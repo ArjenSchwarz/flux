@@ -110,7 +110,7 @@ references:
 
 ## Validation
 
-- [ ] 11. Validate template with cfn-lint <!-- id:guku1go -->
+- [x] 11. Validate template with cfn-lint <!-- id:guku1go -->
   - Install cfn-lint if not present (pip install cfn-lint)
   - Run cfn-lint infrastructure/template.yaml
   - Fix any errors or warnings
