@@ -1,0 +1,5 @@
+# Compiled Lambda binary
+lambda/bootstrap
+
+# CloudFormation packaged template (contains build-specific S3 URIs)
+infrastructure/packaged.yaml

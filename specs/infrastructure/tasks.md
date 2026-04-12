@@ -8,13 +8,13 @@ references:
 
 ## Setup
 
-- [ ] 1. Create project scaffolding <!-- id:guku1ge -->
+- [x] 1. Create project scaffolding <!-- id:guku1ge -->
   - Create .gitignore with entries for lambda/bootstrap and infrastructure/packaged.yaml
   - Create infrastructure/ directory
   - Stream: 1
   - Requirements: [7.1](requirements.md#7.1)
 
-- [ ] 2. Create CloudFormation template skeleton <!-- id:guku1gf -->
+- [x] 2. Create CloudFormation template skeleton <!-- id:guku1gf -->
   - Create infrastructure/template.yaml with AWSTemplateFormatVersion, Description
   - Add all 6 Parameters: ContainerImageUri, AlphaESSAppId, SystemSerialNumber, OffPeakWindowStart (default 11:00), OffPeakWindowEnd (default 14:00), SSMPathPrefix (default /flux)
   - Add 3 Outputs: FunctionUrl, EcsClusterName, EcsServiceName

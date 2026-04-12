@@ -1,0 +1,47 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Flux backend infrastructure — ECS Fargate poller, Lambda API with Function URL,
+  DynamoDB tables, VPC networking, and SSM configuration.
+
+Parameters:
+  ContainerImageUri:
+    Type: String
+    Description: Full GHCR image URI for the poller container (e.g., ghcr.io/owner/flux-poller:latest)
+
+  AlphaESSAppId:
+    Type: String
+    Description: AlphaESS developer App ID
+
+  SystemSerialNumber:
+    Type: String
+    Description: AlphaESS system serial number
+
+  OffPeakWindowStart:
+    Type: String
+    Default: "11:00"
+    Description: Off-peak window start time (HH:MM)
+
+  OffPeakWindowEnd:
+    Type: String
+    Default: "14:00"
+    Description: Off-peak window end time (HH:MM)
+
+  SSMPathPrefix:
+    Type: String
+    Default: /flux
+    Description: SSM Parameter Store path prefix for configuration parameters
+
+Resources: {}
+
+Outputs:
+  FunctionUrl:
+    Description: Lambda Function URL for the API
+    Value: !GetAtt ApiFunctionUrl.FunctionUrl
+
+  EcsClusterName:
+    Description: ECS cluster name
+    Value: !Ref EcsCluster
+
+  EcsServiceName:
+    Description: ECS service name
+    Value: !GetAtt PollerService.Name
