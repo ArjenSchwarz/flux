@@ -22,3 +22,8 @@ The template is a skeleton with:
 - ARM64 for both Fargate and Lambda (Decision 4)
 - SecureString SSM params (`/flux/app-secret`, `/flux/api-token`) must be created manually before deploy (Decision 7)
 - Lambda code deployed via `aws cloudformation package` (Decision 8)
+
+## cfn-lint Notes
+
+- Em dashes (—) are not valid in SecurityGroup GroupDescription fields — use regular dashes
+- During incremental development, W2001 (unused params) and E6101 (forward-referencing outputs) are expected and safe to ignore

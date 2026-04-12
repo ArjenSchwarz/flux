@@ -24,7 +24,7 @@ references:
 
 ## Network Resources
 
-- [ ] 3. Add VPC and subnet resources <!-- id:guku1gg -->
+- [x] 3. Add VPC and subnet resources <!-- id:guku1gg -->
   - Add VPC with CIDR 10.0.0.0/24 and DNS enabled
   - Add SubnetA (10.0.0.0/25) in AZ 0 and SubnetB (10.0.0.128/25) in AZ 1
   - Add InternetGateway and VPCGatewayAttachment
@@ -32,7 +32,7 @@ references:
   - Stream: 1
   - Requirements: [1.1](requirements.md#1.1), [1.2](requirements.md#1.2), [1.3](requirements.md#1.3), [1.7](requirements.md#1.7)
 
-- [ ] 4. Add route table, VPC endpoints, and security group <!-- id:guku1gh -->
+- [x] 4. Add route table, VPC endpoints, and security group <!-- id:guku1gh -->
   - Add RouteTable with default route to IGW, associate with both subnets
   - Add DynamoDB Gateway VPC endpoint attached to route table
   - Add S3 Gateway VPC endpoint attached to route table
