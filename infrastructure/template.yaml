@@ -248,6 +248,40 @@ Resources:
       LogGroupName: /flux/api
       RetentionInDays: 14
 
+  # --- SSM Parameters ---
+
+  AppIdParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "${SSMPathPrefix}/app-id"
+      Type: String
+      Value: !Ref AlphaESSAppId
+      Description: AlphaESS developer App ID
+
+  SerialParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "${SSMPathPrefix}/serial"
+      Type: String
+      Value: !Ref SystemSerialNumber
+      Description: AlphaESS system serial number
+
+  OffpeakStartParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "${SSMPathPrefix}/offpeak-start"
+      Type: String
+      Value: !Ref OffPeakWindowStart
+      Description: Off-peak window start time
+
+  OffpeakEndParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "${SSMPathPrefix}/offpeak-end"
+      Type: String
+      Value: !Ref OffPeakWindowEnd
+      Description: Off-peak window end time
+
   # --- DynamoDB Tables ---
 
   ReadingsTable:
@@ -341,6 +375,120 @@ Resources:
           KeyType: HASH
         - AttributeName: date
           KeyType: RANGE
+
+  # --- Lambda Function and Function URL ---
+
+  ApiFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: flux-api
+      Runtime: provided.al2023
+      Architectures:
+        - arm64
+      Handler: bootstrap
+      MemorySize: 128
+      Timeout: 10
+      Code: ./lambda/
+      Role: !GetAtt LambdaExecutionRole.Arn
+      LoggingConfig:
+        LogGroup: !Ref ApiLogGroup
+      Environment:
+        Variables:
+          API_TOKEN_PARAM: !Sub "${SSMPathPrefix}/api-token"
+          SYSTEM_SERIAL_PARAM: !Sub "${SSMPathPrefix}/serial"
+          OFFPEAK_START: !Ref OffPeakWindowStart
+          OFFPEAK_END: !Ref OffPeakWindowEnd
+          TABLE_READINGS: !Ref ReadingsTable
+          TABLE_DAILY_ENERGY: !Ref DailyEnergyTable
+          TABLE_DAILY_POWER: !Ref DailyPowerTable
+          TABLE_SYSTEM: !Ref SystemTable
+          TABLE_OFFPEAK: !Ref OffpeakTable
+
+  ApiFunctionUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !GetAtt ApiFunction.Arn
+      AuthType: NONE
+
+  ApiFunctionUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunctionUrl
+      FunctionName: !Ref ApiFunction
+      Principal: "*"
+      FunctionUrlAuthType: NONE
+
+  # --- ECS Fargate Poller ---
+
+  EcsCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: flux
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: flux-poller
+      RequiresCompatibilities:
+        - FARGATE
+      RuntimePlatform:
+        CpuArchitecture: ARM64
+        OperatingSystemFamily: LINUX
+      Cpu: "256"
+      Memory: "512"
+      NetworkMode: awsvpc
+      ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt TaskRole.Arn
+      ContainerDefinitions:
+        - Name: poller
+          Image: !Ref ContainerImageUri
+          Essential: true
+          Secrets:
+            - Name: ALPHA_APP_ID
+              ValueFrom: !Sub "${SSMPathPrefix}/app-id"
+            - Name: ALPHA_APP_SECRET
+              ValueFrom: !Sub "${SSMPathPrefix}/app-secret"
+            - Name: SYSTEM_SERIAL
+              ValueFrom: !Sub "${SSMPathPrefix}/serial"
+          Environment:
+            - Name: OFFPEAK_START
+              Value: !Ref OffPeakWindowStart
+            - Name: OFFPEAK_END
+              Value: !Ref OffPeakWindowEnd
+            - Name: AWS_REGION
+              Value: !Ref AWS::Region
+          HealthCheck:
+            Command:
+              - CMD
+              - /poller
+              - healthcheck
+            Interval: 60
+            Timeout: 10
+            Retries: 3
+            StartPeriod: 120
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref PollerLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: poller
+
+  PollerService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: flux-poller
+      Cluster: !Ref EcsCluster
+      LaunchType: FARGATE
+      DesiredCount: 1
+      TaskDefinition: !Ref TaskDefinition
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+            - !Ref SecurityGroup
+          Subnets:
+            - !Ref SubnetA
+            - !Ref SubnetB
 
 Outputs:
   FunctionUrl:

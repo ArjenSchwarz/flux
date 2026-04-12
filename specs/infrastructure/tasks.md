@@ -75,7 +75,7 @@ references:
 
 ## Compute Resources
 
-- [ ] 8. Add SSM parameter resources <!-- id:guku1gl -->
+- [x] 8. Add SSM parameter resources <!-- id:guku1gl -->
   - Add SSM parameter for app-id (String) sourced from AlphaESSAppId parameter
   - Add SSM parameter for serial (String) sourced from SystemSerialNumber parameter
   - Add SSM parameter for offpeak-start (String) sourced from OffPeakWindowStart parameter
@@ -86,7 +86,7 @@ references:
   - Stream: 1
   - Requirements: [5.1](requirements.md#5.1), [5.3](requirements.md#5.3), [5.4](requirements.md#5.4), [5.5](requirements.md#5.5), [5.7](requirements.md#5.7), [5.8](requirements.md#5.8)
 
-- [ ] 9. Add ECS cluster, task definition, and service <!-- id:guku1gm -->
+- [x] 9. Add ECS cluster, task definition, and service <!-- id:guku1gm -->
   - Add ECS Cluster with default settings
   - Add TaskDefinition: Fargate, ARM64, 256 CPU, 512 Memory, awsvpc network mode
   - Configure container with Secrets (ALPHA_APP_ID, ALPHA_APP_SECRET, SYSTEM_SERIAL from SSM) and Environment (OFFPEAK_START, OFFPEAK_END, AWS_REGION)
@@ -97,7 +97,7 @@ references:
   - Stream: 1
   - Requirements: [2.1](requirements.md#2.1), [2.2](requirements.md#2.2), [2.3](requirements.md#2.3), [2.5](requirements.md#2.5), [2.6](requirements.md#2.6), [2.7](requirements.md#2.7), [2.10](requirements.md#2.10), [2.11](requirements.md#2.11)
 
-- [ ] 10. Add Lambda function, Function URL, and permission <!-- id:guku1gn -->
+- [x] 10. Add Lambda function, Function URL, and permission <!-- id:guku1gn -->
   - Add Lambda function: provided.al2023 runtime, arm64, 128 MB memory, 10s timeout, handler bootstrap
   - Set Code property to ./lambda/ (rewritten by cloudformation package)
   - Configure environment variables: API_TOKEN_PARAM, SYSTEM_SERIAL_PARAM, OFFPEAK_START, OFFPEAK_END, all 5 TABLE_* names

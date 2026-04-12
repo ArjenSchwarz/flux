@@ -16,12 +16,23 @@ The template is a skeleton with:
 
 `cfn-lint` is available on this machine and should be used to validate template changes. Expected warnings for unused parameters and unresolved resource references are normal during incremental development.
 
+## Resources Now in Template
+
+- **VPC/Networking**: Vpc, SubnetA/B, IGW, RouteTable, DynamoDB/S3 endpoints, SecurityGroup
+- **IAM**: TaskExecutionRole, TaskRole, LambdaExecutionRole
+- **CloudWatch**: PollerLogGroup, ApiLogGroup
+- **SSM Parameters**: AppIdParameter, SerialParameter, OffpeakStartParameter, OffpeakEndParameter
+- **DynamoDB**: ReadingsTable, DailyEnergyTable, DailyPowerTable, SystemTable, OffpeakTable
+- **Lambda**: ApiFunction, ApiFunctionUrl, ApiFunctionUrlPermission
+- **ECS**: EcsCluster, TaskDefinition, PollerService
+
 ## Key Design Points
 
 - Single template, no nested stacks (Decision 1)
 - ARM64 for both Fargate and Lambda (Decision 4)
 - SecureString SSM params (`/flux/app-secret`, `/flux/api-token`) must be created manually before deploy (Decision 7)
 - Lambda code deployed via `aws cloudformation package` (Decision 8)
+- Lambda uses `LoggingConfig.LogGroup` to point to the dedicated ApiLogGroup
 
 ## cfn-lint Notes
 
