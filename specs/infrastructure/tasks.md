@@ -56,14 +56,14 @@ references:
 
 ## IAM and Logging
 
-- [ ] 6. Add CloudWatch log groups <!-- id:guku1gj -->
+- [x] 6. Add CloudWatch log groups <!-- id:guku1gj -->
   - Add PollerLogGroup with 14-day retention and DeletionPolicy Delete
   - Add ApiLogGroup with 14-day retention and DeletionPolicy Delete
   - Blocked-by: guku1gf (Create CloudFormation template skeleton)
   - Stream: 1
   - Requirements: [8.1](requirements.md#8.1), [8.2](requirements.md#8.2), [8.3](requirements.md#8.3)
 
-- [ ] 7. Add IAM roles and policies <!-- id:guku1gk -->
+- [x] 7. Add IAM roles and policies <!-- id:guku1gk -->
   - Add TaskExecutionRole: ssm:GetParameters on /flux/*, logs:CreateLogStream and logs:PutLogEvents on PollerLogGroup
   - Add TaskRole: dynamodb:PutItem/UpdateItem/BatchWriteItem/GetItem/Query on all 5 table ARNs
   - Add LambdaExecutionRole: dynamodb:GetItem/Query on all 5 table ARNs, ssm:GetParameter on /flux/*, logs on ApiLogGroup
