@@ -164,7 +164,7 @@ Resources:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource:
-                  - !GetAtt PollerLogGroup.Arn
+                  - !Sub "${PollerLogGroup.Arn}:*"
 
   TaskRole:
     Type: AWS::IAM::Role
@@ -230,7 +230,7 @@ Resources:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource:
-                  - !GetAtt ApiLogGroup.Arn
+                  - !Sub "${ApiLogGroup.Arn}:*"
 
   # --- CloudWatch Log Groups ---
 
