@@ -34,6 +34,11 @@ The template is a skeleton with:
 - Lambda code deployed via `aws cloudformation package` (Decision 8)
 - Lambda uses `LoggingConfig.LogGroup` to point to the dedicated ApiLogGroup
 
+## Deployment README
+
+- `infrastructure/README.md` documents prerequisites, first-time SSM setup, build/deploy commands, and update procedures
+- Covers all four update scenarios: Lambda code, container image, configuration, infrastructure
+
 ## cfn-lint Notes
 
 - Em dashes (—) are not valid in SecurityGroup GroupDescription fields — use regular dashes

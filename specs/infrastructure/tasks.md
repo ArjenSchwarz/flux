@@ -121,7 +121,7 @@ references:
 
 ## Documentation
 
-- [ ] 12. Create deployment README <!-- id:guku1gp -->
+- [x] 12. Create deployment README <!-- id:guku1gp -->
   - Create infrastructure/README.md with prerequisites section
   - Document SecureString parameter creation commands (app-secret, api-token)
   - Document build, package, and deploy commands
