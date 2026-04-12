@@ -43,7 +43,7 @@ references:
 
 ## Storage Resources
 
-- [ ] 5. Add DynamoDB table resources <!-- id:guku1gi -->
+- [x] 5. Add DynamoDB table resources <!-- id:guku1gi -->
   - Add flux-readings table: PK sysSn (S), SK timestamp (N), TTL on ttl attribute, DeletionPolicy Retain
   - Add flux-daily-energy table: PK sysSn (S), SK date (S), no TTL, DeletionPolicy Retain
   - Add flux-daily-power table: PK sysSn (S), SK uploadTime (S), TTL on ttl attribute, DeletionPolicy Retain

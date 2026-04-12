@@ -137,6 +137,100 @@ Resources:
         - Key: Name
           Value: flux-sg
 
+  # --- DynamoDB Tables ---
+
+  ReadingsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: flux-readings
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: sysSn
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: "N"
+      KeySchema:
+        - AttributeName: sysSn
+          KeyType: HASH
+        - AttributeName: timestamp
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  DailyEnergyTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: flux-daily-energy
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: sysSn
+          AttributeType: S
+        - AttributeName: date
+          AttributeType: S
+      KeySchema:
+        - AttributeName: sysSn
+          KeyType: HASH
+        - AttributeName: date
+          KeyType: RANGE
+
+  DailyPowerTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: flux-daily-power
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: sysSn
+          AttributeType: S
+        - AttributeName: uploadTime
+          AttributeType: S
+      KeySchema:
+        - AttributeName: sysSn
+          KeyType: HASH
+        - AttributeName: uploadTime
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  SystemTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: flux-system
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: sysSn
+          AttributeType: S
+      KeySchema:
+        - AttributeName: sysSn
+          KeyType: HASH
+
+  OffpeakTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: flux-offpeak
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: sysSn
+          AttributeType: S
+        - AttributeName: date
+          AttributeType: S
+      KeySchema:
+        - AttributeName: sysSn
+          KeyType: HASH
+        - AttributeName: date
+          KeyType: RANGE
+
 Outputs:
   FunctionUrl:
     Description: Lambda Function URL for the API
