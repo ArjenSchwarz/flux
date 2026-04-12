@@ -1,0 +1,504 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Flux backend infrastructure — ECS Fargate poller, Lambda API with Function URL,
+  DynamoDB tables, VPC networking, and SSM configuration.
+
+Parameters:
+  ContainerImageUri:
+    Type: String
+    Description: Full GHCR image URI for the poller container (e.g., ghcr.io/owner/flux-poller:latest)
+
+  AlphaESSAppId:
+    Type: String
+    Description: AlphaESS developer App ID
+
+  SystemSerialNumber:
+    Type: String
+    Description: AlphaESS system serial number
+
+  OffPeakWindowStart:
+    Type: String
+    Default: "11:00"
+    Description: Off-peak window start time (HH:MM)
+
+  OffPeakWindowEnd:
+    Type: String
+    Default: "14:00"
+    Description: Off-peak window end time (HH:MM)
+
+  SSMPathPrefix:
+    Type: String
+    Default: /flux
+    Description: SSM Parameter Store path prefix for configuration parameters
+
+Resources:
+  # --- VPC and Networking ---
+
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/24
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: flux-vpc
+
+  SubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.0.0.0/25
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: flux-subnet-a
+
+  SubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.0.0.128/25
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: flux-subnet-b
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: flux-igw
+
+  VpcGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: flux-rt
+
+  DefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VpcGatewayAttachment
+    Properties:
+      RouteTableId: !Ref RouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  SubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetA
+      RouteTableId: !Ref RouteTable
+
+  SubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetB
+      RouteTableId: !Ref RouteTable
+
+  DynamoDBEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.dynamodb
+      VpcEndpointType: Gateway
+      RouteTableIds:
+        - !Ref RouteTable
+
+  S3Endpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
+      VpcEndpointType: Gateway
+      RouteTableIds:
+        - !Ref RouteTable
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Flux Fargate task - all egress, no ingress
+      VpcId: !Ref Vpc
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: flux-sg
+
+  # --- IAM Roles ---
+
+  TaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: FluxTaskExecutionPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameters
+                Resource:
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${SSMPathPrefix}/*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !Sub "${PollerLogGroup.Arn}:*"
+
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: FluxTaskPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:BatchWriteItem
+                  - dynamodb:GetItem
+                  - dynamodb:Query
+                Resource:
+                  - !GetAtt ReadingsTable.Arn
+                  - !GetAtt DailyEnergyTable.Arn
+                  - !GetAtt DailyPowerTable.Arn
+                  - !GetAtt SystemTable.Arn
+                  - !GetAtt OffpeakTable.Arn
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: FluxLambdaPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:Query
+                Resource:
+                  - !GetAtt ReadingsTable.Arn
+                  - !GetAtt DailyEnergyTable.Arn
+                  - !GetAtt DailyPowerTable.Arn
+                  - !GetAtt SystemTable.Arn
+                  - !GetAtt OffpeakTable.Arn
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                Resource:
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${SSMPathPrefix}/*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !Sub "${ApiLogGroup.Arn}:*"
+
+  # --- CloudWatch Log Groups ---
+
+  PollerLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    Properties:
+      LogGroupName: /flux/poller
+      RetentionInDays: 14
+
+  ApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    Properties:
+      LogGroupName: /flux/api
+      RetentionInDays: 14
+
+  # --- SSM Parameters ---
+
+  AppIdParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "${SSMPathPrefix}/app-id"
+      Type: String
+      Value: !Ref AlphaESSAppId
+      Description: AlphaESS developer App ID
+
+  SerialParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "${SSMPathPrefix}/serial"
+      Type: String
+      Value: !Ref SystemSerialNumber
+      Description: AlphaESS system serial number
+
+  OffpeakStartParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "${SSMPathPrefix}/offpeak-start"
+      Type: String
+      Value: !Ref OffPeakWindowStart
+      Description: Off-peak window start time
+
+  OffpeakEndParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "${SSMPathPrefix}/offpeak-end"
+      Type: String
+      Value: !Ref OffPeakWindowEnd
+      Description: Off-peak window end time
+
+  # --- DynamoDB Tables ---
+
+  ReadingsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: flux-readings
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: sysSn
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: "N"
+      KeySchema:
+        - AttributeName: sysSn
+          KeyType: HASH
+        - AttributeName: timestamp
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  DailyEnergyTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: flux-daily-energy
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: sysSn
+          AttributeType: S
+        - AttributeName: date
+          AttributeType: S
+      KeySchema:
+        - AttributeName: sysSn
+          KeyType: HASH
+        - AttributeName: date
+          KeyType: RANGE
+
+  DailyPowerTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: flux-daily-power
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: sysSn
+          AttributeType: S
+        - AttributeName: uploadTime
+          AttributeType: S
+      KeySchema:
+        - AttributeName: sysSn
+          KeyType: HASH
+        - AttributeName: uploadTime
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  SystemTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: flux-system
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: sysSn
+          AttributeType: S
+      KeySchema:
+        - AttributeName: sysSn
+          KeyType: HASH
+
+  OffpeakTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: flux-offpeak
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: sysSn
+          AttributeType: S
+        - AttributeName: date
+          AttributeType: S
+      KeySchema:
+        - AttributeName: sysSn
+          KeyType: HASH
+        - AttributeName: date
+          KeyType: RANGE
+
+  # --- Lambda Function and Function URL ---
+
+  ApiFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: flux-api
+      Runtime: provided.al2023
+      Architectures:
+        - arm64
+      Handler: bootstrap
+      MemorySize: 128
+      Timeout: 10
+      Code: ./lambda/
+      Role: !GetAtt LambdaExecutionRole.Arn
+      LoggingConfig:
+        LogGroup: !Ref ApiLogGroup
+      Environment:
+        Variables:
+          API_TOKEN_PARAM: !Sub "${SSMPathPrefix}/api-token"
+          SYSTEM_SERIAL_PARAM: !Sub "${SSMPathPrefix}/serial"
+          OFFPEAK_START: !Ref OffPeakWindowStart
+          OFFPEAK_END: !Ref OffPeakWindowEnd
+          TABLE_READINGS: !Ref ReadingsTable
+          TABLE_DAILY_ENERGY: !Ref DailyEnergyTable
+          TABLE_DAILY_POWER: !Ref DailyPowerTable
+          TABLE_SYSTEM: !Ref SystemTable
+          TABLE_OFFPEAK: !Ref OffpeakTable
+
+  ApiFunctionUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !GetAtt ApiFunction.Arn
+      AuthType: NONE
+
+  ApiFunctionUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunctionUrl
+      FunctionName: !Ref ApiFunction
+      Principal: "*"
+      FunctionUrlAuthType: NONE
+
+  # --- ECS Fargate Poller ---
+
+  EcsCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: flux
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: flux-poller
+      RequiresCompatibilities:
+        - FARGATE
+      RuntimePlatform:
+        CpuArchitecture: ARM64
+        OperatingSystemFamily: LINUX
+      Cpu: "256"
+      Memory: "512"
+      NetworkMode: awsvpc
+      ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt TaskRole.Arn
+      ContainerDefinitions:
+        - Name: poller
+          Image: !Ref ContainerImageUri
+          Essential: true
+          Secrets:
+            - Name: ALPHA_APP_ID
+              ValueFrom: !Sub "${SSMPathPrefix}/app-id"
+            - Name: ALPHA_APP_SECRET
+              ValueFrom: !Sub "${SSMPathPrefix}/app-secret"
+            - Name: SYSTEM_SERIAL
+              ValueFrom: !Sub "${SSMPathPrefix}/serial"
+          Environment:
+            - Name: OFFPEAK_START
+              Value: !Ref OffPeakWindowStart
+            - Name: OFFPEAK_END
+              Value: !Ref OffPeakWindowEnd
+            - Name: AWS_REGION
+              Value: !Ref AWS::Region
+          HealthCheck:
+            Command:
+              - CMD
+              - /poller
+              - healthcheck
+            Interval: 60
+            Timeout: 10
+            Retries: 3
+            StartPeriod: 120
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref PollerLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: poller
+
+  PollerService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: flux-poller
+      Cluster: !Ref EcsCluster
+      LaunchType: FARGATE
+      DesiredCount: 1
+      TaskDefinition: !Ref TaskDefinition
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+            - !Ref SecurityGroup
+          Subnets:
+            - !Ref SubnetA
+            - !Ref SubnetB
+
+Outputs:
+  FunctionUrl:
+    Description: Lambda Function URL for the API
+    Value: !GetAtt ApiFunctionUrl.FunctionUrl
+
+  EcsClusterName:
+    Description: ECS cluster name
+    Value: !Ref EcsCluster
+
+  EcsServiceName:
+    Description: ECS service name
+    Value: !GetAtt PollerService.Name
