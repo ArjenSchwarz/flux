@@ -9,7 +9,6 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-	"time"
 
 	_ "time/tzdata" // Embed timezone data for distroless containers.
 
@@ -63,7 +62,7 @@ func main() {
 	// Log startup.
 	slog.Info("poller starting",
 		"serial", cfg.Serial,
-		"offpeak", formatHHMM(cfg.OffpeakStart)+"-"+formatHHMM(cfg.OffpeakEnd),
+		"offpeak", config.FormatHHMM(cfg.OffpeakStart)+"-"+config.FormatHHMM(cfg.OffpeakEnd),
 		"tz", cfg.Location.String(),
 		"dry_run", cfg.DryRun,
 	)
@@ -104,9 +103,4 @@ func createStore(cfg *config.Config) (dynamo.Store, error) {
 		System:      cfg.TableSystem,
 		Offpeak:     cfg.TableOffpeak,
 	}), nil
-}
-
-// formatHHMM formats a duration-from-midnight as HH:MM.
-func formatHHMM(d time.Duration) string {
-	return fmt.Sprintf("%02d:%02d", int(d.Hours()), int(d.Minutes())%60)
 }

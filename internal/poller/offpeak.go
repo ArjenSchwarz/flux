@@ -17,6 +17,15 @@ const (
 	defaultRetryDelay = 10 * time.Second
 )
 
+// windowPosition represents the poller's position relative to the off-peak window.
+type windowPosition string
+
+const (
+	positionBefore windowPosition = "before"
+	positionDuring windowPosition = "during"
+	positionAfter  windowPosition = "after"
+)
+
 // OffpeakScheduler manages off-peak window state and snapshot capture.
 type OffpeakScheduler struct {
 	client APIClient
@@ -54,7 +63,7 @@ func (o *OffpeakScheduler) Run(loopCtx, drainCtx context.Context, wg *sync.WaitG
 	slog.Debug("offpeak scheduler starting", "position", pos, "date", date)
 
 	switch pos {
-	case "before":
+	case positionBefore:
 		// Wait for start time, then handle start and end.
 		if !o.waitUntil(loopCtx, wallClockTime(now, o.cfg.Location, o.cfg.OffpeakStart)) {
 			return
@@ -67,14 +76,9 @@ func (o *OffpeakScheduler) Run(loopCtx, drainCtx context.Context, wg *sync.WaitG
 		if !o.waitUntil(loopCtx, wallClockTime(now, o.cfg.Location, o.cfg.OffpeakEnd)) {
 			return
 		}
-		if err := o.handleEnd(drainCtx, date); err != nil {
-			slog.Warn("offpeak end failed, deleting pending record", "date", date, "error", err)
-			if delErr := o.store.DeleteOffpeak(drainCtx, o.cfg.Serial, date); delErr != nil {
-				slog.Error("delete pending offpeak failed", "date", date, "error", delErr)
-			}
-		}
+		o.handleEndOrCleanup(drainCtx, date)
 
-	case "during":
+	case positionDuring:
 		// Try to recover from existing pending record.
 		if err := o.recoverMidWindow(drainCtx, date); err != nil {
 			slog.Error("offpeak mid-window recovery failed", "date", date, "error", err)
@@ -83,17 +87,12 @@ func (o *OffpeakScheduler) Run(loopCtx, drainCtx context.Context, wg *sync.WaitG
 			if !o.waitUntil(loopCtx, wallClockTime(now, o.cfg.Location, o.cfg.OffpeakEnd)) {
 				return
 			}
-			if err := o.handleEnd(drainCtx, date); err != nil {
-				slog.Warn("offpeak end failed, deleting pending record", "date", date, "error", err)
-				if delErr := o.store.DeleteOffpeak(drainCtx, o.cfg.Serial, date); delErr != nil {
-					slog.Error("delete pending offpeak failed", "date", date, "error", delErr)
-				}
-			}
+			o.handleEndOrCleanup(drainCtx, date)
 		} else {
 			slog.Info("offpeak: no pending record found, skipping today", "date", date)
 		}
 
-	case "after":
+	case positionAfter:
 		slog.Info("offpeak: past window, skipping today", "date", date)
 	}
 
@@ -119,12 +118,7 @@ nextDay:
 			return
 		}
 
-		if err := o.handleEnd(drainCtx, date); err != nil {
-			slog.Warn("offpeak end failed, deleting pending record", "date", date, "error", err)
-			if delErr := o.store.DeleteOffpeak(drainCtx, o.cfg.Serial, date); delErr != nil {
-				slog.Error("delete pending offpeak failed", "date", date, "error", delErr)
-			}
-		}
+		o.handleEndOrCleanup(drainCtx, date)
 	}
 }
 
@@ -140,7 +134,7 @@ func (o *OffpeakScheduler) handleStart(ctx context.Context, date string) error {
 	o.hasStart = true
 
 	item := dynamo.OffpeakItem{
-		SysSn: o.cfg.Serial, Date: date, Status: "pending",
+		SysSn: o.cfg.Serial, Date: date, Status: dynamo.OffpeakStatusPending,
 		StartEpv: energy.Epv, StartEInput: energy.EInput, StartEOutput: energy.EOutput,
 		StartECharge: energy.ECharge, StartEDischarge: energy.EDischarge, StartEGridCharge: energy.EGridCharge,
 		SocStart: soc,
@@ -209,7 +203,7 @@ func (o *OffpeakScheduler) recoverMidWindow(ctx context.Context, date string) er
 		return nil // Log and skip, don't propagate.
 	}
 
-	if item == nil || item.Status != "pending" {
+	if item == nil || item.Status != dynamo.OffpeakStatusPending {
 		return nil
 	}
 
@@ -222,6 +216,16 @@ func (o *OffpeakScheduler) recoverMidWindow(ctx context.Context, date string) er
 
 	slog.Info("offpeak: recovered pending record", "date", date, "socStart", o.socStart)
 	return nil
+}
+
+// handleEndOrCleanup attempts the end snapshot; on failure, deletes the pending record.
+func (o *OffpeakScheduler) handleEndOrCleanup(ctx context.Context, date string) {
+	if err := o.handleEnd(ctx, date); err != nil {
+		slog.Warn("offpeak end failed, deleting pending record", "date", date, "error", err)
+		if delErr := o.store.DeleteOffpeak(ctx, o.cfg.Serial, date); delErr != nil {
+			slog.Error("delete pending offpeak failed", "date", date, "error", delErr)
+		}
+	}
 }
 
 // resetState clears in-memory off-peak state for a new day.
@@ -246,18 +250,17 @@ func (o *OffpeakScheduler) waitUntil(ctx context.Context, target time.Time) bool
 	}
 }
 
-// timePosition returns "before", "during", or "after" based on the current
-// time's position relative to the off-peak window.
-func timePosition(now time.Time, start, end time.Duration) string {
+// timePosition returns the current time's position relative to the off-peak window.
+func timePosition(now time.Time, start, end time.Duration) windowPosition {
 	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	elapsed := now.Sub(midnight)
 	switch {
 	case elapsed < start:
-		return "before"
+		return positionBefore
 	case elapsed < end:
-		return "during"
+		return positionDuring
 	default:
-		return "after"
+		return positionAfter
 	}
 }
 
@@ -273,7 +276,7 @@ func wallClockTime(day time.Time, loc *time.Location, d time.Duration) time.Time
 // computeOffpeakDeltas computes all energy deltas between start and end snapshots.
 func computeOffpeakDeltas(serial, date string, start, end *alphaess.EnergyData, socStart, socEnd float64) dynamo.OffpeakItem {
 	return dynamo.OffpeakItem{
-		SysSn: serial, Date: date, Status: "complete",
+		SysSn: serial, Date: date, Status: dynamo.OffpeakStatusComplete,
 		StartEpv: start.Epv, StartEInput: start.EInput, StartEOutput: start.EOutput,
 		StartECharge: start.ECharge, StartEDischarge: start.EDischarge, StartEGridCharge: start.EGridCharge,
 		SocStart: socStart,

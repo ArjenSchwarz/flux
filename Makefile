@@ -16,7 +16,7 @@ lint:
 	golangci-lint run
 
 modernize:
-	go mod tidy
+	go mod tidy -compat=1.26
 	go fix ./...
 
 check: fmt vet lint test

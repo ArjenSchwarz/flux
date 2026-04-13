@@ -189,7 +189,6 @@ Resources:
                   - dynamodb:DeleteItem
                   - dynamodb:GetItem
                   - dynamodb:Query
-                  - dynamodb:DeleteItem
                 Resource:
                   - !GetAtt ReadingsTable.Arn
                   - !GetAtt DailyEnergyTable.Arn

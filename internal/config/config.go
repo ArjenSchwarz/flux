@@ -75,7 +75,7 @@ func Load() (*Config, error) {
 	if cfg.OffpeakStart > 0 || cfg.OffpeakEnd > 0 {
 		if cfg.OffpeakStart >= cfg.OffpeakEnd {
 			errs = append(errs, fmt.Errorf("OFFPEAK_START must be before OFFPEAK_END (%s >= %s)",
-				formatHHMM(cfg.OffpeakStart), formatHHMM(cfg.OffpeakEnd)))
+				FormatHHMM(cfg.OffpeakStart), FormatHHMM(cfg.OffpeakEnd)))
 		}
 	}
 
@@ -107,7 +107,7 @@ func Load() (*Config, error) {
 
 	slog.Debug("config loaded",
 		"serial", cfg.Serial,
-		"offpeak", formatHHMM(cfg.OffpeakStart)+"-"+formatHHMM(cfg.OffpeakEnd),
+		"offpeak", FormatHHMM(cfg.OffpeakStart)+"-"+FormatHHMM(cfg.OffpeakEnd),
 		"tz", cfg.Location.String(),
 		"dry_run", cfg.DryRun,
 	)
@@ -144,8 +144,8 @@ func parseHHMM(s string) (time.Duration, error) {
 	return time.Duration(h)*time.Hour + time.Duration(m)*time.Minute, nil
 }
 
-// formatHHMM formats a duration-from-midnight back to HH:MM for logging.
-func formatHHMM(d time.Duration) string {
+// FormatHHMM formats a duration-from-midnight back to HH:MM for logging.
+func FormatHHMM(d time.Duration) string {
 	h := int(d.Hours())
 	m := int(d.Minutes()) % 60
 	return fmt.Sprintf("%02d:%02d", h, m)

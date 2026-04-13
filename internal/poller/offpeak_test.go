@@ -44,7 +44,7 @@ func TestComputeOffpeakDeltas(t *testing.T) {
 			socStart: 20.0,
 			socEnd:   80.0,
 			want: dynamo.OffpeakItem{
-				SysSn: "TEST123", Date: "2026-04-13", Status: "complete",
+				SysSn: "TEST123", Date: "2026-04-13", Status: dynamo.OffpeakStatusComplete,
 				StartEpv: 1.0, StartEInput: 2.0, StartEOutput: 0.5,
 				StartECharge: 3.0, StartEDischarge: 1.0, StartEGridCharge: 0.5,
 				SocStart: 20.0,
@@ -65,7 +65,7 @@ func TestComputeOffpeakDeltas(t *testing.T) {
 			socStart: 50.0,
 			socEnd:   50.0,
 			want: dynamo.OffpeakItem{
-				SysSn: "TEST123", Date: "2026-04-13", Status: "complete",
+				SysSn: "TEST123", Date: "2026-04-13", Status: dynamo.OffpeakStatusComplete,
 				StartEpv: 5.0, StartEInput: 5.0, StartEOutput: 5.0,
 				StartECharge: 5.0, StartEDischarge: 5.0, StartEGridCharge: 5.0,
 				SocStart: 50.0,
@@ -80,7 +80,7 @@ func TestComputeOffpeakDeltas(t *testing.T) {
 			socStart: 80.0,
 			socEnd:   30.0,
 			want: dynamo.OffpeakItem{
-				SysSn: "TEST123", Date: "2026-04-13", Status: "complete",
+				SysSn: "TEST123", Date: "2026-04-13", Status: dynamo.OffpeakStatusComplete,
 				SocStart: 80.0, SocEnd: 30.0,
 				BatteryDeltaPercent: -50.0,
 			},
@@ -102,27 +102,27 @@ func TestTimePosition(t *testing.T) {
 
 	tests := map[string]struct {
 		now  time.Time
-		want string // "before", "during", "after"
+		want windowPosition
 	}{
 		"before window": {
 			now:  time.Date(2026, 4, 13, 0, 30, 0, 0, cfg.Location),
-			want: "before",
+			want: positionBefore,
 		},
 		"exactly at start": {
 			now:  time.Date(2026, 4, 13, 1, 0, 0, 0, cfg.Location),
-			want: "during",
+			want: positionDuring,
 		},
 		"during window": {
 			now:  time.Date(2026, 4, 13, 3, 0, 0, 0, cfg.Location),
-			want: "during",
+			want: positionDuring,
 		},
 		"exactly at end": {
 			now:  time.Date(2026, 4, 13, 6, 0, 0, 0, cfg.Location),
-			want: "after",
+			want: positionAfter,
 		},
 		"after window": {
 			now:  time.Date(2026, 4, 13, 12, 0, 0, 0, cfg.Location),
-			want: "after",
+			want: positionAfter,
 		},
 	}
 
@@ -226,7 +226,7 @@ func TestOffpeak_StartSucceeds_EndFails_DeletesPending(t *testing.T) {
 func TestOffpeak_MidWindowRecovery_PendingRecordExists(t *testing.T) {
 	ms := &mockStore{
 		getOffpeakResult: &dynamo.OffpeakItem{
-			SysSn: "TEST123", Date: "2026-04-13", Status: "pending",
+			SysSn: "TEST123", Date: "2026-04-13", Status: dynamo.OffpeakStatusPending,
 			StartEpv: 1.0, StartEInput: 2.0, StartEOutput: 0.5,
 			StartECharge: 3.0, StartEDischarge: 1.0, StartEGridCharge: 0.5,
 			SocStart: 20.0,
@@ -285,12 +285,12 @@ func TestWallClockTime_DST(t *testing.T) {
 	// During AEDT (UTC+11), 01:00 local = 14:00 UTC previous day.
 	aedt := time.Date(2026, 1, 15, 1, 0, 0, 0, sydney)
 	pos := timePosition(aedt, cfg.OffpeakStart, cfg.OffpeakEnd)
-	assert.Equal(t, "during", pos)
+	assert.Equal(t, positionDuring, pos)
 
 	// During AEST (UTC+10), 01:00 local = 15:00 UTC previous day.
 	aest := time.Date(2026, 7, 15, 1, 0, 0, 0, sydney)
 	pos = timePosition(aest, cfg.OffpeakStart, cfg.OffpeakEnd)
-	assert.Equal(t, "during", pos)
+	assert.Equal(t, positionDuring, pos)
 }
 
 // --- retryMockClient wraps mockClient with custom energy function ---

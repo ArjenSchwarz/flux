@@ -67,72 +67,40 @@ func (p *Poller) Run(ctx context.Context) error {
 	}
 }
 
-func (p *Poller) pollLiveData(loopCtx, drainCtx context.Context, wg *sync.WaitGroup) {
+// pollLoop runs fn immediately, then on each tick until loopCtx is cancelled.
+func pollLoop(loopCtx, drainCtx context.Context, wg *sync.WaitGroup, interval time.Duration, fn func(context.Context)) {
 	defer wg.Done()
-	ticker := time.NewTicker(10 * time.Second)
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
-	p.fetchAndStoreLiveData(drainCtx)
+	fn(drainCtx)
 
 	for {
 		select {
 		case <-loopCtx.Done():
 			return
 		case <-ticker.C:
-			p.fetchAndStoreLiveData(drainCtx)
+			fn(drainCtx)
 		}
 	}
+}
+
+func (p *Poller) pollLiveData(loopCtx, drainCtx context.Context, wg *sync.WaitGroup) {
+	pollLoop(loopCtx, drainCtx, wg, 10*time.Second, p.fetchAndStoreLiveData)
 }
 
 func (p *Poller) pollDailyPower(loopCtx, drainCtx context.Context, wg *sync.WaitGroup) {
-	defer wg.Done()
-	ticker := time.NewTicker(1 * time.Hour)
-	defer ticker.Stop()
-
-	p.fetchAndStoreDailyPower(drainCtx)
-
-	for {
-		select {
-		case <-loopCtx.Done():
-			return
-		case <-ticker.C:
-			p.fetchAndStoreDailyPower(drainCtx)
-		}
-	}
+	pollLoop(loopCtx, drainCtx, wg, 1*time.Hour, p.fetchAndStoreDailyPower)
 }
 
 func (p *Poller) pollDailyEnergy(loopCtx, drainCtx context.Context, wg *sync.WaitGroup) {
-	defer wg.Done()
-	ticker := time.NewTicker(6 * time.Hour)
-	defer ticker.Stop()
-
-	p.fetchAndStoreDailyEnergy(drainCtx, "")
-
-	for {
-		select {
-		case <-loopCtx.Done():
-			return
-		case <-ticker.C:
-			p.fetchAndStoreDailyEnergy(drainCtx, "")
-		}
-	}
+	pollLoop(loopCtx, drainCtx, wg, 6*time.Hour, func(ctx context.Context) {
+		p.fetchAndStoreDailyEnergy(ctx, "")
+	})
 }
 
 func (p *Poller) pollSystemInfo(loopCtx, drainCtx context.Context, wg *sync.WaitGroup) {
-	defer wg.Done()
-	ticker := time.NewTicker(24 * time.Hour)
-	defer ticker.Stop()
-
-	p.fetchAndStoreSystemInfo(drainCtx)
-
-	for {
-		select {
-		case <-loopCtx.Done():
-			return
-		case <-ticker.C:
-			p.fetchAndStoreSystemInfo(drainCtx)
-		}
-	}
+	pollLoop(loopCtx, drainCtx, wg, 24*time.Hour, p.fetchAndStoreSystemInfo)
 }
 
 // midnightFinalizer waits until midnight+5min local time, then writes

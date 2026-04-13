@@ -8,6 +8,12 @@ import (
 
 const ttl30Days = 30 * 24 * time.Hour
 
+// Off-peak record status values.
+const (
+	OffpeakStatusPending  = "pending"
+	OffpeakStatusComplete = "complete"
+)
+
 // ReadingItem represents a row in the flux-readings table.
 type ReadingItem struct {
 	SysSn     string  `dynamodbav:"sysSn"`
