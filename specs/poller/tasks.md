@@ -8,7 +8,7 @@ references:
 
 ## Project Setup
 
-- [ ] 1. Initialize Go module and project structure <!-- id:vqdz1ig -->
+- [x] 1. Initialize Go module and project structure <!-- id:vqdz1ig -->
   - Create go.mod at repo root with module path and Go 1.26
   - Create directory structure: cmd/poller/, internal/alphaess/, internal/dynamo/, internal/poller/, internal/config/
   - Create Makefile with targets: build, test, fmt, vet, lint, modernize, check, docker-build, deps-tidy, deps-update
