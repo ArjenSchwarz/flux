@@ -19,7 +19,7 @@ references:
 
 ## Configuration
 
-- [ ] 2. Write tests for config loading and validation <!-- id:vqdz1ih -->
+- [x] 2. Write tests for config loading and validation <!-- id:vqdz1ih -->
   - Test valid config with all env vars set
   - Test missing required vars (each individually) returns error naming the variable
   - Test malformed OFFPEAK_START/END (invalid HH:MM, start >= end)
@@ -32,7 +32,7 @@ references:
   - Requirements: [5.1](requirements.md#5.1), [5.2](requirements.md#5.2), [5.3](requirements.md#5.3), [5.4](requirements.md#5.4), [5.5](requirements.md#5.5), [5.6](requirements.md#5.6), [5.7](requirements.md#5.7), [5.8](requirements.md#5.8), [5.9](requirements.md#5.9), [5.10](requirements.md#5.10), [5.11](requirements.md#5.11), [12.4](requirements.md#12.4)
   - References: internal/config/config_test.go
 
-- [ ] 3. Implement config loading and validation <!-- id:vqdz1ii -->
+- [x] 3. Implement config loading and validation <!-- id:vqdz1ii -->
   - Config struct with all fields per design
   - Load from env vars, parse HH:MM to time.Duration
   - time.LoadLocation for timezone with Australia/Sydney default
