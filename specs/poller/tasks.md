@@ -84,7 +84,7 @@ references:
 
 ## DynamoDB Layer
 
-- [ ] 7. Create DynamoDB models, Store interface, and transformation functions <!-- id:vqdz1im -->
+- [x] 7. Create DynamoDB models, Store interface, and transformation functions <!-- id:vqdz1im -->
   - ReadingItem, DailyEnergyItem, DailyPowerItem, SystemItem, OffpeakItem structs with dynamodbav tags
   - OffpeakItem includes Status field (pending/complete)
   - Store interface with 7 methods: WriteReading, WriteDailyEnergy, WriteDailyPower, WriteSystem, WriteOffpeak, DeleteOffpeak, GetOffpeak
@@ -95,7 +95,7 @@ references:
   - Requirements: [4.1](requirements.md#4.1), [4.2](requirements.md#4.2), [4.3](requirements.md#4.3), [4.4](requirements.md#4.4), [4.5](requirements.md#4.5), [4.6](requirements.md#4.6), [4.7](requirements.md#4.7), [4.10](requirements.md#4.10)
   - References: internal/dynamo/models.go, internal/dynamo/store.go
 
-- [ ] 8. Write tests for DynamoDB model transformations <!-- id:vqdz1in -->
+- [x] 8. Write tests for DynamoDB model transformations <!-- id:vqdz1in -->
   - Test NewReadingItem maps API fields correctly and computes 30-day TTL
   - Test NewDailyEnergyItem maps fields and sets date as sort key
   - Test NewDailyPowerItems maps all snapshots and computes 30-day TTL
@@ -106,7 +106,7 @@ references:
   - Requirements: [4.1](requirements.md#4.1), [4.2](requirements.md#4.2), [4.3](requirements.md#4.3), [4.4](requirements.md#4.4), [4.5](requirements.md#4.5), [4.6](requirements.md#4.6)
   - References: internal/dynamo/models_test.go
 
-- [ ] 9. Implement DynamoStore <!-- id:vqdz1io -->
+- [x] 9. Implement DynamoStore <!-- id:vqdz1io -->
   - DynamoStore struct with dynamodb.Client and TableNames
   - WriteReading: PutItem with MarshalMap
   - WriteDailyEnergy: PutItem with MarshalMap
@@ -121,7 +121,7 @@ references:
   - Requirements: [4.1](requirements.md#4.1), [4.3](requirements.md#4.3), [4.4](requirements.md#4.4), [4.6](requirements.md#4.6), [4.7](requirements.md#4.7), [4.8](requirements.md#4.8), [4.9](requirements.md#4.9), [4.10](requirements.md#4.10), [4.11](requirements.md#4.11)
   - References: internal/dynamo/store.go
 
-- [ ] 10. Write tests for LogStore (dry-run) <!-- id:vqdz1ip -->
+- [x] 10. Write tests for LogStore (dry-run) <!-- id:vqdz1ip -->
   - Test each write method logs table name and item attributes
   - Test DeleteOffpeak logs what would be deleted
   - Test GetOffpeak returns nil
@@ -131,7 +131,7 @@ references:
   - Requirements: [12.2](requirements.md#12.2), [12.3](requirements.md#12.3)
   - References: internal/dynamo/logstore_test.go
 
-- [ ] 11. Implement LogStore <!-- id:vqdz1iq -->
+- [x] 11. Implement LogStore <!-- id:vqdz1iq -->
   - LogStore struct with slog.Logger
   - Each write method logs table name and JSON-serialized item
   - DeleteOffpeak logs table and key that would be deleted
