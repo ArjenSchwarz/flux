@@ -186,8 +186,10 @@ Resources:
                   - dynamodb:PutItem
                   - dynamodb:UpdateItem
                   - dynamodb:BatchWriteItem
+                  - dynamodb:DeleteItem
                   - dynamodb:GetItem
                   - dynamodb:Query
+                  - dynamodb:DeleteItem
                 Resource:
                   - !GetAtt ReadingsTable.Arn
                   - !GetAtt DailyEnergyTable.Arn
@@ -457,6 +459,18 @@ Resources:
               Value: !Ref OffPeakWindowEnd
             - Name: AWS_REGION
               Value: !Ref AWS::Region
+            - Name: TABLE_READINGS
+              Value: !Ref ReadingsTable
+            - Name: TABLE_DAILY_ENERGY
+              Value: !Ref DailyEnergyTable
+            - Name: TABLE_DAILY_POWER
+              Value: !Ref DailyPowerTable
+            - Name: TABLE_SYSTEM
+              Value: !Ref SystemTable
+            - Name: TABLE_OFFPEAK
+              Value: !Ref OffpeakTable
+            - Name: TZ
+              Value: Australia/Sydney
           HealthCheck:
             Command:
               - CMD

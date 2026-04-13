@@ -143,7 +143,7 @@ references:
 
 ## Poller Orchestrator
 
-- [ ] 12. Write tests for poller polling goroutines <!-- id:vqdz1ir -->
+- [x] 12. Write tests for poller polling goroutines <!-- id:vqdz1ir -->
   - Test pollLiveData calls GetLastPowerData and WriteReading
   - Test pollDailyPower calls GetOneDayPower with todays date and WriteDailyPower
   - Test pollDailyEnergy calls GetOneDateEnergy with todays date and WriteDailyEnergy
@@ -158,7 +158,7 @@ references:
   - Requirements: [3.1](requirements.md#3.1), [3.2](requirements.md#3.2), [3.3](requirements.md#3.3), [3.4](requirements.md#3.4), [3.5](requirements.md#3.5), [3.6](requirements.md#3.6), [2.9](requirements.md#2.9), [4.9](requirements.md#4.9), [12.2](requirements.md#12.2)
   - References: internal/poller/poller_test.go
 
-- [ ] 13. Implement poller orchestrator <!-- id:vqdz1is -->
+- [x] 13. Implement poller orchestrator <!-- id:vqdz1is -->
   - Poller struct with Client, Store, Config, OffpeakScheduler
   - Run(ctx) with two-context pattern: loopCtx for tickers, drainCtx for in-flight ops
   - pollLiveData: 10s ticker goroutine
@@ -173,7 +173,7 @@ references:
   - Requirements: [3.1](requirements.md#3.1), [3.2](requirements.md#3.2), [3.3](requirements.md#3.3), [3.4](requirements.md#3.4), [3.5](requirements.md#3.5), [3.6](requirements.md#3.6), [8.2](requirements.md#8.2), [8.3](requirements.md#8.3), [9.3](requirements.md#9.3), [9.4](requirements.md#9.4), [12.2](requirements.md#12.2)
   - References: internal/poller/poller.go
 
-- [ ] 14. Write tests for off-peak scheduler <!-- id:vqdz1it -->
+- [x] 14. Write tests for off-peak scheduler <!-- id:vqdz1it -->
   - Test off-peak delta computation: given start and end snapshots, verify all 6 deltas
   - Test batteryDeltaPercent = socEnd - socStart
   - Test time position detection: before window, during window, after window
@@ -189,7 +189,7 @@ references:
   - Requirements: [6.1](requirements.md#6.1), [6.2](requirements.md#6.2), [6.3](requirements.md#6.3), [6.4](requirements.md#6.4), [6.5](requirements.md#6.5), [6.6](requirements.md#6.6), [6.7](requirements.md#6.7), [6.10](requirements.md#6.10), [6.11](requirements.md#6.11), [6.12](requirements.md#6.12), [6.13](requirements.md#6.13), [6.14](requirements.md#6.14)
   - References: internal/poller/offpeak_test.go
 
-- [ ] 15. Implement off-peak scheduler <!-- id:vqdz1iu -->
+- [x] 15. Implement off-peak scheduler <!-- id:vqdz1iu -->
   - OffpeakScheduler struct with Client, Store, Config, in-memory start state
   - Run method: determine position (before/during/after), schedule accordingly
   - captureSnapshot: call GetOneDateEnergy + GetLastPowerData with 3-attempt retry
@@ -204,7 +204,7 @@ references:
   - Requirements: [6.1](requirements.md#6.1), [6.2](requirements.md#6.2), [6.3](requirements.md#6.3), [6.4](requirements.md#6.4), [6.5](requirements.md#6.5), [6.6](requirements.md#6.6), [6.7](requirements.md#6.7), [6.8](requirements.md#6.8), [6.9](requirements.md#6.9), [6.10](requirements.md#6.10), [6.11](requirements.md#6.11), [6.12](requirements.md#6.12), [6.13](requirements.md#6.13), [6.14](requirements.md#6.14)
   - References: internal/poller/offpeak.go
 
-- [ ] 16. Write tests for midnight energy finalizer <!-- id:vqdz1iv -->
+- [x] 16. Write tests for midnight energy finalizer <!-- id:vqdz1iv -->
   - Test nextLocalMidnight returns correct time from various times of day
   - Test nextLocalMidnight across DST transition boundaries
   - Test finalizer calls GetOneDateEnergy with yesterdays date after midnight
@@ -213,7 +213,7 @@ references:
   - Requirements: [3.7](requirements.md#3.7)
   - References: internal/poller/poller_test.go
 
-- [ ] 17. Implement midnight energy finalizer <!-- id:vqdz1iw -->
+- [x] 17. Implement midnight energy finalizer <!-- id:vqdz1iw -->
   - midnightFinalizer goroutine in poller
   - nextLocalMidnight helper using time.Date for DST safety
   - Sleep until midnight + 5 minutes, call GetOneDateEnergy(yesterday), write to store
@@ -271,7 +271,7 @@ references:
   - Requirements: [10.1](requirements.md#10.1), [10.2](requirements.md#10.2), [10.3](requirements.md#10.3), [10.4](requirements.md#10.4), [10.5](requirements.md#10.5), [10.6](requirements.md#10.6)
   - References: Dockerfile
 
-- [ ] 22. Create GitHub Actions CI workflow <!-- id:vqdz1j1 -->
+- [x] 22. Create GitHub Actions CI workflow <!-- id:vqdz1j1 -->
   - Trigger on push to main when poller source, Dockerfile, or go.mod/sum change
   - Setup Go 1.26, run go vet and go test
   - Short SHA extraction step with id: short-sha
@@ -284,7 +284,7 @@ references:
 
 ## Infrastructure Update
 
-- [ ] 23. Update CloudFormation template with poller env vars <!-- id:vqdz1j2 -->
+- [x] 23. Update CloudFormation template with poller env vars <!-- id:vqdz1j2 -->
   - Add TABLE_READINGS, TABLE_DAILY_ENERGY, TABLE_DAILY_POWER, TABLE_SYSTEM, TABLE_OFFPEAK environment variables to container definition
   - Values reference CloudFormation table resources via !Ref
   - Add TZ=Australia/Sydney environment variable
