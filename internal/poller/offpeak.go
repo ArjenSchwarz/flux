@@ -39,6 +39,9 @@ type OffpeakScheduler struct {
 
 	// retryDelay between snapshot attempts (overridable for tests).
 	retryDelay time.Duration
+
+	// now returns the current time. Injectable for deterministic testing.
+	now func() time.Time
 }
 
 // NewOffpeakScheduler creates an OffpeakScheduler with the given dependencies.
@@ -48,6 +51,7 @@ func NewOffpeakScheduler(client APIClient, store dynamo.Store, cfg *config.Confi
 		store:      store,
 		cfg:        cfg,
 		retryDelay: defaultRetryDelay,
+		now:        time.Now,
 	}
 }
 
@@ -56,8 +60,8 @@ func NewOffpeakScheduler(client APIClient, store dynamo.Store, cfg *config.Confi
 func (o *OffpeakScheduler) Run(loopCtx, drainCtx context.Context, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	now := time.Now().In(o.cfg.Location)
-	date := now.Format("2006-01-02")
+	now := o.now().In(o.cfg.Location)
+	date := now.Format(dateLayout)
 	pos := timePosition(now, o.cfg.OffpeakStart, o.cfg.OffpeakEnd)
 
 	slog.Debug("offpeak scheduler starting", "position", pos, "date", date)
@@ -100,8 +104,8 @@ nextDay:
 	// Daily loop: wait for tomorrow's start, then repeat.
 	for {
 		o.resetState()
-		tomorrow := time.Now().In(o.cfg.Location).AddDate(0, 0, 1)
-		date = tomorrow.Format("2006-01-02")
+		tomorrow := o.now().In(o.cfg.Location).AddDate(0, 0, 1)
+		date = tomorrow.Format(dateLayout)
 		startTime := wallClockTime(tomorrow, o.cfg.Location, o.cfg.OffpeakStart)
 
 		if !o.waitUntil(loopCtx, startTime) {
@@ -163,7 +167,8 @@ func (o *OffpeakScheduler) handleEnd(ctx context.Context, date string) error {
 	return nil
 }
 
-// captureSnapshot calls GetOneDateEnergy + GetLastPowerData with retry.
+// captureSnapshot calls GetOneDateEnergy + GetLastPowerData in parallel with retry.
+// Both API calls are independent and run concurrently within each attempt.
 func (o *OffpeakScheduler) captureSnapshot(ctx context.Context, date string) (*alphaess.EnergyData, float64, error) {
 	delay := o.retryDelay
 	var lastErr error
@@ -176,17 +181,32 @@ func (o *OffpeakScheduler) captureSnapshot(ctx context.Context, date string) (*a
 			}
 		}
 
-		energy, err := o.client.GetOneDateEnergy(ctx, o.cfg.Serial, date)
-		if err != nil {
-			lastErr = err
-			slog.Warn("offpeak snapshot energy attempt failed", "attempt", attempt+1, "error", err)
+		var (
+			energy              *alphaess.EnergyData
+			power               *alphaess.PowerData
+			energyErr, powerErr error
+			wg                  sync.WaitGroup
+		)
+
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			energy, energyErr = o.client.GetOneDateEnergy(ctx, o.cfg.Serial, date)
+		}()
+		go func() {
+			defer wg.Done()
+			power, powerErr = o.client.GetLastPowerData(ctx, o.cfg.Serial)
+		}()
+		wg.Wait()
+
+		if energyErr != nil {
+			lastErr = energyErr
+			slog.Warn("offpeak snapshot energy attempt failed", "attempt", attempt+1, "error", energyErr)
 			continue
 		}
-
-		power, err := o.client.GetLastPowerData(ctx, o.cfg.Serial)
-		if err != nil {
-			lastErr = err
-			slog.Warn("offpeak snapshot power attempt failed", "attempt", attempt+1, "error", err)
+		if powerErr != nil {
+			lastErr = powerErr
+			slog.Warn("offpeak snapshot power attempt failed", "attempt", attempt+1, "error", powerErr)
 			continue
 		}
 

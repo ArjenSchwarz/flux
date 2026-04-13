@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 
 	_ "time/tzdata" // Embed timezone data for distroless containers.
@@ -22,20 +21,7 @@ import (
 )
 
 func main() {
-	// Configure structured JSON logging with renamed fields.
-	handler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-		ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
-			if a.Key == slog.TimeKey {
-				a.Key = "timestamp"
-			}
-			if a.Key == slog.LevelKey {
-				a.Value = slog.StringValue(strings.ToLower(a.Value.String()))
-			}
-			return a
-		},
-	})
-	slog.SetDefault(slog.New(handler))
+	configureLogger()
 
 	// Healthcheck subcommand — fast path, no full startup.
 	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
@@ -59,13 +45,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Log startup.
-	slog.Info("poller starting",
-		"serial", cfg.Serial,
-		"offpeak", config.FormatHHMM(cfg.OffpeakStart)+"-"+config.FormatHHMM(cfg.OffpeakEnd),
-		"tz", cfg.Location.String(),
-		"dry_run", cfg.DryRun,
-	)
+	logPollerStartup(cfg, slog.Default())
 
 	// Signal handling — SIGTERM/SIGINT cancel the context.
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)

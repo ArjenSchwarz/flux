@@ -34,35 +34,11 @@ func NewDynamoStore(client DynamoAPI, tables TableNames) *DynamoStore {
 }
 
 func (s *DynamoStore) WriteReading(ctx context.Context, item ReadingItem) error {
-	av, err := attributevalue.MarshalMap(item)
-	if err != nil {
-		return fmt.Errorf("marshal reading (sysSn=%s): %w", item.SysSn, err)
-	}
-
-	_, err = s.client.PutItem(ctx, &dynamodb.PutItemInput{
-		TableName: &s.tables.Readings,
-		Item:      av,
-	})
-	if err != nil {
-		return fmt.Errorf("put reading (table=%s, sysSn=%s): %w", s.tables.Readings, item.SysSn, err)
-	}
-	return nil
+	return s.putItem(ctx, s.tables.Readings, item, fmt.Sprintf("reading (sysSn=%s)", item.SysSn))
 }
 
 func (s *DynamoStore) WriteDailyEnergy(ctx context.Context, item DailyEnergyItem) error {
-	av, err := attributevalue.MarshalMap(item)
-	if err != nil {
-		return fmt.Errorf("marshal daily energy (sysSn=%s, date=%s): %w", item.SysSn, item.Date, err)
-	}
-
-	_, err = s.client.PutItem(ctx, &dynamodb.PutItemInput{
-		TableName: &s.tables.DailyEnergy,
-		Item:      av,
-	})
-	if err != nil {
-		return fmt.Errorf("put daily energy (table=%s, sysSn=%s, date=%s): %w", s.tables.DailyEnergy, item.SysSn, item.Date, err)
-	}
-	return nil
+	return s.putItem(ctx, s.tables.DailyEnergy, item, fmt.Sprintf("daily energy (sysSn=%s, date=%s)", item.SysSn, item.Date))
 }
 
 func (s *DynamoStore) WriteDailyPower(ctx context.Context, items []DailyPowerItem) error {
@@ -120,35 +96,11 @@ func (s *DynamoStore) WriteDailyPower(ctx context.Context, items []DailyPowerIte
 }
 
 func (s *DynamoStore) WriteSystem(ctx context.Context, item SystemItem) error {
-	av, err := attributevalue.MarshalMap(item)
-	if err != nil {
-		return fmt.Errorf("marshal system (sysSn=%s): %w", item.SysSn, err)
-	}
-
-	_, err = s.client.PutItem(ctx, &dynamodb.PutItemInput{
-		TableName: &s.tables.System,
-		Item:      av,
-	})
-	if err != nil {
-		return fmt.Errorf("put system (table=%s, sysSn=%s): %w", s.tables.System, item.SysSn, err)
-	}
-	return nil
+	return s.putItem(ctx, s.tables.System, item, fmt.Sprintf("system (sysSn=%s)", item.SysSn))
 }
 
 func (s *DynamoStore) WriteOffpeak(ctx context.Context, item OffpeakItem) error {
-	av, err := attributevalue.MarshalMap(item)
-	if err != nil {
-		return fmt.Errorf("marshal offpeak (sysSn=%s, date=%s): %w", item.SysSn, item.Date, err)
-	}
-
-	_, err = s.client.PutItem(ctx, &dynamodb.PutItemInput{
-		TableName: &s.tables.Offpeak,
-		Item:      av,
-	})
-	if err != nil {
-		return fmt.Errorf("put offpeak (table=%s, sysSn=%s, date=%s): %w", s.tables.Offpeak, item.SysSn, item.Date, err)
-	}
-	return nil
+	return s.putItem(ctx, s.tables.Offpeak, item, fmt.Sprintf("offpeak (sysSn=%s, date=%s)", item.SysSn, item.Date))
 }
 
 func (s *DynamoStore) DeleteOffpeak(ctx context.Context, serial, date string) error {
@@ -186,4 +138,22 @@ func (s *DynamoStore) GetOffpeak(ctx context.Context, serial, date string) (*Off
 		return nil, fmt.Errorf("unmarshal offpeak (sysSn=%s, date=%s): %w", serial, date, err)
 	}
 	return &item, nil
+}
+
+// putItem marshals the item and writes it to the given table. The key string
+// is used for error context (e.g., "reading (sysSn=X)").
+func (s *DynamoStore) putItem(ctx context.Context, table string, item any, key string) error {
+	av, err := attributevalue.MarshalMap(item)
+	if err != nil {
+		return fmt.Errorf("marshal %s: %w", key, err)
+	}
+
+	_, err = s.client.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName: &table,
+		Item:      av,
+	})
+	if err != nil {
+		return fmt.Errorf("put %s (table=%s): %w", key, table, err)
+	}
+	return nil
 }

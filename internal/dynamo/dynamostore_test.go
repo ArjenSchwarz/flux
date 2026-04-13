@@ -70,7 +70,7 @@ func TestDynamoStore_WriteReading(t *testing.T) {
 		"put error wraps context": {
 			item:    ReadingItem{SysSn: "AB1234", Timestamp: 1000},
 			putErr:  errors.New("throttled"),
-			wantErr: "put reading (table=test-readings, sysSn=AB1234)",
+			wantErr: "put reading (sysSn=AB1234) (table=test-readings)",
 		},
 	}
 
@@ -109,7 +109,7 @@ func TestDynamoStore_WriteDailyEnergy(t *testing.T) {
 		"put error wraps context": {
 			item:    DailyEnergyItem{SysSn: "AB1234", Date: "2026-04-13"},
 			putErr:  errors.New("throttled"),
-			wantErr: "put daily energy (table=test-daily-energy, sysSn=AB1234, date=2026-04-13)",
+			wantErr: "put daily energy (sysSn=AB1234, date=2026-04-13) (table=test-daily-energy)",
 		},
 	}
 

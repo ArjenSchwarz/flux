@@ -13,6 +13,16 @@ import (
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
 )
 
+const (
+	livePollInterval     = 10 * time.Second
+	dailyPowerInterval   = 1 * time.Hour
+	dailyEnergyInterval  = 6 * time.Hour
+	systemInfoInterval   = 24 * time.Hour
+	shutdownDrainTimeout = 25 * time.Second
+	midnightDelay        = 5 * time.Minute
+	dateLayout           = "2006-01-02"
+)
+
 // APIClient defines the AlphaESS API methods used by the poller.
 type APIClient interface {
 	GetLastPowerData(ctx context.Context, serial string) (*alphaess.PowerData, error)
@@ -27,11 +37,14 @@ type Poller struct {
 	store   dynamo.Store
 	cfg     *config.Config
 	offpeak *OffpeakScheduler
+
+	// now returns the current time. Injectable for deterministic testing.
+	now func() time.Time
 }
 
 // New creates a Poller with the given dependencies.
 func New(client APIClient, store dynamo.Store, cfg *config.Config) *Poller {
-	p := &Poller{client: client, store: store, cfg: cfg}
+	p := &Poller{client: client, store: store, cfg: cfg, now: time.Now}
 	p.offpeak = NewOffpeakScheduler(client, store, cfg)
 	return p
 }
@@ -61,9 +74,9 @@ func (p *Poller) Run(ctx context.Context) error {
 	select {
 	case <-done:
 		return nil
-	case <-time.After(25 * time.Second):
+	case <-time.After(shutdownDrainTimeout):
 		drainCancel()
-		return fmt.Errorf("shutdown timed out after 25 seconds")
+		return fmt.Errorf("shutdown timed out after %s", shutdownDrainTimeout)
 	}
 }
 
@@ -86,21 +99,21 @@ func pollLoop(loopCtx, drainCtx context.Context, wg *sync.WaitGroup, interval ti
 }
 
 func (p *Poller) pollLiveData(loopCtx, drainCtx context.Context, wg *sync.WaitGroup) {
-	pollLoop(loopCtx, drainCtx, wg, 10*time.Second, p.fetchAndStoreLiveData)
+	pollLoop(loopCtx, drainCtx, wg, livePollInterval, p.fetchAndStoreLiveData)
 }
 
 func (p *Poller) pollDailyPower(loopCtx, drainCtx context.Context, wg *sync.WaitGroup) {
-	pollLoop(loopCtx, drainCtx, wg, 1*time.Hour, p.fetchAndStoreDailyPower)
+	pollLoop(loopCtx, drainCtx, wg, dailyPowerInterval, p.fetchAndStoreDailyPower)
 }
 
 func (p *Poller) pollDailyEnergy(loopCtx, drainCtx context.Context, wg *sync.WaitGroup) {
-	pollLoop(loopCtx, drainCtx, wg, 6*time.Hour, func(ctx context.Context) {
+	pollLoop(loopCtx, drainCtx, wg, dailyEnergyInterval, func(ctx context.Context) {
 		p.fetchAndStoreDailyEnergy(ctx, "")
 	})
 }
 
 func (p *Poller) pollSystemInfo(loopCtx, drainCtx context.Context, wg *sync.WaitGroup) {
-	pollLoop(loopCtx, drainCtx, wg, 24*time.Hour, p.fetchAndStoreSystemInfo)
+	pollLoop(loopCtx, drainCtx, wg, systemInfoInterval, p.fetchAndStoreSystemInfo)
 }
 
 // midnightFinalizer waits until midnight+5min local time, then writes
@@ -108,15 +121,15 @@ func (p *Poller) pollSystemInfo(loopCtx, drainCtx context.Context, wg *sync.Wait
 func (p *Poller) midnightFinalizer(loopCtx, drainCtx context.Context, wg *sync.WaitGroup) {
 	defer wg.Done()
 	for {
-		now := time.Now().In(p.cfg.Location)
+		now := p.now().In(p.cfg.Location)
 		next := nextLocalMidnight(now, p.cfg.Location)
-		delay := time.Until(next) + 5*time.Minute
+		delay := time.Until(next) + midnightDelay
 
 		select {
 		case <-loopCtx.Done():
 			return
 		case <-time.After(delay):
-			yesterday := time.Now().In(p.cfg.Location).AddDate(0, 0, -1).Format("2006-01-02")
+			yesterday := p.now().In(p.cfg.Location).AddDate(0, 0, -1).Format(dateLayout)
 			slog.Debug("midnight finalizer running", "date", yesterday)
 			p.fetchAndStoreDailyEnergy(drainCtx, yesterday)
 		}
@@ -143,15 +156,16 @@ func (p *Poller) fetchAndStoreLiveData(ctx context.Context) {
 		logDryRunPayload("getLastPowerData", data)
 	}
 
-	now := time.Now()
-	item := dynamo.NewReadingItem(p.cfg.Serial, data, now)
+	item := dynamo.NewReadingItem(p.cfg.Serial, data, p.now())
 	if err := p.store.WriteReading(ctx, item); err != nil {
 		slog.Error("write reading failed", "error", err)
+		return
 	}
+	slog.Info("stored reading", "sysSn", p.cfg.Serial)
 }
 
 func (p *Poller) fetchAndStoreDailyPower(ctx context.Context) {
-	today := time.Now().In(p.cfg.Location).Format("2006-01-02")
+	today := p.now().In(p.cfg.Location).Format(dateLayout)
 	snapshots, err := p.client.GetOneDayPower(ctx, p.cfg.Serial, today)
 	if err != nil {
 		slog.Error("fetch daily power failed", "error", err)
@@ -162,18 +176,19 @@ func (p *Poller) fetchAndStoreDailyPower(ctx context.Context) {
 		logDryRunPayload("getOneDayPowerBySn", snapshots)
 	}
 
-	now := time.Now()
-	items := dynamo.NewDailyPowerItems(p.cfg.Serial, snapshots, now)
+	items := dynamo.NewDailyPowerItems(p.cfg.Serial, snapshots, p.now())
 	if err := p.store.WriteDailyPower(ctx, items); err != nil {
 		slog.Error("write daily power failed", "error", err)
+		return
 	}
+	slog.Info("stored daily power", "date", today, "count", len(items))
 }
 
 // fetchAndStoreDailyEnergy fetches and stores energy data. If date is empty,
 // uses today in the configured timezone.
 func (p *Poller) fetchAndStoreDailyEnergy(ctx context.Context, date string) {
 	if date == "" {
-		date = time.Now().In(p.cfg.Location).Format("2006-01-02")
+		date = p.now().In(p.cfg.Location).Format(dateLayout)
 	}
 
 	data, err := p.client.GetOneDateEnergy(ctx, p.cfg.Serial, date)
@@ -189,7 +204,9 @@ func (p *Poller) fetchAndStoreDailyEnergy(ctx context.Context, date string) {
 	item := dynamo.NewDailyEnergyItem(p.cfg.Serial, date, data)
 	if err := p.store.WriteDailyEnergy(ctx, item); err != nil {
 		slog.Error("write daily energy failed", "date", date, "error", err)
+		return
 	}
+	slog.Info("stored daily energy", "date", date)
 }
 
 func (p *Poller) fetchAndStoreSystemInfo(ctx context.Context) {
@@ -203,11 +220,12 @@ func (p *Poller) fetchAndStoreSystemInfo(ctx context.Context) {
 		logDryRunPayload("getEssList", info)
 	}
 
-	now := time.Now()
-	item := dynamo.NewSystemItem(info, now)
+	item := dynamo.NewSystemItem(info, p.now())
 	if err := p.store.WriteSystem(ctx, item); err != nil {
 		slog.Error("write system info failed", "error", err)
+		return
 	}
+	slog.Info("stored system info")
 }
 
 // logDryRunPayload logs the raw API response payload at info level.

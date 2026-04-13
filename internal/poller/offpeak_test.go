@@ -142,7 +142,7 @@ func TestCaptureSnapshot_SuccessOnFirstAttempt(t *testing.T) {
 		lastPowerData: &alphaess.PowerData{Soc: 50.0},
 	}
 	cfg := testOffpeakCfg()
-	o := &OffpeakScheduler{client: mc, store: &mockStore{}, cfg: cfg}
+	o := &OffpeakScheduler{client: mc, store: &mockStore{}, cfg: cfg, now: time.Now}
 
 	energy, soc, err := o.captureSnapshot(context.Background(), "2026-04-13")
 	require.NoError(t, err)
@@ -172,7 +172,7 @@ func TestCaptureSnapshot_RetryThenSucceed(t *testing.T) {
 	_ = callCount
 
 	cfg := testOffpeakCfg()
-	o := &OffpeakScheduler{client: origClient, store: &mockStore{}, cfg: cfg, retryDelay: 1 * time.Millisecond}
+	o := &OffpeakScheduler{client: origClient, store: &mockStore{}, cfg: cfg, retryDelay: 1 * time.Millisecond, now: time.Now}
 
 	energy, soc, err := o.captureSnapshot(context.Background(), "2026-04-13")
 	require.NoError(t, err)
@@ -186,7 +186,7 @@ func TestCaptureSnapshot_AllRetriesFail(t *testing.T) {
 		oneDateEnergyErr: errors.New("persistent error"),
 	}
 	cfg := testOffpeakCfg()
-	o := &OffpeakScheduler{client: mc, store: &mockStore{}, cfg: cfg, retryDelay: 1 * time.Millisecond}
+	o := &OffpeakScheduler{client: mc, store: &mockStore{}, cfg: cfg, retryDelay: 1 * time.Millisecond, now: time.Now}
 
 	_, _, err := o.captureSnapshot(context.Background(), "2026-04-13")
 	require.Error(t, err)
@@ -206,7 +206,7 @@ func TestOffpeak_StartSucceeds_EndFails_DeletesPending(t *testing.T) {
 		lastPowerData: &alphaess.PowerData{Soc: 50.0},
 	}
 	cfg := testOffpeakCfg()
-	o := &OffpeakScheduler{client: mc, store: ms, cfg: cfg, retryDelay: 1 * time.Millisecond}
+	o := &OffpeakScheduler{client: mc, store: ms, cfg: cfg, retryDelay: 1 * time.Millisecond, now: time.Now}
 
 	// Simulate start capture.
 	err := o.handleStart(context.Background(), "2026-04-13")
@@ -234,7 +234,7 @@ func TestOffpeak_MidWindowRecovery_PendingRecordExists(t *testing.T) {
 	}
 	mc := &mockClient{}
 	cfg := testOffpeakCfg()
-	o := &OffpeakScheduler{client: mc, store: ms, cfg: cfg}
+	o := &OffpeakScheduler{client: mc, store: ms, cfg: cfg, now: time.Now}
 
 	err := o.recoverMidWindow(context.Background(), "2026-04-13")
 	require.NoError(t, err)
@@ -247,7 +247,7 @@ func TestOffpeak_MidWindowRecovery_NoRecord(t *testing.T) {
 	ms := &mockStore{getOffpeakResult: nil}
 	mc := &mockClient{}
 	cfg := testOffpeakCfg()
-	o := &OffpeakScheduler{client: mc, store: ms, cfg: cfg}
+	o := &OffpeakScheduler{client: mc, store: ms, cfg: cfg, now: time.Now}
 
 	err := o.recoverMidWindow(context.Background(), "2026-04-13")
 	require.NoError(t, err)
@@ -261,7 +261,7 @@ func TestOffpeak_MidWindowRecovery_StoreError(t *testing.T) {
 	ms := &mockStore{getOffpeakErr: errors.New("dynamo query fail")}
 	mc := &mockClient{}
 	cfg := testOffpeakCfg()
-	o := &OffpeakScheduler{client: mc, store: ms, cfg: cfg}
+	o := &OffpeakScheduler{client: mc, store: ms, cfg: cfg, now: time.Now}
 
 	err := o.recoverMidWindow(context.Background(), "2026-04-13")
 	require.NoError(t, err) // Should not return error, just log and skip.

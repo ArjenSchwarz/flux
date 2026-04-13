@@ -119,7 +119,7 @@ func testPoller(client APIClient, store dynamo.Store, opts ...func(*config.Confi
 	for _, o := range opts {
 		o(cfg)
 	}
-	return &Poller{client: client, store: store, cfg: cfg}
+	return &Poller{client: client, store: store, cfg: cfg, now: time.Now}
 }
 
 func withDryRun(cfg *config.Config) { cfg.DryRun = true }
