@@ -225,7 +225,7 @@ references:
 
 ## Entrypoint and Health Check
 
-- [ ] 18. Write tests for health check <!-- id:vqdz1ix -->
+- [x] 18. Write tests for health check <!-- id:vqdz1ix -->
   - Test health check returns 0 when recent reading exists (<60s old)
   - Test health check returns 1 when reading is stale (>60s)
   - Test health check returns 1 when no reading exists
@@ -235,7 +235,7 @@ references:
   - Requirements: [7.1](requirements.md#7.1), [7.2](requirements.md#7.2), [7.3](requirements.md#7.3), [7.4](requirements.md#7.4), [7.5](requirements.md#7.5), [12.5](requirements.md#12.5)
   - References: cmd/poller/healthcheck_test.go
 
-- [ ] 19. Implement entrypoint and health check <!-- id:vqdz1iy -->
+- [x] 19. Implement entrypoint and health check <!-- id:vqdz1iy -->
   - main.go: os.Args dispatch for healthcheck subcommand
   - main.go: slog JSON handler with ReplaceAttr (time->timestamp, lowercase levels)
   - main.go: config.Load, create AlphaESS client, create store (DynamoStore or LogStore)
@@ -250,7 +250,7 @@ references:
 
 ## Logging Setup
 
-- [ ] 20. Configure slog JSON handler with field name customization <!-- id:vqdz1iz -->
+- [x] 20. Configure slog JSON handler with field name customization <!-- id:vqdz1iz -->
   - This is wired into main.go but the slog setup can be extracted to a helper
   - ReplaceAttr: rename time -> timestamp, lowercase level values
   - Verify secret safety: Config struct never logged directly
@@ -261,7 +261,7 @@ references:
 
 ## Docker and CI
 
-- [ ] 21. Create Dockerfile <!-- id:vqdz1j0 -->
+- [x] 21. Create Dockerfile <!-- id:vqdz1j0 -->
   - Multi-stage build: golang:1.26-alpine builder, gcr.io/distroless/static:nonroot runtime
   - Build with CGO_ENABLED=0 GOOS=linux GOARCH=arm64 -trimpath -ldflags=-s -w
   - Binary placed at /poller
