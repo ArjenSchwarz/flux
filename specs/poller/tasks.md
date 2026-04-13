@@ -45,7 +45,7 @@ references:
 
 ## AlphaESS API Client
 
-- [ ] 4. Create AlphaESS API response models <!-- id:vqdz1ij -->
+- [x] 4. Create AlphaESS API response models <!-- id:vqdz1ij -->
   - apiResponse envelope struct with Code, Msg, Data (json.RawMessage)
   - PowerData, EnergyData, PowerSnapshot, SystemInfo structs with json tags
   - All fields per design section 4
@@ -54,7 +54,7 @@ references:
   - Requirements: [2.4](requirements.md#2.4), [2.5](requirements.md#2.5), [2.6](requirements.md#2.6), [2.7](requirements.md#2.7)
   - References: internal/alphaess/models.go
 
-- [ ] 5. Write tests for AlphaESS client auth and HTTP handling <!-- id:vqdz1ik -->
+- [x] 5. Write tests for AlphaESS client auth and HTTP handling <!-- id:vqdz1ik -->
   - Test SHA-512 signing produces correct digest for known inputs
   - Test auth headers (appId, timeStamp, sign) are set on requests
   - Test successful response parsing for each endpoint
@@ -69,7 +69,7 @@ references:
   - Requirements: [2.1](requirements.md#2.1), [2.2](requirements.md#2.2), [2.3](requirements.md#2.3), [2.8](requirements.md#2.8), [2.9](requirements.md#2.9)
   - References: internal/alphaess/client_test.go
 
-- [ ] 6. Implement AlphaESS client <!-- id:vqdz1il -->
+- [x] 6. Implement AlphaESS client <!-- id:vqdz1il -->
   - Client struct with baseURL, appID, appSecret, httpClient
   - sign() method: SHA-512 of appID+appSecret+timestamp
   - Private doRequest helper: build request, set auth headers, POST, check HTTP status, unmarshal envelope, check code field
