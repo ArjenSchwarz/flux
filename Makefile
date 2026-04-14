@@ -1,4 +1,4 @@
-.PHONY: build test fmt vet lint modernize check docker-build deps-tidy deps-update
+.PHONY: build test fmt vet lint modernize check docker-build docker-dry-run deps-tidy deps-update
 
 build:
 	CGO_ENABLED=0 go build -o bin/poller ./cmd/poller
@@ -23,6 +23,17 @@ check: fmt vet lint test
 
 docker-build:
 	docker buildx build --platform linux/arm64 -t flux-poller .
+
+docker-dry-run:
+	docker run --rm \
+		-e DRY_RUN=true \
+		-e ALPHA_APP_ID=$${ALPHA_APP_ID} \
+		-e ALPHA_APP_SECRET=$${ALPHA_APP_SECRET} \
+		-e SYSTEM_SERIAL=$${SYSTEM_SERIAL} \
+		-e OFFPEAK_START=11:00 \
+		-e OFFPEAK_END=14:00 \
+		-e OFFPEAK_TZ=Australia/Melbourne \
+		flux-poller
 
 deps-tidy:
 	go mod tidy

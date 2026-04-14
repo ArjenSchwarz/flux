@@ -146,6 +146,23 @@ aws cloudformation deploy \
 | `EcsClusterName` | ECS cluster name |
 | `EcsServiceName` | ECS service name |
 
+## Local Dry-Run
+
+To test the poller container locally without writing to DynamoDB:
+
+```bash
+# Build the container first
+make docker-build
+
+# Run in dry-run mode (requires AlphaESS credentials as env vars)
+export ALPHA_APP_ID=your_app_id
+export ALPHA_APP_SECRET=your_app_secret
+export SYSTEM_SERIAL=your_serial_number
+make docker-dry-run
+```
+
+This starts the poller with `DRY_RUN=true`, which disables DynamoDB writes and logs API responses instead. Useful for verifying API connectivity and response parsing.
+
 ## Notes
 
 - DynamoDB tables use `DeletionPolicy: Retain` -- data survives stack deletion
