@@ -1,0 +1,63 @@
+name: Poller CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - cmd/poller/**
+      - internal/**
+      - go.mod
+      - go.sum
+      - Dockerfile
+  pull_request:
+    paths:
+      - cmd/poller/**
+      - internal/**
+      - go.mod
+      - go.sum
+      - Dockerfile
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Run go test
+        run: go test ./...
+
+      - name: Extract short SHA
+        id: short-sha
+        run: echo "sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          push: ${{ github.event_name != 'pull_request' }}
+          platforms: linux/arm64
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/flux-poller:latest
+            ghcr.io/${{ github.repository_owner }}/flux-poller:sha-${{ steps.short-sha.outputs.sha }}
