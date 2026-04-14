@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -86,8 +86,8 @@ func checkHealth(ctx context.Context, client healthQueryAPI, table, serial strin
 		return 1
 	}
 
-	var ts int64
-	if _, err := fmt.Sscanf(tsNum.Value, "%d", &ts); err != nil {
+	ts, err := strconv.ParseInt(tsNum.Value, 10, 64)
+	if err != nil {
 		slog.Error("healthcheck: parse timestamp", "value", tsNum.Value, "error", err)
 		return 1
 	}

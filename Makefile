@@ -32,7 +32,7 @@ docker-dry-run:
 		-e SYSTEM_SERIAL=$${SYSTEM_SERIAL} \
 		-e OFFPEAK_START=11:00 \
 		-e OFFPEAK_END=14:00 \
-		-e OFFPEAK_TZ=Australia/Melbourne \
+		-e TZ=Australia/Melbourne \
 		flux-poller
 
 deps-tidy:

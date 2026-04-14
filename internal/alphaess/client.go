@@ -60,7 +60,7 @@ func (c *Client) doGet(ctx context.Context, endpoint string, params map[string]s
 	req.Header.Set("appId", c.appID)
 	req.Header.Set("timeStamp", ts)
 	req.Header.Set("sign", sig)
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/json") // Required by AlphaESS API even on GET requests.
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

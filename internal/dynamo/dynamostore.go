@@ -85,10 +85,8 @@ func (s *DynamoStore) WriteDailyPower(ctx context.Context, items []DailyPowerIte
 				return fmt.Errorf("retry batch write daily power (table=%s): %w", s.tables.DailyPower, err)
 			}
 			if len(out.UnprocessedItems) > 0 {
-				slog.Error("unprocessed items after retry",
-					"table", s.tables.DailyPower,
-					"count", len(out.UnprocessedItems[s.tables.DailyPower]),
-				)
+				count := len(out.UnprocessedItems[s.tables.DailyPower])
+				return fmt.Errorf("batch write daily power (table=%s): %d items still unprocessed after retry", s.tables.DailyPower, count)
 			}
 		}
 	}

@@ -9,6 +9,13 @@ on:
       - go.mod
       - go.sum
       - Dockerfile
+  pull_request:
+    paths:
+      - cmd/poller/**
+      - internal/**
+      - go.mod
+      - go.sum
+      - Dockerfile
 
 permissions:
   contents: read
