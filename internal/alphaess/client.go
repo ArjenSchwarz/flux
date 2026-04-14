@@ -1,7 +1,6 @@
 package alphaess
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha512"
 	"encoding/hex"
@@ -9,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 )
@@ -39,15 +39,19 @@ func (c *Client) sign() (timestamp string, signature string) {
 	return ts, hex.EncodeToString(h.Sum(nil))
 }
 
-// doRequest sends an authenticated POST to the given endpoint and unmarshals
-// the API envelope. It returns the raw Data field for per-endpoint unmarshaling.
-func (c *Client) doRequest(ctx context.Context, endpoint string, body any) (json.RawMessage, error) {
-	bodyBytes, err := json.Marshal(body)
-	if err != nil {
-		return nil, fmt.Errorf("%s: marshal request: %w", endpoint, err)
+// doGet sends an authenticated GET to the given endpoint with query parameters
+// and unmarshals the API envelope. It returns the raw Data field for per-endpoint unmarshaling.
+func (c *Client) doGet(ctx context.Context, endpoint string, params map[string]string) (json.RawMessage, error) {
+	u := c.baseURL + "/" + endpoint
+	if len(params) > 0 {
+		q := url.Values{}
+		for k, v := range params {
+			q.Set(k, v)
+		}
+		u += "?" + q.Encode()
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/"+endpoint, bytes.NewReader(bodyBytes))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, fmt.Errorf("%s: create request: %w", endpoint, err)
 	}
@@ -78,7 +82,7 @@ func (c *Client) doRequest(ctx context.Context, endpoint string, body any) (json
 		return nil, fmt.Errorf("%s: unmarshal response: %w", endpoint, err)
 	}
 
-	if envelope.Code != 0 {
+	if envelope.Code != 0 && envelope.Code != 200 {
 		return nil, fmt.Errorf("%s: API error code %d: %s", endpoint, envelope.Code, envelope.Msg)
 	}
 
@@ -87,7 +91,7 @@ func (c *Client) doRequest(ctx context.Context, endpoint string, body any) (json
 
 // GetLastPowerData retrieves real-time power data for the given serial number.
 func (c *Client) GetLastPowerData(ctx context.Context, serial string) (*PowerData, error) {
-	data, err := c.doRequest(ctx, "getLastPowerData", map[string]string{"sysSn": serial})
+	data, err := c.doGet(ctx, "getLastPowerData", map[string]string{"sysSn": serial})
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +105,7 @@ func (c *Client) GetLastPowerData(ctx context.Context, serial string) (*PowerDat
 
 // GetOneDayPower retrieves 5-minute power snapshots for the given serial and date.
 func (c *Client) GetOneDayPower(ctx context.Context, serial, date string) ([]PowerSnapshot, error) {
-	data, err := c.doRequest(ctx, "getOneDayPowerBySn", map[string]string{"sysSn": serial, "queryDate": date})
+	data, err := c.doGet(ctx, "getOneDayPowerBySn", map[string]string{"sysSn": serial, "queryDate": date})
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +119,7 @@ func (c *Client) GetOneDayPower(ctx context.Context, serial, date string) ([]Pow
 
 // GetOneDateEnergy retrieves daily energy totals for the given serial and date.
 func (c *Client) GetOneDateEnergy(ctx context.Context, serial, date string) (*EnergyData, error) {
-	data, err := c.doRequest(ctx, "getOneDateEnergyBySn", map[string]string{"sysSn": serial, "queryDate": date})
+	data, err := c.doGet(ctx, "getOneDateEnergyBySn", map[string]string{"sysSn": serial, "queryDate": date})
 	if err != nil {
 		return nil, err
 	}
@@ -130,7 +134,7 @@ func (c *Client) GetOneDateEnergy(ctx context.Context, serial, date string) (*En
 // GetEssList retrieves system information and filters to the given serial number.
 // Returns an error if the serial is not found in the response.
 func (c *Client) GetEssList(ctx context.Context, serial string) (*SystemInfo, error) {
-	data, err := c.doRequest(ctx, "getEssList", nil)
+	data, err := c.doGet(ctx, "getEssList", nil)
 	if err != nil {
 		return nil, err
 	}

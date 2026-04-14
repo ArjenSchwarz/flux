@@ -46,9 +46,11 @@ func TestSign_TimestampChanges(t *testing.T) {
 
 func TestAuthHeaders_SetOnRequests(t *testing.T) {
 	var gotHeaders http.Header
+	var gotMethod string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotHeaders = r.Header.Clone()
-		writeJSON(t, w, apiResponse{Code: 0, Msg: "Success", Data: json.RawMessage(`{}`)})
+		gotMethod = r.Method
+		writeJSON(t, w, apiResponse{Code: 200, Msg: "Success", Data: json.RawMessage(`{}`)})
 	}))
 	defer srv.Close()
 
@@ -57,6 +59,7 @@ func TestAuthHeaders_SetOnRequests(t *testing.T) {
 
 	_, _ = c.GetLastPowerData(context.Background(), "SN123")
 
+	assert.Equal(t, http.MethodGet, gotMethod)
 	assert.Equal(t, "test-app-id", gotHeaders.Get("appId"))
 	assert.NotEmpty(t, gotHeaders.Get("timeStamp"))
 	assert.NotEmpty(t, gotHeaders.Get("sign"))
@@ -67,7 +70,7 @@ func TestGetLastPowerData_Success(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		data := PowerData{Ppv: 3.5, Pload: 1.2, Pbat: -0.5, Pgrid: 0.3, Soc: 85.0}
 		raw, _ := json.Marshal(data)
-		writeJSON(t, w, apiResponse{Code: 0, Msg: "Success", Data: raw})
+		writeJSON(t, w, apiResponse{Code: 200, Msg: "Success", Data: raw})
 	}))
 	defer srv.Close()
 
@@ -88,7 +91,7 @@ func TestGetOneDateEnergy_Success(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		data := EnergyData{Epv: 12.5, EInput: 3.0, EOutput: 1.5, ECharge: 5.0, EDischarge: 2.0, EGridCharge: 0.5}
 		raw, _ := json.Marshal(data)
-		writeJSON(t, w, apiResponse{Code: 0, Msg: "Success", Data: raw})
+		writeJSON(t, w, apiResponse{Code: 200, Msg: "Success", Data: raw})
 	}))
 	defer srv.Close()
 
@@ -113,7 +116,7 @@ func TestGetOneDayPower_Success(t *testing.T) {
 			{Cbat: 82.0, Ppv: 2.5, Load: 1.1, FeedIn: 0.6, GridCharge: 0.0, UploadTime: "2026-04-13 10:05:00"},
 		}
 		raw, _ := json.Marshal(data)
-		writeJSON(t, w, apiResponse{Code: 0, Msg: "Success", Data: raw})
+		writeJSON(t, w, apiResponse{Code: 200, Msg: "Success", Data: raw})
 	}))
 	defer srv.Close()
 
@@ -137,7 +140,7 @@ func TestGetEssList_FiltersToSerial(t *testing.T) {
 			{SysSn: "OTHER2", Cobat: 7.0},
 		}
 		raw, _ := json.Marshal(data)
-		writeJSON(t, w, apiResponse{Code: 0, Msg: "Success", Data: raw})
+		writeJSON(t, w, apiResponse{Code: 200, Msg: "Success", Data: raw})
 	}))
 	defer srv.Close()
 
@@ -155,7 +158,7 @@ func TestGetEssList_SerialNotFound(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		data := []SystemInfo{{SysSn: "OTHER", Cobat: 5.0}}
 		raw, _ := json.Marshal(data)
-		writeJSON(t, w, apiResponse{Code: 0, Msg: "Success", Data: raw})
+		writeJSON(t, w, apiResponse{Code: 200, Msg: "Success", Data: raw})
 	}))
 	defer srv.Close()
 
@@ -227,11 +230,10 @@ func TestHTTPTimeout_ReturnsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "getLastPowerData")
 }
 
-func TestRequestBody_ContainsSerialNumber(t *testing.T) {
-	var gotBody map[string]string
+func TestRequestQuery_ContainsSerialNumber(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.NoError(t, json.NewDecoder(r.Body).Decode(&gotBody))
-		writeJSON(t, w, apiResponse{Code: 0, Msg: "Success", Data: json.RawMessage(`{}`)})
+		assert.Equal(t, "MY-SERIAL", r.URL.Query().Get("sysSn"))
+		writeJSON(t, w, apiResponse{Code: 200, Msg: "Success", Data: json.RawMessage(`{}`)})
 	}))
 	defer srv.Close()
 
@@ -239,15 +241,13 @@ func TestRequestBody_ContainsSerialNumber(t *testing.T) {
 	c.baseURL = srv.URL
 
 	_, _ = c.GetLastPowerData(context.Background(), "MY-SERIAL")
-
-	assert.Equal(t, "MY-SERIAL", gotBody["sysSn"])
 }
 
 func TestGetOneDateEnergy_RequestContainsDateAndSerial(t *testing.T) {
-	var gotBody map[string]string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.NoError(t, json.NewDecoder(r.Body).Decode(&gotBody))
-		writeJSON(t, w, apiResponse{Code: 0, Msg: "Success", Data: json.RawMessage(`{}`)})
+		assert.Equal(t, "SN123", r.URL.Query().Get("sysSn"))
+		assert.Equal(t, "2026-04-13", r.URL.Query().Get("queryDate"))
+		writeJSON(t, w, apiResponse{Code: 200, Msg: "Success", Data: json.RawMessage(`{}`)})
 	}))
 	defer srv.Close()
 
@@ -255,7 +255,4 @@ func TestGetOneDateEnergy_RequestContainsDateAndSerial(t *testing.T) {
 	c.baseURL = srv.URL
 
 	_, _ = c.GetOneDateEnergy(context.Background(), "SN123", "2026-04-13")
-
-	assert.Equal(t, "SN123", gotBody["sysSn"])
-	assert.Equal(t, "2026-04-13", gotBody["queryDate"])
 }
