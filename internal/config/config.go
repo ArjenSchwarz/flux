@@ -53,12 +53,14 @@ func Load() (*Config, error) {
 	cfg.Serial = requireEnv("SYSTEM_SERIAL", &errs)
 
 	// Off-peak window.
+	var startOK, endOK bool
 	if raw := requireEnv("OFFPEAK_START", &errs); raw != "" {
 		d, err := parseHHMM(raw)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("OFFPEAK_START: %w", err))
 		} else {
 			cfg.OffpeakStart = d
+			startOK = true
 		}
 	}
 
@@ -68,15 +70,13 @@ func Load() (*Config, error) {
 			errs = append(errs, fmt.Errorf("OFFPEAK_END: %w", err))
 		} else {
 			cfg.OffpeakEnd = d
+			endOK = true
 		}
 	}
 
-	// Validate start < end (only if both parsed successfully).
-	if cfg.OffpeakStart > 0 || cfg.OffpeakEnd > 0 {
-		if cfg.OffpeakStart >= cfg.OffpeakEnd {
-			errs = append(errs, fmt.Errorf("OFFPEAK_START must be before OFFPEAK_END (%s >= %s)",
-				FormatHHMM(cfg.OffpeakStart), FormatHHMM(cfg.OffpeakEnd)))
-		}
+	if startOK && endOK && cfg.OffpeakStart >= cfg.OffpeakEnd {
+		errs = append(errs, fmt.Errorf("OFFPEAK_START must be before OFFPEAK_END (%s >= %s)",
+			FormatHHMM(cfg.OffpeakStart), FormatHHMM(cfg.OffpeakEnd)))
 	}
 
 	// Timezone.
