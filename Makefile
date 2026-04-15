@@ -1,7 +1,10 @@
-.PHONY: build test fmt vet lint modernize check docker-build docker-dry-run deps-tidy deps-update
+.PHONY: build build-api test fmt vet lint modernize check docker-build docker-dry-run deps-tidy deps-update
 
 build:
 	CGO_ENABLED=0 go build -o bin/poller ./cmd/poller
+
+build-api:
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o lambda/bootstrap ./cmd/api
 
 test:
 	go test ./...
@@ -32,7 +35,7 @@ docker-dry-run:
 		-e SYSTEM_SERIAL=$${SYSTEM_SERIAL} \
 		-e OFFPEAK_START=11:00 \
 		-e OFFPEAK_END=14:00 \
-		-e TZ=Australia/Melbourne \
+		-e TZ=Australia/Sydney \
 		flux-poller
 
 deps-tidy:
