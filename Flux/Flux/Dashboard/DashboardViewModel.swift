@@ -62,10 +62,8 @@ final class DashboardViewModel {
             status = response
             lastSuccessfulFetch = nowProvider()
             error = nil
-        } catch let apiError as FluxAPIError {
-            error = apiError
         } catch {
-            self.error = .networkError(error.localizedDescription)
+            self.error = FluxAPIError.from(error)
         }
     }
 }

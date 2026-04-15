@@ -2,6 +2,7 @@ import SwiftUI
 
 struct DayDetailView: View {
     @State private var viewModel: DayDetailViewModel
+    @State private var showingSettings = false
 
     init(date: String, apiClient: any FluxAPIClient) {
         _viewModel = State(initialValue: DayDetailViewModel(date: date, apiClient: apiClient))
@@ -43,6 +44,18 @@ struct DayDetailView: View {
         .task(id: viewModel.date) {
             await viewModel.loadDay()
         }
+        .sheet(isPresented: $showingSettings) {
+            NavigationStack {
+                SettingsView()
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("Done") {
+                                showingSettings = false
+                            }
+                        }
+                    }
+            }
+        }
     }
 
     private var dayNavigationHeader: some View {
@@ -72,7 +85,7 @@ struct DayDetailView: View {
     }
 
     private var formattedDate: String {
-        guard let parsedDate = DayDetailDateFormatters.dayFormatter.date(from: viewModel.date) else {
+        guard let parsedDate = DateFormatting.parseDayDate(viewModel.date) else {
             return viewModel.date
         }
         return DayDetailDateFormatters.headerFormatter.string(from: parsedDate)
@@ -153,15 +166,24 @@ struct DayDetailView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Unable to load day data")
                 .font(.headline)
-            Text(error.localizedDescription)
+            Text(error.message)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            Button("Retry") {
-                Task {
-                    await viewModel.loadDay()
+            HStack {
+                Button("Retry") {
+                    Task {
+                        await viewModel.loadDay()
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+
+                if error.suggestsSettings {
+                    Button("Settings") {
+                        showingSettings = true
+                    }
+                    .buttonStyle(.bordered)
                 }
             }
-            .buttonStyle(.borderedProminent)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
@@ -170,13 +192,6 @@ struct DayDetailView: View {
 }
 
 private enum DayDetailDateFormatters {
-    static let dayFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        formatter.timeZone = DateFormatting.sydneyTimeZone
-        return formatter
-    }()
-
     static let headerFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.timeZone = DateFormatting.sydneyTimeZone

@@ -34,7 +34,7 @@ struct SOCChartView: View {
                     .symbolSize(50)
                     .foregroundStyle(.purple)
                     .annotation(position: .top) {
-                        Text("\(socLow, specifier: "%.1f")%")
+                        Text("\(socLow, specifier: "%.1f")% at \(DateFormatting.clockTime(from: socLowTime))")
                             .font(.caption2)
                             .padding(4)
                             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 6, style: .continuous))

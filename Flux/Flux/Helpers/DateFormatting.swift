@@ -3,7 +3,7 @@ import Foundation
 enum DateFormatting {
     static let sydneyTimeZone = TimeZone(identifier: "Australia/Sydney")!
 
-    private static let sydneyCalendar: Calendar = {
+    static let sydneyCalendar: Calendar = {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = sydneyTimeZone
         return calendar
@@ -21,7 +21,7 @@ enum DateFormatting {
         return formatter
     }()
 
-    private static let dayFormatter: DateFormatter = {
+    static let dayFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         formatter.timeZone = sydneyTimeZone
@@ -46,6 +46,14 @@ enum DateFormatting {
 
     static func todayDateString(now: Date = .now) -> String {
         dayFormatter.string(from: now)
+    }
+
+    static func parseDayDate(_ dateString: String) -> Date? {
+        dayFormatter.date(from: dateString)
+    }
+
+    static func dayDateString(from date: Date) -> String {
+        dayFormatter.string(from: date)
     }
 
     static func parseWindowTime(_ timeString: String, on date: Date = .now) -> Date? {

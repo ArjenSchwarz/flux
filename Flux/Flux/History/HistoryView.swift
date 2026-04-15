@@ -4,6 +4,7 @@ import SwiftUI
 struct HistoryView: View {
     @State private var viewModel: HistoryViewModel
     @State private var selectedRange: Int
+    @State private var showingSettings = false
 
     private let makeDayDetailViewModel: (String) -> DayDetailViewModel
 
@@ -40,6 +41,8 @@ struct HistoryView: View {
 
                 if let selectedDay = viewModel.selectedDay {
                     summaryCard(for: selectedDay)
+                } else if let error = viewModel.error, viewModel.days.isEmpty, !viewModel.isLoading {
+                    errorState(error)
                 } else if !viewModel.isLoading {
                     emptyState
                 }
@@ -55,6 +58,18 @@ struct HistoryView: View {
         }
         .refreshable {
             await viewModel.loadHistory(days: selectedRange)
+        }
+        .sheet(isPresented: $showingSettings) {
+            NavigationStack {
+                SettingsView()
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("Done") {
+                                showingSettings = false
+                            }
+                        }
+                    }
+            }
         }
     }
 
@@ -105,6 +120,32 @@ struct HistoryView: View {
             Text("\(value, specifier: "%.2f") kWh")
         }
         .font(.subheadline)
+    }
+
+    private func errorState(_ error: FluxAPIError) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Unable to load history", systemImage: "wifi.exclamationmark")
+                .font(.headline)
+            Text(error.message)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            HStack {
+                Button("Retry") {
+                    Task { await viewModel.loadHistory(days: selectedRange) }
+                }
+                .buttonStyle(.borderedProminent)
+
+                if error.suggestsSettings {
+                    Button("Settings") {
+                        showingSettings = true
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }
 

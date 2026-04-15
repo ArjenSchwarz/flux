@@ -13,19 +13,6 @@ final class DayDetailViewModel {
     private let apiClient: any FluxAPIClient
     private let nowProvider: @Sendable () -> Date
 
-    private static let dayFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        formatter.timeZone = DateFormatting.sydneyTimeZone
-        return formatter
-    }()
-
-    private static let sydneyCalendar: Calendar = {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = DateFormatting.sydneyTimeZone
-        return calendar
-    }()
-
     init(
         date: String,
         apiClient: any FluxAPIClient,
@@ -56,7 +43,7 @@ final class DayDetailViewModel {
             readings = []
             summary = nil
             hasPowerData = true
-            self.error = mapError(error)
+            self.error = FluxAPIError.from(error)
         }
     }
 
@@ -71,28 +58,20 @@ final class DayDetailViewModel {
     }
 
     private func shiftDate(by dayOffset: Int) -> String? {
-        guard let currentDate = Self.dayFormatter.date(from: date),
-              let newDate = Self.sydneyCalendar.date(byAdding: .day, value: dayOffset, to: currentDate)
+        guard let currentDate = DateFormatting.parseDayDate(date),
+              let newDate = DateFormatting.sydneyCalendar.date(byAdding: .day, value: dayOffset, to: currentDate)
         else {
             return nil
         }
 
-        return Self.dayFormatter.string(from: newDate)
+        return DateFormatting.dayDateString(from: newDate)
     }
 
     private func isFallbackData(_ readings: [TimeSeriesPoint]) -> Bool {
         guard !readings.isEmpty else { return false }
 
-        return readings.allSatisfy {
-            $0.ppv == 0 && $0.pload == 0 && $0.pbat == 0 && $0.pgrid == 0
-        }
-    }
-
-    private func mapError(_ error: Error) -> FluxAPIError {
-        if let apiError = error as? FluxAPIError {
-            return apiError
-        }
-
-        return .networkError(error.localizedDescription)
+        return readings.first {
+            $0.ppv != 0 || $0.pload != 0 || $0.pbat != 0 || $0.pgrid != 0
+        } == nil
     }
 }

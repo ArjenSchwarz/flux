@@ -46,7 +46,7 @@ final class HistoryViewModel {
         } catch {
             let fallbackDays = loadCachedDays(limit: requestedDays)
             if fallbackDays.isEmpty {
-                self.error = mapError(error)
+                self.error = FluxAPIError.from(error)
                 days = []
                 selectedDay = nil
             } else {
@@ -63,9 +63,22 @@ final class HistoryViewModel {
 
     private func cacheHistoricalDays(_ dayEnergies: [DayEnergy]) throws {
         let now = nowProvider()
+        let descriptor = FetchDescriptor<CachedDayEnergy>()
+        let cachedDays = try modelContext.fetch(descriptor)
+        var cachedByDate = Dictionary(uniqueKeysWithValues: cachedDays.map { ($0.date, $0) })
 
         for day in dayEnergies where !DateFormatting.isToday(day.date, now: now) {
-            modelContext.insert(CachedDayEnergy(from: day))
+            if let cached = cachedByDate[day.date] {
+                cached.epv = day.epv
+                cached.eInput = day.eInput
+                cached.eOutput = day.eOutput
+                cached.eCharge = day.eCharge
+                cached.eDischarge = day.eDischarge
+            } else {
+                let newCachedDay = CachedDayEnergy(from: day)
+                modelContext.insert(newCachedDay)
+                cachedByDate[day.date] = newCachedDay
+            }
         }
 
         if modelContext.hasChanges {
@@ -98,21 +111,6 @@ final class HistoryViewModel {
         self.selectedDay = days.first(where: { $0.date == selectedDay.date }) ?? days.first
     }
 
-    private func mapError(_ error: Error) -> FluxAPIError {
-        if let apiError = error as? FluxAPIError {
-            return apiError
-        }
-
-        return .networkError(error.localizedDescription)
-    }
-
-    private static let dayFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        formatter.timeZone = DateFormatting.sydneyTimeZone
-        return formatter
-    }()
-
     private func rebuildChartData() {
         guard !days.isEmpty else {
             chartDays = []
@@ -128,7 +126,7 @@ final class HistoryViewModel {
         newChartEntries.reserveCapacity(days.count * HistoryChartMetric.allCases.count)
 
         for day in days {
-            guard let parsedDate = Self.dayFormatter.date(from: day.date) else {
+            guard let parsedDate = DateFormatting.parseDayDate(day.date) else {
                 continue
             }
 

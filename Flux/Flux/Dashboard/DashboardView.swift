@@ -22,37 +22,42 @@ struct DashboardView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                if viewModel.error != nil, viewModel.status != nil {
-                    stalenessBanner
+            if viewModel.status == nil, let error = viewModel.error {
+                initialLoadErrorCard(error: error)
+                    .padding()
+            } else {
+                VStack(alignment: .leading, spacing: 16) {
+                    if viewModel.error != nil, viewModel.status != nil {
+                        stalenessBanner
+                    }
+
+                    BatteryHeroView(
+                        live: viewModel.status?.live,
+                        battery: viewModel.status?.battery
+                    )
+
+                    PowerTrioView(
+                        live: viewModel.status?.live,
+                        offpeak: viewModel.status?.offpeak
+                    )
+
+                    SecondaryStatsView(
+                        battery: viewModel.status?.battery,
+                        rolling15min: viewModel.status?.rolling15min,
+                        offpeak: viewModel.status?.offpeak
+                    )
+
+                    TodayEnergyView(todayEnergy: viewModel.status?.todayEnergy)
+
+                    NavigationLink("View history") {
+                        historyFactory(modelContext)
+                    }
+                    .font(.headline)
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
                 }
-
-                BatteryHeroView(
-                    live: viewModel.status?.live,
-                    battery: viewModel.status?.battery
-                )
-
-                PowerTrioView(
-                    live: viewModel.status?.live,
-                    offpeak: viewModel.status?.offpeak
-                )
-
-                SecondaryStatsView(
-                    battery: viewModel.status?.battery,
-                    rolling15min: viewModel.status?.rolling15min,
-                    offpeak: viewModel.status?.offpeak
-                )
-
-                TodayEnergyView(todayEnergy: viewModel.status?.todayEnergy)
-
-                NavigationLink("View history") {
-                    historyFactory(modelContext)
-                }
-                .font(.headline)
-                .padding(.horizontal)
-                .padding(.bottom, 8)
+                .padding()
             }
-            .padding()
         }
         .navigationTitle("Dashboard")
         .refreshable {
@@ -60,9 +65,6 @@ struct DashboardView: View {
         }
         .onAppear {
             viewModel.startAutoRefresh()
-            Task {
-                await viewModel.refresh()
-            }
         }
         .onDisappear {
             viewModel.stopAutoRefresh()
@@ -71,9 +73,6 @@ struct DashboardView: View {
             switch newPhase {
             case .active:
                 viewModel.startAutoRefresh()
-                Task {
-                    await viewModel.refresh()
-                }
             case .background, .inactive:
                 viewModel.stopAutoRefresh()
             @unknown default:
@@ -104,9 +103,15 @@ struct DashboardView: View {
     @ViewBuilder
     private var stalenessBanner: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("Showing stale data", systemImage: "exclamationmark.triangle.fill")
+            Label(stalenessTitle, systemImage: "exclamationmark.triangle.fill")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.orange)
+
+            if let error = viewModel.error {
+                Text(error.message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
 
             if let lastSuccessfulFetch = viewModel.lastSuccessfulFetch {
                 Text("Last updated \(lastSuccessfulFetch, style: .relative) ago")
@@ -124,6 +129,40 @@ struct DashboardView: View {
                     showingSettings = true
                 }
                 .buttonStyle(.bordered)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private var stalenessTitle: String {
+        if case .some(.unauthorized) = viewModel.error {
+            return "Authentication required"
+        }
+        return "Showing stale data"
+    }
+
+    private func initialLoadErrorCard(error: FluxAPIError) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Unable to load dashboard", systemImage: "wifi.exclamationmark")
+                .font(.headline)
+            Text(error.message)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            HStack {
+                Button("Retry") {
+                    Task { await viewModel.refresh() }
+                }
+                .buttonStyle(.borderedProminent)
+
+                if error.suggestsSettings {
+                    Button("Settings") {
+                        showingSettings = true
+                    }
+                    .buttonStyle(.bordered)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

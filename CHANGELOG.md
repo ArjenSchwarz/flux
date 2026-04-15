@@ -117,6 +117,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- iOS spec-validation hardening across dashboard/history/day detail: first-load dashboard failures now render an explicit error card with retry/settings actions, history shows inline retry/settings when network fails and cache is empty, day detail auth/config failures now provide settings recovery, and SOC low chart annotation now includes low-time text
+- Shared iOS date and error handling logic to reduce duplication and improve consistency: centralized day parsing/formatting/calendar usage via `DateFormatting`, unified error coercion with `FluxAPIError.from(_:)`, and updated history cache writes to upsert existing `CachedDayEnergy` records instead of repeatedly inserting duplicate dates
 - `DayDetailViewModelTests.navigatePreviousAndNextUpdateDateString` now uses a deterministic non-today reference date, preventing timezone-dependent false failures
 - `computeCutoffTime` now guards against NaN/Inf results from very small `pbat` values and rejects `capacityKwh <= 0`, preventing unreasonable cutoff times from reaching the API response
 

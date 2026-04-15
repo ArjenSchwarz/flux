@@ -10,13 +10,6 @@ final actor MockFluxAPIClient: FluxAPIClient {
         return calendar
     }()
 
-    private static let dayFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.timeZone = DateFormatting.sydneyTimeZone
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter
-    }()
-
     static let statusResponse = StatusResponse(
         live: LiveData(
             ppv: 2400,
@@ -58,7 +51,7 @@ final actor MockFluxAPIClient: FluxAPIClient {
     )
 
     static let historyDays: [DayEnergy] = {
-        guard let baseDate = dayFormatter.date(from: previewDate) else {
+        guard let baseDate = DateFormatting.parseDayDate(previewDate) else {
             return []
         }
 
@@ -72,7 +65,7 @@ final actor MockFluxAPIClient: FluxAPIClient {
             let trend = Double(dayOffset)
             days.append(
                 DayEnergy(
-                    date: dayFormatter.string(from: date),
+                    date: DateFormatting.dayDateString(from: date),
                     epv: max(0, 14.2 - trend * 0.17),
                     eInput: max(0.2, 2.3 - trend * 0.03),
                     eOutput: max(0.5, 5.1 - trend * 0.09),
