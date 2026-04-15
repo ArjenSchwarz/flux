@@ -20,6 +20,9 @@ type Handler struct {
 	apiToken     string
 	offpeakStart string
 	offpeakEnd   string
+	// nowFunc returns the current time. Defaults to time.Now.
+	// Exposed for testing to ensure consistent time capture per request.
+	nowFunc func() time.Time
 }
 
 // NewHandler creates a Handler with all dependencies injected.
@@ -30,6 +33,7 @@ func NewHandler(reader dynamo.Reader, serial, apiToken, offpeakStart, offpeakEnd
 		apiToken:     apiToken,
 		offpeakStart: offpeakStart,
 		offpeakEnd:   offpeakEnd,
+		nowFunc:      time.Now,
 	}
 }
 
@@ -109,22 +113,4 @@ func jsonResponse(v any) events.LambdaFunctionURLResponse {
 		Headers:    map[string]string{"Content-Type": "application/json"},
 		Body:       string(data),
 	}
-}
-
-// Endpoint stubs — will be implemented in later tasks.
-
-func (h *Handler) handleStatus(_ context.Context, _ events.LambdaFunctionURLRequest) events.LambdaFunctionURLResponse {
-	return jsonResponse(&StatusResponse{})
-}
-
-func (h *Handler) handleHistory(_ context.Context, _ events.LambdaFunctionURLRequest) events.LambdaFunctionURLResponse {
-	return jsonResponse(&HistoryResponse{Days: []DayEnergy{}})
-}
-
-func (h *Handler) handleDay(_ context.Context, req events.LambdaFunctionURLRequest) events.LambdaFunctionURLResponse {
-	date := req.QueryStringParameters["date"]
-	if date == "" {
-		return errorResponse(400, "invalid or missing date parameter")
-	}
-	return jsonResponse(&DayDetailResponse{Date: date, Readings: []TimeSeriesPoint{}})
 }

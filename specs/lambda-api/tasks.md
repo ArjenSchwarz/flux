@@ -101,7 +101,7 @@ references:
 
 ## Endpoint Handlers
 
-- [ ] 9. Write tests for /status endpoint <!-- id:e3gfl5e -->
+- [x] 9. Write tests for /status endpoint <!-- id:e3gfl5e -->
   - Test normal case: all data present, verify all response fields with correct rounding
   - Test no readings: live null, rolling15min null, low24h null
   - Test off-peak pending: delta fields null, windowStart/windowEnd still present
@@ -114,7 +114,7 @@ references:
   - Stream: 2
   - Requirements: [3.1](requirements.md#3.1), [3.2](requirements.md#3.2), [3.3](requirements.md#3.3), [3.4](requirements.md#3.4), [3.5](requirements.md#3.5), [3.7](requirements.md#3.7), [3.8](requirements.md#3.8), [4.1](requirements.md#4.1), [4.2](requirements.md#4.2), [4.3](requirements.md#4.3), [4.7](requirements.md#4.7), [4.8](requirements.md#4.8), [4.9](requirements.md#4.9), [4.10](requirements.md#4.10), [5.1](requirements.md#5.1), [5.2](requirements.md#5.2), [5.7](requirements.md#5.7), [6.1](requirements.md#6.1), [6.2](requirements.md#6.2), [6.3](requirements.md#6.3), [6.4](requirements.md#6.4), [6.5](requirements.md#6.5), [7.1](requirements.md#7.1), [7.2](requirements.md#7.2), [7.3](requirements.md#7.3), [10.3](requirements.md#10.3)
 
-- [ ] 10. Implement /status endpoint handler <!-- id:e3gfl5f -->
+- [x] 10. Implement /status endpoint handler <!-- id:e3gfl5f -->
   - Create internal/api/status.go with handleStatus method
   - Phase 1: errgroup.WithContext for concurrent QueryReadings(24h), GetSystem, GetOffpeak, GetDailyEnergy
   - Phase 2: extract latest reading (last element of 24h), filter to 60s/15min subsets in memory
@@ -128,7 +128,7 @@ references:
   - Stream: 2
   - Requirements: [3.1](requirements.md#3.1), [3.2](requirements.md#3.2), [3.3](requirements.md#3.3), [3.4](requirements.md#3.4), [3.5](requirements.md#3.5), [3.7](requirements.md#3.7), [3.8](requirements.md#3.8), [4.1](requirements.md#4.1), [4.2](requirements.md#4.2), [4.3](requirements.md#4.3), [4.4](requirements.md#4.4), [4.5](requirements.md#4.5), [4.6](requirements.md#4.6), [4.7](requirements.md#4.7), [4.8](requirements.md#4.8), [4.9](requirements.md#4.9), [4.10](requirements.md#4.10), [5.1](requirements.md#5.1), [5.2](requirements.md#5.2), [5.3](requirements.md#5.3), [5.4](requirements.md#5.4), [5.5](requirements.md#5.5), [5.6](requirements.md#5.6), [5.7](requirements.md#5.7), [6.1](requirements.md#6.1), [6.2](requirements.md#6.2), [6.3](requirements.md#6.3), [6.4](requirements.md#6.4), [6.5](requirements.md#6.5), [7.1](requirements.md#7.1), [7.2](requirements.md#7.2), [7.3](requirements.md#7.3)
 
-- [ ] 11. Write tests for /history endpoint <!-- id:e3gfl5g -->
+- [x] 11. Write tests for /history endpoint <!-- id:e3gfl5g -->
   - Test default days (7), explicit 14, explicit 30
   - Test invalid days parameter: returns 400 with correct message
   - Test no data for range: empty days array
@@ -138,7 +138,7 @@ references:
   - Stream: 2
   - Requirements: [8.1](requirements.md#8.1), [8.2](requirements.md#8.2), [8.3](requirements.md#8.3), [8.4](requirements.md#8.4), [8.5](requirements.md#8.5), [8.6](requirements.md#8.6), [8.7](requirements.md#8.7), [8.8](requirements.md#8.8), [10.7](requirements.md#10.7)
 
-- [ ] 12. Implement /history endpoint handler <!-- id:e3gfl5h -->
+- [x] 12. Implement /history endpoint handler <!-- id:e3gfl5h -->
   - Create internal/api/history.go with handleHistory method
   - Parse days query parameter with default 7, validate 7/14/30
   - Compute date range from today in configured timezone
@@ -149,7 +149,7 @@ references:
   - Stream: 2
   - Requirements: [8.1](requirements.md#8.1), [8.2](requirements.md#8.2), [8.3](requirements.md#8.3), [8.4](requirements.md#8.4), [8.5](requirements.md#8.5), [8.6](requirements.md#8.6), [8.7](requirements.md#8.7), [8.8](requirements.md#8.8)
 
-- [ ] 13. Write tests for /day endpoint <!-- id:e3gfl5i -->
+- [x] 13. Write tests for /day endpoint <!-- id:e3gfl5i -->
   - Test normal case: readings + daily energy, verify downsampled output and full summary
   - Test fallback: no flux-readings, flux-daily-power data returned directly (cbat -> soc, power fields 0)
   - Test no data from either source: empty readings, null summary
@@ -160,7 +160,7 @@ references:
   - Stream: 2
   - Requirements: [9.1](requirements.md#9.1), [9.2](requirements.md#9.2), [9.3](requirements.md#9.3), [9.4](requirements.md#9.4), [9.5](requirements.md#9.5), [9.6](requirements.md#9.6), [9.7](requirements.md#9.7), [9.8](requirements.md#9.8), [9.9](requirements.md#9.9), [9.10](requirements.md#9.10), [9.11](requirements.md#9.11), [9.12](requirements.md#9.12), [9.13](requirements.md#9.13), [9.14](requirements.md#9.14)
 
-- [ ] 14. Implement /day endpoint handler <!-- id:e3gfl5j -->
+- [x] 14. Implement /day endpoint handler <!-- id:e3gfl5j -->
   - Create internal/api/day.go with handleDay method
   - Parse and validate date parameter (YYYY-MM-DD)
   - Query flux-readings for full day, fall back to QueryDailyPower if empty
