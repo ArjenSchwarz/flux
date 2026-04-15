@@ -33,7 +33,7 @@ references:
 
 ## Foundation — Services
 
-- [ ] 4. Write tests for KeychainService <!-- id:oxpta5o -->
+- [x] 4. Write tests for KeychainService <!-- id:oxpta5o -->
   - Create KeychainServiceTests.swift
   - Test saveToken + loadToken round-trip
   - Test deleteToken removes stored token
@@ -42,7 +42,7 @@ references:
   - Stream: 1
   - Requirements: [1.7](requirements.md#1.7), [3.2](requirements.md#3.2)
 
-- [ ] 5. Implement KeychainService <!-- id:oxpta5p -->
+- [x] 5. Implement KeychainService <!-- id:oxpta5p -->
   - Create Services/KeychainService.swift
   - Wrap SecItemAdd/SecItemCopyMatching/SecItemDelete
   - Use kSecAttrAccessGroup with App Group identifier
@@ -51,7 +51,7 @@ references:
   - Stream: 1
   - Requirements: [1.7](requirements.md#1.7), [3.2](requirements.md#3.2)
 
-- [ ] 6. Define FluxAPIClient protocol <!-- id:oxpta5q -->
+- [x] 6. Define FluxAPIClient protocol <!-- id:oxpta5q -->
   - Create Services/FluxAPIClient.swift
   - Protocol with Sendable conformance
   - Three methods: fetchStatus(), fetchHistory(days:), fetchDay(date:)
@@ -60,7 +60,7 @@ references:
   - Stream: 1
   - Requirements: [2.1](requirements.md#2.1), [2.3](requirements.md#2.3)
 
-- [ ] 7. Write tests for URLSessionAPIClient <!-- id:oxpta5r -->
+- [x] 7. Write tests for URLSessionAPIClient <!-- id:oxpta5r -->
   - Create URLSessionAPIClientTests.swift
   - Use URLProtocol subclass to mock HTTP responses
   - Test fetchStatus/fetchHistory/fetchDay with 200 returns decoded response
@@ -73,7 +73,7 @@ references:
   - Stream: 1
   - Requirements: [2.1](requirements.md#2.1), [2.2](requirements.md#2.2), [2.3](requirements.md#2.3), [2.4](requirements.md#2.4), [2.5](requirements.md#2.5), [2.6](requirements.md#2.6), [2.7](requirements.md#2.7)
 
-- [ ] 8. Implement URLSessionAPIClient <!-- id:oxpta5s -->
+- [x] 8. Implement URLSessionAPIClient <!-- id:oxpta5s -->
   - Create Services/URLSessionAPIClient.swift
   - Two initializers: production (KeychainService tokenProvider) and validation (explicit token) per Decision 8
   - performRequest centralizes error wrapping with typed throws

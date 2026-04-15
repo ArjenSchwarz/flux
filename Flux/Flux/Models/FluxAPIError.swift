@@ -1,4 +1,4 @@
-enum FluxAPIError: Error, Sendable {
+enum FluxAPIError: Error, Sendable, Equatable {
     case notConfigured
     case unauthorized
     case badRequest(String)
