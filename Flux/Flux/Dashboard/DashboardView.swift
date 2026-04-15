@@ -89,8 +89,7 @@ struct DashboardView: View {
         }
         .sheet(isPresented: $showingSettings) {
             NavigationStack {
-                Text("Settings view coming soon")
-                    .navigationTitle("Settings")
+                SettingsView()
                     .toolbar {
                         ToolbarItem(placement: .topBarTrailing) {
                             Button("Done") {

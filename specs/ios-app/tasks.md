@@ -291,7 +291,7 @@ references:
 
 ## Views — Settings & Navigation
 
-- [ ] 29. Create SettingsView <!-- id:oxpta6d -->
+- [x] 29. Create SettingsView <!-- id:oxpta6d -->
   - Create Settings/SettingsView.swift
   - Form with Backend + Display sections
   - Save button disabled during validation / when empty
@@ -301,7 +301,7 @@ references:
   - Stream: 1
   - Requirements: [3.1](requirements.md#3.1), [3.2](requirements.md#3.2), [3.3](requirements.md#3.3), [3.4](requirements.md#3.4), [3.5](requirements.md#3.5), [3.6](requirements.md#3.6), [3.7](requirements.md#3.7), [3.8](requirements.md#3.8)
 
-- [ ] 30. Create AppNavigationView, SidebarView, and FluxApp entry point <!-- id:oxpta6e -->
+- [x] 30. Create AppNavigationView, SidebarView, and FluxApp entry point <!-- id:oxpta6e -->
   - Create Navigation/AppNavigationView.swift — NavigationSplitView preferredCompactColumn: .detail
   - Create Navigation/SidebarView.swift and Screen.swift enum
   - .onChange(of: selectedScreen) resets navigationPath

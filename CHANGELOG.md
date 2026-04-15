@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- iOS settings and root navigation implementation: `SettingsView` form with backend/display sections and validation-driven dismiss flow, plus `Navigation/AppNavigationView`, `SidebarView`, and `Screen` to power `NavigationSplitView` routing with automatic redirect to Settings when API configuration is missing
 - iOS History and Day Detail UI implementation in `Flux/Flux/History/` and `Flux/Flux/DayDetail/`, including grouped 5-metric history bars with day selection, 7/14/30 range picker, day summary card with drill-down navigation, SOC/power/battery charts, day-to-day navigation, and fallback SOC-only handling when power data is unavailable
 - Shared day-axis domain helper (`DayChartDomain`) and new chart views (`HistoryChartView`, `SOCChartView`, `PowerChartView`, `BatteryPowerChartView`) with Sydney-date alignment and 3-hour x-axis tick marks for consistent 00:00–00:00 rendering
 - History/day detail flow wiring from the dashboard “View history” link to the real `HistoryView` screen instead of placeholder content
