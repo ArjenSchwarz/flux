@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- iOS foundation model layer in `Flux/Flux/Models/`: backend-aligned `Codable & Sendable` response structs (`/status`, `/history`, `/day`), typed `FluxAPIError`, and SwiftData `CachedDayEnergy` cache model with unique `date` key plus conversion helpers
 - iOS app spec: requirements document with 13 sections and 57 acceptance criteria covering platform/architecture, API client, authentication/settings, dashboard (battery hero, power readings, secondary stats, today's energy), refresh behaviour, history screen, day detail screen, caching, error states, and navigation
 - iOS app spec: design document with MVVM architecture using `@MainActor @Observable` view models, NavigationSplitView with adaptive layout, FluxAPIClient protocol with URLSessionAPIClient (token provider pattern for settings validation), SwiftData caching for history, Keychain with App Group, SwiftUI Charts (BarMark/LineMark/AreaMark/RuleMark), DateFormatting utility with Sydney timezone, conditional colouring helpers, and file layout mapped to Xcode project structure at `Flux/Flux/`
 - iOS app spec: decision log with 9 decisions (adaptive layout from start, no third-party dependencies, SwiftData for history caching only, Keychain with App Group, 10-second auto-refresh, spec scope excludes Xcode project, Sydney timezone for all date operations, token provider pattern for settings validation, fallback data detection via heuristic)

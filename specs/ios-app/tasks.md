@@ -8,7 +8,7 @@ references:
 
 ## Foundation — Models & Types
 
-- [ ] 1. Define API response models (Codable structs) <!-- id:oxpta5l -->
+- [x] 1. Define API response models (Codable structs) <!-- id:oxpta5l -->
   - Create Models/APIModels.swift with StatusResponse, LiveData, BatteryInfo, Low24h, RollingAvg, OffpeakData, TodayEnergy, HistoryResponse, DayEnergy, DayDetailResponse, TimeSeriesPoint, DaySummary, APIErrorResponse
   - All structs Codable + Sendable, field names match backend camelCase JSON tags
   - DayEnergy and TimeSeriesPoint conform to Identifiable with computed id
@@ -16,13 +16,13 @@ references:
   - Requirements: [2.4](requirements.md#2.4), [3.2](requirements.md#3.2), [3.3](requirements.md#3.3), [4.1](requirements.md#4.1), [5.1](requirements.md#5.1), [6.1](requirements.md#6.1), [7.1](requirements.md#7.1), [7.2](requirements.md#7.2), [8.5](requirements.md#8.5), [9.5](requirements.md#9.5), [9.9](requirements.md#9.9), [10.1](requirements.md#10.1)
   - References: specs/ios-app/design.md
 
-- [ ] 2. Define FluxAPIError enum <!-- id:oxpta5m -->
+- [x] 2. Define FluxAPIError enum <!-- id:oxpta5m -->
   - Create Models/FluxAPIError.swift with cases: notConfigured, unauthorized, badRequest(String), serverError, networkError(String), decodingError(String), unexpectedStatus(Int)
   - Conforms to Error + Sendable — uses String payloads for Sendable compliance (Decision 10)
   - Stream: 1
   - Requirements: [2.5](requirements.md#2.5), [2.6](requirements.md#2.6), [12.3](requirements.md#12.3)
 
-- [ ] 3. Define CachedDayEnergy SwiftData model <!-- id:oxpta5n -->
+- [x] 3. Define CachedDayEnergy SwiftData model <!-- id:oxpta5n -->
   - Create Models/CachedDayEnergy.swift with @Model class
   - @Attribute(.unique) on date field (YYYY-MM-DD format)
   - init(from: DayEnergy) and asDayEnergy computed property for conversion
