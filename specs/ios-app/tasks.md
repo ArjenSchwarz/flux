@@ -123,7 +123,7 @@ references:
 
 ## View Models
 
-- [ ] 13. Write tests for DashboardViewModel <!-- id:oxpta5x -->
+- [x] 13. Write tests for DashboardViewModel <!-- id:oxpta5x -->
   - Create DashboardViewModelTests.swift with MockFluxAPIClient
   - Test refresh() updates status on success, preserves on failure
   - Test refresh() skips when isLoading is true
@@ -133,7 +133,7 @@ references:
   - Stream: 1
   - Requirements: [8.1](requirements.md#8.1), [8.2](requirements.md#8.2), [8.3](requirements.md#8.3), [8.4](requirements.md#8.4), [8.5](requirements.md#8.5), [12.1](requirements.md#12.1)
 
-- [ ] 14. Implement DashboardViewModel <!-- id:oxpta5y -->
+- [x] 14. Implement DashboardViewModel <!-- id:oxpta5y -->
   - Create Dashboard/DashboardViewModel.swift
   - @MainActor @Observable, holds FluxAPIClient
   - startAutoRefresh cancels existing refreshTask before creating new loop
@@ -143,7 +143,7 @@ references:
   - Stream: 1
   - Requirements: [8.1](requirements.md#8.1), [8.2](requirements.md#8.2), [8.3](requirements.md#8.3), [8.4](requirements.md#8.4), [8.5](requirements.md#8.5), [11.4](requirements.md#11.4), [12.1](requirements.md#12.1), [12.4](requirements.md#12.4)
 
-- [ ] 15. Write tests for HistoryViewModel <!-- id:oxpta5z -->
+- [x] 15. Write tests for HistoryViewModel <!-- id:oxpta5z -->
   - Create HistoryViewModelTests.swift
   - Test loadHistory fetches from API and populates days
   - Test historical days written to SwiftData cache on success
@@ -153,7 +153,7 @@ references:
   - Stream: 2
   - Requirements: [9.1](requirements.md#9.1), [9.2](requirements.md#9.2), [9.8](requirements.md#9.8), [11.1](requirements.md#11.1), [11.2](requirements.md#11.2), [11.3](requirements.md#11.3)
 
-- [ ] 16. Implement HistoryViewModel <!-- id:oxpta60 -->
+- [x] 16. Implement HistoryViewModel <!-- id:oxpta60 -->
   - Create History/HistoryViewModel.swift
   - @MainActor @Observable with FluxAPIClient and ModelContext
   - loadHistory: fetch, cache historical days, fall back on failure
@@ -163,7 +163,7 @@ references:
   - Stream: 2
   - Requirements: [9.1](requirements.md#9.1), [9.2](requirements.md#9.2), [9.8](requirements.md#9.8), [11.1](requirements.md#11.1), [11.2](requirements.md#11.2), [11.3](requirements.md#11.3)
 
-- [ ] 17. Write tests for DayDetailViewModel <!-- id:oxpta61 -->
+- [x] 17. Write tests for DayDetailViewModel <!-- id:oxpta61 -->
   - Create DayDetailViewModelTests.swift
   - Test loadDay populates readings and summary
   - Test navigatePrevious/Next date string changes
@@ -173,7 +173,7 @@ references:
   - Stream: 2
   - Requirements: [10.1](requirements.md#10.1), [10.2](requirements.md#10.2), [10.8](requirements.md#10.8), [10.9](requirements.md#10.9)
 
-- [ ] 18. Implement DayDetailViewModel <!-- id:oxpta62 -->
+- [x] 18. Implement DayDetailViewModel <!-- id:oxpta62 -->
   - Create DayDetail/DayDetailViewModel.swift
   - @MainActor @Observable with init(date:apiClient:)
   - navigatePrevious/Next update date synchronously — view uses .task(id:)
@@ -183,7 +183,7 @@ references:
   - Stream: 2
   - Requirements: [10.1](requirements.md#10.1), [10.2](requirements.md#10.2), [10.8](requirements.md#10.8), [10.9](requirements.md#10.9)
 
-- [ ] 19. Write tests for SettingsViewModel <!-- id:oxpta63 -->
+- [x] 19. Write tests for SettingsViewModel <!-- id:oxpta63 -->
   - Create SettingsViewModelTests.swift
   - Test save() validates with entered token (not Keychain), stores on success
   - Test save() sets validationError on failure, does not modify Keychain
@@ -193,7 +193,7 @@ references:
   - Stream: 1
   - Requirements: [3.1](requirements.md#3.1), [3.2](requirements.md#3.2), [3.3](requirements.md#3.3), [3.4](requirements.md#3.4), [3.5](requirements.md#3.5), [3.6](requirements.md#3.6), [3.7](requirements.md#3.7), [3.8](requirements.md#3.8)
 
-- [ ] 20. Implement SettingsViewModel <!-- id:oxpta64 -->
+- [x] 20. Implement SettingsViewModel <!-- id:oxpta64 -->
   - Create Settings/SettingsViewModel.swift
   - @MainActor @Observable with KeychainService dependency
   - save() creates URLSessionAPIClient with init(baseURL:token:) per Decision 8
