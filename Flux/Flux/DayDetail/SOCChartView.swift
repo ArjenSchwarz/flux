@@ -3,7 +3,7 @@ import SwiftUI
 
 struct SOCChartView: View {
     let date: String
-    let readings: [TimeSeriesPoint]
+    let readings: [ParsedReading]
     let summary: DaySummary?
 
     var body: some View {
@@ -12,10 +12,10 @@ struct SOCChartView: View {
                 .font(.headline)
 
             Chart {
-                ForEach(points) { point in
+                ForEach(readings) { reading in
                     AreaMark(
-                        x: .value("Time", point.date),
-                        y: .value("SOC", point.soc)
+                        x: .value("Time", reading.date),
+                        y: .value("SOC", reading.point.soc)
                     )
                     .foregroundStyle(.blue.opacity(0.3))
                 }
@@ -56,36 +56,19 @@ struct SOCChartView: View {
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
-    private var points: [SOCPoint] {
-        var parsed: [SOCPoint] = []
-        parsed.reserveCapacity(readings.count)
-
-        for reading in readings {
-            guard let parsedDate = DateFormatting.parseTimestamp(reading.timestamp) else {
-                continue
-            }
-
-            parsed.append(SOCPoint(id: reading.id, date: parsedDate, soc: reading.soc))
-        }
-
-        return parsed
-    }
-
     private var xDomain: ClosedRange<Date> {
         DayChartDomain.domain(for: date)
     }
 }
 
-private struct SOCPoint: Identifiable {
-    let id: String
-    let date: Date
-    let soc: Double
-}
-
 #if DEBUG
 #Preview {
     let day = MockFluxAPIClient.dayDetailResponse()
-    SOCChartView(date: day.date, readings: day.readings, summary: day.summary)
+    let parsed = day.readings.compactMap { reading -> ParsedReading? in
+        guard let date = DateFormatting.parseTimestamp(reading.timestamp) else { return nil }
+        return ParsedReading(id: reading.id, date: date, point: reading)
+    }
+    SOCChartView(date: day.date, readings: parsed, summary: day.summary)
         .padding()
 }
 #endif

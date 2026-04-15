@@ -8,6 +8,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- `APIModelsTests.swift` with 14 JSON decoding tests covering full status response, null/missing optional fields, partial summaries, empty history, error response, and `Identifiable` conformance for all API models
+- `ParsedReading` struct in `DayDetailViewModel` that pre-parses timestamps once after fetch, replacing per-chart-view parsing that ran 3x per render cycle (up to 864 `DateFormatter` calls per Day Detail render)
+- `OffpeakData.defaultWindowStart` / `.defaultWindowEnd` static constants for off-peak window fallback values, replacing duplicated `"11:00"` / `"14:00"` string literals in `PowerTrioView` and `SecondaryStatsView`
+
+### Changed
+
+- Day Detail chart views (`SOCChartView`, `PowerChartView`, `BatteryPowerChartView`) now accept `[ParsedReading]` instead of `[TimeSeriesPoint]`, eliminating per-view timestamp parsing
+- `HistoryViewModel.cacheHistoricalDays` now scopes its SwiftData fetch with a `#Predicate` filtering to only the incoming dates, instead of loading the entire cache table
+- `HistoryViewModel.loadCachedDays` now uses `fetchLimit` on the `FetchDescriptor` instead of fetching all records and slicing in memory
+- `specs/ios-app/implementation.md` rewritten with three-level explanation (beginner/intermediate/expert) and completeness assessment
+
+### Removed
+
+- Dead Xcode template files `ContentView.swift` and `Item.swift` that were unreferenced after the app was implemented
+
+### Added
+
 - Shared `MockFluxAPIClient` preview service in `Flux/Flux/Services/MockFluxAPIClient.swift` with static `/status`, `/history`, and `/day` sample payloads, then wired SwiftUI previews across dashboard/history/day-detail views (including SOC/power/battery chart views) to use centralized mock data instead of per-file preview actors
 - iOS settings and root navigation implementation: `SettingsView` form with backend/display sections and validation-driven dismiss flow, plus `Navigation/AppNavigationView`, `SidebarView`, and `Screen` to power `NavigationSplitView` routing with automatic redirect to Settings when API configuration is missing
 - iOS History and Day Detail UI implementation in `Flux/Flux/History/` and `Flux/Flux/DayDetail/`, including grouped 5-metric history bars with day selection, 7/14/30 range picker, day summary card with drill-down navigation, SOC/power/battery charts, day-to-day navigation, and fallback SOC-only handling when power data is unavailable

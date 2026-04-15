@@ -3,7 +3,7 @@ import SwiftUI
 
 struct BatteryPowerChartView: View {
     let date: String
-    let readings: [TimeSeriesPoint]
+    let readings: [ParsedReading]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -11,10 +11,10 @@ struct BatteryPowerChartView: View {
                 .font(.headline)
 
             Chart {
-                ForEach(points) { point in
+                ForEach(readings) { reading in
                     LineMark(
-                        x: .value("Time", point.date),
-                        y: .value("Battery power", point.power)
+                        x: .value("Time", reading.date),
+                        y: .value("Battery power", -reading.point.pbat)
                     )
                     .foregroundStyle(.purple)
                 }
@@ -36,36 +36,19 @@ struct BatteryPowerChartView: View {
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
-    private var points: [BatteryPowerPoint] {
-        var parsed: [BatteryPowerPoint] = []
-        parsed.reserveCapacity(readings.count)
-
-        for reading in readings {
-            guard let parsedDate = DateFormatting.parseTimestamp(reading.timestamp) else {
-                continue
-            }
-
-            parsed.append(BatteryPowerPoint(id: reading.id, date: parsedDate, power: -reading.pbat))
-        }
-
-        return parsed
-    }
-
     private var xDomain: ClosedRange<Date> {
         DayChartDomain.domain(for: date)
     }
 }
 
-private struct BatteryPowerPoint: Identifiable {
-    let id: String
-    let date: Date
-    let power: Double
-}
-
 #if DEBUG
 #Preview {
     let day = MockFluxAPIClient.dayDetailResponse()
-    BatteryPowerChartView(date: day.date, readings: day.readings)
+    let parsed = day.readings.compactMap { reading -> ParsedReading? in
+        guard let date = DateFormatting.parseTimestamp(reading.timestamp) else { return nil }
+        return ParsedReading(id: reading.id, date: date, point: reading)
+    }
+    BatteryPowerChartView(date: day.date, readings: parsed)
         .padding()
 }
 #endif

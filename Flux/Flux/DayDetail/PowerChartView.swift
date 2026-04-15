@@ -3,7 +3,7 @@ import SwiftUI
 
 struct PowerChartView: View {
     let date: String
-    let readings: [TimeSeriesPoint]
+    let readings: [ParsedReading]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -11,30 +11,30 @@ struct PowerChartView: View {
                 .font(.headline)
 
             Chart {
-                ForEach(points) { point in
+                ForEach(readings) { reading in
                     AreaMark(
-                        x: .value("Time", point.date),
+                        x: .value("Time", reading.date),
                         yStart: .value("Power", 0),
-                        yEnd: .value("Power", point.solar)
+                        yEnd: .value("Power", reading.point.ppv)
                     )
                     .foregroundStyle(.green.opacity(0.25))
 
                     LineMark(
-                        x: .value("Time", point.date),
-                        y: .value("Load", point.load)
+                        x: .value("Time", reading.date),
+                        y: .value("Load", reading.point.pload)
                     )
                     .foregroundStyle(.primary)
 
-                    if point.grid >= 0 {
+                    if reading.point.pgrid >= 0 {
                         LineMark(
-                            x: .value("Time", point.date),
-                            y: .value("Grid import", point.grid)
+                            x: .value("Time", reading.date),
+                            y: .value("Grid import", reading.point.pgrid)
                         )
                         .foregroundStyle(.red)
                     } else {
                         LineMark(
-                            x: .value("Time", point.date),
-                            y: .value("Grid export", abs(point.grid))
+                            x: .value("Time", reading.date),
+                            y: .value("Grid export", abs(reading.point.pgrid))
                         )
                         .foregroundStyle(.blue)
                     }
@@ -54,45 +54,19 @@ struct PowerChartView: View {
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
-    private var points: [PowerPoint] {
-        var parsed: [PowerPoint] = []
-        parsed.reserveCapacity(readings.count)
-
-        for reading in readings {
-            guard let parsedDate = DateFormatting.parseTimestamp(reading.timestamp) else {
-                continue
-            }
-            parsed.append(
-                PowerPoint(
-                    id: reading.id,
-                    date: parsedDate,
-                    solar: reading.ppv,
-                    load: reading.pload,
-                    grid: reading.pgrid
-                )
-            )
-        }
-
-        return parsed
-    }
-
     private var xDomain: ClosedRange<Date> {
         DayChartDomain.domain(for: date)
     }
 }
 
-private struct PowerPoint: Identifiable {
-    let id: String
-    let date: Date
-    let solar: Double
-    let load: Double
-    let grid: Double
-}
-
 #if DEBUG
 #Preview {
     let day = MockFluxAPIClient.dayDetailResponse()
-    PowerChartView(date: day.date, readings: day.readings)
+    let parsed = day.readings.compactMap { reading -> ParsedReading? in
+        guard let date = DateFormatting.parseTimestamp(reading.timestamp) else { return nil }
+        return ParsedReading(id: reading.id, date: date, point: reading)
+    }
+    PowerChartView(date: day.date, readings: parsed)
         .padding()
 }
 #endif

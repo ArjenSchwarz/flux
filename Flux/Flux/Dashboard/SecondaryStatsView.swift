@@ -64,7 +64,7 @@ struct SecondaryStatsView: View {
                 {
                     let cutoffColor = CutoffTimeColor.forCutoff(
                         cutoffDate,
-                        offpeakWindowStart: offpeak?.windowStart ?? "11:00",
+                        offpeakWindowStart: offpeak?.windowStart ?? OffpeakData.defaultWindowStart,
                         now: nowProvider()
                     ).color
                     Text("(~\(DateFormatting.clockTime(from: cutoffDate)))")

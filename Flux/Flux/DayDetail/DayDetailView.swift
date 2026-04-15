@@ -17,12 +17,12 @@ struct DayDetailView: View {
             VStack(alignment: .leading, spacing: 16) {
                 dayNavigationHeader
 
-                if !viewModel.readings.isEmpty {
-                    SOCChartView(date: viewModel.date, readings: viewModel.readings, summary: viewModel.summary)
+                if !viewModel.parsedReadings.isEmpty {
+                    SOCChartView(date: viewModel.date, readings: viewModel.parsedReadings, summary: viewModel.summary)
 
                     if viewModel.hasPowerData {
-                        PowerChartView(date: viewModel.date, readings: viewModel.readings)
-                        BatteryPowerChartView(date: viewModel.date, readings: viewModel.readings)
+                        PowerChartView(date: viewModel.date, readings: viewModel.parsedReadings)
+                        BatteryPowerChartView(date: viewModel.date, readings: viewModel.parsedReadings)
                     } else {
                         noPowerDataCard
                     }

@@ -63,7 +63,15 @@ final class HistoryViewModel {
 
     private func cacheHistoricalDays(_ dayEnergies: [DayEnergy]) throws {
         let now = nowProvider()
-        let descriptor = FetchDescriptor<CachedDayEnergy>()
+        let datesToCache = dayEnergies
+            .filter { !DateFormatting.isToday($0.date, now: now) }
+            .map(\.date)
+        guard !datesToCache.isEmpty else { return }
+        let descriptor = FetchDescriptor<CachedDayEnergy>(
+            predicate: #Predicate<CachedDayEnergy> { cached in
+                datesToCache.contains(cached.date)
+            }
+        )
         let cachedDays = try modelContext.fetch(descriptor)
         var cachedByDate = Dictionary(uniqueKeysWithValues: cachedDays.map { ($0.date, $0) })
 
@@ -87,19 +95,16 @@ final class HistoryViewModel {
     }
 
     private func loadCachedDays(limit: Int) -> [DayEnergy] {
-        let descriptor = FetchDescriptor<CachedDayEnergy>(
+        var descriptor = FetchDescriptor<CachedDayEnergy>(
             sortBy: [SortDescriptor(\CachedDayEnergy.date, order: .reverse)]
         )
+        descriptor.fetchLimit = limit
 
         guard let cachedDays = try? modelContext.fetch(descriptor), !cachedDays.isEmpty else {
             return []
         }
 
-        if cachedDays.count <= limit {
-            return cachedDays.map(\.asDayEnergy)
-        }
-
-        return Array(cachedDays.prefix(limit)).map(\.asDayEnergy)
+        return cachedDays.map(\.asDayEnergy)
     }
 
     private func selectDefaultDayIfNeeded() {

@@ -39,6 +39,9 @@ struct RollingAvg: Codable, Sendable {
 }
 
 struct OffpeakData: Codable, Sendable {
+    static let defaultWindowStart = "11:00"
+    static let defaultWindowEnd = "14:00"
+
     let windowStart: String
     let windowEnd: String
     let gridUsageKwh: Double?

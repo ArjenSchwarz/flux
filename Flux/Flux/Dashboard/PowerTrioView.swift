@@ -38,8 +38,8 @@ struct PowerTrioView: View {
                 color: GridColor.forGrid(
                     pgrid: live?.pgrid ?? 0,
                     pgridSustained: live?.pgridSustained ?? false,
-                    offpeakWindowStart: offpeak?.windowStart ?? "11:00",
-                    offpeakWindowEnd: offpeak?.windowEnd ?? "14:00",
+                    offpeakWindowStart: offpeak?.windowStart ?? OffpeakData.defaultWindowStart,
+                    offpeakWindowEnd: offpeak?.windowEnd ?? OffpeakData.defaultWindowEnd,
                     now: nowProvider()
                 ).color,
                 detail: gridDirection
