@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- iOS History and Day Detail UI implementation in `Flux/Flux/History/` and `Flux/Flux/DayDetail/`, including grouped 5-metric history bars with day selection, 7/14/30 range picker, day summary card with drill-down navigation, SOC/power/battery charts, day-to-day navigation, and fallback SOC-only handling when power data is unavailable
+- Shared day-axis domain helper (`DayChartDomain`) and new chart views (`HistoryChartView`, `SOCChartView`, `PowerChartView`, `BatteryPowerChartView`) with Sydney-date alignment and 3-hour x-axis tick marks for consistent 00:00–00:00 rendering
+- History/day detail flow wiring from the dashboard “View history” link to the real `HistoryView` screen instead of placeholder content
+
 - iOS dashboard UI building blocks in `Flux/Flux/Dashboard/`: `BatteryHeroView`, `PowerTrioView`, `SecondaryStatsView`, `TodayEnergyView`, and `DashboardView` with pull-to-refresh, 10-second auto-refresh lifecycle hooks, scene phase handling, stale-data banner, and placeholder navigation/actions for History and Settings
 - iOS view models for Dashboard, History, Day Detail, and Settings in `Flux/Flux/` with `@MainActor @Observable` state, async loading/refresh flows, Sydney-time `isToday` handling, fallback day-power detection, and settings validation via `URLSessionAPIClient(baseURL:token:)`
 - iOS settings persistence support via `UserDefaults` extensions for `apiURL` and `loadAlertThreshold` (3000W default)
@@ -111,6 +115,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- `DayDetailViewModelTests.navigatePreviousAndNextUpdateDateString` now uses a deterministic non-today reference date, preventing timezone-dependent false failures
 - `computeCutoffTime` now guards against NaN/Inf results from very small `pbat` values and rejects `capacityKwh <= 0`, preventing unreasonable cutoff times from reaching the API response
 
 ### Changed

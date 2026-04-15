@@ -4,9 +4,15 @@ import SwiftData
 
 @MainActor @Observable
 final class HistoryViewModel {
-    private(set) var days: [DayEnergy] = []
+    private(set) var days: [DayEnergy] = [] {
+        didSet {
+            rebuildChartData()
+        }
+    }
     private(set) var selectedDay: DayEnergy?
     private(set) var selectedDayRange = 7
+    private(set) var chartDays: [HistoryChartDay] = []
+    private(set) var chartEntries: [HistoryChartEntry] = []
     private(set) var isLoading = false
     private(set) var error: FluxAPIError?
 
@@ -98,5 +104,100 @@ final class HistoryViewModel {
         }
 
         return .networkError(error.localizedDescription)
+    }
+
+    private static let dayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.timeZone = DateFormatting.sydneyTimeZone
+        return formatter
+    }()
+
+    private func rebuildChartData() {
+        guard !days.isEmpty else {
+            chartDays = []
+            chartEntries = []
+            return
+        }
+
+        let now = nowProvider()
+        var newChartDays: [HistoryChartDay] = []
+        newChartDays.reserveCapacity(days.count)
+
+        var newChartEntries: [HistoryChartEntry] = []
+        newChartEntries.reserveCapacity(days.count * HistoryChartMetric.allCases.count)
+
+        for day in days {
+            guard let parsedDate = Self.dayFormatter.date(from: day.date) else {
+                continue
+            }
+
+            let isToday = DateFormatting.isToday(day.date, now: now)
+            let chartDay = HistoryChartDay(day: day, date: parsedDate, isToday: isToday)
+            newChartDays.append(chartDay)
+
+            for metric in HistoryChartMetric.allCases {
+                newChartEntries.append(
+                    HistoryChartEntry(
+                        dayID: day.date,
+                        date: parsedDate,
+                        metric: metric,
+                        value: metric.value(from: day),
+                        isToday: isToday
+                    )
+                )
+            }
+        }
+
+        chartDays = newChartDays
+        chartEntries = newChartEntries
+    }
+}
+
+extension HistoryViewModel {
+    struct HistoryChartDay: Identifiable {
+        let day: DayEnergy
+        let date: Date
+        let isToday: Bool
+
+        var id: String { day.date }
+    }
+
+    struct HistoryChartEntry: Identifiable {
+        let dayID: String
+        let date: Date
+        let metric: HistoryChartMetric
+        let value: Double
+        let isToday: Bool
+
+        var id: String { "\(dayID)-\(metric.rawValue)" }
+    }
+
+    enum HistoryChartMetric: String, CaseIterable, Sendable {
+        case solar
+        case gridImported
+        case gridExported
+        case charged
+        case discharged
+
+        var label: String {
+            switch self {
+            case .solar: "Solar"
+            case .gridImported: "Grid In"
+            case .gridExported: "Grid Out"
+            case .charged: "Charged"
+            case .discharged: "Discharged"
+            }
+        }
+
+        func value(from day: DayEnergy) -> Double {
+            switch self {
+            case .solar: day.epv
+            case .gridImported: day.eInput
+            case .gridExported: day.eOutput
+            case .charged: day.eCharge
+            case .discharged: day.eDischarge
+            }
+        }
     }
 }

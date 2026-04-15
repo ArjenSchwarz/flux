@@ -22,7 +22,7 @@ struct DayDetailViewModelTests {
     @Test
     func navigatePreviousAndNextUpdateDateString() {
         let apiClient = MockDayDetailAPIClient()
-        let fixedNow = Self.makeUTCDate(year: 2026, month: 4, day: 14, hour: 0, minute: 0)
+        let fixedNow = Self.makeUTCDate(year: 2026, month: 4, day: 13, hour: 0, minute: 0)
         let viewModel = DayDetailViewModel(date: "2026-04-15", apiClient: apiClient, nowProvider: {
             fixedNow
         })

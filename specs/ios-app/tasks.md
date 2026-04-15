@@ -248,7 +248,7 @@ references:
 
 ## Views — History & Day Detail
 
-- [ ] 25. Create HistoryChartView with grouped bars and selection <!-- id:oxpta69 -->
+- [x] 25. Create HistoryChartView with grouped bars and selection <!-- id:oxpta69 -->
   - Create History/HistoryChartView.swift
   - BarMark with .foregroundStyle(by:) and .position(by:) for grouped bars
   - 5 metrics: solar (green), grid imported (red), grid exported (blue), charged (amber), discharged (purple)
@@ -260,7 +260,7 @@ references:
   - Stream: 2
   - Requirements: [9.1](requirements.md#9.1), [9.2](requirements.md#9.2), [9.3](requirements.md#9.3), [9.4](requirements.md#9.4), [9.5](requirements.md#9.5), [9.6](requirements.md#9.6)
 
-- [ ] 26. Create HistoryView with summary card and navigation <!-- id:oxpta6a -->
+- [x] 26. Create HistoryView with summary card and navigation <!-- id:oxpta6a -->
   - Create History/HistoryView.swift
   - Assembles HistoryChartView + summary card
   - View day detail link to DayDetailView
@@ -270,7 +270,7 @@ references:
   - Stream: 2
   - Requirements: [9.5](requirements.md#9.5), [9.7](requirements.md#9.7), [9.8](requirements.md#9.8)
 
-- [ ] 27. Create SOCChartView, PowerChartView, and BatteryPowerChartView <!-- id:oxpta6b -->
+- [x] 27. Create SOCChartView, PowerChartView, and BatteryPowerChartView <!-- id:oxpta6b -->
   - Create DayDetail/SOCChartView.swift — AreaMark + RuleMark at 10% + PointMark for low
   - Create DayDetail/PowerChartView.swift — AreaMark solar, LineMark load/grid
   - Create DayDetail/BatteryPowerChartView.swift — LineMark with -pbat, RuleMark at zero
@@ -279,7 +279,7 @@ references:
   - Stream: 2
   - Requirements: [1.3](requirements.md#1.3), [10.3](requirements.md#10.3), [10.4](requirements.md#10.4), [10.5](requirements.md#10.5), [10.6](requirements.md#10.6)
 
-- [ ] 28. Create DayDetailView with day navigation and summary <!-- id:oxpta6c -->
+- [x] 28. Create DayDetailView with day navigation and summary <!-- id:oxpta6c -->
   - Create DayDetail/DayDetailView.swift
   - ScrollView with three stacked charts + summary card
   - Day navigation with chevron buttons, .task(id: date) for loading

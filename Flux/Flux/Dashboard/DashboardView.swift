@@ -1,16 +1,23 @@
 import SwiftUI
+import SwiftData
 
 struct DashboardView: View {
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.modelContext) private var modelContext
     @State private var viewModel: DashboardViewModel
     @State private var showingSettings = false
+    private let historyFactory: (ModelContext) -> AnyView
 
     init(viewModel: DashboardViewModel) {
         _viewModel = State(initialValue: viewModel)
+        historyFactory = { _ in AnyView(Text("History unavailable")) }
     }
 
     init(apiClient: any FluxAPIClient) {
-        self.init(viewModel: DashboardViewModel(apiClient: apiClient))
+        _viewModel = State(initialValue: DashboardViewModel(apiClient: apiClient))
+        historyFactory = { modelContext in
+            AnyView(HistoryView(apiClient: apiClient, modelContext: modelContext))
+        }
     }
 
     var body: some View {
@@ -39,8 +46,7 @@ struct DashboardView: View {
                 TodayEnergyView(todayEnergy: viewModel.status?.todayEnergy)
 
                 NavigationLink("View history") {
-                    Text("History view coming soon")
-                        .navigationTitle("History")
+                    historyFactory(modelContext)
                 }
                 .font(.headline)
                 .padding(.horizontal)
