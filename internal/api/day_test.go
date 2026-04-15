@@ -69,7 +69,8 @@ func TestHandleDayNormalCase(t *testing.T) {
 	require.NotNil(t, dr.Summary.Epv)
 	assert.Equal(t, roundEnergy(15.5), *dr.Summary.Epv)
 	// socLow should be from raw data (40 at 18:00).
-	assert.Equal(t, roundPower(40), dr.Summary.SocLow)
+	require.NotNil(t, dr.Summary.SocLow)
+	assert.Equal(t, roundPower(40), *dr.Summary.SocLow)
 }
 
 func TestHandleDayFallbackToDailyPower(t *testing.T) {
@@ -115,9 +116,40 @@ func TestHandleDayFallbackToDailyPower(t *testing.T) {
 
 	// Summary should have socLow from fallback data.
 	require.NotNil(t, dr.Summary)
-	assert.Equal(t, roundPower(45), dr.Summary.SocLow)
+	require.NotNil(t, dr.Summary.SocLow)
+	assert.Equal(t, roundPower(45), *dr.Summary.SocLow)
 	// Energy fields should be null since no daily energy.
 	assert.Nil(t, dr.Summary.Epv)
+}
+
+func TestHandleDayOnlyDailyEnergySocLowIsNull(t *testing.T) {
+	// When daily energy exists but no readings/power data, SocLow and SocLowTime
+	// should be null — not zero-valued — so the client can distinguish "absent" from "0%".
+	mr := &mockReader{
+		queryReadingsFn: func(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
+			return []dynamo.ReadingItem{}, nil
+		},
+		queryDailyPowerFn: func(_ context.Context, _, _ string) ([]dynamo.DailyPowerItem, error) {
+			return []dynamo.DailyPowerItem{}, nil
+		},
+		getDailyEnergyFn: func(_ context.Context, _, _ string) (*dynamo.DailyEnergyItem, error) {
+			return &dynamo.DailyEnergyItem{
+				Date: "2026-04-14", Epv: 10.0, EInput: 2.0, EOutput: 1.0, ECharge: 5.0, EDischarge: 4.0,
+			}, nil
+		},
+	}
+
+	h := NewHandler(mr, testSerial, testToken, "11:00", "14:00")
+
+	resp, err := h.Handle(context.Background(), dayRequest(map[string]string{"date": "2026-04-14"}))
+	require.NoError(t, err)
+	assert.Equal(t, 200, resp.StatusCode)
+
+	dr := parseDayResponse(t, resp)
+	require.NotNil(t, dr.Summary, "summary should exist when daily energy is present")
+	assert.Nil(t, dr.Summary.SocLow, "socLow should be null when no readings exist")
+	assert.Nil(t, dr.Summary.SocLowTime, "socLowTime should be null when no readings exist")
+	require.NotNil(t, dr.Summary.Epv, "energy fields should be populated")
 }
 
 func TestHandleDayNoDataFromEitherSource(t *testing.T) {
@@ -168,7 +200,8 @@ func TestHandleDayReadingsButNoDailyEnergy(t *testing.T) {
 
 	dr := parseDayResponse(t, resp)
 	require.NotNil(t, dr.Summary)
-	assert.Equal(t, roundPower(35), dr.Summary.SocLow)
+	require.NotNil(t, dr.Summary.SocLow)
+	assert.Equal(t, roundPower(35), *dr.Summary.SocLow)
 	assert.Nil(t, dr.Summary.Epv, "energy fields should be null")
 	assert.Nil(t, dr.Summary.EInput)
 }
@@ -224,7 +257,8 @@ func TestHandleDaySocLowFromRawNotDownsampled(t *testing.T) {
 
 	dr := parseDayResponse(t, resp)
 	require.NotNil(t, dr.Summary)
-	assert.Equal(t, roundPower(20), dr.Summary.SocLow, "socLow should come from raw data, not downsampled")
+	require.NotNil(t, dr.Summary.SocLow)
+	assert.Equal(t, roundPower(20), *dr.Summary.SocLow, "socLow should come from raw data, not downsampled")
 }
 
 func TestHandleDayDynamoDBError(t *testing.T) {

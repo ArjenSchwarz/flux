@@ -88,8 +88,10 @@ func (h *Handler) handleDay(ctx context.Context, req events.LambdaFunctionURLReq
 	if hasReadings || deItem != nil {
 		summary := &DaySummary{}
 		if hasReadings {
-			summary.SocLow = roundPower(socLow)
-			summary.SocLowTime = time.Unix(socLowTime, 0).UTC().Format(time.RFC3339)
+			sl := roundPower(socLow)
+			summary.SocLow = &sl
+			slt := time.Unix(socLowTime, 0).UTC().Format(time.RFC3339)
+			summary.SocLowTime = &slt
 		}
 		if deItem != nil {
 			summary.Epv = floatPtr(roundEnergy(deItem.Epv))
@@ -107,31 +109,34 @@ func (h *Handler) handleDay(ctx context.Context, req events.LambdaFunctionURLReq
 // mapDailyPowerToPoints converts fallback daily power items to time series points.
 // Maps cbat to soc, power fields to 0. Used directly without downsampling.
 func mapDailyPowerToPoints(items []dynamo.DailyPowerItem) []TimeSeriesPoint {
-	points := make([]TimeSeriesPoint, len(items))
-	for i, item := range items {
-		t, _ := time.ParseInLocation("2006-01-02 15:04:05", item.UploadTime, sydneyTZ)
-		points[i] = TimeSeriesPoint{
+	points := make([]TimeSeriesPoint, 0, len(items))
+	for _, item := range items {
+		t, err := time.ParseInLocation("2006-01-02 15:04:05", item.UploadTime, sydneyTZ)
+		if err != nil {
+			continue
+		}
+		points = append(points, TimeSeriesPoint{
 			Timestamp: t.UTC().Format(time.RFC3339),
 			Soc:       roundPower(item.Cbat),
-		}
+		})
 	}
 	return points
 }
 
 // findMinSOCFromPower finds the minimum cbat value from daily power items.
 func findMinSOCFromPower(items []dynamo.DailyPowerItem) (soc float64, timestamp int64, found bool) {
-	if len(items) == 0 {
-		return 0, 0, false
-	}
-	minSoc := items[0].Cbat
-	t, _ := time.ParseInLocation("2006-01-02 15:04:05", items[0].UploadTime, sydneyTZ)
-	minTS := t.Unix()
-	for _, item := range items[1:] {
-		if item.Cbat < minSoc {
+	var minSoc float64
+	var minTS int64
+	for _, item := range items {
+		t, err := time.ParseInLocation("2006-01-02 15:04:05", item.UploadTime, sydneyTZ)
+		if err != nil {
+			continue
+		}
+		if !found || item.Cbat < minSoc {
 			minSoc = item.Cbat
-			t, _ = time.ParseInLocation("2006-01-02 15:04:05", item.UploadTime, sydneyTZ)
 			minTS = t.Unix()
+			found = true
 		}
 	}
-	return minSoc, minTS, true
+	return minSoc, minTS, found
 }

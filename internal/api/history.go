@@ -12,7 +12,7 @@ import (
 var validDays = map[int]bool{7: true, 14: true, 30: true}
 
 func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionURLRequest) events.LambdaFunctionURLResponse {
-	now := h.nowFunc()
+	now := h.nowFunc().In(sydneyTZ)
 	today := now.Format("2006-01-02")
 
 	// Parse and validate days parameter (default 7).

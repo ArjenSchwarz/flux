@@ -102,6 +102,6 @@ type DaySummary struct {
 	EOutput    *float64 `json:"eOutput"`
 	ECharge    *float64 `json:"eCharge"`
 	EDischarge *float64 `json:"eDischarge"`
-	SocLow     float64  `json:"socLow"`
-	SocLowTime string   `json:"socLowTime"`
+	SocLow     *float64 `json:"socLow"`
+	SocLowTime *string  `json:"socLowTime"`
 }
