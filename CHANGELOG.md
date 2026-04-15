@@ -90,6 +90,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Deployment README (`infrastructure/README.md`) with prerequisites, SecureString setup commands, build/package/deploy workflow, and update procedures for Lambda code, container image, configuration, and infrastructure changes
 - Infrastructure spec: implementation explanation at beginner, intermediate, and expert levels with completeness assessment
 
+### Fixed
+
+- `computeCutoffTime` now guards against NaN/Inf results from very small `pbat` values and rejects `capacityKwh <= 0`, preventing unreasonable cutoff times from reaching the API response
+
 ### Changed
 
 - Lambda MemorySize increased from 128MB to 256MB for 24h query headroom

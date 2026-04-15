@@ -40,6 +40,14 @@ func TestComputeCutoffTime(t *testing.T) {
 			soc: 5, pbat: 1000, capacityKwh: 10, cutoffPercent: 10,
 			want: nil,
 		},
+		"zero capacity returns nil": {
+			soc: 50, pbat: 1000, capacityKwh: 0, cutoffPercent: 10,
+			want: nil,
+		},
+		"negative capacity returns nil": {
+			soc: 50, pbat: 1000, capacityKwh: -5, cutoffPercent: 10,
+			want: nil,
+		},
 		"calculation verification": {
 			// remaining = (80-10)/100 * 13.34 = 9.338 kWh
 			// rate = 2000W = 2 kW, hours = 9.338/2 = 4.669
@@ -332,6 +340,45 @@ func TestRoundPower(t *testing.T) {
 			got := roundPower(tc.input)
 			assert.InDelta(t, tc.want, got, 1e-9)
 		})
+	}
+}
+
+func BenchmarkDownsample(b *testing.B) {
+	loc, _ := time.LoadLocation("Australia/Sydney")
+	dayStart := time.Date(2026, 4, 10, 0, 0, 0, 0, loc)
+	readings := make([]dynamo.ReadingItem, 0, 8640)
+	for i := range 8640 {
+		readings = append(readings, dynamo.ReadingItem{
+			Timestamp: dayStart.Unix() + int64(i*10),
+			Ppv:       float64(i % 500),
+			Pload:     float64(i % 350),
+			Pbat:      float64(i % 200),
+			Pgrid:     float64(i % 150),
+			Soc:       20 + float64(i%80),
+		})
+	}
+
+	for b.Loop() {
+		_ = downsample(readings, "2026-04-10")
+	}
+}
+
+func BenchmarkComputePgridSustained(b *testing.B) {
+	readings := make([]dynamo.ReadingItem, 0, 360)
+	base := int64(1000)
+	for i := range 360 {
+		pgrid := 100.0
+		if i > 350 {
+			pgrid = 600
+		}
+		readings = append(readings, dynamo.ReadingItem{
+			Timestamp: base + int64(i*10),
+			Pgrid:     pgrid,
+		})
+	}
+
+	for b.Loop() {
+		_ = computePgridSustained(readings)
 	}
 }
 

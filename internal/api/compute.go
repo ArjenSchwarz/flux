@@ -21,11 +21,14 @@ var sydneyTZ = func() *time.Location {
 // using linear extrapolation. Returns nil if the battery is not discharging or
 // SOC is already at/below cutoff.
 func computeCutoffTime(soc, pbat, capacityKwh, cutoffPercent float64, now time.Time) *time.Time {
-	if pbat <= 0 || soc <= cutoffPercent {
+	if pbat <= 0 || soc <= cutoffPercent || capacityKwh <= 0 {
 		return nil
 	}
 	remainingKwh := (soc - cutoffPercent) / 100 * capacityKwh
 	hoursRemaining := remainingKwh / (pbat / 1000)
+	if hoursRemaining <= 0 || math.IsNaN(hoursRemaining) || math.IsInf(hoursRemaining, 0) {
+		return nil
+	}
 	t := now.Add(time.Duration(hoursRemaining * float64(time.Hour)))
 	return &t
 }

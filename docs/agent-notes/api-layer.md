@@ -82,4 +82,12 @@
 - `fixedNow()` returns 2026-04-15 10:00:00 AEST for deterministic tests.
 - Status tests inject `nowFunc` to control time capture.
 - `TestHandleStatusSingleNowCapture` verifies nowFunc is called exactly once.
+- `cmd/api/main_test.go` tests `loadConfig` missing-env-var validation path.
+- `compute_test.go` includes benchmarks: `BenchmarkDownsample` (8640 readings) and `BenchmarkComputePgridSustained` (360 readings).
 - golangci-lint has a version mismatch (built with Go 1.25, project targets 1.26) — not related to API code.
+
+## Known Issues
+
+- `DaySummary.SocLow` and `SocLowTime` are non-pointer types — they serialise as `0` and `""` when no readings exist instead of null. App must handle defensively. See `specs/lambda-api/implementation.md` validation findings.
+- `findMinSOCFromPower` does not validate `UploadTime` format — parsing failures silently produce zero time.
+- `computeCutoffTime` has NaN/Inf guards (added during consolidation) to prevent unreasonable cutoff times from very small pbat values.

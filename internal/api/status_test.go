@@ -308,6 +308,63 @@ func TestHandleStatusDynamoDBError(t *testing.T) {
 	}
 }
 
+func TestHandleStatusOffpeakNotFound(t *testing.T) {
+	now := fixedNow()
+	mr := &mockReader{
+		getOffpeakFn: func(_ context.Context, _, _ string) (*dynamo.OffpeakItem, error) {
+			return nil, nil // no offpeak record exists
+		},
+	}
+
+	h := NewHandler(mr, testSerial, testToken, "11:00", "14:00")
+	h.nowFunc = func() time.Time { return now }
+
+	resp, err := h.Handle(context.Background(), statusRequest())
+	require.NoError(t, err)
+	assert.Equal(t, 200, resp.StatusCode)
+
+	sr := parseStatusResponse(t, resp)
+
+	// No offpeak record — window times present, delta fields null.
+	require.NotNil(t, sr.Offpeak)
+	assert.Equal(t, "11:00", sr.Offpeak.WindowStart)
+	assert.Equal(t, "14:00", sr.Offpeak.WindowEnd)
+	assert.Nil(t, sr.Offpeak.GridUsageKwh)
+	assert.Nil(t, sr.Offpeak.SolarKwh)
+	assert.Nil(t, sr.Offpeak.BatteryChargeKwh)
+	assert.Nil(t, sr.Offpeak.BatteryDischargeKwh)
+	assert.Nil(t, sr.Offpeak.GridExportKwh)
+	assert.Nil(t, sr.Offpeak.BatteryDeltaPercent)
+}
+
+func TestHandleStatusRollingAvgFewerThan2Readings(t *testing.T) {
+	now := fixedNow()
+	nowUnix := now.Unix()
+
+	mr := &mockReader{
+		queryReadingsFn: func(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
+			// Only one reading in the 24h window (also within 15min).
+			return []dynamo.ReadingItem{
+				{Timestamp: nowUnix - 60, Ppv: 100, Pload: 200, Pbat: 300, Pgrid: 50, Soc: 50},
+			}, nil
+		},
+	}
+
+	h := NewHandler(mr, testSerial, testToken, "11:00", "14:00")
+	h.nowFunc = func() time.Time { return now }
+
+	resp, err := h.Handle(context.Background(), statusRequest())
+	require.NoError(t, err)
+	assert.Equal(t, 200, resp.StatusCode)
+
+	sr := parseStatusResponse(t, resp)
+
+	// Only 1 reading in 15min window → rolling15min is null.
+	assert.Nil(t, sr.Rolling15m, "rolling15min should be null with fewer than 2 readings")
+	// But live should still be present.
+	require.NotNil(t, sr.Live)
+}
+
 func TestHandleStatusSingleNowCapture(t *testing.T) {
 	// Verify that the handler captures "now" once and uses it consistently.
 	// The mock clock should be called exactly once via nowFunc.
