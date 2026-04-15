@@ -15,6 +15,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - iOS app spec: prerequisites document listing Xcode project setup steps (App Group capability still needed)
 - Xcode project for iOS app (`Flux/`) with iOS 26 deployment target, SwiftUI + SwiftData template, entitlements for CloudKit and push notifications, and unit/UI test targets
 - Xcode-specific entries to `.gitignore` (`xcuserdata/`, `*.xcuserstate`)
+- App Group entitlement (`group.me.nore.ig.flux`) for Keychain sharing with future widget extension
+- App category set to Utilities in Xcode project
 
 - Lambda entry point (`cmd/api/main.go`) with cold-start initialisation: AWS SDK config loading, SSM parameter fetching (api-token, serial) with decryption, environment variable validation, DynamoReader and Handler creation, and `lambda.Start` invocation
 - `time/tzdata` import in Lambda entry point for timezone embedding on `provided.al2023` runtime
