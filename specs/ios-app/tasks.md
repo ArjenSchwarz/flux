@@ -84,7 +84,7 @@ references:
 
 ## Foundation — Helpers
 
-- [ ] 9. Write tests for DateFormatting <!-- id:oxpta5t -->
+- [x] 9. Write tests for DateFormatting <!-- id:oxpta5t -->
   - Create DateFormattingTests.swift
   - Test parseTimestamp with valid/invalid ISO 8601 strings
   - Test todayDateString returns correct date in Sydney timezone
@@ -94,7 +94,7 @@ references:
   - Stream: 2
   - Requirements: [5.8](requirements.md#5.8), [6.6](requirements.md#6.6)
 
-- [ ] 10. Implement DateFormatting <!-- id:oxpta5u -->
+- [x] 10. Implement DateFormatting <!-- id:oxpta5u -->
   - Create Helpers/DateFormatting.swift
   - sydneyTimeZone constant (Decision 7)
   - Static shared ISO8601DateFormatter instance
@@ -104,7 +104,7 @@ references:
   - Stream: 2
   - Requirements: [5.8](requirements.md#5.8), [6.6](requirements.md#6.6)
 
-- [ ] 11. Write tests for BatteryColor and GridColor <!-- id:oxpta5v -->
+- [x] 11. Write tests for BatteryColor and GridColor <!-- id:oxpta5v -->
   - Create ColoringTests.swift
   - BatteryColor.forSOC: verify boundaries — 0, 14.9, 15, 29.9, 30, 60, 60.1, 100
   - GridColor: all combinations of pgrid threshold, sustained flag, off-peak window
@@ -113,7 +113,7 @@ references:
   - Stream: 2
   - Requirements: [4.2](requirements.md#4.2), [5.3](requirements.md#5.3), [5.4](requirements.md#5.4), [5.5](requirements.md#5.5), [5.6](requirements.md#5.6), [5.7](requirements.md#5.7), [6.7](requirements.md#6.7), [6.8](requirements.md#6.8)
 
-- [ ] 12. Implement BatteryColor and GridColor <!-- id:oxpta5w -->
+- [x] 12. Implement BatteryColor and GridColor <!-- id:oxpta5w -->
   - Create Helpers/BatteryColor.swift — forSOC uses > 60 (not >= 60) per requirement 4.2
   - Create Helpers/GridColor.swift — pgrid > 500 AND pgridSustained AND outside off-peak for red
   - Create Helpers/CutoffTimeColor.swift — red <2h, amber before windowStart

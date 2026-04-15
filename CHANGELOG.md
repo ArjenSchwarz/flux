@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- iOS helper utilities in `Flux/Flux/Helpers/`: `DateFormatting` (Sydney timezone-safe parsing/formatting, off-peak window checks), `BatteryColor`, `GridColor`, and `CutoffTimeColor` for shared dashboard color logic
+- iOS unit tests in `Flux/FluxTests/`: `DateFormattingTests` for timezone and off-peak boundary behavior, plus `ColoringTests` covering SOC thresholds, grid import/export rules, and cutoff color states
 - iOS service foundation in `Flux/Flux/Services/`: `FluxAPIClient` protocol, `KeychainService` with App Group-aware Security framework storage, and `URLSessionAPIClient` with bearer-token request building plus typed `FluxAPIError` mapping for HTTP, network, and decoding failures
 - iOS unit tests for service layer in `Flux/FluxTests/`: `KeychainServiceTests` for token persistence lifecycle and `URLSessionAPIClientTests` using a `URLProtocol` mock to verify endpoint URLs, auth headers, validation-token initializer behavior, and typed error handling
 - iOS foundation model layer in `Flux/Flux/Models/`: backend-aligned `Codable & Sendable` response structs (`/status`, `/history`, `/day`), typed `FluxAPIError`, and SwiftData `CachedDayEnergy` cache model with unique `date` key plus conversion helpers
