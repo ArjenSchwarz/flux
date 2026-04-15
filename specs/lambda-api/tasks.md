@@ -42,14 +42,14 @@ references:
 
 ## Response Types and Business Logic
 
-- [ ] 4. Define JSON response structs <!-- id:e3gfl59 -->
+- [x] 4. Define JSON response structs <!-- id:e3gfl59 -->
   - Create internal/api/response.go with StatusResponse, LiveData, BatteryInfo, Low24h, RollingAvg, OffpeakData, TodayEnergy, HistoryResponse, DayEnergy, DayDetailResponse, TimeSeriesPoint, DaySummary
   - Use pointer types (*float64, *string) for nullable fields
   - JSON tags must match V1 plan contract exactly
   - Stream: 2
   - Requirements: [3.2](requirements.md#3.2), [4.1](requirements.md#4.1), [5.1](requirements.md#5.1), [6.1](requirements.md#6.1), [7.1](requirements.md#7.1), [8.5](requirements.md#8.5), [9.5](requirements.md#9.5), [9.9](requirements.md#9.9)
 
-- [ ] 5. Write tests for compute functions <!-- id:e3gfl5a -->
+- [x] 5. Write tests for compute functions <!-- id:e3gfl5a -->
   - TestComputeCutoffTime: discharging normal, charging (nil), SOC at cutoff (nil), SOC below cutoff (nil), zero pbat (nil), calculation verification
   - TestComputeRollingAverages: empty slice, single reading, multiple readings, arithmetic
   - TestComputePgridSustained: 3+ consecutive above threshold (true), 2 consecutive (false), gap >30s breaks chain (false), interspersed below-threshold (false), empty (false)
@@ -61,7 +61,7 @@ references:
   - Stream: 2
   - Requirements: [3.6](requirements.md#3.6), [3.7](requirements.md#3.7), [3.8](requirements.md#3.8), [4.4](requirements.md#4.4), [4.5](requirements.md#4.5), [4.6](requirements.md#4.6), [5.3](requirements.md#5.3), [5.4](requirements.md#5.4), [5.5](requirements.md#5.5), [5.6](requirements.md#5.6), [9.6](requirements.md#9.6), [9.10](requirements.md#9.10), [10.7](requirements.md#10.7)
 
-- [ ] 6. Implement compute functions <!-- id:e3gfl5b -->
+- [x] 6. Implement compute functions <!-- id:e3gfl5b -->
   - Create internal/api/compute.go
   - computeCutoffTime: linear extrapolation with nil guards for charging, idle, SOC <= cutoff
   - computeRollingAverages: mean of pload and pbat

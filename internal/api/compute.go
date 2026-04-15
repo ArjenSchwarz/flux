@@ -1,0 +1,156 @@
+package api
+
+import (
+	"math"
+	"sort"
+	"time"
+
+	"github.com/ArjenSchwarz/flux/internal/dynamo"
+)
+
+// computeCutoffTime estimates when the battery will reach the cutoff percentage
+// using linear extrapolation. Returns nil if the battery is not discharging or
+// SOC is already at/below cutoff.
+func computeCutoffTime(soc, pbat, capacityKwh, cutoffPercent float64, now time.Time) *time.Time {
+	if pbat <= 0 || soc <= cutoffPercent {
+		return nil
+	}
+	remainingKwh := (soc - cutoffPercent) / 100 * capacityKwh
+	hoursRemaining := remainingKwh / (pbat / 1000)
+	t := now.Add(time.Duration(hoursRemaining * float64(time.Hour)))
+	return &t
+}
+
+// computeRollingAverages returns the mean pload and pbat over the given readings.
+// Returns (0, 0) for an empty slice.
+func computeRollingAverages(readings []dynamo.ReadingItem) (avgLoad, avgPbat float64) {
+	if len(readings) == 0 {
+		return 0, 0
+	}
+	var sumLoad, sumPbat float64
+	for _, r := range readings {
+		sumLoad += r.Pload
+		sumPbat += r.Pbat
+	}
+	n := float64(len(readings))
+	return sumLoad / n, sumPbat / n
+}
+
+// computePgridSustained checks whether grid import is currently sustained.
+// It iterates backwards from the most recent reading and counts consecutive
+// readings where pgrid > 500 with each pair no more than 30 seconds apart.
+// Returns true if 3+ consecutive qualifying readings are found.
+// The function expects readings in ascending timestamp order.
+func computePgridSustained(readings []dynamo.ReadingItem) bool {
+	if len(readings) < 3 {
+		return false
+	}
+
+	consecutive := 1
+	for i := len(readings) - 1; i > 0; i-- {
+		curr := readings[i]
+		prev := readings[i-1]
+
+		if curr.Pgrid <= 500 {
+			break
+		}
+		if prev.Pgrid <= 500 {
+			break
+		}
+		if curr.Timestamp-prev.Timestamp > 30 {
+			break
+		}
+		consecutive++
+		if consecutive >= 3 {
+			return true
+		}
+	}
+	return false
+}
+
+// bucketsPerDay is the number of 5-minute buckets in a day (288).
+const bucketsPerDay = 288
+
+// downsample divides a day into 5-minute buckets and averages all readings
+// within each bucket. Empty buckets are omitted. The date parameter is in
+// YYYY-MM-DD format and is interpreted in Australia/Sydney timezone.
+func downsample(readings []dynamo.ReadingItem, date string) []TimeSeriesPoint {
+	if len(readings) == 0 {
+		return nil
+	}
+
+	loc, _ := time.LoadLocation("Australia/Sydney")
+	dayStart, _ := time.ParseInLocation("2006-01-02", date, loc)
+
+	type bucket struct {
+		ppv, pload, pbat, pgrid, soc float64
+		count                        int
+	}
+	buckets := make([]bucket, bucketsPerDay)
+
+	for _, r := range readings {
+		t := time.Unix(r.Timestamp, 0).In(loc)
+		minuteOfDay := t.Hour()*60 + t.Minute()
+		idx := minuteOfDay / 5
+		if idx >= bucketsPerDay {
+			idx = bucketsPerDay - 1
+		}
+		b := &buckets[idx]
+		b.ppv += r.Ppv
+		b.pload += r.Pload
+		b.pbat += r.Pbat
+		b.pgrid += r.Pgrid
+		b.soc += r.Soc
+		b.count++
+	}
+
+	var points []TimeSeriesPoint
+	for i, b := range buckets {
+		if b.count == 0 {
+			continue
+		}
+		n := float64(b.count)
+		bucketTime := dayStart.Add(time.Duration(i*5) * time.Minute)
+		points = append(points, TimeSeriesPoint{
+			Timestamp: bucketTime.UTC().Format(time.RFC3339),
+			Ppv:       b.ppv / n,
+			Pload:     b.pload / n,
+			Pbat:      b.pbat / n,
+			Pgrid:     b.pgrid / n,
+			Soc:       b.soc / n,
+		})
+	}
+
+	sort.Slice(points, func(i, j int) bool {
+		return points[i].Timestamp < points[j].Timestamp
+	})
+
+	return points
+}
+
+// findMinSOC scans readings for the minimum SOC value.
+// Returns (soc, timestamp, found). found is false if readings is empty.
+func findMinSOC(readings []dynamo.ReadingItem) (soc float64, timestamp int64, found bool) {
+	if len(readings) == 0 {
+		return 0, 0, false
+	}
+	minSoc := readings[0].Soc
+	minTS := readings[0].Timestamp
+	for _, r := range readings[1:] {
+		if r.Soc < minSoc {
+			minSoc = r.Soc
+			minTS = r.Timestamp
+		}
+	}
+	return minSoc, minTS, true
+}
+
+// roundEnergy rounds a kWh value to 2 decimal places.
+func roundEnergy(v float64) float64 {
+	return math.Round(v*100) / 100
+}
+
+// roundPower rounds a watts or SOC value to 1 decimal place.
+func roundPower(v float64) float64 {
+	return math.Round(v*10) / 10
+}

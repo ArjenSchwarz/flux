@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Lambda API response structs (`internal/api/response.go`) with JSON tags matching V1 plan contract: `StatusResponse`, `HistoryResponse`, `DayDetailResponse` and nested types, using pointer types for nullable fields
+- Lambda API compute functions (`internal/api/compute.go`): cutoff time estimation via linear extrapolation, rolling averages, sustained grid detection (pgrid > 500 for 3+ consecutive readings within 30s gaps), 5-minute bucket downsampling (288 buckets/day), min SOC finder, and energy/power rounding helpers
+- Unit tests for all compute functions covering happy paths and edge cases (empty input, boundary conditions, nil guards)
 - DynamoDB read layer (`internal/dynamo/reader.go`) with `Reader` interface (6 methods: `QueryReadings`, `GetSystem`, `GetOffpeak`, `GetDailyEnergy`, `QueryDailyEnergy`, `QueryDailyPower`) and `DynamoReader` implementation for the Lambda API
 - `ReadAPI` client interface (Query, GetItem) separate from the existing write-focused `DynamoAPI` to maintain interface segregation between poller and API concerns
 - Generic `getItem[T]` and `queryAll[T]` helpers for DynamoDB GetItem/Query operations with pagination, shared between `DynamoStore` and `DynamoReader`
