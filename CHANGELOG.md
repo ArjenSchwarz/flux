@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- iOS app spec: requirements document with 13 sections and 57 acceptance criteria covering platform/architecture, API client, authentication/settings, dashboard (battery hero, power readings, secondary stats, today's energy), refresh behaviour, history screen, day detail screen, caching, error states, and navigation
+- iOS app spec: design document with MVVM architecture using `@MainActor @Observable` view models, NavigationSplitView with adaptive layout, FluxAPIClient protocol with URLSessionAPIClient (token provider pattern for settings validation), SwiftData caching for history, Keychain with App Group, SwiftUI Charts (BarMark/LineMark/AreaMark/RuleMark), DateFormatting utility with Sydney timezone, conditional colouring helpers, and file layout mapped to Xcode project structure at `Flux/Flux/`
+- iOS app spec: decision log with 9 decisions (adaptive layout from start, no third-party dependencies, SwiftData for history caching only, Keychain with App Group, 10-second auto-refresh, spec scope excludes Xcode project, Sydney timezone for all date operations, token provider pattern for settings validation, fallback data detection via heuristic)
+- iOS app spec: task list with 31 implementation tasks across 7 phases and 2 parallel streams, TDD-ordered with dependency tracking and requirement traceability
+- iOS app spec: prerequisites document listing Xcode project setup steps (App Group capability still needed)
+- Xcode project for iOS app (`Flux/`) with iOS 26 deployment target, SwiftUI + SwiftData template, entitlements for CloudKit and push notifications, and unit/UI test targets
+- Xcode-specific entries to `.gitignore` (`xcuserdata/`, `*.xcuserstate`)
+
 - Lambda entry point (`cmd/api/main.go`) with cold-start initialisation: AWS SDK config loading, SSM parameter fetching (api-token, serial) with decryption, environment variable validation, DynamoReader and Handler creation, and `lambda.Start` invocation
 - `time/tzdata` import in Lambda entry point for timezone embedding on `provided.al2023` runtime
 - JSON structured logging via `slog.NewJSONHandler` for CloudWatch compatibility
