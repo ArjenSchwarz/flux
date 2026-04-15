@@ -21,11 +21,15 @@ Parameters:
     # No default — HH:MM values must be passed via parameters file or
     # --parameter-overrides. aws cloudformation package re-serializes YAML
     # and strips quotes, causing YAML 1.1 sexagesimal parsing (11:00 → 660).
+    AllowedPattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+    ConstraintDescription: Must be a valid time in HH:MM format (24-hour)
     Description: Off-peak window start time (HH:MM)
 
   OffPeakWindowEnd:
     Type: String
     # No default — see OffPeakWindowStart comment.
+    AllowedPattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+    ConstraintDescription: Must be a valid time in HH:MM format (24-hour)
     Description: Off-peak window end time (HH:MM)
 
   SSMPathPrefix:
