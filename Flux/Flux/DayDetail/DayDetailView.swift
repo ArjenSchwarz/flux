@@ -186,54 +186,8 @@ private enum DayDetailDateFormatters {
     }()
 }
 
-private actor PreviewDayDetailAPIClient: FluxAPIClient {
-    func fetchStatus() async throws -> StatusResponse {
-        throw FluxAPIError.notConfigured
-    }
-
-    func fetchHistory(days _: Int) async throws -> HistoryResponse {
-        throw FluxAPIError.notConfigured
-    }
-
-    func fetchDay(date: String) async throws -> DayDetailResponse {
-        var readings: [TimeSeriesPoint] = []
-        readings.reserveCapacity(24)
-
-        for hour in 0 ... 23 {
-            let timestamp = "\(date)T\(String(format: "%02d", hour)):00:00Z"
-            let solar = max(0, Double(1800 - abs(12 - hour) * 140))
-            let load = Double(450 + hour * 12)
-            let battery = Double((hour % 6) - 3) * 120
-            let grid = Double((hour % 5) * 90)
-            let soc = Double(70 - hour)
-            readings.append(
-                TimeSeriesPoint(
-                    timestamp: timestamp,
-                    ppv: solar,
-                    pload: load,
-                    pbat: battery,
-                    pgrid: grid,
-                    soc: soc
-                )
-            )
-        }
-
-        let summary = DaySummary(
-            epv: 13.4,
-            eInput: 2.2,
-            eOutput: 4.9,
-            eCharge: 5.1,
-            eDischarge: 6.2,
-            socLow: 18.3,
-            socLowTime: "\(date)T19:00:00Z"
-        )
-
-        return DayDetailResponse(date: date, readings: readings, summary: summary)
-    }
-}
-
 #Preview {
     NavigationStack {
-        DayDetailView(date: "2026-04-15", apiClient: PreviewDayDetailAPIClient())
+        DayDetailView(date: MockFluxAPIClient.previewDate, apiClient: MockFluxAPIClient.preview)
     }
 }

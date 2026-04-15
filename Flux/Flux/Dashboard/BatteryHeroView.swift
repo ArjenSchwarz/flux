@@ -49,22 +49,10 @@ struct BatteryHeroView: View {
 }
 
 #Preview {
+    let status = MockFluxAPIClient.statusResponse
     BatteryHeroView(
-        live: LiveData(
-            ppv: 2500,
-            pload: 900,
-            pbat: 800,
-            pgrid: 300,
-            pgridSustained: false,
-            soc: 62.4,
-            timestamp: "2026-04-15T02:00:00Z"
-        ),
-        battery: BatteryInfo(
-            capacityKwh: 13.3,
-            cutoffPercent: 10,
-            estimatedCutoffTime: "2026-04-15T18:30:00Z",
-            low24h: nil
-        )
+        live: status.live,
+        battery: status.battery
     )
     .padding()
 }

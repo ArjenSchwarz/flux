@@ -88,3 +88,9 @@ private struct PowerPoint: Identifiable {
     let load: Double
     let grid: Double
 }
+
+#Preview {
+    let day = MockFluxAPIClient.dayDetailResponse()
+    PowerChartView(date: day.date, readings: day.readings)
+        .padding()
+}

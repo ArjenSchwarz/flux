@@ -314,7 +314,7 @@ references:
 
 ## Integration
 
-- [ ] 31. Create MockFluxAPIClient for SwiftUI previews <!-- id:oxpta6f -->
+- [x] 31. Create MockFluxAPIClient for SwiftUI previews <!-- id:oxpta6f -->
   - Create MockFluxAPIClient with static sample data for all endpoints
   - Add SwiftUI preview providers to all view files
   - Verify all previews render without crashes

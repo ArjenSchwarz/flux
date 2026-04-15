@@ -84,26 +84,10 @@ struct PowerTrioView: View {
 }
 
 #Preview {
+    let status = MockFluxAPIClient.statusResponse
     PowerTrioView(
-        live: LiveData(
-            ppv: 1400,
-            pload: 3200,
-            pbat: -600,
-            pgrid: 550,
-            pgridSustained: true,
-            soc: 64,
-            timestamp: "2026-04-15T02:00:00Z"
-        ),
-        offpeak: OffpeakData(
-            windowStart: "11:00",
-            windowEnd: "14:00",
-            gridUsageKwh: nil,
-            solarKwh: nil,
-            batteryChargeKwh: nil,
-            batteryDischargeKwh: nil,
-            gridExportKwh: nil,
-            batteryDeltaPercent: nil
-        )
+        live: status.live,
+        offpeak: status.offpeak
     )
     .padding()
 }

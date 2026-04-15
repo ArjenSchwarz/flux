@@ -108,27 +108,10 @@ struct HistoryView: View {
     }
 }
 
-private actor PreviewHistoryAPIClient: FluxAPIClient {
-    func fetchStatus() async throws -> StatusResponse {
-        throw FluxAPIError.notConfigured
-    }
-
-    func fetchHistory(days _: Int) async throws -> HistoryResponse {
-        HistoryResponse(days: [
-            DayEnergy(date: "2026-04-15", epv: 11.2, eInput: 2.3, eOutput: 3.1, eCharge: 4.2, eDischarge: 5.4),
-            DayEnergy(date: "2026-04-14", epv: 9.7, eInput: 1.9, eOutput: 2.8, eCharge: 3.6, eDischarge: 4.9)
-        ])
-    }
-
-    func fetchDay(date _: String) async throws -> DayDetailResponse {
-        throw FluxAPIError.notConfigured
-    }
-}
-
 #Preview {
     let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
     let container = try! ModelContainer(for: CachedDayEnergy.self, configurations: configuration)
     NavigationStack {
-        HistoryView(apiClient: PreviewHistoryAPIClient(), modelContext: ModelContext(container))
+        HistoryView(apiClient: MockFluxAPIClient.preview, modelContext: ModelContext(container))
     }
 }

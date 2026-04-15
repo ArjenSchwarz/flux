@@ -34,14 +34,6 @@ struct TodayEnergyView: View {
 }
 
 #Preview {
-    TodayEnergyView(
-        todayEnergy: TodayEnergy(
-            epv: 14.3,
-            eInput: 0.25,
-            eOutput: 5.94,
-            eCharge: 5.7,
-            eDischarge: 6.8
-        )
-    )
+    TodayEnergyView(todayEnergy: MockFluxAPIClient.statusResponse.todayEnergy)
     .padding()
 }

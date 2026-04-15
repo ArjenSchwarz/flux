@@ -132,50 +132,8 @@ struct DashboardView: View {
     }
 }
 
-private actor PreviewDashboardAPIClient: FluxAPIClient {
-    func fetchStatus() async throws -> StatusResponse {
-        StatusResponse(
-            live: LiveData(
-                ppv: 2400,
-                pload: 750,
-                pbat: 400,
-                pgrid: -100,
-                pgridSustained: false,
-                soc: 62.4,
-                timestamp: "2026-04-15T10:00:00Z"
-            ),
-            battery: BatteryInfo(
-                capacityKwh: 13.3,
-                cutoffPercent: 10,
-                estimatedCutoffTime: "2026-04-15T18:30:00Z",
-                low24h: Low24h(soc: 38.2, timestamp: "2026-04-15T08:45:00Z")
-            ),
-            rolling15min: RollingAvg(avgLoad: 243, avgPbat: 320, estimatedCutoffTime: "2026-04-16T03:00:00Z"),
-            offpeak: OffpeakData(
-                windowStart: "11:00",
-                windowEnd: "14:00",
-                gridUsageKwh: 6.1,
-                solarKwh: 2.3,
-                batteryChargeKwh: 5.0,
-                batteryDischargeKwh: 4.2,
-                gridExportKwh: 1.4,
-                batteryDeltaPercent: 42.3
-            ),
-            todayEnergy: TodayEnergy(epv: 14.3, eInput: 0.25, eOutput: 5.94, eCharge: 5.7, eDischarge: 6.8)
-        )
-    }
-
-    func fetchHistory(days _: Int) async throws -> HistoryResponse {
-        throw FluxAPIError.notConfigured
-    }
-
-    func fetchDay(date _: String) async throws -> DayDetailResponse {
-        throw FluxAPIError.notConfigured
-    }
-}
-
 #Preview {
     NavigationStack {
-        DashboardView(apiClient: PreviewDashboardAPIClient())
+        DashboardView(apiClient: MockFluxAPIClient.preview)
     }
 }

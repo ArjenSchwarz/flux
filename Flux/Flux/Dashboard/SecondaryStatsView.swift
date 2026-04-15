@@ -89,28 +89,11 @@ struct SecondaryStatsView: View {
 }
 
 #Preview {
+    let status = MockFluxAPIClient.statusResponse
     SecondaryStatsView(
-        battery: BatteryInfo(
-            capacityKwh: 13.3,
-            cutoffPercent: 10,
-            estimatedCutoffTime: "2026-04-15T18:30:00Z",
-            low24h: Low24h(soc: 22.3, timestamp: "2026-04-15T08:45:00Z")
-        ),
-        rolling15min: RollingAvg(
-            avgLoad: 1234,
-            avgPbat: 444,
-            estimatedCutoffTime: "2026-04-15T12:30:00Z"
-        ),
-        offpeak: OffpeakData(
-            windowStart: "11:00",
-            windowEnd: "14:00",
-            gridUsageKwh: 1.26,
-            solarKwh: 0.3,
-            batteryChargeKwh: 2.1,
-            batteryDischargeKwh: 1.5,
-            gridExportKwh: 0.4,
-            batteryDeltaPercent: 18.2
-        )
+        battery: status.battery,
+        rolling15min: status.rolling15min,
+        offpeak: status.offpeak
     )
     .padding()
 }
