@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Lambda entry point (`cmd/api/main.go`) with cold-start initialisation: AWS SDK config loading, SSM parameter fetching (api-token, serial) with decryption, environment variable validation, DynamoReader and Handler creation, and `lambda.Start` invocation
+- `time/tzdata` import in Lambda entry point for timezone embedding on `provided.al2023` runtime
+- JSON structured logging via `slog.NewJSONHandler` for CloudWatch compatibility
+- `build-api` Makefile target for cross-compiling Lambda binary (`CGO_ENABLED=0 GOOS=linux GOARCH=arm64`)
+- `aws-sdk-go-v2/service/ssm` dependency for SSM Parameter Store access
+
+### Changed
+
+- Lambda MemorySize increased from 128MB to 256MB for 24h query headroom
+- Lambda environment variables: added `TZ: Australia/Sydney` to match poller timezone for date-based operations
+
 - `/status` endpoint handler (`internal/api/status.go`) with concurrent DynamoDB queries via errgroup (readings 24h, system, offpeak, daily energy), in-memory computation for live data, battery info with fallback capacity (13.34 kWh), rolling 15-minute averages, sustained grid detection, cutoff estimates, off-peak deltas, and today's energy totals
 - `/history` endpoint handler (`internal/api/history.go`) with days parameter validation (7/14/30, default 7), date range computation in configured timezone, and energy value rounding
 - `/day` endpoint handler (`internal/api/day.go`) with date validation, flux-readings query with fallback to flux-daily-power (cbat→soc, power fields→0), 5-minute bucket downsampling, socLow computed from raw data before downsampling, and conditional summary assembly

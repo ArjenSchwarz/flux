@@ -1,7 +1,10 @@
-.PHONY: build test fmt vet lint modernize check docker-build docker-dry-run deps-tidy deps-update
+.PHONY: build build-api test fmt vet lint modernize check docker-build docker-dry-run deps-tidy deps-update
 
 build:
 	CGO_ENABLED=0 go build -o bin/poller ./cmd/poller
+
+build-api:
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o lambda/bootstrap ./cmd/api
 
 test:
 	go test ./...

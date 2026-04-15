@@ -387,7 +387,7 @@ Resources:
       Architectures:
         - arm64
       Handler: bootstrap
-      MemorySize: 128
+      MemorySize: 256
       Timeout: 10
       Code: ./lambda/
       Role: !GetAtt LambdaExecutionRole.Arn
@@ -395,6 +395,7 @@ Resources:
         LogGroup: !Ref ApiLogGroup
       Environment:
         Variables:
+          TZ: Australia/Sydney
           API_TOKEN_PARAM: !Sub "${SSMPathPrefix}/api-token"
           SYSTEM_SERIAL_PARAM: !Sub "${SSMPathPrefix}/serial"
           OFFPEAK_START: !Ref OffPeakWindowStart

@@ -175,7 +175,7 @@ references:
 
 ## Entry Point and Infrastructure
 
-- [ ] 15. Create Lambda entry point and config loading <!-- id:e3gfl5k -->
+- [x] 15. Create Lambda entry point and config loading <!-- id:e3gfl5k -->
   - Create cmd/api/main.go with main function
   - Import time/tzdata for timezone embedding
   - loadConfig: load AWS SDK config, create DynamoDB client, create SSM client
@@ -187,7 +187,7 @@ references:
   - Stream: 2
   - Requirements: [1.1](requirements.md#1.1), [1.2](requirements.md#1.2), [1.3](requirements.md#1.3), [1.4](requirements.md#1.4), [1.7](requirements.md#1.7), [2.2](requirements.md#2.2), [2.6](requirements.md#2.6), [11.1](requirements.md#11.1), [11.2](requirements.md#11.2), [11.3](requirements.md#11.3), [11.4](requirements.md#11.4), [11.5](requirements.md#11.5), [11.6](requirements.md#11.6), [11.7](requirements.md#11.7), [12.1](requirements.md#12.1)
 
-- [ ] 16. Update Makefile and CloudFormation template <!-- id:e3gfl5l -->
+- [x] 16. Update Makefile and CloudFormation template <!-- id:e3gfl5l -->
   - Add build-api target: CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o lambda/bootstrap ./cmd/api
   - Add TZ: Australia/Sydney to Lambda environment variables in infrastructure/template.yaml
   - Update Lambda MemorySize from 128 to 256 in template.yaml
@@ -196,7 +196,7 @@ references:
   - Requirements: [1.2](requirements.md#1.2), [1.3](requirements.md#1.3), [1.8](requirements.md#1.8), [11.5](requirements.md#11.5)
   - References: Makefile, infrastructure/template.yaml
 
-- [ ] 17. Add new Go dependencies and verify build <!-- id:e3gfl5m -->
+- [x] 17. Add new Go dependencies and verify build <!-- id:e3gfl5m -->
   - Run go get github.com/aws/aws-lambda-go
   - Run go get github.com/aws/aws-sdk-go-v2/service/ssm
   - Run go mod tidy

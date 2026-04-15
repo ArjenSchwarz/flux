@@ -2,6 +2,9 @@
 
 ## Package Structure
 
+`cmd/api/` contains:
+- `main.go` — Lambda entry point. Validates env vars, loads AWS config, fetches SSM params (api-token, serial), creates DynamoReader and Handler, calls `lambda.Start`. Uses JSON slog handler. Imports `time/tzdata` for timezone embedding. Defines `ssmAPI` interface for testability.
+
 `internal/api/` contains:
 - `handler.go` — Handler struct with routing, auth, and request logging. Routes to dedicated endpoint files.
 - `status.go` — `/status` endpoint: concurrent DynamoDB queries via errgroup, in-memory computation for live data, battery info, rolling averages, off-peak, and today's energy.
