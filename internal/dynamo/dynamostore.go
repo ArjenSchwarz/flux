@@ -116,26 +116,10 @@ func (s *DynamoStore) DeleteOffpeak(ctx context.Context, serial, date string) er
 }
 
 func (s *DynamoStore) GetOffpeak(ctx context.Context, serial, date string) (*OffpeakItem, error) {
-	out, err := s.client.GetItem(ctx, &dynamodb.GetItemInput{
-		TableName: &s.tables.Offpeak,
-		Key: map[string]types.AttributeValue{
-			"sysSn": &types.AttributeValueMemberS{Value: serial},
-			"date":  &types.AttributeValueMemberS{Value: date},
-		},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("get offpeak (table=%s, sysSn=%s, date=%s): %w", s.tables.Offpeak, serial, date, err)
-	}
-
-	if out.Item == nil {
-		return nil, nil
-	}
-
-	var item OffpeakItem
-	if err := attributevalue.UnmarshalMap(out.Item, &item); err != nil {
-		return nil, fmt.Errorf("unmarshal offpeak (sysSn=%s, date=%s): %w", serial, date, err)
-	}
-	return &item, nil
+	return getItem[OffpeakItem](ctx, s.client, s.tables.Offpeak,
+		offpeakKey(serial, date),
+		fmt.Sprintf("offpeak (table=%s, sysSn=%s, date=%s)", s.tables.Offpeak, serial, date),
+	)
 }
 
 // putItem marshals the item and writes it to the given table. The key string

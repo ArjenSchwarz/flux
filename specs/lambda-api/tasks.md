@@ -8,7 +8,7 @@ references:
 
 ## DynamoDB Read Layer
 
-- [ ] 1. Define Reader interface and ReadAPI interface <!-- id:e3gfl56 -->
+- [x] 1. Define Reader interface and ReadAPI interface <!-- id:e3gfl56 -->
   - Create internal/dynamo/reader.go with Reader interface (6 methods: QueryReadings, GetSystem, GetOffpeak, GetDailyEnergy, QueryDailyEnergy, QueryDailyPower)
   - Define ReadAPI client interface (Query + GetItem)
   - Define DynamoReader struct and NewDynamoReader constructor
@@ -17,7 +17,7 @@ references:
   - Requirements: [1.5](requirements.md#1.5)
   - References: internal/dynamo/store.go, internal/dynamo/dynamostore.go
 
-- [ ] 2. Write tests for DynamoReader <!-- id:e3gfl57 -->
+- [x] 2. Write tests for DynamoReader <!-- id:e3gfl57 -->
   - Test each Reader method: successful query, empty result (nil/nil for Get, empty slice for Query), DynamoDB error
   - Verify QueryReadings sets ScanIndexForward: true and correct key condition expression
   - Test QueryReadings pagination: mock returns non-nil LastEvaluatedKey on first call, verify all pages collected
@@ -29,7 +29,7 @@ references:
   - Requirements: [1.5](requirements.md#1.5)
   - References: internal/dynamo/dynamostore_test.go
 
-- [ ] 3. Implement DynamoReader methods <!-- id:e3gfl58 -->
+- [x] 3. Implement DynamoReader methods <!-- id:e3gfl58 -->
   - Implement QueryReadings with BETWEEN key condition and pagination loop on LastEvaluatedKey
   - Implement GetSystem, GetOffpeak, GetDailyEnergy as GetItem calls with nil/nil for not-found
   - Implement QueryDailyEnergy with date BETWEEN range and pagination
