@@ -62,8 +62,10 @@ private struct BatteryPowerPoint: Identifiable {
     let power: Double
 }
 
+#if DEBUG
 #Preview {
     let day = MockFluxAPIClient.dayDetailResponse()
     BatteryPowerChartView(date: day.date, readings: day.readings)
         .padding()
 }
+#endif

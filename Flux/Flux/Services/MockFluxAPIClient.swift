@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 
 final actor MockFluxAPIClient: FluxAPIClient {
@@ -134,3 +135,4 @@ final actor MockFluxAPIClient: FluxAPIClient {
         Self.dayDetailResponse(for: date)
     }
 }
+#endif

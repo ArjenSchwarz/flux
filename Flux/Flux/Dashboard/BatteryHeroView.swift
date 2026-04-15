@@ -6,7 +6,7 @@ struct BatteryHeroView: View {
 
     var body: some View {
         let soc = live?.soc ?? 0
-        let batteryColor = BatteryColor.forSOC(soc)
+        let batteryColor = BatteryColor.forSOC(soc).color
 
         VStack(spacing: 12) {
             Text("\(soc, specifier: "%.1f")%")
@@ -48,6 +48,7 @@ struct BatteryHeroView: View {
     }
 }
 
+#if DEBUG
 #Preview {
     let status = MockFluxAPIClient.statusResponse
     BatteryHeroView(
@@ -56,3 +57,4 @@ struct BatteryHeroView: View {
     )
     .padding()
 }
+#endif

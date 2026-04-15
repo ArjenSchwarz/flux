@@ -66,7 +66,7 @@ struct SecondaryStatsView: View {
                         cutoffDate,
                         offpeakWindowStart: offpeak?.windowStart ?? "11:00",
                         now: nowProvider()
-                    )
+                    ).color
                     Text("(~\(DateFormatting.clockTime(from: cutoffDate)))")
                         .foregroundStyle(cutoffColor)
                 }
@@ -88,6 +88,7 @@ struct SecondaryStatsView: View {
     }
 }
 
+#if DEBUG
 #Preview {
     let status = MockFluxAPIClient.statusResponse
     SecondaryStatsView(
@@ -97,3 +98,4 @@ struct SecondaryStatsView: View {
     )
     .padding()
 }
+#endif

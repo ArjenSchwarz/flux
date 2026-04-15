@@ -1,4 +1,4 @@
-import SwiftUI
+import Foundation
 
 enum GridColor {
     static func forGrid(
@@ -7,7 +7,7 @@ enum GridColor {
         offpeakWindowStart: String,
         offpeakWindowEnd: String,
         now: Date = .now
-    ) -> Color {
+    ) -> ColorTier {
         if pgrid < 0 {
             return .green
         }
@@ -18,6 +18,6 @@ enum GridColor {
             return .red
         }
 
-        return .primary
+        return .normal
     }
 }

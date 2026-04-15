@@ -41,7 +41,7 @@ struct PowerTrioView: View {
                     offpeakWindowStart: offpeak?.windowStart ?? "11:00",
                     offpeakWindowEnd: offpeak?.windowEnd ?? "14:00",
                     now: nowProvider()
-                ),
+                ).color,
                 detail: gridDirection
             )
         }
@@ -83,6 +83,7 @@ struct PowerTrioView: View {
     }
 }
 
+#if DEBUG
 #Preview {
     let status = MockFluxAPIClient.statusResponse
     PowerTrioView(
@@ -91,3 +92,4 @@ struct PowerTrioView: View {
     )
     .padding()
 }
+#endif

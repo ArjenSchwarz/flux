@@ -171,8 +171,10 @@ struct DashboardView: View {
     }
 }
 
+#if DEBUG
 #Preview {
     NavigationStack {
         DashboardView(apiClient: MockFluxAPIClient.preview)
     }
 }
+#endif

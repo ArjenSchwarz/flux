@@ -201,8 +201,10 @@ private enum DayDetailDateFormatters {
     }()
 }
 
+#if DEBUG
 #Preview {
     NavigationStack {
         DayDetailView(date: MockFluxAPIClient.previewDate, apiClient: MockFluxAPIClient.preview)
     }
 }
+#endif

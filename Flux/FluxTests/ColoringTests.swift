@@ -1,4 +1,4 @@
-import SwiftUI
+import Foundation
 import Testing
 @testable import Flux
 
@@ -6,26 +6,26 @@ import Testing
 struct ColoringTests {
     @Test
     func batteryColorSOCBoundaries() {
-        expectColor(BatteryColor.forSOC(0), equals: .red)
-        expectColor(BatteryColor.forSOC(14.9), equals: .red)
-        expectColor(BatteryColor.forSOC(15), equals: .orange)
-        expectColor(BatteryColor.forSOC(29.9), equals: .orange)
-        expectColor(BatteryColor.forSOC(30), equals: .primary)
-        expectColor(BatteryColor.forSOC(60), equals: .primary)
-        expectColor(BatteryColor.forSOC(60.1), equals: .green)
-        expectColor(BatteryColor.forSOC(100), equals: .green)
+        #expect(BatteryColor.forSOC(0) == .red)
+        #expect(BatteryColor.forSOC(14.9) == .red)
+        #expect(BatteryColor.forSOC(15) == .orange)
+        #expect(BatteryColor.forSOC(29.9) == .orange)
+        #expect(BatteryColor.forSOC(30) == .normal)
+        #expect(BatteryColor.forSOC(60) == .normal)
+        #expect(BatteryColor.forSOC(60.1) == .green)
+        #expect(BatteryColor.forSOC(100) == .green)
     }
 
     @Test
     func gridColorRedOnlyForHighSustainedImportOutsideOffpeak() {
-        let cases: [(pgrid: Double, sustained: Bool, inOffpeak: Bool, expected: Color)] = [
-            (400, false, false, .primary),
-            (400, false, true, .primary),
-            (400, true, false, .primary),
-            (400, true, true, .primary),
-            (600, false, false, .primary),
-            (600, false, true, .primary),
-            (600, true, true, .primary),
+        let cases: [(pgrid: Double, sustained: Bool, inOffpeak: Bool, expected: ColorTier)] = [
+            (400, false, false, .normal),
+            (400, false, true, .normal),
+            (400, true, false, .normal),
+            (400, true, true, .normal),
+            (600, false, false, .normal),
+            (600, false, true, .normal),
+            (600, true, true, .normal),
             (600, true, false, .red)
         ]
 
@@ -34,7 +34,7 @@ struct ColoringTests {
                 ? makeSydneyDate(year: 2026, month: 4, day: 15, hour: 12, minute: 0)
                 : makeSydneyDate(year: 2026, month: 4, day: 15, hour: 15, minute: 0)
 
-            let color = GridColor.forGrid(
+            let tier = GridColor.forGrid(
                 pgrid: testCase.pgrid,
                 pgridSustained: testCase.sustained,
                 offpeakWindowStart: "11:00",
@@ -42,14 +42,14 @@ struct ColoringTests {
                 now: now
             )
 
-            expectColor(color, equals: testCase.expected)
+            #expect(tier == testCase.expected)
         }
     }
 
     @Test
     func gridColorIsGreenWhenExporting() {
         let now = makeSydneyDate(year: 2026, month: 4, day: 15, hour: 16, minute: 0)
-        let color = GridColor.forGrid(
+        let tier = GridColor.forGrid(
             pgrid: -250,
             pgridSustained: true,
             offpeakWindowStart: "11:00",
@@ -57,7 +57,7 @@ struct ColoringTests {
             now: now
         )
 
-        expectColor(color, equals: .green)
+        #expect(tier == .green)
     }
 
     @Test
@@ -67,13 +67,9 @@ struct ColoringTests {
         let amberCutoff = makeSydneyDate(year: 2026, month: 4, day: 15, hour: 10, minute: 30)
         let defaultCutoff = makeSydneyDate(year: 2026, month: 4, day: 15, hour: 12, minute: 0)
 
-        expectColor(CutoffTimeColor.forCutoff(redCutoff, offpeakWindowStart: "11:00", now: now), equals: .red)
-        expectColor(CutoffTimeColor.forCutoff(amberCutoff, offpeakWindowStart: "11:00", now: now), equals: .orange)
-        expectColor(CutoffTimeColor.forCutoff(defaultCutoff, offpeakWindowStart: "11:00", now: now), equals: .primary)
-    }
-
-    private func expectColor(_ color: Color, equals expected: Color) {
-        #expect(String(reflecting: color) == String(reflecting: expected))
+        #expect(CutoffTimeColor.forCutoff(redCutoff, offpeakWindowStart: "11:00", now: now) == .red)
+        #expect(CutoffTimeColor.forCutoff(amberCutoff, offpeakWindowStart: "11:00", now: now) == .orange)
+        #expect(CutoffTimeColor.forCutoff(defaultCutoff, offpeakWindowStart: "11:00", now: now) == .normal)
     }
 
     private var sydneyCalendar: Calendar {

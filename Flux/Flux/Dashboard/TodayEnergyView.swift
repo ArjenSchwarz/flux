@@ -33,7 +33,9 @@ struct TodayEnergyView: View {
     }
 }
 
+#if DEBUG
 #Preview {
     TodayEnergyView(todayEnergy: MockFluxAPIClient.statusResponse.todayEnergy)
     .padding()
 }
+#endif

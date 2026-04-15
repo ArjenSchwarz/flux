@@ -82,8 +82,10 @@ private struct SOCPoint: Identifiable {
     let soc: Double
 }
 
+#if DEBUG
 #Preview {
     let day = MockFluxAPIClient.dayDetailResponse()
     SOCChartView(date: day.date, readings: day.readings, summary: day.summary)
         .padding()
 }
+#endif

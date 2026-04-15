@@ -149,6 +149,7 @@ struct HistoryView: View {
     }
 }
 
+#if DEBUG
 #Preview {
     let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
     let container = try! ModelContainer(for: CachedDayEnergy.self, configurations: configuration)
@@ -156,3 +157,4 @@ struct HistoryView: View {
         HistoryView(apiClient: MockFluxAPIClient.preview, modelContext: ModelContext(container))
     }
 }
+#endif
