@@ -18,7 +18,7 @@ const (
 )
 
 func (h *Handler) handleStatus(ctx context.Context, _ events.LambdaFunctionURLRequest) events.LambdaFunctionURLResponse {
-	now := h.nowFunc()
+	now := h.nowFunc().In(sydneyTZ)
 	today := now.Format("2006-01-02")
 	nowUnix := now.Unix()
 

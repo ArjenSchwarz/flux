@@ -113,6 +113,7 @@ func mapDailyPowerToPoints(items []dynamo.DailyPowerItem) []TimeSeriesPoint {
 	for _, item := range items {
 		t, err := time.ParseInLocation("2006-01-02 15:04:05", item.UploadTime, sydneyTZ)
 		if err != nil {
+			slog.Warn("skipping daily power item with unparseable uploadTime", "uploadTime", item.UploadTime, "error", err)
 			continue
 		}
 		points = append(points, TimeSeriesPoint{
@@ -130,6 +131,7 @@ func findMinSOCFromPower(items []dynamo.DailyPowerItem) (soc float64, timestamp 
 	for _, item := range items {
 		t, err := time.ParseInLocation("2006-01-02 15:04:05", item.UploadTime, sydneyTZ)
 		if err != nil {
+			slog.Warn("skipping daily power item with unparseable uploadTime", "uploadTime", item.UploadTime, "error", err)
 			continue
 		}
 		if !found || item.Cbat < minSoc {

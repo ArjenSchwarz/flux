@@ -61,7 +61,11 @@ func (h *Handler) Handle(ctx context.Context, req events.LambdaFunctionURLReques
 // handle contains the core logic, separated from Handle to simplify logging.
 func (h *Handler) handle(ctx context.Context, req events.LambdaFunctionURLRequest) events.LambdaFunctionURLResponse {
 	if req.RequestContext.HTTP.Method != "GET" {
-		return errorResponse(405, "method not allowed")
+		return events.LambdaFunctionURLResponse{
+			StatusCode: 405,
+			Headers:    map[string]string{"Content-Type": "application/json", "Allow": "GET"},
+			Body:       `{"error":"method not allowed"}`,
+		}
 	}
 
 	if !h.validToken(req.Headers["authorization"]) {
