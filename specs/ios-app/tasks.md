@@ -205,7 +205,7 @@ references:
 
 ## Views — Dashboard
 
-- [ ] 21. Create BatteryHeroView <!-- id:oxpta65 -->
+- [x] 21. Create BatteryHeroView <!-- id:oxpta65 -->
   - Create Dashboard/BatteryHeroView.swift
   - Large centred SOC with BatteryColor.forSOC colouring
   - Progress bar matching battery colour
@@ -215,7 +215,7 @@ references:
   - Stream: 1
   - Requirements: [4.1](requirements.md#4.1), [4.2](requirements.md#4.2), [4.3](requirements.md#4.3), [4.4](requirements.md#4.4), [4.5](requirements.md#4.5), [4.6](requirements.md#4.6), [4.7](requirements.md#4.7)
 
-- [ ] 22. Create PowerTrioView <!-- id:oxpta66 -->
+- [x] 22. Create PowerTrioView <!-- id:oxpta66 -->
   - Create Dashboard/PowerTrioView.swift
   - Three-column HStack: Solar, Load, Grid
   - Solar green when generating, muted when 0
@@ -225,7 +225,7 @@ references:
   - Stream: 1
   - Requirements: [5.1](requirements.md#5.1), [5.2](requirements.md#5.2), [5.3](requirements.md#5.3), [5.4](requirements.md#5.4), [5.5](requirements.md#5.5), [5.6](requirements.md#5.6), [5.7](requirements.md#5.7), [5.8](requirements.md#5.8)
 
-- [ ] 23. Create SecondaryStatsView and TodayEnergyView <!-- id:oxpta67 -->
+- [x] 23. Create SecondaryStatsView and TodayEnergyView <!-- id:oxpta67 -->
   - Create Dashboard/SecondaryStatsView.swift — 24h low, off-peak grid, off-peak battery delta, 15m avg load
   - Create Dashboard/TodayEnergyView.swift — kWh totals, default text colour only
   - Cutoff time colouring via CutoffTimeColor
@@ -234,7 +234,7 @@ references:
   - Stream: 1
   - Requirements: [6.1](requirements.md#6.1), [6.2](requirements.md#6.2), [6.3](requirements.md#6.3), [6.4](requirements.md#6.4), [6.5](requirements.md#6.5), [6.6](requirements.md#6.6), [6.7](requirements.md#6.7), [6.8](requirements.md#6.8), [7.1](requirements.md#7.1), [7.2](requirements.md#7.2), [7.3](requirements.md#7.3)
 
-- [ ] 24. Create DashboardView with pull-to-refresh and auto-refresh <!-- id:oxpta68 -->
+- [x] 24. Create DashboardView with pull-to-refresh and auto-refresh <!-- id:oxpta68 -->
   - Create Dashboard/DashboardView.swift
   - ScrollView + VStack assembling sub-views
   - .refreshable for pull-to-refresh
