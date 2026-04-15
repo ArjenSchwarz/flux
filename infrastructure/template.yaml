@@ -18,12 +18,14 @@ Parameters:
 
   OffPeakWindowStart:
     Type: String
-    Default: "11:00"
+    # No default — HH:MM values must be passed via parameters file or
+    # --parameter-overrides. aws cloudformation package re-serializes YAML
+    # and strips quotes, causing YAML 1.1 sexagesimal parsing (11:00 → 660).
     Description: Off-peak window start time (HH:MM)
 
   OffPeakWindowEnd:
     Type: String
-    Default: "14:00"
+    # No default — see OffPeakWindowStart comment.
     Description: Off-peak window end time (HH:MM)
 
   SSMPathPrefix:
@@ -389,7 +391,7 @@ Resources:
       Handler: bootstrap
       MemorySize: 256
       Timeout: 10
-      Code: ./lambda/
+      Code: ../lambda/
       Role: !GetAtt LambdaExecutionRole.Arn
       LoggingConfig:
         LogGroup: !Ref ApiLogGroup

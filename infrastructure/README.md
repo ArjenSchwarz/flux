@@ -169,3 +169,4 @@ This starts the poller with `DRY_RUN=true`, which disables DynamoDB writes and l
 - Log groups use `DeletionPolicy: Delete` -- logs are cleaned up with the stack
 - `infrastructure/packaged.yaml` is gitignored (contains build-specific S3 URIs)
 - `lambda/bootstrap` is gitignored (compiled binary built before deploy)
+- `OffPeakWindowStart` and `OffPeakWindowEnd` must be passed explicitly via the parameters file or `--parameter-overrides`, not relied on as template defaults. `aws cloudformation package` re-serializes the YAML and can strip quotes from `HH:MM` values, causing YAML 1.1 sexagesimal parsing to convert `11:00` → `660` and `14:00` → `840`.
