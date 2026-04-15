@@ -75,7 +75,7 @@ references:
 
 ## Handler and Routing
 
-- [ ] 7. Write tests for Handler routing and auth <!-- id:e3gfl5c -->
+- [x] 7. Write tests for Handler routing and auth <!-- id:e3gfl5c -->
   - TestHandleMethod: GET passes, POST/PUT/DELETE return 405 with correct JSON body
   - TestHandleAuth: valid token 200, missing header 401, wrong token 401, malformed Bearer header 401
   - TestHandleAuthBeforeRouting: invalid token + unknown path returns 401 not 404
@@ -87,7 +87,7 @@ references:
   - Requirements: [2.1](requirements.md#2.1), [2.3](requirements.md#2.3), [2.4](requirements.md#2.4), [2.5](requirements.md#2.5), [10.1](requirements.md#10.1), [10.2](requirements.md#10.2), [10.5](requirements.md#10.5), [10.6](requirements.md#10.6)
   - References: internal/dynamo/dynamostore_test.go
 
-- [ ] 8. Implement Handler struct with routing and auth <!-- id:e3gfl5d -->
+- [x] 8. Implement Handler struct with routing and auth <!-- id:e3gfl5d -->
   - Create internal/api/handler.go with Handler struct, NewHandler constructor
   - Handle method: accept LambdaFunctionURLRequest, return LambdaFunctionURLResponse
   - Method check (GET only, 405 otherwise), auth with crypto/subtle.ConstantTimeCompare, routing by rawPath
