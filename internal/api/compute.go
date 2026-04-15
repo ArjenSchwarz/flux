@@ -2,11 +2,20 @@ package api
 
 import (
 	"math"
-	"sort"
 	"time"
 
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
 )
+
+// sydneyTZ is the Australia/Sydney timezone used for all date-based operations.
+// Loaded once at package init to avoid repeated lookups and silent error discarding.
+var sydneyTZ = func() *time.Location {
+	loc, err := time.LoadLocation("Australia/Sydney")
+	if err != nil {
+		panic("failed to load Australia/Sydney timezone: " + err.Error())
+	}
+	return loc
+}()
 
 // computeCutoffTime estimates when the battery will reach the cutoff percentage
 // using linear extrapolation. Returns nil if the battery is not discharging or
@@ -79,8 +88,7 @@ func downsample(readings []dynamo.ReadingItem, date string) []TimeSeriesPoint {
 		return nil
 	}
 
-	loc, _ := time.LoadLocation("Australia/Sydney")
-	dayStart, _ := time.ParseInLocation("2006-01-02", date, loc)
+	dayStart, _ := time.ParseInLocation("2006-01-02", date, sydneyTZ)
 
 	type bucket struct {
 		ppv, pload, pbat, pgrid, soc float64
@@ -89,7 +97,7 @@ func downsample(readings []dynamo.ReadingItem, date string) []TimeSeriesPoint {
 	buckets := make([]bucket, bucketsPerDay)
 
 	for _, r := range readings {
-		t := time.Unix(r.Timestamp, 0).In(loc)
+		t := time.Unix(r.Timestamp, 0).In(sydneyTZ)
 		minuteOfDay := t.Hour()*60 + t.Minute()
 		idx := minuteOfDay / 5
 		if idx >= bucketsPerDay {
@@ -105,6 +113,7 @@ func downsample(readings []dynamo.ReadingItem, date string) []TimeSeriesPoint {
 	}
 
 	var points []TimeSeriesPoint
+	// Buckets are iterated 0..287, so points are already in chronological order.
 	for i, b := range buckets {
 		if b.count == 0 {
 			continue
@@ -120,10 +129,6 @@ func downsample(readings []dynamo.ReadingItem, date string) []TimeSeriesPoint {
 			Soc:       b.soc / n,
 		})
 	}
-
-	sort.Slice(points, func(i, j int) bool {
-		return points[i].Timestamp < points[j].Timestamp
-	})
 
 	return points
 }

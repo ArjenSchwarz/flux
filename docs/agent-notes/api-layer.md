@@ -25,7 +25,7 @@
 - `Handle` is the Lambda entry point — logs method, path, status, duration via slog. Never logs the token.
 - Processing order: method check → auth → routing. Auth runs before routing so invalid tokens get 401 regardless of path.
 - `validToken` uses `strings.CutPrefix` for "Bearer " extraction and `subtle.ConstantTimeCompare` for comparison.
-- `errorResponse(status, message)` builds `{"error":"message"}` with Content-Type header.
+- `errorResponse(status, message)` builds `{"error":"message"}` via `json.Marshal` with Content-Type header.
 - `jsonResponse(v)` marshals any value to 200 JSON response.
 
 ## Status Endpoint
@@ -50,18 +50,20 @@
 
 - Date validation: regex + `time.Parse` to catch invalid dates like 2026-13-45.
 - Day range: `dayStart.Unix()` to `dayEnd.Unix()-1` (exclusive end).
+- Concurrent queries: readings and daily energy fetched in parallel via errgroup (same pattern as status endpoint).
 - Fallback: when no flux-readings, queries flux-daily-power. Maps `cbat` → `soc`, power fields → 0. Not downsampled.
 - `socLow` computed from raw data (or fallback cbat) before downsampling.
 - `findMinSOCFromPower` — separate helper for daily power items since they use `Cbat` and `UploadTime` instead of `Soc` and `Timestamp`.
-- `mapDailyPowerToPoints` — parses `UploadTime` in Sydney timezone.
+- `mapDailyPowerToPoints` — parses `UploadTime` using package-level `sydneyTZ`.
 - Summary is null when neither readings nor daily energy exist.
 
 ## Compute Functions
 
+- Package-level `sydneyTZ` var loaded once via init function — avoids repeated `time.LoadLocation` calls and silently discarded errors. Panics on load failure (fail-fast).
 - `computeCutoffTime(soc, pbat, capacityKwh, cutoffPercent, now)` — Linear extrapolation. Returns nil for charging/idle/SOC≤cutoff.
 - `computeRollingAverages(readings)` — Mean of pload and pbat. Returns (0,0) for empty.
 - `computePgridSustained(readings)` — Iterates backwards from end, counts consecutive pgrid>500 within 30s gaps. Needs 3+ consecutive. Expects ascending order input.
-- `downsample(readings, date)` — 288 five-minute buckets, averages per bucket, omits empty. Date parsed in Australia/Sydney timezone.
+- `downsample(readings, date)` — 288 five-minute buckets, averages per bucket, omits empty. Uses `sydneyTZ`. Output is already in chronological order (buckets iterated 0..287).
 - `findMinSOC(readings)` — Returns (soc, timestamp, found).
 - `roundEnergy(v)` — 2 decimal places (kWh).
 - `roundPower(v)` — 1 decimal place (watts/SOC).

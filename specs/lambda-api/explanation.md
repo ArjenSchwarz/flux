@@ -63,7 +63,7 @@ The downsampling algorithm divides a day into 288 fixed 5-minute buckets by comp
 ### Architecture Impact
 - **DynamoDB read patterns**: The Lambda's `Query` operations benefit from the existing partition key (sysSn) + sort key (timestamp/date) design. No GSIs or table changes needed.
 - **The `ReadAPI` interface** is deliberately minimal (Query + GetItem). The production DynamoDB client satisfies both `ReadAPI` and `DynamoAPI` without any wrapper.
-- **CloudFormation change**: Adding `TZ: Australia/Melbourne` to the Lambda env vars is the only infrastructure change. No new resources.
+- **CloudFormation change**: Adding `TZ: Australia/Sydney` to the Lambda env vars is the only infrastructure change. No new resources.
 - **Model reuse**: The `Reader` methods return existing model types, keeping the JSON contract decoupled from the storage schema.
 
 ### Potential Issues

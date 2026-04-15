@@ -13,12 +13,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - JSON structured logging via `slog.NewJSONHandler` for CloudWatch compatibility
 - `build-api` Makefile target for cross-compiling Lambda binary (`CGO_ENABLED=0 GOOS=linux GOARCH=arm64`)
 - `aws-sdk-go-v2/service/ssm` dependency for SSM Parameter Store access
-
-### Changed
-
-- Lambda MemorySize increased from 128MB to 256MB for 24h query headroom
-- Lambda environment variables: added `TZ: Australia/Sydney` to match poller timezone for date-based operations
-
 - `/status` endpoint handler (`internal/api/status.go`) with concurrent DynamoDB queries via errgroup (readings 24h, system, offpeak, daily energy), in-memory computation for live data, battery info with fallback capacity (13.34 kWh), rolling 15-minute averages, sustained grid detection, cutoff estimates, off-peak deltas, and today's energy totals
 - `/history` endpoint handler (`internal/api/history.go`) with days parameter validation (7/14/30, default 7), date range computation in configured timezone, and energy value rounding
 - `/day` endpoint handler (`internal/api/day.go`) with date validation, flux-readings query with fallback to flux-daily-power (cbat→soc, power fields→0), 5-minute bucket downsampling, socLow computed from raw data before downsampling, and conditional summary assembly
@@ -27,7 +21,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Unit tests for `/history` endpoint covering default/explicit days, invalid days parameter, no data, ascending order, energy rounding, and DynamoDB errors
 - Unit tests for `/day` endpoint covering normal case, fallback to daily power, no data from either source, readings without daily energy, date validation, socLow from raw not downsampled, and DynamoDB errors
 - `golang.org/x/sync` dependency for errgroup
-
 - Lambda API handler (`internal/api/handler.go`) with GET-only method check, bearer token auth using constant-time comparison, path routing (`/status`, `/history`, `/day`, 404), structured request logging (method, path, status, duration), and JSON error response helpers
 - Handler tests (`internal/api/handler_test.go`) covering method validation, auth (valid/missing/wrong/malformed tokens), auth-before-routing ordering, path routing, and error response format verification
 - `aws-lambda-go` dependency for Lambda Function URL request/response types
@@ -38,17 +31,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `ReadAPI` client interface (Query, GetItem) separate from the existing write-focused `DynamoAPI` to maintain interface segregation between poller and API concerns
 - Generic `getItem[T]` and `queryAll[T]` helpers for DynamoDB GetItem/Query operations with pagination, shared between `DynamoStore` and `DynamoReader`
 - Unit tests for all `DynamoReader` methods covering success, not-found/empty, pagination, and error wrapping
-
-### Changed
-
-- `DynamoStore.GetOffpeak` refactored to use shared `getItem[T]` helper, eliminating implementation divergence with `DynamoReader.GetOffpeak`
-
 - Lambda API spec: requirements document with 12 requirement groups and 74 acceptance criteria covering implementation constraints, authentication, status/history/day endpoints, response format, runtime configuration, and observability
 - Lambda API spec: design document with architecture diagram, component interfaces (Handler, Reader, DynamoReader), response types, pure compute functions (cutoff estimation, rolling averages, sustained grid detection, downsampling), DynamoDB query patterns with pagination, concurrency model (errgroup Phase 1/Phase 2), and testing strategy
 - Lambda API spec: decision log with 14 decisions (SSM caching, computation location, sustained grid threshold, day data resolution, cutoff estimation method, error format, single system, timezone, downsampling algorithm, low24h data source, float precision, time-to-full deferral, read layer design, query optimisation)
 - Lambda API spec: task list with 17 implementation tasks across 5 phases and 2 parallel streams, TDD-ordered with dependency tracking and requirement traceability
 - Lambda API spec: three-level explanation (beginner/intermediate/expert) with validation findings
-
 - Implementation explanation (`specs/poller/implementation.md`) at beginner, intermediate, and expert levels with completeness assessment
 - Poller orchestrator (`internal/poller/poller.go`) with 4 independent polling goroutines (10s live data, 1h daily power, 6h daily energy, 24h system info), immediate first poll on startup, two-context graceful shutdown pattern (25s drain timeout), and dry-run API response logging
 - Off-peak scheduler (`internal/poller/offpeak.go`) with snapshot capture at window boundaries, 3-attempt retry with 10s intervals, delta computation for 6 energy fields + battery SOC, pending record persistence for crash recovery, mid-window startup recovery via DynamoDB query, and daily scheduling loop with DST-safe wall-clock times
@@ -105,6 +92,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Lambda MemorySize increased from 128MB to 256MB for 24h query headroom
+- Lambda environment variables: added `TZ: Australia/Sydney` to match poller timezone for date-based operations
+- `DynamoStore.GetOffpeak` refactored to use shared `getItem[T]` helper, eliminating implementation divergence with `DynamoReader.GetOffpeak`
+- `/day` endpoint now queries readings and daily energy concurrently via errgroup, matching the `/status` endpoint pattern
+- `time.LoadLocation("Australia/Sydney")` extracted to package-level `sydneyTZ` variable with fail-fast error handling, replacing 4 repeated calls (including one inside a loop)
+- `errorResponse` now uses `json.Marshal` instead of `fmt.Sprintf` with `%q` to produce valid JSON escaping for all inputs
+- Removed unnecessary `sort.Slice` in `downsample` — output is already chronological since buckets are iterated 0..287
 - Go module version updated from 1.25 to 1.26 to match spec requirements
 - Exported `config.FormatHHMM` and removed duplicate in `cmd/poller/main.go`
 - Off-peak status values use `dynamo.OffpeakStatusPending` and `dynamo.OffpeakStatusComplete` constants instead of raw strings
@@ -116,6 +110,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- `explanation.md` incorrectly referenced `Australia/Melbourne` instead of `Australia/Sydney` in the expert section
+- Makefile `docker-dry-run` target used `TZ=Australia/Melbourne` instead of `TZ=Australia/Sydney`
+- CHANGELOG.md had duplicate `### Added` and `### Changed` section headers — consolidated into single sections
 - AlphaESS API client now uses GET requests with query parameters instead of POST with JSON body, matching the actual API specification (fixes HTTP 405 errors)
 - AlphaESS API envelope success check now accepts both code 0 and code 200, matching the API's actual success response format
 - Duplicate `dynamodb:DeleteItem` permission removed from TaskRole IAM policy in CloudFormation template

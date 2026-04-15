@@ -8,6 +8,7 @@ import (
 
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
 	"github.com/aws/aws-lambda-go/events"
+	"golang.org/x/sync/errgroup"
 )
 
 // datePattern validates YYYY-MM-DD format.
@@ -24,14 +25,31 @@ func (h *Handler) handleDay(ctx context.Context, req events.LambdaFunctionURLReq
 		return errorResponse(400, "invalid or missing date parameter")
 	}
 
-	// Query flux-readings for the full day.
-	loc, _ := time.LoadLocation("Australia/Sydney")
-	dayStart, _ := time.ParseInLocation("2006-01-02", date, loc)
+	// Compute day boundaries in Sydney timezone.
+	dayStart, _ := time.ParseInLocation("2006-01-02", date, sydneyTZ)
 	dayEnd := dayStart.AddDate(0, 0, 1)
 
-	readings, err := h.reader.QueryReadings(ctx, h.serial, dayStart.Unix(), dayEnd.Unix()-1)
-	if err != nil {
-		slog.Error("day readings query failed", "error", err)
+	// Concurrent queries: readings and daily energy are independent.
+	var (
+		readings []dynamo.ReadingItem
+		deItem   *dynamo.DailyEnergyItem
+	)
+
+	g, gctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error {
+		items, err := h.reader.QueryReadings(gctx, h.serial, dayStart.Unix(), dayEnd.Unix()-1)
+		readings = items
+		return err
+	})
+	g.Go(func() error {
+		item, err := h.reader.GetDailyEnergy(gctx, h.serial, date)
+		deItem = item
+		return err
+	})
+
+	if err := g.Wait(); err != nil {
+		slog.Error("day query failed", "error", err)
 		return errorResponse(500, "internal error")
 	}
 
@@ -56,13 +74,6 @@ func (h *Handler) handleDay(ctx context.Context, req events.LambdaFunctionURLReq
 			points = mapDailyPowerToPoints(powerItems)
 			socLow, socLowTime, hasReadings = findMinSOCFromPower(powerItems)
 		}
-	}
-
-	// Get daily energy for summary.
-	deItem, err := h.reader.GetDailyEnergy(ctx, h.serial, date)
-	if err != nil {
-		slog.Error("day energy query failed", "error", err)
-		return errorResponse(500, "internal error")
 	}
 
 	resp := &DayDetailResponse{
@@ -98,9 +109,7 @@ func (h *Handler) handleDay(ctx context.Context, req events.LambdaFunctionURLReq
 func mapDailyPowerToPoints(items []dynamo.DailyPowerItem) []TimeSeriesPoint {
 	points := make([]TimeSeriesPoint, len(items))
 	for i, item := range items {
-		// Parse uploadTime format "YYYY-MM-DD HH:MM:SS" in Sydney timezone.
-		loc, _ := time.LoadLocation("Australia/Sydney")
-		t, _ := time.ParseInLocation("2006-01-02 15:04:05", item.UploadTime, loc)
+		t, _ := time.ParseInLocation("2006-01-02 15:04:05", item.UploadTime, sydneyTZ)
 		points[i] = TimeSeriesPoint{
 			Timestamp: t.UTC().Format(time.RFC3339),
 			Soc:       roundPower(item.Cbat),
@@ -114,14 +123,13 @@ func findMinSOCFromPower(items []dynamo.DailyPowerItem) (soc float64, timestamp 
 	if len(items) == 0 {
 		return 0, 0, false
 	}
-	loc, _ := time.LoadLocation("Australia/Sydney")
 	minSoc := items[0].Cbat
-	t, _ := time.ParseInLocation("2006-01-02 15:04:05", items[0].UploadTime, loc)
+	t, _ := time.ParseInLocation("2006-01-02 15:04:05", items[0].UploadTime, sydneyTZ)
 	minTS := t.Unix()
 	for _, item := range items[1:] {
 		if item.Cbat < minSoc {
 			minSoc = item.Cbat
-			t, _ = time.ParseInLocation("2006-01-02 15:04:05", item.UploadTime, loc)
+			t, _ = time.ParseInLocation("2006-01-02 15:04:05", item.UploadTime, sydneyTZ)
 			minTS = t.Unix()
 		}
 	}

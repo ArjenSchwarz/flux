@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -93,11 +92,11 @@ func (h *Handler) validToken(authHeader string) bool {
 
 // errorResponse builds a JSON error response with the given status and message.
 func errorResponse(status int, message string) events.LambdaFunctionURLResponse {
-	body := fmt.Sprintf(`{"error":%q}`, message)
+	data, _ := json.Marshal(map[string]string{"error": message})
 	return events.LambdaFunctionURLResponse{
 		StatusCode: status,
 		Headers:    map[string]string{"Content-Type": "application/json"},
-		Body:       body,
+		Body:       string(data),
 	}
 }
 
