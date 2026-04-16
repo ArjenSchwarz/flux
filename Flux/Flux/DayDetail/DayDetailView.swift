@@ -97,16 +97,26 @@ struct DayDetailView: View {
                 .font(.headline)
 
             summaryRow("Solar", viewModel.summary?.epv)
-            summaryRow("Grid imported", viewModel.summary?.eInput)
-            summaryRow("Grid exported", viewModel.summary?.eOutput)
-            summaryRow("Battery charged", viewModel.summary?.eCharge)
-            summaryRow("Battery discharged", viewModel.summary?.eDischarge)
+            pairedSummaryRow(
+                title: "Grid",
+                positive: viewModel.summary?.eInput,
+                positiveLabel: "import",
+                negative: viewModel.summary?.eOutput,
+                negativeLabel: "export"
+            )
+            pairedSummaryRow(
+                title: "Battery",
+                positive: viewModel.summary?.eCharge,
+                positiveLabel: "+",
+                negative: viewModel.summary?.eDischarge,
+                negativeLabel: "-"
+            )
 
             HStack {
-                Text("SOC low")
+                Text("24h low")
                     .foregroundStyle(.secondary)
                 Spacer()
-                Text(socLowText)
+                Text(lowText)
             }
             .font(.subheadline)
         }
@@ -115,7 +125,7 @@ struct DayDetailView: View {
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
-    private var socLowText: String {
+    private var lowText: String {
         guard let low = viewModel.summary?.socLow else { return "—" }
         let lowText = String(format: "%.1f", low)
         if let lowTimeString = viewModel.summary?.socLowTime,
@@ -131,9 +141,30 @@ struct DayDetailView: View {
             Text(title)
                 .foregroundStyle(.secondary)
             Spacer()
-            Text(value.map { "\(String(format: "%.2f", $0)) kWh" } ?? "—")
+            Text(formatKwh(value))
         }
         .font(.subheadline)
+    }
+
+    private func pairedSummaryRow(
+        title: String,
+        positive: Double?,
+        positiveLabel: String,
+        negative: Double?,
+        negativeLabel: String
+    ) -> some View {
+        HStack {
+            Text("\(title) (\(positiveLabel)/\(negativeLabel))")
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text("\(formatKwh(positive)) / \(formatKwh(negative))")
+        }
+        .font(.subheadline)
+    }
+
+    private func formatKwh(_ value: Double?) -> String {
+        guard let value else { return "—" }
+        return String(format: "%.2f kWh", value)
     }
 
     private var noPowerDataCard: some View {

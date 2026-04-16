@@ -7,6 +7,13 @@ struct ParsedReading: Identifiable {
     let point: TimeSeriesPoint
 }
 
+extension Array where Element == ParsedReading {
+    func nearestReading(to target: Date) -> ParsedReading? {
+        guard !isEmpty else { return nil }
+        return self.min(by: { abs($0.date.timeIntervalSince(target)) < abs($1.date.timeIntervalSince(target)) })
+    }
+}
+
 @MainActor @Observable
 final class DayDetailViewModel {
     private(set) var date: String

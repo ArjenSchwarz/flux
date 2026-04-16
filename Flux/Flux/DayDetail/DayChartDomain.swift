@@ -11,4 +11,15 @@ enum DayChartDomain {
 
         return startOfDay ... endOfDay
     }
+
+    static func offpeakRange(for dateString: String) -> (start: Date, end: Date)? {
+        guard let startOfDay = DateFormatting.parseDayDate(dateString) else { return nil }
+        let calendar = DateFormatting.sydneyCalendar
+
+        guard let offpeakStart = calendar.date(byAdding: .hour, value: 11, to: startOfDay),
+              let offpeakEnd = calendar.date(byAdding: .hour, value: 14, to: startOfDay)
+        else { return nil }
+
+        return (offpeakStart, offpeakEnd)
+    }
 }

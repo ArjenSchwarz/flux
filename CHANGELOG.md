@@ -12,6 +12,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Shell safety flags (`pipefail`, `errexit`) to Makefile for reliable error propagation
 - Battery charge/discharge rate display in `BatteryHeroView` status line (e.g. "Charging at 3.42 kW")
 - Shared `PowerFormatting.format()` helper for consistent watt/kW display across dashboard views (W below 1000, kW with 2 decimal places above)
+- `PowerFormatting.formatAxis()` for chart y-axis labels in kW
+- "Today detail" button on dashboard linking to today's day detail page
+- Tap/drag selection on all three day detail charts (Battery %, Power Flows, Battery Load) showing values at the selected point with a dashed vertical line and colored dots
+- `nearestReading(to:)` helper on `[ParsedReading]` for chart selection lookup
+- Off-peak window highlight (11:00-14:00) as yellow background band on all day detail charts
+- `DayChartDomain.offpeakRange(for:)` helper for computing off-peak time range
 
 ### Changed
 
@@ -21,6 +27,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `PowerTrioView` grid column now shows direction in header ("Grid (import)" / "Grid (export)") instead of a separate detail row, reducing card height
 - `PowerTrioView` values now use `PowerFormatting` (kW with 2 decimals for 1000+) instead of raw integer watts
 - `TodayEnergyView` condensed from 5 rows to 3: solar, "Grid (import/export)", and "Battery (+/-)" with paired values
+- History screen now defaults to today instead of the oldest day
+- Day detail summary card uses paired rows matching dashboard layout: "Grid (import/export)" and "Battery (+/-)"
+- "SOC low" renamed to "24h low" in day detail summary
+- "Battery SOC" chart renamed to "Battery %"
+- "Battery Power" chart renamed to "Battery Load"
+- Power Flows and Battery Load chart y-axis labels now display in kW instead of raw watts
+- Power Flows chart uses named legend series (Solar, Load, Grid) instead of unnamed colors
+- Dashboard navigation changed from single "View history" link to side-by-side "Today detail" and "History" buttons
 
 ### Added
 

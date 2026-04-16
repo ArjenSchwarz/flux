@@ -109,11 +109,11 @@ final class HistoryViewModel {
 
     private func selectDefaultDayIfNeeded() {
         guard let selectedDay else {
-            self.selectedDay = days.first
+            self.selectedDay = days.last
             return
         }
 
-        self.selectedDay = days.first(where: { $0.date == selectedDay.date }) ?? days.first
+        self.selectedDay = days.first(where: { $0.date == selectedDay.date }) ?? days.last
     }
 
     private func rebuildChartData() {

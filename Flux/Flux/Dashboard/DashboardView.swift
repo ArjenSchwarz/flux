@@ -7,16 +7,21 @@ struct DashboardView: View {
     @State private var viewModel: DashboardViewModel
     @State private var showingSettings = false
     private let historyFactory: (ModelContext) -> AnyView
+    private let dayDetailFactory: (String) -> AnyView
 
     init(viewModel: DashboardViewModel) {
         _viewModel = State(initialValue: viewModel)
         historyFactory = { _ in AnyView(Text("History unavailable")) }
+        dayDetailFactory = { _ in AnyView(Text("Day detail unavailable")) }
     }
 
     init(apiClient: any FluxAPIClient) {
         _viewModel = State(initialValue: DashboardViewModel(apiClient: apiClient))
         historyFactory = { modelContext in
             AnyView(HistoryView(apiClient: apiClient, modelContext: modelContext))
+        }
+        dayDetailFactory = { date in
+            AnyView(DayDetailView(date: date, apiClient: apiClient))
         }
     }
 
@@ -49,12 +54,25 @@ struct DashboardView: View {
 
                     TodayEnergyView(todayEnergy: viewModel.status?.todayEnergy)
 
-                    NavigationLink("View history") {
-                        historyFactory(modelContext)
+                    HStack(spacing: 12) {
+                        NavigationLink {
+                            dayDetailFactory(DateFormatting.todayDateString())
+                        } label: {
+                            Text("Today detail")
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+
+                        NavigationLink {
+                            historyFactory(modelContext)
+                        } label: {
+                            Text("History")
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
                     }
-                    .font(.headline)
-                    .padding(.horizontal)
-                    .padding(.bottom, 8)
                 }
                 .padding()
             }
