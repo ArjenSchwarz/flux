@@ -34,7 +34,6 @@ struct DashboardView: View {
 
                     BatteryHeroView(
                         live: viewModel.status?.live,
-                        battery: viewModel.status?.battery,
                         rolling15min: viewModel.status?.rolling15min
                     )
 

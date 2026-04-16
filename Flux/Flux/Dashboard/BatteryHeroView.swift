@@ -2,7 +2,6 @@ import SwiftUI
 
 struct BatteryHeroView: View {
     let live: LiveData?
-    let battery: BatteryInfo?
     let rolling15min: RollingAvg?
 
     var body: some View {
@@ -57,7 +56,6 @@ struct BatteryHeroView: View {
     let status = MockFluxAPIClient.statusResponse
     BatteryHeroView(
         live: status.live,
-        battery: status.battery,
         rolling15min: status.rolling15min
     )
     .padding()
