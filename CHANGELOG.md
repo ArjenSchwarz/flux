@@ -12,14 +12,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `reconcileEnergy()` function in Lambda API compute layer — per-field max of computed (from readings integration) and stored (from DynamoDB daily energy) values
 - Unit tests for `computeTodayEnergy()` (7 cases: empty, single, normal, midnight boundary, gap skip, mixed sign, rounding) and `reconcileEnergy()` (5 cases: both nil, one nil, per-field max, mixed)
 - Integration tests for computed energy in `handleStatus`: computed-only (no DailyEnergyItem), reconciled (per-field max of computed vs stored), and fallback to DailyEnergyItem when fewer than 2 readings
-
-### Changed
-
-- `dailyEnergyInterval` reduced from 6 hours to 1 hour in poller for more frequent AlphaESS energy reconciliation
-- `handleStatus` now computes today's energy from power readings via `computeTodayEnergy()` and reconciles with `DailyEnergyItem` via `reconcileEnergy()`, replacing the DailyEnergyItem-only approach
-
-### Added
-
 - iOS build, test, lint, device install, and App Store distribution targets to Makefile (`ios-build`, `ios-test`, `ios-install`, `ios-run`, `ios-archive`, `ios-upload`, etc.) with xcbeautify pipe, device auto-detection, and `make help` overview
 - Shell safety flags (`pipefail`, `errexit`) to Makefile for reliable error propagation
 - Battery charge/discharge rate display in `BatteryHeroView` status line (e.g. "Charging at 3.42 kW")
@@ -33,6 +25,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- `dailyEnergyInterval` reduced from 6 hours to 1 hour in poller for more frequent AlphaESS energy reconciliation
+- `handleStatus` now computes today's energy from power readings via `computeTodayEnergy()` and reconciles with `DailyEnergyItem` via `reconcileEnergy()`, replacing the DailyEnergyItem-only approach
 - iOS deployment target lowered from 26.4 to 26.0 for device compatibility
 - `URLSessionAPIClient` now uses a no-cache `URLSession` instead of `.shared`, preventing stale HTTP responses for real-time polling data
 - HTTP 403 responses now map to `FluxAPIError.unauthorized` instead of `unexpectedStatus`, matching bearer token auth semantics
