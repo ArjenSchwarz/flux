@@ -6,15 +6,22 @@ final class URLSessionAPIClient: FluxAPIClient, Sendable {
     private let tokenProvider: @Sendable () -> String?
     private let decoder: JSONDecoder
 
-    init(baseURL: URL, keychainService: KeychainService, session: URLSession = .shared) {
-        self.session = session
+    private static let noCacheSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        config.urlCache = nil
+        return URLSession(configuration: config)
+    }()
+
+    init(baseURL: URL, keychainService: KeychainService, session: URLSession? = nil) {
+        self.session = session ?? Self.noCacheSession
         self.baseURL = baseURL
         self.tokenProvider = { keychainService.loadToken() }
         self.decoder = JSONDecoder()
     }
 
-    init(baseURL: URL, token: String, session: URLSession = .shared) {
-        self.session = session
+    init(baseURL: URL, token: String, session: URLSession? = nil) {
+        self.session = session ?? Self.noCacheSession
         self.baseURL = baseURL
         self.tokenProvider = { token }
         self.decoder = JSONDecoder()
@@ -76,7 +83,7 @@ final class URLSessionAPIClient: FluxAPIClient, Sendable {
             return try decodeResponse(data)
         case 400:
             throw FluxAPIError.badRequest(parseErrorMessage(from: data))
-        case 401:
+        case 401, 403:
             throw FluxAPIError.unauthorized
         case 500 ... 599:
             throw FluxAPIError.serverError

@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- iOS build, test, lint, device install, and App Store distribution targets to Makefile (`ios-build`, `ios-test`, `ios-install`, `ios-run`, `ios-archive`, `ios-upload`, etc.) with xcbeautify pipe, device auto-detection, and `make help` overview
+- Shell safety flags (`pipefail`, `errexit`) to Makefile for reliable error propagation
+
+### Changed
+
+- iOS deployment target lowered from 26.4 to 26.0 for device compatibility
+- `URLSessionAPIClient` now uses a no-cache `URLSession` instead of `.shared`, preventing stale HTTP responses for real-time polling data
+- HTTP 403 responses now map to `FluxAPIError.unauthorized` instead of `unexpectedStatus`, matching bearer token auth semantics
+
+### Added
+
 - `APIModelsTests.swift` with 14 JSON decoding tests covering full status response, null/missing optional fields, partial summaries, empty history, error response, and `Identifiable` conformance for all API models
 - `ParsedReading` struct in `DayDetailViewModel` that pre-parses timestamps once after fetch, replacing per-chart-view parsing that ran 3x per render cycle (up to 864 `DateFormatter` calls per Day Detail render)
 - `OffpeakData.defaultWindowStart` / `.defaultWindowEnd` static constants for off-peak window fallback values, replacing duplicated `"11:00"` / `"14:00"` string literals in `PowerTrioView` and `SecondaryStatsView`
