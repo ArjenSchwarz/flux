@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Peak periods wired into `/day` endpoint — `handleDay` calls `findPeakPeriods` on raw readings and returns results in `peakPeriods` field (always `[]`, never null)
+- Integration tests for `/day` endpoint verifying `peakPeriods` presence across normal, fallback, no-data, and known-peak scenarios
+- `peakPeriods` property on iOS `DayDetailViewModel` with nil-coalescing from response and error-path reset
+- ViewModel unit tests for peak periods population, nil handling, error clearing, and backwards-compatible JSON decoding
+- `DateFormatting.clockTime24h(from:)` — locale-independent 24-hour time formatter (HH:mm) for Sydney timezone
 - `findPeakPeriods` algorithm in `compute.go` — 5-step threshold-based clustering that identifies top 3 peak household load periods from raw readings, excluding off-peak windows, with trapezoidal energy integration and configurable merge/duration/gap thresholds
 - Unit tests for `findPeakPeriods` covering 16 scenarios: empty input, off-peak exclusion, uniform load, single/multiple peaks, cluster merging within 5min, separate clusters >5min, short period filtering (<2min), top-3 ranking, 60s gap handling, off-peak boundary behaviour, transitive merging, zero-energy sparse periods, invalid off-peak parsing, negative Pload clamping, and unrounded energy ranking
 - Property-based tests for `findPeakPeriods` using `pgregory.net/rapid` verifying 6 invariants: result count ≤3, periods outside off-peak, non-overlapping, positive energy, descending energy order, and duration ≥2 minutes

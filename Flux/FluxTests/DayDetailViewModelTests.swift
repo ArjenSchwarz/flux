@@ -65,6 +65,62 @@ struct DayDetailViewModelTests {
         #expect(viewModel.hasPowerData == false)
     }
 
+    @Test
+    func loadDayPopulatesPeakPeriodsFromResponse() async {
+        let apiClient = MockDayDetailAPIClient()
+        let peaks = [PeakPeriod(start: "17:00", end: "18:00", avgLoadW: 3200, energyWh: 3200)]
+        apiClient.dayResult = .success(DayDetailResponse(
+            date: "2026-04-15", readings: [], summary: nil, peakPeriods: peaks
+        ))
+
+        let viewModel = DayDetailViewModel(date: "2026-04-15", apiClient: apiClient)
+        await viewModel.loadDay()
+
+        #expect(viewModel.peakPeriods.count == 1)
+        #expect(viewModel.peakPeriods.first?.start == "17:00")
+    }
+
+    @Test
+    func loadDayWithNilPeakPeriodsLeavesArrayEmpty() async {
+        let apiClient = MockDayDetailAPIClient()
+        apiClient.dayResult = .success(DayDetailResponse(
+            date: "2026-04-15", readings: [], summary: nil, peakPeriods: nil
+        ))
+
+        let viewModel = DayDetailViewModel(date: "2026-04-15", apiClient: apiClient)
+        await viewModel.loadDay()
+
+        #expect(viewModel.peakPeriods.isEmpty)
+    }
+
+    @Test
+    func loadDayErrorClearsPeakPeriods() async {
+        let apiClient = MockDayDetailAPIClient()
+        let peaks = [PeakPeriod(start: "17:00", end: "18:00", avgLoadW: 3200, energyWh: 3200)]
+        apiClient.dayResult = .success(DayDetailResponse(
+            date: "2026-04-15", readings: [], summary: nil, peakPeriods: peaks
+        ))
+
+        let viewModel = DayDetailViewModel(date: "2026-04-15", apiClient: apiClient)
+        await viewModel.loadDay()
+        #expect(viewModel.peakPeriods.count == 1)
+
+        apiClient.dayResult = .failure(FluxAPIError.notConfigured)
+        await viewModel.loadDay()
+
+        #expect(viewModel.peakPeriods.isEmpty)
+    }
+
+    @Test
+    func responseWithoutPeakPeriodsKeyDecodesToNil() throws {
+        let json = """
+        {"date":"2026-04-15","readings":[],"summary":null}
+        """
+        let data = Data(json.utf8)
+        let response = try JSONDecoder().decode(DayDetailResponse.self, from: data)
+        #expect(response.peakPeriods == nil)
+    }
+
     private static func makeUTCDate(year: Int, month: Int, day: Int, hour: Int, minute: Int) -> Date {
         let calendar = Calendar(identifier: .gregorian)
         return calendar.date(from: DateComponents(

@@ -23,6 +23,7 @@ final class DayDetailViewModel {
     private(set) var isLoading = false
     private(set) var error: FluxAPIError?
     private(set) var hasPowerData = true
+    private(set) var peakPeriods: [PeakPeriod] = []
 
     private let apiClient: any FluxAPIClient
     private let nowProvider: @Sendable () -> Date
@@ -53,12 +54,14 @@ final class DayDetailViewModel {
             parsedReadings = parseReadings(response.readings)
             summary = response.summary
             hasPowerData = !isFallbackData(response.readings)
+            peakPeriods = response.peakPeriods ?? []
             error = nil
         } catch {
             readings = []
             parsedReadings = []
             summary = nil
             hasPowerData = true
+            peakPeriods = []
             self.error = FluxAPIError.from(error)
         }
     }

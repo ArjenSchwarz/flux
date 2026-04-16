@@ -62,7 +62,7 @@ references:
 
 ## Backend Integration
 
-- [ ] 6. Write integration tests for /day endpoint with peakPeriods <!-- id:1x60rrl -->
+- [x] 6. Write integration tests for /day endpoint with peakPeriods <!-- id:1x60rrl -->
   - Update parseDayResponse in day_test.go to handle new PeakPeriods field
   - Update TestHandleDayNormalCase to verify peakPeriods is present and non-null
   - Update TestHandleDayFallbackToDailyPower to verify peakPeriods is empty array
@@ -73,7 +73,7 @@ references:
   - Requirements: [2.1](requirements.md#2.1), [2.3](requirements.md#2.3), [2.5](requirements.md#2.5)
   - References: internal/api/day_test.go
 
-- [ ] 7. Wire findPeakPeriods into handleDay <!-- id:1x60rrm -->
+- [x] 7. Wire findPeakPeriods into handleDay <!-- id:1x60rrm -->
   - In day.go handleDay(), after findMinSOC and downsample, call findPeakPeriods(readings, h.offpeakStart, h.offpeakEnd)
   - Initialize peakPeriods to []PeakPeriod{} when nil (JSON encodes as [] not null)
   - Only call findPeakPeriods when len(readings) > 0
@@ -98,7 +98,7 @@ references:
 
 ## iOS ViewModel — TDD
 
-- [ ] 9. Write unit tests for peakPeriods in DayDetailViewModel <!-- id:1x60rro -->
+- [x] 9. Write unit tests for peakPeriods in DayDetailViewModel <!-- id:1x60rro -->
   - Add tests in DayDetailViewModelTests.swift following existing patterns
   - Test loadDay populates peakPeriods from response (nil-coalesces to [])
   - Test loadDay with nil peakPeriods leaves array empty
@@ -109,7 +109,7 @@ references:
   - Requirements: [3.1](requirements.md#3.1), [3.2](requirements.md#3.2)
   - References: Flux/FluxTests/DayDetailViewModelTests.swift
 
-- [ ] 10. Add peakPeriods property to DayDetailViewModel <!-- id:1x60rrp -->
+- [x] 10. Add peakPeriods property to DayDetailViewModel <!-- id:1x60rrp -->
   - Add private(set) var peakPeriods: [PeakPeriod] = [] to DayDetailViewModel
   - In loadDay() success path: peakPeriods = response.peakPeriods ?? []
   - In loadDay() error path: peakPeriods = []
@@ -121,7 +121,7 @@ references:
 
 ## iOS View
 
-- [ ] 11. Add 24-hour time formatter to DateFormatting <!-- id:1x60rrq -->
+- [x] 11. Add 24-hour time formatter to DateFormatting <!-- id:1x60rrq -->
   - Add static 24h formatter to DateFormatting: dateFormat=HH:mm, timeZone=sydneyTimeZone
   - Add static func clockTime24h(from:) -> String using this formatter
   - Avoids locale-dependent 12h/24h from existing clockTime formatter

@@ -44,6 +44,17 @@ enum DateFormatting {
         clockFormatter.string(from: date)
     }
 
+    private static let clock24hFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        formatter.timeZone = sydneyTimeZone
+        return formatter
+    }()
+
+    static func clockTime24h(from date: Date) -> String {
+        clock24hFormatter.string(from: date)
+    }
+
     static func todayDateString(now: Date = .now) -> String {
         dayFormatter.string(from: now)
     }
