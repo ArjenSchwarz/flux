@@ -394,3 +394,179 @@ func TestRoundingMultipliers(t *testing.T) {
 	// roundPower: 1 decimal place → multiplier 10
 	assert.InDelta(t, 0.1, 1.0/math.Round(1.0/roundPower(0.1)), 1e-9)
 }
+
+func TestComputeTodayEnergy(t *testing.T) {
+	midnight := int64(1713139200) // arbitrary midnight boundary
+
+	tests := map[string]struct {
+		readings     []dynamo.ReadingItem
+		midnightUnix int64
+		want         *TodayEnergy
+	}{
+		"empty readings returns nil": {
+			readings:     nil,
+			midnightUnix: midnight,
+			want:         nil,
+		},
+		"single reading returns nil": {
+			readings: []dynamo.ReadingItem{
+				{Timestamp: midnight + 100, Ppv: 1000, Pgrid: 500, Pbat: 200},
+			},
+			midnightUnix: midnight,
+			want:         nil,
+		},
+		"two readings after midnight computes correct energy": {
+			readings: []dynamo.ReadingItem{
+				{Timestamp: midnight + 10, Ppv: 1000, Pgrid: 500, Pbat: -300},
+				{Timestamp: midnight + 20, Ppv: 1000, Pgrid: 500, Pbat: -300},
+			},
+			midnightUnix: midnight,
+			// dt = 10s, trapezoid average = same values
+			// epv: (1000+1000)/2 * 10/3600 = 2.7778 Wh = 0.0028 kWh → roundEnergy → 0.0
+			// eInput: max(500,0)=500, (500+500)/2 * 10/3600 = 1.3889 Wh = 0.0014 kWh → 0.0
+			// eOutput: max(-500,0)=0 → 0
+			// eCharge: max(-(-300),0)=max(300,0)=300, (300+300)/2 * 10/3600 = 0.8333 Wh = 0.0008 kWh → 0.0
+			// eDischarge: max(-300,0)=0 → 0
+			want: &TodayEnergy{
+				Epv:        roundEnergy(1000.0 * 10.0 / 3600.0 / 1000.0),
+				EInput:     roundEnergy(500.0 * 10.0 / 3600.0 / 1000.0),
+				EOutput:    0,
+				ECharge:    roundEnergy(300.0 * 10.0 / 3600.0 / 1000.0),
+				EDischarge: 0,
+			},
+		},
+		"readings spanning midnight only counts post-midnight pairs": {
+			readings: []dynamo.ReadingItem{
+				{Timestamp: midnight - 20, Ppv: 9999, Pgrid: 9999, Pbat: 9999},
+				{Timestamp: midnight - 10, Ppv: 9999, Pgrid: 9999, Pbat: 9999},
+				{Timestamp: midnight + 10, Ppv: 2000, Pgrid: 1000, Pbat: 500},
+				{Timestamp: midnight + 20, Ppv: 2000, Pgrid: 1000, Pbat: 500},
+			},
+			midnightUnix: midnight,
+			want: &TodayEnergy{
+				Epv:        roundEnergy(2000.0 * 10.0 / 3600.0 / 1000.0),
+				EInput:     roundEnergy(1000.0 * 10.0 / 3600.0 / 1000.0),
+				EOutput:    0,
+				ECharge:    0,
+				EDischarge: roundEnergy(500.0 * 10.0 / 3600.0 / 1000.0),
+			},
+		},
+		"gap over 60s between readings skips that pair": {
+			readings: []dynamo.ReadingItem{
+				{Timestamp: midnight + 10, Ppv: 1000, Pgrid: 500, Pbat: 200},
+				{Timestamp: midnight + 20, Ppv: 1000, Pgrid: 500, Pbat: 200},
+				{Timestamp: midnight + 81, Ppv: 3000, Pgrid: 1500, Pbat: 600},
+				{Timestamp: midnight + 91, Ppv: 3000, Pgrid: 1500, Pbat: 600},
+			},
+			midnightUnix: midnight,
+			// Only pairs (10,20) and (81,91) count; pair (20,81) has 61s gap → skipped
+			want: &TodayEnergy{
+				Epv:        roundEnergy((1000.0*10.0/3600.0 + 3000.0*10.0/3600.0) / 1000.0),
+				EInput:     roundEnergy((500.0*10.0/3600.0 + 1500.0*10.0/3600.0) / 1000.0),
+				EOutput:    0,
+				ECharge:    0,
+				EDischarge: roundEnergy((200.0*10.0/3600.0 + 600.0*10.0/3600.0) / 1000.0),
+			},
+		},
+		"mixed sign pgrid and pbat maps to correct fields": {
+			readings: []dynamo.ReadingItem{
+				{Timestamp: midnight + 100, Ppv: 500, Pgrid: -800, Pbat: -400},
+				{Timestamp: midnight + 110, Ppv: 500, Pgrid: -800, Pbat: -400},
+			},
+			midnightUnix: midnight,
+			// pgrid=-800: eInput=max(-800,0)=0, eOutput=max(800,0)=800
+			// pbat=-400: eDischarge=max(-400,0)=0, eCharge=max(400,0)=400
+			want: &TodayEnergy{
+				Epv:        roundEnergy(500.0 * 10.0 / 3600.0 / 1000.0),
+				EInput:     0,
+				EOutput:    roundEnergy(800.0 * 10.0 / 3600.0 / 1000.0),
+				ECharge:    roundEnergy(400.0 * 10.0 / 3600.0 / 1000.0),
+				EDischarge: 0,
+			},
+		},
+		"rounding matches roundEnergy output": {
+			readings: []dynamo.ReadingItem{
+				{Timestamp: midnight + 10, Ppv: 3600, Pgrid: 1800, Pbat: 900},
+				{Timestamp: midnight + 20, Ppv: 3600, Pgrid: 1800, Pbat: 900},
+			},
+			midnightUnix: midnight,
+			// dt = 10s, constant power
+			// epv: 3600 * 10 / 3600 / 1000 = 0.01
+			// eInput: 1800 * 10 / 3600 / 1000 = 0.005 → roundEnergy → 0.01
+			// eDischarge: 900 * 10 / 3600 / 1000 = 0.0025 → roundEnergy → 0.0
+			want: &TodayEnergy{
+				Epv:        roundEnergy(3600.0 * 10.0 / 3600.0 / 1000.0),
+				EInput:     roundEnergy(1800.0 * 10.0 / 3600.0 / 1000.0),
+				EOutput:    0,
+				ECharge:    0,
+				EDischarge: roundEnergy(900.0 * 10.0 / 3600.0 / 1000.0),
+			},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := computeTodayEnergy(tc.readings, tc.midnightUnix)
+			if tc.want == nil {
+				assert.Nil(t, got)
+				return
+			}
+			assert.NotNil(t, got)
+			assert.InDelta(t, tc.want.Epv, got.Epv, 1e-9)
+			assert.InDelta(t, tc.want.EInput, got.EInput, 1e-9)
+			assert.InDelta(t, tc.want.EOutput, got.EOutput, 1e-9)
+			assert.InDelta(t, tc.want.ECharge, got.ECharge, 1e-9)
+			assert.InDelta(t, tc.want.EDischarge, got.EDischarge, 1e-9)
+		})
+	}
+}
+
+func TestReconcileEnergy(t *testing.T) {
+	tests := map[string]struct {
+		computed *TodayEnergy
+		stored   *TodayEnergy
+		want     *TodayEnergy
+	}{
+		"both nil returns nil": {
+			computed: nil,
+			stored:   nil,
+			want:     nil,
+		},
+		"only computed returns computed": {
+			computed: &TodayEnergy{Epv: 1.5, EInput: 0.8, EOutput: 0.3, ECharge: 0.5, EDischarge: 0.2},
+			stored:   nil,
+			want:     &TodayEnergy{Epv: 1.5, EInput: 0.8, EOutput: 0.3, ECharge: 0.5, EDischarge: 0.2},
+		},
+		"only stored returns stored": {
+			computed: nil,
+			stored:   &TodayEnergy{Epv: 2.0, EInput: 1.0, EOutput: 0.5, ECharge: 0.7, EDischarge: 0.3},
+			want:     &TodayEnergy{Epv: 2.0, EInput: 1.0, EOutput: 0.5, ECharge: 0.7, EDischarge: 0.3},
+		},
+		"both present returns per-field max": {
+			computed: &TodayEnergy{Epv: 3.0, EInput: 1.0, EOutput: 2.0, ECharge: 0.5, EDischarge: 1.5},
+			stored:   &TodayEnergy{Epv: 2.5, EInput: 1.5, EOutput: 1.0, ECharge: 1.0, EDischarge: 0.5},
+			want:     &TodayEnergy{Epv: 3.0, EInput: 1.5, EOutput: 2.0, ECharge: 1.0, EDischarge: 1.5},
+		},
+		"mixed values where some fields higher in computed and some in stored": {
+			computed: &TodayEnergy{Epv: 0.1, EInput: 5.0, EOutput: 0.0, ECharge: 3.0, EDischarge: 0.0},
+			stored:   &TodayEnergy{Epv: 4.0, EInput: 0.0, EOutput: 2.5, ECharge: 0.0, EDischarge: 7.0},
+			want:     &TodayEnergy{Epv: 4.0, EInput: 5.0, EOutput: 2.5, ECharge: 3.0, EDischarge: 7.0},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := reconcileEnergy(tc.computed, tc.stored)
+			if tc.want == nil {
+				assert.Nil(t, got)
+				return
+			}
+			assert.NotNil(t, got)
+			assert.InDelta(t, tc.want.Epv, got.Epv, 1e-9)
+			assert.InDelta(t, tc.want.EInput, got.EInput, 1e-9)
+			assert.InDelta(t, tc.want.EOutput, got.EOutput, 1e-9)
+			assert.InDelta(t, tc.want.ECharge, got.ECharge, 1e-9)
+			assert.InDelta(t, tc.want.EDischarge, got.EDischarge, 1e-9)
+		})
+	}
+}

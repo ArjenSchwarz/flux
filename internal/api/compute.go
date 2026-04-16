@@ -153,6 +153,68 @@ func findMinSOC(readings []dynamo.ReadingItem) (soc float64, timestamp int64, fo
 	return minSoc, minTS, true
 }
 
+func computeTodayEnergy(readings []dynamo.ReadingItem, midnightUnix int64) *TodayEnergy {
+	var filtered []dynamo.ReadingItem
+	for _, r := range readings {
+		if r.Timestamp >= midnightUnix {
+			filtered = append(filtered, r)
+		}
+	}
+	if len(filtered) < 2 {
+		return nil
+	}
+
+	var epvWh, eInputWh, eOutputWh, eChargeWh, eDischargeWh float64
+
+	for i := 1; i < len(filtered); i++ {
+		prev := filtered[i-1]
+		curr := filtered[i]
+
+		dt := float64(curr.Timestamp - prev.Timestamp)
+		// Skip pairs with gaps longer than ~6 poll intervals (10s each).
+		// This prevents phantom energy accumulation during polling outages.
+		if dt > 60 {
+			continue
+		}
+
+		epvWh += ((max(prev.Ppv, 0) + max(curr.Ppv, 0)) / 2) * dt / 3600
+		eInputWh += ((max(prev.Pgrid, 0) + max(curr.Pgrid, 0)) / 2) * dt / 3600
+		eOutputWh += ((max(-prev.Pgrid, 0) + max(-curr.Pgrid, 0)) / 2) * dt / 3600
+		eChargeWh += ((max(-prev.Pbat, 0) + max(-curr.Pbat, 0)) / 2) * dt / 3600
+		eDischargeWh += ((max(prev.Pbat, 0) + max(curr.Pbat, 0)) / 2) * dt / 3600
+	}
+
+	return &TodayEnergy{
+		Epv:        roundEnergy(epvWh / 1000),
+		EInput:     roundEnergy(eInputWh / 1000),
+		EOutput:    roundEnergy(eOutputWh / 1000),
+		ECharge:    roundEnergy(eChargeWh / 1000),
+		EDischarge: roundEnergy(eDischargeWh / 1000),
+	}
+}
+
+func reconcileEnergy(computed *TodayEnergy, stored *TodayEnergy) *TodayEnergy {
+	if computed == nil && stored == nil {
+		return nil
+	}
+	// When one side is nil, return the other pointer directly. This aliases
+	// the caller's input, which is safe because the result is only serialised
+	// to JSON and never mutated after assignment.
+	if computed == nil {
+		return stored
+	}
+	if stored == nil {
+		return computed
+	}
+	return &TodayEnergy{
+		Epv:        max(computed.Epv, stored.Epv),
+		EInput:     max(computed.EInput, stored.EInput),
+		EOutput:    max(computed.EOutput, stored.EOutput),
+		ECharge:    max(computed.ECharge, stored.ECharge),
+		EDischarge: max(computed.EDischarge, stored.EDischarge),
+	}
+}
+
 // roundEnergy rounds a kWh value to 2 decimal places.
 func roundEnergy(v float64) float64 {
 	return math.Round(v*100) / 100

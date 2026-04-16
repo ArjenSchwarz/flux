@@ -65,6 +65,8 @@
 - `computePgridSustained(readings)` — Iterates backwards from end, counts consecutive pgrid>500 within 30s gaps. Needs 3+ consecutive. Expects ascending order input.
 - `downsample(readings, date)` — 288 five-minute buckets, averages per bucket, omits empty. Uses `sydneyTZ`. Output is already in chronological order (buckets iterated 0..287).
 - `findMinSOC(readings)` — Returns (soc, timestamp, found).
+- `computeTodayEnergy(readings, midnightUnix)` — Integrates power readings into energy totals using trapezoidal integration. Filters to post-midnight readings, skips pairs with gap >60s. Clamps directional values: `max(pgrid,0)` for eInput, `max(-pgrid,0)` for eOutput, `max(-pbat,0)` for eCharge, `max(pbat,0)` for eDischarge. Converts Wh→kWh, rounds with `roundEnergy`. Returns nil if <2 post-midnight readings.
+- `reconcileEnergy(computed, stored)` — Takes per-field max of computed (from integration) and stored (from DynamoDB daily energy). Returns nil if both nil, whichever is non-nil if only one exists.
 - `roundEnergy(v)` — 2 decimal places (kWh).
 - `roundPower(v)` — 1 decimal place (watts/SOC).
 

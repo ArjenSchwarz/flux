@@ -16,7 +16,7 @@ import (
 const (
 	livePollInterval     = 10 * time.Second
 	dailyPowerInterval   = 1 * time.Hour
-	dailyEnergyInterval  = 6 * time.Hour
+	dailyEnergyInterval  = 1 * time.Hour
 	systemInfoInterval   = 24 * time.Hour
 	shutdownDrainTimeout = 25 * time.Second
 	midnightDelay        = 5 * time.Minute

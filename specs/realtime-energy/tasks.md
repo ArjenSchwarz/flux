@@ -8,7 +8,7 @@ references:
 
 ## Core Compute Functions
 
-- [ ] 1. Write tests for computeTodayEnergy() <!-- id:ao4cq06 -->
+- [x] 1. Write tests for computeTodayEnergy() <!-- id:ao4cq06 -->
   - Write map-based table-driven tests in internal/api/compute_test.go
   - Test cases: empty readings returns nil, single reading returns nil, two readings after midnight computes correct energy, readings spanning midnight only counts post-midnight pairs, gap >60s between readings skips that pair, mixed sign pgrid/pbat maps to correct fields (eInput vs eOutput, eCharge vs eDischarge), rounding matches roundEnergy() output
   - Use assert.InDelta() for floating point comparisons
@@ -16,7 +16,7 @@ references:
   - Stream: 1
   - Requirements: [1.1](requirements.md#1.1), [1.2](requirements.md#1.2), [1.3](requirements.md#1.3), [1.4](requirements.md#1.4), [1.6](requirements.md#1.6), [1.7](requirements.md#1.7)
 
-- [ ] 2. Implement computeTodayEnergy() <!-- id:ao4cq07 -->
+- [x] 2. Implement computeTodayEnergy() <!-- id:ao4cq07 -->
   - Add function to internal/api/compute.go
   - Signature: func computeTodayEnergy(readings []dynamo.ReadingItem, midnightUnix int64) *TodayEnergy
   - Filter readings to those >= midnightUnix, return nil if <2 remain
@@ -28,13 +28,13 @@ references:
   - Stream: 1
   - Requirements: [1.1](requirements.md#1.1), [1.2](requirements.md#1.2), [1.3](requirements.md#1.3), [1.4](requirements.md#1.4), [1.5](requirements.md#1.5), [1.6](requirements.md#1.6), [1.7](requirements.md#1.7), [1.8](requirements.md#1.8)
 
-- [ ] 3. Write tests for reconcileEnergy() <!-- id:ao4cq08 -->
+- [x] 3. Write tests for reconcileEnergy() <!-- id:ao4cq08 -->
   - Write map-based table-driven tests in internal/api/compute_test.go
   - Test cases: both nil returns nil, only computed returns computed, only stored returns stored, both present returns per-field max, mixed values where some fields higher in computed and some in stored
   - Stream: 1
   - Requirements: [2.1](requirements.md#2.1), [2.2](requirements.md#2.2), [2.3](requirements.md#2.3), [2.4](requirements.md#2.4)
 
-- [ ] 4. Implement reconcileEnergy() <!-- id:ao4cq09 -->
+- [x] 4. Implement reconcileEnergy() <!-- id:ao4cq09 -->
   - Add function to internal/api/compute.go
   - Signature: func reconcileEnergy(computed *TodayEnergy, stored *TodayEnergy) *TodayEnergy
   - Return nil if both nil
@@ -46,7 +46,7 @@ references:
 
 ## Integration
 
-- [ ] 5. Write tests for computed energy in handleStatus <!-- id:ao4cq0a -->
+- [x] 5. Write tests for computed energy in handleStatus <!-- id:ao4cq0a -->
   - Add/update tests in internal/api/status_test.go
   - Test: readings present with no DailyEnergyItem returns computed energy
   - Test: both readings and DailyEnergyItem returns reconciled max values
@@ -56,7 +56,7 @@ references:
   - Stream: 1
   - Requirements: [1.5](requirements.md#1.5), [1.7](requirements.md#1.7), [2.1](requirements.md#2.1), [2.3](requirements.md#2.3), [2.4](requirements.md#2.4)
 
-- [ ] 6. Wire computeTodayEnergy and reconcileEnergy into handleStatus <!-- id:ao4cq0b -->
+- [x] 6. Wire computeTodayEnergy and reconcileEnergy into handleStatus <!-- id:ao4cq0b -->
   - Modify internal/api/status.go handleStatus function
   - Compute midnight Unix from now using sydneyTZ
   - Call computeTodayEnergy(allReadings, midnight)
@@ -69,7 +69,7 @@ references:
 
 ## Poller
 
-- [ ] 7. Reduce daily energy poll interval to 1 hour <!-- id:ao4cq0c -->
+- [x] 7. Reduce daily energy poll interval to 1 hour <!-- id:ao4cq0c -->
   - Change dailyEnergyInterval from 6 * time.Hour to 1 * time.Hour in internal/poller/poller.go
   - No other changes needed - midnight finalizer remains at 00:05
   - Stream: 2

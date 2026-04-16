@@ -126,9 +126,13 @@ func (h *Handler) handleStatus(ctx context.Context, _ events.LambdaFunctionURLRe
 	// Off-peak data — always includes window times, deltas only when complete.
 	resp.Offpeak = buildOffpeak(opItem, h.offpeakStart, h.offpeakEnd)
 
-	// Today's energy.
+	// Today's energy: compute from readings, reconcile with DailyEnergyItem.
+	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, sydneyTZ).Unix()
+	computedEnergy := computeTodayEnergy(allReadings, midnight)
+
+	var storedEnergy *TodayEnergy
 	if deItem != nil {
-		resp.TodayEnergy = &TodayEnergy{
+		storedEnergy = &TodayEnergy{
 			Epv:        roundEnergy(deItem.Epv),
 			EInput:     roundEnergy(deItem.EInput),
 			EOutput:    roundEnergy(deItem.EOutput),
@@ -136,6 +140,7 @@ func (h *Handler) handleStatus(ctx context.Context, _ events.LambdaFunctionURLRe
 			EDischarge: roundEnergy(deItem.EDischarge),
 		}
 	}
+	resp.TodayEnergy = reconcileEnergy(computedEnergy, storedEnergy)
 
 	return jsonResponse(resp)
 }
