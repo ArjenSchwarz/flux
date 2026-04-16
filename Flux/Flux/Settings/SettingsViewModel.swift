@@ -39,6 +39,11 @@ final class SettingsViewModel {
             return
         }
 
+        guard baseURL.scheme == "https" else {
+            validationError = "API URL must use HTTPS."
+            return
+        }
+
         isValidating = true
         validationError = nil
         shouldDismiss = false
