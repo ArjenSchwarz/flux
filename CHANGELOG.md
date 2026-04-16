@@ -8,6 +8,83 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- iOS build, test, lint, device install, and App Store distribution targets to Makefile (`ios-build`, `ios-test`, `ios-install`, `ios-run`, `ios-archive`, `ios-upload`, etc.) with xcbeautify pipe, device auto-detection, and `make help` overview
+- Shell safety flags (`pipefail`, `errexit`) to Makefile for reliable error propagation
+- Battery charge/discharge rate display in `BatteryHeroView` status line (e.g. "Charging at 3.42 kW")
+- Shared `PowerFormatting.format()` helper for consistent watt/kW display across dashboard views (W below 1000, kW with 2 decimal places above)
+- `PowerFormatting.formatAxis()` for chart y-axis labels in kW
+- "Today detail" button on dashboard linking to today's day detail page
+- Tap/drag selection on all three day detail charts (Battery %, Power Flows, Battery Load) showing values at the selected point with a dashed vertical line and colored dots
+- `nearestReading(to:)` helper on `[ParsedReading]` for chart selection lookup
+- Off-peak window highlight (11:00-14:00) as yellow background band on all day detail charts
+- `DayChartDomain.offpeakRange(for:)` helper for computing off-peak time range
+
+### Changed
+
+- iOS deployment target lowered from 26.4 to 26.0 for device compatibility
+- `URLSessionAPIClient` now uses a no-cache `URLSession` instead of `.shared`, preventing stale HTTP responses for real-time polling data
+- HTTP 403 responses now map to `FluxAPIError.unauthorized` instead of `unexpectedStatus`, matching bearer token auth semantics
+- `PowerTrioView` grid column now shows direction in header ("Grid (import)" / "Grid (export)") instead of a separate detail row, reducing card height
+- `PowerTrioView` values now use `PowerFormatting` (kW with 2 decimals for 1000+) instead of raw integer watts
+- `TodayEnergyView` condensed from 5 rows to 3: solar, "Grid (import/export)", and "Battery (+/-)" with paired values
+- History screen now defaults to today instead of the oldest day
+- Day detail summary card uses paired rows matching dashboard layout: "Grid (import/export)" and "Battery (+/-)"
+- "SOC low" renamed to "24h low" in day detail summary
+- "Battery SOC" chart renamed to "Battery %"
+- "Battery Power" chart renamed to "Battery Load"
+- Power Flows and Battery Load chart y-axis labels now display in kW instead of raw watts
+- Power Flows chart uses named legend series (Solar, Load, Grid) instead of unnamed colors
+- Dashboard navigation changed from single "View history" link to side-by-side "Today detail" and "History" buttons
+- Dashboard now shows empty placeholder layout on initial load instead of error card, with data filling in once fetched
+- `DashboardViewModel.startAutoRefresh()` no longer cancels in-flight requests on repeated calls from view lifecycle
+- `DashboardViewModel.refresh()` ignores cancellation errors from view lifecycle instead of storing them as error state
+- Removed "Secondary Stats" heading from secondary stats card
+- 15m avg load now uses `PowerFormatting` for kW display
+
+### Added
+
+- `APIModelsTests.swift` with 14 JSON decoding tests covering full status response, null/missing optional fields, partial summaries, empty history, error response, and `Identifiable` conformance for all API models
+- `ParsedReading` struct in `DayDetailViewModel` that pre-parses timestamps once after fetch, replacing per-chart-view parsing that ran 3x per render cycle (up to 864 `DateFormatter` calls per Day Detail render)
+- `OffpeakData.defaultWindowStart` / `.defaultWindowEnd` static constants for off-peak window fallback values, replacing duplicated `"11:00"` / `"14:00"` string literals in `PowerTrioView` and `SecondaryStatsView`
+
+### Changed
+
+- Day Detail chart views (`SOCChartView`, `PowerChartView`, `BatteryPowerChartView`) now accept `[ParsedReading]` instead of `[TimeSeriesPoint]`, eliminating per-view timestamp parsing
+- `HistoryViewModel.cacheHistoricalDays` now scopes its SwiftData fetch with a `#Predicate` filtering to only the incoming dates, instead of loading the entire cache table
+- `HistoryViewModel.loadCachedDays` now uses `fetchLimit` on the `FetchDescriptor` instead of fetching all records and slicing in memory
+- `specs/ios-app/implementation.md` rewritten with three-level explanation (beginner/intermediate/expert) and completeness assessment
+
+### Removed
+
+- Dead Xcode template files `ContentView.swift` and `Item.swift` that were unreferenced after the app was implemented
+
+### Added
+
+- Shared `MockFluxAPIClient` preview service in `Flux/Flux/Services/MockFluxAPIClient.swift` with static `/status`, `/history`, and `/day` sample payloads, then wired SwiftUI previews across dashboard/history/day-detail views (including SOC/power/battery chart views) to use centralized mock data instead of per-file preview actors
+- iOS settings and root navigation implementation: `SettingsView` form with backend/display sections and validation-driven dismiss flow, plus `Navigation/AppNavigationView`, `SidebarView`, and `Screen` to power `NavigationSplitView` routing with automatic redirect to Settings when API configuration is missing
+- iOS History and Day Detail UI implementation in `Flux/Flux/History/` and `Flux/Flux/DayDetail/`, including grouped 5-metric history bars with day selection, 7/14/30 range picker, day summary card with drill-down navigation, SOC/power/battery charts, day-to-day navigation, and fallback SOC-only handling when power data is unavailable
+- Shared day-axis domain helper (`DayChartDomain`) and new chart views (`HistoryChartView`, `SOCChartView`, `PowerChartView`, `BatteryPowerChartView`) with Sydney-date alignment and 3-hour x-axis tick marks for consistent 00:00–00:00 rendering
+- History/day detail flow wiring from the dashboard “View history” link to the real `HistoryView` screen instead of placeholder content
+
+- iOS dashboard UI building blocks in `Flux/Flux/Dashboard/`: `BatteryHeroView`, `PowerTrioView`, `SecondaryStatsView`, `TodayEnergyView`, and `DashboardView` with pull-to-refresh, 10-second auto-refresh lifecycle hooks, scene phase handling, stale-data banner, and placeholder navigation/actions for History and Settings
+- iOS view models for Dashboard, History, Day Detail, and Settings in `Flux/Flux/` with `@MainActor @Observable` state, async loading/refresh flows, Sydney-time `isToday` handling, fallback day-power detection, and settings validation via `URLSessionAPIClient(baseURL:token:)`
+- iOS settings persistence support via `UserDefaults` extensions for `apiURL` and `loadAlertThreshold` (3000W default)
+- iOS unit tests in `Flux/FluxTests/` for `DashboardViewModel`, `HistoryViewModel`, `DayDetailViewModel`, and `SettingsViewModel`, including refresh concurrency guards, auto-refresh lifecycle, cache fallback behavior, fallback power-data detection, and settings save/load validation
+- iOS helper utilities in `Flux/Flux/Helpers/`: `DateFormatting` (Sydney timezone-safe parsing/formatting, off-peak window checks), `BatteryColor`, `GridColor`, and `CutoffTimeColor` for shared dashboard color logic
+- iOS unit tests in `Flux/FluxTests/`: `DateFormattingTests` for timezone and off-peak boundary behavior, plus `ColoringTests` covering SOC thresholds, grid import/export rules, and cutoff color states
+- iOS service foundation in `Flux/Flux/Services/`: `FluxAPIClient` protocol, `KeychainService` with App Group-aware Security framework storage, and `URLSessionAPIClient` with bearer-token request building plus typed `FluxAPIError` mapping for HTTP, network, and decoding failures
+- iOS unit tests for service layer in `Flux/FluxTests/`: `KeychainServiceTests` for token persistence lifecycle and `URLSessionAPIClientTests` using a `URLProtocol` mock to verify endpoint URLs, auth headers, validation-token initializer behavior, and typed error handling
+- iOS foundation model layer in `Flux/Flux/Models/`: backend-aligned `Codable & Sendable` response structs (`/status`, `/history`, `/day`), typed `FluxAPIError`, and SwiftData `CachedDayEnergy` cache model with unique `date` key plus conversion helpers
+- iOS app spec: requirements document with 13 sections and 57 acceptance criteria covering platform/architecture, API client, authentication/settings, dashboard (battery hero, power readings, secondary stats, today's energy), refresh behaviour, history screen, day detail screen, caching, error states, and navigation
+- iOS app spec: design document with MVVM architecture using `@MainActor @Observable` view models, NavigationSplitView with adaptive layout, FluxAPIClient protocol with URLSessionAPIClient (token provider pattern for settings validation), SwiftData caching for history, Keychain with App Group, SwiftUI Charts (BarMark/LineMark/AreaMark/RuleMark), DateFormatting utility with Sydney timezone, conditional colouring helpers, and file layout mapped to Xcode project structure at `Flux/Flux/`
+- iOS app spec: decision log with 9 decisions (adaptive layout from start, no third-party dependencies, SwiftData for history caching only, Keychain with App Group, 10-second auto-refresh, spec scope excludes Xcode project, Sydney timezone for all date operations, token provider pattern for settings validation, fallback data detection via heuristic)
+- iOS app spec: task list with 31 implementation tasks across 7 phases and 2 parallel streams, TDD-ordered with dependency tracking and requirement traceability
+- iOS app spec: prerequisites document listing Xcode project setup steps (App Group capability still needed)
+- Xcode project for iOS app (`Flux/`) with iOS 26 deployment target, SwiftUI + SwiftData template, entitlements for CloudKit and push notifications, and unit/UI test targets
+- Xcode-specific entries to `.gitignore` (`xcuserdata/`, `*.xcuserstate`)
+- App Group entitlement (`group.me.nore.ig.flux`) for Keychain sharing with future widget extension
+- App category set to Utilities in Xcode project
+
 - Lambda entry point (`cmd/api/main.go`) with cold-start initialisation: AWS SDK config loading, SSM parameter fetching (api-token, serial) with decryption, environment variable validation, DynamoReader and Handler creation, and `lambda.Start` invocation
 - `time/tzdata` import in Lambda entry point for timezone embedding on `provided.al2023` runtime
 - JSON structured logging via `slog.NewJSONHandler` for CloudWatch compatibility
@@ -96,6 +173,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- iOS spec-validation hardening across dashboard/history/day detail: first-load dashboard failures now render an explicit error card with retry/settings actions, history shows inline retry/settings when network fails and cache is empty, day detail auth/config failures now provide settings recovery, and SOC low chart annotation now includes low-time text
+- Shared iOS date and error handling logic to reduce duplication and improve consistency: centralized day parsing/formatting/calendar usage via `DateFormatting`, unified error coercion with `FluxAPIError.from(_:)`, and updated history cache writes to upsert existing `CachedDayEnergy` records instead of repeatedly inserting duplicate dates
+- `DayDetailViewModelTests.navigatePreviousAndNextUpdateDateString` now uses a deterministic non-today reference date, preventing timezone-dependent false failures
 - Off-peak window parameters interpreted as integers (`11:00` → `660`, `14:00` → `840`) due to YAML 1.1 sexagesimal parsing after `aws cloudformation package` re-serializes the template and strips quotes. Defaults removed and `AllowedPattern` added for deploy-time validation.
 - Lambda `Code` path corrected from `./lambda/` to `../lambda/` (relative to template location)
 - Lambda Function URL returning 403 — added `lambda:InvokeFunction` permission alongside `lambda:InvokeFunctionUrl` in the resource policy, both are required for public access with `AuthType: NONE`

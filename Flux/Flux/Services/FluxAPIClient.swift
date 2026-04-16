@@ -1,0 +1,5 @@
+protocol FluxAPIClient: Sendable {
+    func fetchStatus() async throws -> StatusResponse
+    func fetchHistory(days: Int) async throws -> HistoryResponse
+    func fetchDay(date: String) async throws -> DayDetailResponse
+}

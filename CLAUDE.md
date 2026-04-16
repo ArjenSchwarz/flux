@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Flux is a personal AlphaESS battery monitoring system with two main components:
 
 1. **AWS Backend** — Go-based ECS Fargate poller + Lambda API that polls the AlphaESS API, stores data in DynamoDB, and serves pre-computed stats via Lambda Function URL
-2. **iOS App** (not yet implemented) — Swift/SwiftUI iOS 26+ app with Dashboard, History, and Day Detail screens
+2. **iOS App** — Swift/SwiftUI iOS 26+ app with Dashboard, History, Day Detail, and Settings screens
 
 The app never talks to AlphaESS directly. The backend handles all API polling and serves three endpoints: `/status`, `/history?days=N`, and `/day?date=YYYY-MM-DD`. App authenticates to the Lambda via a bearer token stored in SSM Parameter Store.
 
@@ -74,7 +74,7 @@ The V1 plan (`docs/flux-v1.md`) is the authoritative product spec covering both 
 - **DynamoDB on-demand billing** — low volume (~260K writes/month), on-demand is cheaper than provisioned
 - **DeletionPolicy: Retain** on DynamoDB tables, **Delete** on log groups
 
-## iOS App (Planned)
+## iOS App
 
 - iOS 26+ with Liquid Glass styling
 - SwiftUI Charts for all graphs (no third-party charting)

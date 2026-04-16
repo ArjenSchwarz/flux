@@ -5,3 +5,10 @@ lambda/bootstrap
 # CloudFormation packaged template (contains build-specific S3 URIs)
 infrastructure/packaged.yaml
 infrastructure/parameters/
+
+# Xcode user-specific files
+xcuserdata/
+*.xcuserstate
+
+# Xcode derived data
+DerivedData/
