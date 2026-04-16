@@ -94,6 +94,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Off-peak window parameters (`OffPeakWindowStart`, `OffPeakWindowEnd`) no longer use template defaults — `aws cloudformation package` re-serializes YAML and strips quotes from `HH:MM` values, causing YAML 1.1 sexagesimal parsing (`11:00` → `660`, `14:00` → `840`). Values must now be passed via the parameters file or `--parameter-overrides`.
 - Lambda `Code` path corrected from `./lambda/` to `../lambda/` (relative to template location)
+- Lambda Function URL returning 403 — added `lambda:InvokeFunction` permission alongside `lambda:InvokeFunctionUrl` in the resource policy, both are required for public access with `AuthType: NONE`
 - `computeCutoffTime` now guards against NaN/Inf results from very small `pbat` values and rejects `capacityKwh <= 0`, preventing unreasonable cutoff times from reaching the API response
 
 ### Changed
