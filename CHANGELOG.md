@@ -8,7 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- `PeakPeriod` type and `PeakPeriods` field on `DayDetailResponse` in backend API (Go) for returning peak usage periods in `/day` responses
+- `findPeakPeriods` algorithm in `compute.go` — 5-step threshold-based clustering that identifies top 3 peak household load periods from raw readings, excluding off-peak windows, with trapezoidal energy integration and configurable merge/duration/gap thresholds
+- Unit tests for `findPeakPeriods` covering 16 scenarios: empty input, off-peak exclusion, uniform load, single/multiple peaks, cluster merging within 5min, separate clusters >5min, short period filtering (<2min), top-3 ranking, 60s gap handling, off-peak boundary behaviour, transitive merging, zero-energy sparse periods, invalid off-peak parsing, negative Pload clamping, and unrounded energy ranking
+- Property-based tests for `findPeakPeriods` using `pgregory.net/rapid` verifying 6 invariants: result count ≤3, periods outside off-peak, non-overlapping, positive energy, descending energy order, and duration ≥2 minutes
+- Benchmark for `findPeakPeriods` with 8640 readings (full day at 10s intervals)
+- `pgregory.net/rapid` dependency for property-based testing
 - Named constants for peak period computation: merge gap (5min), minimum duration (2min), max pair gap (60s), max periods (3)
 - `PeakPeriod` model in iOS app (Codable, Sendable, Identifiable) with optional `peakPeriods` on `DayDetailResponse` for backwards compatibility
 - Sample peak period data in iOS mock API client for previews

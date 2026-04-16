@@ -19,7 +19,7 @@ references:
 
 ## Backend Algorithm — TDD
 
-- [ ] 2. Write unit tests for findPeakPeriods <!-- id:1x60rrh -->
+- [x] 2. Write unit tests for findPeakPeriods <!-- id:1x60rrh -->
   - Create map-based table-driven tests in compute_test.go following existing TestDownsample pattern
   - Test cases: empty readings, all readings in off-peak, uniform load, single peak above mean, two clusters within 5min merge, two clusters >5min separate, period under 2min discarded, more than 3 returns top 3, gap >60s skips energy pair, off-peak boundary, off-peak boundary clustering (10:59 and 14:01 must not cluster), transitive merge (A+B+C), zero-energy sparse period discarded, invalid off-peak parse failure, negative Pload clamped, two periods with same rounded energy ranked by unrounded
   - Use helper function to create readings at specific Sydney times
@@ -29,7 +29,7 @@ references:
   - Requirements: [1.2](requirements.md#1.2), [1.3](requirements.md#1.3), [1.4](requirements.md#1.4), [1.5](requirements.md#1.5), [1.6](requirements.md#1.6), [1.7](requirements.md#1.7), [1.8](requirements.md#1.8), [1.9](requirements.md#1.9), [1.10](requirements.md#1.10), [1.11](requirements.md#1.11), [1.12](requirements.md#1.12)
   - References: internal/api/compute_test.go
 
-- [ ] 3. Implement findPeakPeriods to pass unit tests <!-- id:1x60rri -->
+- [x] 3. Implement findPeakPeriods to pass unit tests <!-- id:1x60rri -->
   - Implement the 5-step algorithm in compute.go as specified in design.md
   - Step 1: Parse off-peak HH:MM strings to minuteOfDay ints, validate start < end
   - Step 2: Single pass to compute mean Pload threshold from non-off-peak readings
@@ -42,7 +42,7 @@ references:
   - Requirements: [1.1](requirements.md#1.1), [1.2](requirements.md#1.2), [1.3](requirements.md#1.3), [1.4](requirements.md#1.4), [1.5](requirements.md#1.5), [1.6](requirements.md#1.6), [1.7](requirements.md#1.7), [1.8](requirements.md#1.8), [1.9](requirements.md#1.9), [1.10](requirements.md#1.10), [1.11](requirements.md#1.11), [1.12](requirements.md#1.12)
   - References: internal/api/compute.go, specs/peak-usage-periods/design.md
 
-- [ ] 4. Write property-based tests for findPeakPeriods <!-- id:1x60rrj -->
+- [x] 4. Write property-based tests for findPeakPeriods <!-- id:1x60rrj -->
   - Add PBT tests using pgregory.net/rapid in compute_test.go
   - Properties: result count <= 3, all periods outside off-peak, non-overlapping, energy positive, descending energy order, duration >= 2 minutes
   - Generator: random ReadingItem slices spanning a day at ~10s intervals, random Pload 0-10000W, random off-peak windows with start < end
@@ -51,7 +51,7 @@ references:
   - Requirements: [1.2](requirements.md#1.2), [1.6](requirements.md#1.6), [1.8](requirements.md#1.8), [1.9](requirements.md#1.9)
   - References: internal/api/compute_test.go
 
-- [ ] 5. Add benchmark for findPeakPeriods <!-- id:1x60rrk -->
+- [x] 5. Add benchmark for findPeakPeriods <!-- id:1x60rrk -->
   - Add BenchmarkFindPeakPeriods in compute_test.go following existing BenchmarkDownsample pattern
   - Generate 8640 readings (full day at 10s intervals) with varied Pload values
   - Use b.Loop() pattern per Go testing rules

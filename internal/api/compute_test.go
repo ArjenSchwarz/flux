@@ -1,12 +1,15 @@
 package api
 
 import (
+	"fmt"
 	"math"
+	"sort"
 	"testing"
 	"time"
 
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
 	"github.com/stretchr/testify/assert"
+	"pgregory.net/rapid"
 )
 
 func TestComputeCutoffTime(t *testing.T) {
@@ -568,5 +571,474 @@ func TestReconcileEnergy(t *testing.T) {
 			assert.InDelta(t, tc.want.ECharge, got.ECharge, 1e-9)
 			assert.InDelta(t, tc.want.EDischarge, got.EDischarge, 1e-9)
 		})
+	}
+}
+
+// sydneyReading creates a ReadingItem at the given Sydney local time with the specified Pload.
+// Other fields default to zero.
+func sydneyReading(hour, minute, second int, pload float64) dynamo.ReadingItem {
+	t := time.Date(2026, 4, 15, hour, minute, second, 0, sydneyTZ)
+	return dynamo.ReadingItem{Timestamp: t.Unix(), Pload: pload}
+}
+
+// sydneyReadings creates a sequence of readings at 10-second intervals starting
+// at the given Sydney local time, one per Pload value.
+func sydneyReadings(hour, minute, second int, ploads ...float64) []dynamo.ReadingItem {
+	start := time.Date(2026, 4, 15, hour, minute, second, 0, sydneyTZ)
+	out := make([]dynamo.ReadingItem, len(ploads))
+	for i, p := range ploads {
+		out[i] = dynamo.ReadingItem{
+			Timestamp: start.Add(time.Duration(i*10) * time.Second).Unix(),
+			Pload:     p,
+		}
+	}
+	return out
+}
+
+func TestFindPeakPeriods(t *testing.T) {
+	// Standard off-peak window: 11:00 - 14:00
+	const opStart = "11:00"
+	const opEnd = "14:00"
+
+	tests := map[string]struct {
+		readings     []dynamo.ReadingItem
+		offpeakStart string
+		offpeakEnd   string
+		wantCount    int
+		check        func(t *testing.T, got []PeakPeriod)
+	}{
+		"empty readings": {
+			readings:     nil,
+			offpeakStart: opStart, offpeakEnd: opEnd,
+			wantCount: 0,
+		},
+		"all readings in off-peak": {
+			// All readings between 11:00 and 14:00
+			readings:     sydneyReadings(12, 0, 0, 5000, 6000, 7000, 8000, 9000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000),
+			offpeakStart: opStart, offpeakEnd: opEnd,
+			wantCount: 0,
+		},
+		"uniform load": {
+			// All readings have the same Pload = mean, so none are strictly above threshold
+			readings:     sydneyReadings(8, 0, 0, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000),
+			offpeakStart: opStart, offpeakEnd: opEnd,
+			wantCount: 0,
+		},
+		"single peak above mean": {
+			// Mean of non-off-peak = (100*6 + 5000*13) / 19 ≈ 3441
+			// The 5000W readings at 08:01:00 through 08:03:00 form a cluster > 2 min
+			readings: append(
+				sydneyReadings(8, 0, 0, 100, 100, 100, 100, 100, 100),
+				sydneyReadings(8, 1, 0, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000)...,
+			),
+			offpeakStart: opStart, offpeakEnd: opEnd,
+			wantCount: 1,
+			check: func(t *testing.T, got []PeakPeriod) {
+				assert.True(t, got[0].EnergyWh > 0)
+				assert.True(t, got[0].AvgLoadW > 0)
+			},
+		},
+		"two clusters within 5min merge": {
+			// Two above-threshold bursts separated by < 5 min of below-threshold
+			readings: func() []dynamo.ReadingItem {
+				var r []dynamo.ReadingItem
+				// Low baseline: 08:00:00 - 08:00:50 (6 readings)
+				r = append(r, sydneyReadings(8, 0, 0, 100, 100, 100, 100, 100, 100)...)
+				// High burst 1: 08:01:00 - 08:03:00 (13 readings)
+				r = append(r, sydneyReadings(8, 1, 0, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000)...)
+				// Brief dip: 08:03:10 - 08:03:40 (4 readings, below threshold)
+				r = append(r, sydneyReadings(8, 3, 10, 100, 100, 100, 100)...)
+				// High burst 2: 08:03:50 - 08:05:50 (13 readings)
+				r = append(r, sydneyReadings(8, 3, 50, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000)...)
+				return r
+			}(),
+			offpeakStart: opStart, offpeakEnd: opEnd,
+			wantCount: 1, // merged into one
+		},
+		"two clusters >5min separate": {
+			readings: func() []dynamo.ReadingItem {
+				var r []dynamo.ReadingItem
+				// Low baseline
+				r = append(r, sydneyReadings(8, 0, 0, 100, 100, 100, 100, 100, 100)...)
+				// High burst 1: 08:01:00 - 08:03:00
+				r = append(r, sydneyReadings(8, 1, 0, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000)...)
+				// Long gap of low readings: 08:03:10 - 08:09:00 (>5 min)
+				for i := range 36 {
+					ts := time.Date(2026, 4, 15, 8, 3, 10+i*10, 0, sydneyTZ)
+					r = append(r, dynamo.ReadingItem{Timestamp: ts.Unix(), Pload: 100})
+				}
+				// High burst 2: 08:09:10 - 08:11:10
+				r = append(r, sydneyReadings(8, 9, 10, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000)...)
+				return r
+			}(),
+			offpeakStart: opStart, offpeakEnd: opEnd,
+			wantCount: 2,
+		},
+		"period under 2min discarded": {
+			// Short burst of 11 readings (100s) above threshold, below 2 min
+			readings: func() []dynamo.ReadingItem {
+				var r []dynamo.ReadingItem
+				r = append(r, sydneyReadings(8, 0, 0, 100, 100, 100, 100, 100, 100)...)
+				// 11 readings = 100s duration (< 120s)
+				r = append(r, sydneyReadings(8, 1, 0, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000)...)
+				return r
+			}(),
+			offpeakStart: opStart, offpeakEnd: opEnd,
+			wantCount: 0,
+		},
+		"more than 3 returns top 3": {
+			readings: func() []dynamo.ReadingItem {
+				var r []dynamo.ReadingItem
+				// Low baseline
+				r = append(r, sydneyReadings(6, 0, 0, 100, 100, 100, 100, 100, 100)...)
+				// 4 separate high bursts, each > 2 min, separated by > 5 min of low readings
+				starts := []struct{ h, m int }{{7, 0}, {7, 15}, {7, 30}, {7, 45}}
+				for i, s := range starts {
+					// 13 readings = 120s at 10s intervals
+					for j := range 13 {
+						ts := time.Date(2026, 4, 15, s.h, s.m, j*10, 0, sydneyTZ)
+						r = append(r, dynamo.ReadingItem{Timestamp: ts.Unix(), Pload: 5000 + float64(i*100)})
+					}
+					// Low readings to create > 5 min gap (fill until next burst)
+					if i < len(starts)-1 {
+						endSec := s.m*60 + 120 // burst ends 120s after start
+						nextStartSec := starts[i+1].m * 60
+						for sec := endSec + 10; sec < nextStartSec; sec += 10 {
+							ts := time.Date(2026, 4, 15, s.h, 0, sec, 0, sydneyTZ)
+							r = append(r, dynamo.ReadingItem{Timestamp: ts.Unix(), Pload: 100})
+						}
+					}
+				}
+				return r
+			}(),
+			offpeakStart: opStart, offpeakEnd: opEnd,
+			wantCount: 3,
+			check: func(t *testing.T, got []PeakPeriod) {
+				// Descending energy order
+				for i := 1; i < len(got); i++ {
+					assert.True(t, got[i-1].EnergyWh >= got[i].EnergyWh, "periods should be in descending energy order")
+				}
+			},
+		},
+		"gap >60s skips energy pair": {
+			// Readings with a 61s gap in the middle — that pair should be skipped in energy calc
+			readings: func() []dynamo.ReadingItem {
+				var r []dynamo.ReadingItem
+				// Low baseline
+				r = append(r, sydneyReadings(8, 0, 0, 100, 100, 100, 100, 100, 100)...)
+				// High readings with a gap
+				r = append(r, sydneyReading(8, 1, 0, 5000))
+				r = append(r, sydneyReading(8, 1, 10, 5000))
+				r = append(r, sydneyReading(8, 1, 20, 5000))
+				// 61s gap
+				r = append(r, sydneyReading(8, 2, 21, 5000))
+				r = append(r, sydneyReading(8, 2, 31, 5000))
+				r = append(r, sydneyReading(8, 2, 41, 5000))
+				r = append(r, sydneyReading(8, 2, 51, 5000))
+				r = append(r, sydneyReading(8, 3, 1, 5000))
+				r = append(r, sydneyReading(8, 3, 11, 5000))
+				r = append(r, sydneyReading(8, 3, 21, 5000))
+				r = append(r, sydneyReading(8, 3, 31, 5000))
+				r = append(r, sydneyReading(8, 3, 41, 5000))
+				r = append(r, sydneyReading(8, 3, 51, 5000))
+				return r
+			}(),
+			offpeakStart: opStart, offpeakEnd: opEnd,
+			wantCount: 1,
+			check: func(t *testing.T, got []PeakPeriod) {
+				// Energy should be less than if the gap pair were included
+				// Full energy without gap: 5000 * 170s / 3600 ≈ 236 Wh
+				// With gap skipped: less than that
+				assert.True(t, got[0].EnergyWh > 0)
+				assert.True(t, got[0].EnergyWh < 236)
+			},
+		},
+		"off-peak boundary": {
+			// Reading at exactly 11:00 is off-peak (>= start), reading at 14:00 is NOT off-peak (< end is false)
+			readings: func() []dynamo.ReadingItem {
+				var r []dynamo.ReadingItem
+				// Low baseline before off-peak
+				r = append(r, sydneyReadings(8, 0, 0, 100, 100, 100, 100, 100, 100)...)
+				// Reading at exactly 11:00 — should be excluded (off-peak)
+				r = append(r, sydneyReading(11, 0, 0, 9000))
+				// Readings at 14:00 and after — should be included (not off-peak)
+				r = append(r, sydneyReadings(14, 0, 0, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000)...)
+				return r
+			}(),
+			offpeakStart: opStart, offpeakEnd: opEnd,
+			wantCount: 1,
+			check: func(t *testing.T, got []PeakPeriod) {
+				// The period should start at 14:00, not 11:00
+				assert.Contains(t, got[0].Start, "T04:00:00Z") // 14:00 AEST = 04:00 UTC
+			},
+		},
+		"off-peak boundary clustering": {
+			// Above-threshold readings at 10:59 and 14:01 must NOT cluster together
+			// Off-peak readings between them break the cluster
+			readings: func() []dynamo.ReadingItem {
+				var r []dynamo.ReadingItem
+				// Low baseline
+				r = append(r, sydneyReadings(8, 0, 0, 100, 100, 100, 100, 100, 100)...)
+				// Burst ending at 10:59 (13 readings = 120s)
+				r = append(r, sydneyReadings(10, 57, 0, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000)...)
+				// Off-peak readings (these break the cluster)
+				r = append(r, sydneyReadings(11, 0, 0, 5000, 5000, 5000)...)
+				// Burst starting at 14:01 (13 readings = 120s)
+				r = append(r, sydneyReadings(14, 1, 0, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000)...)
+				return r
+			}(),
+			offpeakStart: opStart, offpeakEnd: opEnd,
+			wantCount: 2, // must be separate
+		},
+		"transitive merge": {
+			// Three clusters: A-B within 5min, B-C within 5min, but A-C > 5min
+			// Should all merge transitively into one period
+			readings: func() []dynamo.ReadingItem {
+				var r []dynamo.ReadingItem
+				// Low baseline
+				r = append(r, sydneyReadings(8, 0, 0, 100, 100, 100, 100, 100, 100)...)
+				// Cluster A: 08:01:00 - 08:03:00 (13 readings)
+				r = append(r, sydneyReadings(8, 1, 0, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000)...)
+				// Gap ~4 min of low readings
+				for i := range 24 {
+					ts := time.Date(2026, 4, 15, 8, 3, 10+i*10, 0, sydneyTZ)
+					r = append(r, dynamo.ReadingItem{Timestamp: ts.Unix(), Pload: 100})
+				}
+				// Cluster B: 08:07:10 - 08:09:10 (13 readings)
+				r = append(r, sydneyReadings(8, 7, 10, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000)...)
+				// Gap ~4 min of low readings
+				for i := range 24 {
+					ts := time.Date(2026, 4, 15, 8, 9, 20+i*10, 0, sydneyTZ)
+					r = append(r, dynamo.ReadingItem{Timestamp: ts.Unix(), Pload: 100})
+				}
+				// Cluster C: 08:13:20 - 08:15:20 (13 readings)
+				r = append(r, sydneyReadings(8, 13, 20, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000)...)
+				return r
+			}(),
+			offpeakStart: opStart, offpeakEnd: opEnd,
+			wantCount: 1, // all three merge transitively
+		},
+		"zero-energy sparse period discarded": {
+			// All reading pairs within the cluster have > 60s gaps, so energy = 0
+			readings: func() []dynamo.ReadingItem {
+				var r []dynamo.ReadingItem
+				// Low baseline
+				r = append(r, sydneyReadings(8, 0, 0, 100, 100, 100, 100, 100, 100)...)
+				// Sparse high readings: each 61s apart, spanning > 2 min
+				r = append(r, sydneyReading(8, 1, 0, 5000))
+				r = append(r, sydneyReading(8, 2, 1, 5000))  // 61s gap
+				r = append(r, sydneyReading(8, 3, 2, 5000))  // 61s gap
+				r = append(r, sydneyReading(8, 4, 3, 5000))  // 61s gap
+				r = append(r, sydneyReading(8, 5, 4, 5000))  // 61s gap
+				r = append(r, sydneyReading(8, 6, 5, 5000))  // 61s gap
+				r = append(r, sydneyReading(8, 7, 6, 5000))  // 61s gap
+				r = append(r, sydneyReading(8, 8, 7, 5000))  // 61s gap
+				r = append(r, sydneyReading(8, 9, 8, 5000))  // 61s gap
+				r = append(r, sydneyReading(8, 10, 9, 5000)) // 61s gap
+				return r
+			}(),
+			offpeakStart: opStart, offpeakEnd: opEnd,
+			wantCount: 0, // zero energy → discarded
+		},
+		"invalid off-peak parse failure": {
+			// Invalid off-peak strings → treat as no off-peak window
+			readings: func() []dynamo.ReadingItem {
+				var r []dynamo.ReadingItem
+				r = append(r, sydneyReadings(8, 0, 0, 100, 100, 100, 100, 100, 100)...)
+				r = append(r, sydneyReadings(8, 1, 0, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000)...)
+				return r
+			}(),
+			offpeakStart: "invalid", offpeakEnd: "also-invalid",
+			wantCount: 1,
+		},
+		"negative Pload clamped": {
+			// Negative Pload values should be clamped to 0 in energy calculation
+			readings: func() []dynamo.ReadingItem {
+				var r []dynamo.ReadingItem
+				// Mix of negative and positive — mean computed from raw values,
+				// but energy uses max(Pload, 0)
+				r = append(r, sydneyReadings(8, 0, 0, -500, -500, -500, -500, -500, -500)...)
+				r = append(r, sydneyReadings(8, 1, 0, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000)...)
+				return r
+			}(),
+			offpeakStart: opStart, offpeakEnd: opEnd,
+			wantCount: 1,
+			check: func(t *testing.T, got []PeakPeriod) {
+				assert.True(t, got[0].EnergyWh > 0)
+			},
+		},
+		"two periods with same rounded energy ranked by unrounded": {
+			// Two periods that round to the same energy but differ in unrounded value
+			readings: func() []dynamo.ReadingItem {
+				var r []dynamo.ReadingItem
+				// Low baseline
+				r = append(r, sydneyReadings(6, 0, 0, 100, 100, 100, 100, 100, 100)...)
+				// Period 1: slightly higher energy (13 readings at 5001W)
+				r = append(r, sydneyReadings(7, 0, 0, 5001, 5001, 5001, 5001, 5001, 5001, 5001, 5001, 5001, 5001, 5001, 5001, 5001)...)
+				// Gap > 5 min
+				for i := range 36 {
+					ts := time.Date(2026, 4, 15, 7, 2, 10+i*10, 0, sydneyTZ)
+					r = append(r, dynamo.ReadingItem{Timestamp: ts.Unix(), Pload: 100})
+				}
+				// Period 2: slightly lower energy (13 readings at 4999W)
+				r = append(r, sydneyReadings(7, 8, 10, 4999, 4999, 4999, 4999, 4999, 4999, 4999, 4999, 4999, 4999, 4999, 4999, 4999)...)
+				return r
+			}(),
+			offpeakStart: opStart, offpeakEnd: opEnd,
+			wantCount: 2,
+			check: func(t *testing.T, got []PeakPeriod) {
+				// First period should have higher or equal energy
+				assert.True(t, got[0].EnergyWh >= got[1].EnergyWh)
+			},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := findPeakPeriods(tc.readings, tc.offpeakStart, tc.offpeakEnd)
+			assert.Len(t, got, tc.wantCount)
+			if tc.check != nil && len(got) > 0 {
+				tc.check(t, got)
+			}
+		})
+	}
+}
+
+func TestFindPeakPeriodsProperties(t *testing.T) {
+	type pbtInput struct {
+		readings     []dynamo.ReadingItem
+		offpeakStart string
+		offpeakEnd   string
+	}
+
+	gen := rapid.Custom(func(t *rapid.T) pbtInput {
+		// Generate off-peak window with start < end
+		startH := rapid.IntRange(0, 22).Draw(t, "offpeakStartH")
+		startM := rapid.IntRange(0, 59).Draw(t, "offpeakStartM")
+		endH := rapid.IntRange(startH+1, min(startH+6, 23)).Draw(t, "offpeakEndH")
+		endM := rapid.IntRange(0, 59).Draw(t, "offpeakEndM")
+		if endH*60+endM <= startH*60+startM {
+			endM = startM + 1
+			if endM > 59 {
+				endH++
+				endM = 0
+			}
+		}
+
+		// Generate readings spanning a day at ~10s intervals
+		n := rapid.IntRange(0, 500).Draw(t, "numReadings")
+		dayStart := time.Date(2026, 4, 15, 0, 0, 0, 0, sydneyTZ)
+		readings := make([]dynamo.ReadingItem, n)
+		ts := dayStart.Unix()
+		for i := range n {
+			gap := rapid.IntRange(8, 15).Draw(t, fmt.Sprintf("gap%d", i))
+			ts += int64(gap)
+			readings[i] = dynamo.ReadingItem{
+				Timestamp: ts,
+				Pload:     rapid.Float64Range(0, 10000).Draw(t, fmt.Sprintf("pload%d", i)),
+			}
+		}
+		return pbtInput{
+			readings:     readings,
+			offpeakStart: fmt.Sprintf("%02d:%02d", startH, startM),
+			offpeakEnd:   fmt.Sprintf("%02d:%02d", endH, endM),
+		}
+	})
+
+	parseMinOfDay := func(s string) int {
+		h := int(s[0]-'0')*10 + int(s[1]-'0')
+		m := int(s[3]-'0')*10 + int(s[4]-'0')
+		return h*60 + m
+	}
+
+	t.Run("result count <= 3", func(t *testing.T) {
+		rapid.Check(t, func(t *rapid.T) {
+			in := gen.Draw(t, "input")
+			got := findPeakPeriods(in.readings, in.offpeakStart, in.offpeakEnd)
+			assert.LessOrEqual(t, len(got), 3)
+		})
+	})
+
+	t.Run("all periods outside off-peak", func(t *testing.T) {
+		rapid.Check(t, func(t *rapid.T) {
+			in := gen.Draw(t, "input")
+			got := findPeakPeriods(in.readings, in.offpeakStart, in.offpeakEnd)
+			opStartM := parseMinOfDay(in.offpeakStart)
+			opEndM := parseMinOfDay(in.offpeakEnd)
+			for _, p := range got {
+				startT, _ := time.Parse(time.RFC3339, p.Start)
+				endT, _ := time.Parse(time.RFC3339, p.End)
+				startMOD := startT.In(sydneyTZ).Hour()*60 + startT.In(sydneyTZ).Minute()
+				endMOD := endT.In(sydneyTZ).Hour()*60 + endT.In(sydneyTZ).Minute()
+				assert.False(t, startMOD >= opStartM && startMOD < opEndM, "period start %s is in off-peak", p.Start)
+				assert.False(t, endMOD >= opStartM && endMOD < opEndM, "period end %s is in off-peak", p.End)
+			}
+		})
+	})
+
+	t.Run("non-overlapping", func(t *testing.T) {
+		rapid.Check(t, func(t *rapid.T) {
+			in := gen.Draw(t, "input")
+			got := findPeakPeriods(in.readings, in.offpeakStart, in.offpeakEnd)
+			if len(got) < 2 {
+				return
+			}
+			sorted := make([]PeakPeriod, len(got))
+			copy(sorted, got)
+			sort.Slice(sorted, func(i, j int) bool { return sorted[i].Start < sorted[j].Start })
+			for i := 1; i < len(sorted); i++ {
+				assert.LessOrEqual(t, sorted[i-1].End, sorted[i].Start,
+					"periods overlap: %s-%s and %s-%s", sorted[i-1].Start, sorted[i-1].End, sorted[i].Start, sorted[i].End)
+			}
+		})
+	})
+
+	t.Run("energy positive", func(t *testing.T) {
+		rapid.Check(t, func(t *rapid.T) {
+			in := gen.Draw(t, "input")
+			got := findPeakPeriods(in.readings, in.offpeakStart, in.offpeakEnd)
+			for _, p := range got {
+				assert.True(t, p.EnergyWh > 0, "energy should be positive, got %f", p.EnergyWh)
+			}
+		})
+	})
+
+	t.Run("descending energy order", func(t *testing.T) {
+		rapid.Check(t, func(t *rapid.T) {
+			in := gen.Draw(t, "input")
+			got := findPeakPeriods(in.readings, in.offpeakStart, in.offpeakEnd)
+			for i := 1; i < len(got); i++ {
+				assert.True(t, got[i-1].EnergyWh >= got[i].EnergyWh,
+					"not descending: %f < %f", got[i-1].EnergyWh, got[i].EnergyWh)
+			}
+		})
+	})
+
+	t.Run("duration >= 2 minutes", func(t *testing.T) {
+		rapid.Check(t, func(t *rapid.T) {
+			in := gen.Draw(t, "input")
+			got := findPeakPeriods(in.readings, in.offpeakStart, in.offpeakEnd)
+			for _, p := range got {
+				startT, _ := time.Parse(time.RFC3339, p.Start)
+				endT, _ := time.Parse(time.RFC3339, p.End)
+				assert.True(t, endT.Sub(startT) >= 2*time.Minute,
+					"duration %s < 2 minutes for period %s-%s", endT.Sub(startT), p.Start, p.End)
+			}
+		})
+	})
+}
+
+func BenchmarkFindPeakPeriods(b *testing.B) {
+	dayStart := time.Date(2026, 4, 15, 0, 0, 0, 0, sydneyTZ)
+	readings := make([]dynamo.ReadingItem, 0, 8640)
+	for i := range 8640 {
+		readings = append(readings, dynamo.ReadingItem{
+			Timestamp: dayStart.Unix() + int64(i*10),
+			Pload:     float64(500 + i%4500), // varied load 500-5000W
+		})
+	}
+
+	for b.Loop() {
+		_ = findPeakPeriods(readings, "11:00", "14:00")
 	}
 }
