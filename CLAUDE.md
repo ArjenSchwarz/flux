@@ -20,7 +20,7 @@ iOS App --> Lambda Function URL (Go, ARM64) -------------+
 ```
 
 - **Poller** polls AlphaESS on multiple schedules (10s for live data, hourly/6h/24h for summaries) and writes to DynamoDB
-- **Lambda API** reads from DynamoDB and computes derived stats (rolling averages, cutoff estimates, off-peak deltas)
+- **Lambda API** reads from DynamoDB and computes derived stats (rolling averages, cutoff estimates, off-peak deltas, peak usage periods)
 - **DynamoDB tables**: `flux-readings` (TTL 30d), `flux-daily-energy`, `flux-daily-power` (TTL 30d), `flux-system`, `flux-offpeak`
 - Off-peak energy is computed by diffing `getOneDateEnergyBySn` snapshots at window start/end (configured via SSM: 11:00-14:00)
 

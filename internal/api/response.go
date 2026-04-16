@@ -78,11 +78,20 @@ type DayEnergy struct {
 	EDischarge float64 `json:"eDischarge"`
 }
 
+// PeakPeriod represents a contiguous period of high household load.
+type PeakPeriod struct {
+	Start    string  `json:"start"`    // RFC 3339
+	End      string  `json:"end"`      // RFC 3339
+	AvgLoadW float64 `json:"avgLoadW"` // average Pload, rounded to 1 decimal
+	EnergyWh float64 `json:"energyWh"` // total energy, rounded to whole number
+}
+
 // DayDetailResponse is the JSON response for GET /day.
 type DayDetailResponse struct {
-	Date     string            `json:"date"`
-	Readings []TimeSeriesPoint `json:"readings"`
-	Summary  *DaySummary       `json:"summary"`
+	Date        string            `json:"date"`
+	Readings    []TimeSeriesPoint `json:"readings"`
+	Summary     *DaySummary       `json:"summary"`
+	PeakPeriods []PeakPeriod      `json:"peakPeriods"`
 }
 
 // TimeSeriesPoint is a single downsampled reading in the day detail response.

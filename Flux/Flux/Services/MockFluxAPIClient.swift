@@ -118,7 +118,13 @@ final actor MockFluxAPIClient: FluxAPIClient {
             socLowTime: "\(date)T19:00:00Z"
         )
 
-        return DayDetailResponse(date: date, readings: readings, summary: summary)
+        let peakPeriods: [PeakPeriod] = [
+            PeakPeriod(start: "\(date)T17:30:00Z", end: "\(date)T18:15:00Z", avgLoadW: 3800.1, energyWh: 2850),
+            PeakPeriod(start: "\(date)T07:15:00Z", end: "\(date)T07:45:00Z", avgLoadW: 4200.3, energyWh: 2100),
+            PeakPeriod(start: "\(date)T12:00:00Z", end: "\(date)T12:20:00Z", avgLoadW: 2900.5, energyWh: 967)
+        ]
+
+        return DayDetailResponse(date: date, readings: readings, summary: summary, peakPeriods: peakPeriods)
     }
 
     func fetchStatus() async throws -> StatusResponse {

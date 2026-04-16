@@ -9,7 +9,9 @@ struct DayDetailViewModelTests {
         let apiClient = MockDayDetailAPIClient()
         let readings = [TimeSeriesPoint(timestamp: "2026-04-15T00:00:00Z", ppv: 1200, pload: 500, pbat: -300, pgrid: -400, soc: 72)]
         let summary = DaySummary(epv: 8.2, eInput: 1.3, eOutput: 0.7, eCharge: 2.4, eDischarge: 3.6, socLow: 21, socLowTime: "2026-04-15T20:00:00Z")
-        apiClient.dayResult = .success(DayDetailResponse(date: "2026-04-15", readings: readings, summary: summary))
+        apiClient.dayResult = .success(DayDetailResponse(
+            date: "2026-04-15", readings: readings, summary: summary, peakPeriods: nil
+        ))
 
         let viewModel = DayDetailViewModel(date: "2026-04-15", apiClient: apiClient)
         await viewModel.loadDay()
@@ -53,12 +55,70 @@ struct DayDetailViewModelTests {
             TimeSeriesPoint(timestamp: "2026-04-15T00:00:00Z", ppv: 0, pload: 0, pbat: 0, pgrid: 0, soc: 45),
             TimeSeriesPoint(timestamp: "2026-04-15T00:05:00Z", ppv: 0, pload: 0, pbat: 0, pgrid: 0, soc: 44)
         ]
-        apiClient.dayResult = .success(DayDetailResponse(date: "2026-04-15", readings: fallbackReadings, summary: nil))
+        apiClient.dayResult = .success(DayDetailResponse(
+            date: "2026-04-15", readings: fallbackReadings, summary: nil, peakPeriods: nil
+        ))
 
         let viewModel = DayDetailViewModel(date: "2026-04-15", apiClient: apiClient)
         await viewModel.loadDay()
 
         #expect(viewModel.hasPowerData == false)
+    }
+
+    @Test
+    func loadDayPopulatesPeakPeriodsFromResponse() async {
+        let apiClient = MockDayDetailAPIClient()
+        let peaks = [PeakPeriod(start: "17:00", end: "18:00", avgLoadW: 3200, energyWh: 3200)]
+        apiClient.dayResult = .success(DayDetailResponse(
+            date: "2026-04-15", readings: [], summary: nil, peakPeriods: peaks
+        ))
+
+        let viewModel = DayDetailViewModel(date: "2026-04-15", apiClient: apiClient)
+        await viewModel.loadDay()
+
+        #expect(viewModel.peakPeriods.count == 1)
+        #expect(viewModel.peakPeriods.first?.start == "17:00")
+    }
+
+    @Test
+    func loadDayWithNilPeakPeriodsLeavesArrayEmpty() async {
+        let apiClient = MockDayDetailAPIClient()
+        apiClient.dayResult = .success(DayDetailResponse(
+            date: "2026-04-15", readings: [], summary: nil, peakPeriods: nil
+        ))
+
+        let viewModel = DayDetailViewModel(date: "2026-04-15", apiClient: apiClient)
+        await viewModel.loadDay()
+
+        #expect(viewModel.peakPeriods.isEmpty)
+    }
+
+    @Test
+    func loadDayErrorClearsPeakPeriods() async {
+        let apiClient = MockDayDetailAPIClient()
+        let peaks = [PeakPeriod(start: "17:00", end: "18:00", avgLoadW: 3200, energyWh: 3200)]
+        apiClient.dayResult = .success(DayDetailResponse(
+            date: "2026-04-15", readings: [], summary: nil, peakPeriods: peaks
+        ))
+
+        let viewModel = DayDetailViewModel(date: "2026-04-15", apiClient: apiClient)
+        await viewModel.loadDay()
+        #expect(viewModel.peakPeriods.count == 1)
+
+        apiClient.dayResult = .failure(FluxAPIError.notConfigured)
+        await viewModel.loadDay()
+
+        #expect(viewModel.peakPeriods.isEmpty)
+    }
+
+    @Test
+    func responseWithoutPeakPeriodsKeyDecodesToNil() throws {
+        let json = """
+        {"date":"2026-04-15","readings":[],"summary":null}
+        """
+        let data = Data(json.utf8)
+        let response = try JSONDecoder().decode(DayDetailResponse.self, from: data)
+        #expect(response.peakPeriods == nil)
     }
 
     private static func makeUTCDate(year: Int, month: Int, day: Int, hour: Int, minute: Int) -> Date {

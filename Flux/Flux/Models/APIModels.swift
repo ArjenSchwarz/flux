@@ -79,10 +79,22 @@ struct DayEnergy: Codable, Sendable, Identifiable {
 
 // MARK: - /day response
 
+struct PeakPeriod: Codable, Sendable, Identifiable {
+    let start: String
+    let end: String
+    let avgLoadW: Double
+    let energyWh: Double
+
+    // Periods in a single day response never overlap, so the RFC 3339 start
+    // timestamp is a stable, unique identifier for SwiftUI diffing.
+    var id: String { start }
+}
+
 struct DayDetailResponse: Codable, Sendable {
     let date: String
     let readings: [TimeSeriesPoint]
     let summary: DaySummary?
+    let peakPeriods: [PeakPeriod]?
 }
 
 struct TimeSeriesPoint: Codable, Sendable, Identifiable {

@@ -71,6 +71,9 @@ func TestHandleDayNormalCase(t *testing.T) {
 	// socLow should be from raw data (40 at 18:00).
 	require.NotNil(t, dr.Summary.SocLow)
 	assert.Equal(t, roundPower(40), *dr.Summary.SocLow)
+
+	// peakPeriods should be present and non-null (at least empty slice).
+	assert.NotNil(t, dr.PeakPeriods, "peakPeriods should never be null")
 }
 
 func TestHandleDayFallbackToDailyPower(t *testing.T) {
@@ -120,6 +123,10 @@ func TestHandleDayFallbackToDailyPower(t *testing.T) {
 	assert.Equal(t, roundPower(45), *dr.Summary.SocLow)
 	// Energy fields should be null since no daily energy.
 	assert.Nil(t, dr.Summary.Epv)
+
+	// peakPeriods should be empty array (no flux-readings to compute from).
+	assert.NotNil(t, dr.PeakPeriods, "peakPeriods should never be null")
+	assert.Empty(t, dr.PeakPeriods, "peakPeriods should be empty when using fallback data")
 }
 
 func TestHandleDayOnlyDailyEnergySocLowIsNull(t *testing.T) {
@@ -174,6 +181,10 @@ func TestHandleDayNoDataFromEitherSource(t *testing.T) {
 	dr := parseDayResponse(t, resp)
 	assert.Empty(t, dr.Readings)
 	assert.Nil(t, dr.Summary, "summary should be null when no data exists")
+
+	// peakPeriods should be empty array even with no data.
+	assert.NotNil(t, dr.PeakPeriods, "peakPeriods should never be null")
+	assert.Empty(t, dr.PeakPeriods)
 }
 
 func TestHandleDayReadingsButNoDailyEnergy(t *testing.T) {
@@ -204,6 +215,52 @@ func TestHandleDayReadingsButNoDailyEnergy(t *testing.T) {
 	assert.Equal(t, roundPower(35), *dr.Summary.SocLow)
 	assert.Nil(t, dr.Summary.Epv, "energy fields should be null")
 	assert.Nil(t, dr.Summary.EInput)
+}
+
+func TestHandleDayPeakPeriods(t *testing.T) {
+	loc, _ := time.LoadLocation("Australia/Sydney")
+	date := "2026-04-14"
+
+	// Build readings: a sustained high-load period at 8:00-8:05 (outside off-peak 11:00-14:00)
+	// and low-load readings elsewhere. Readings every 10s for 3+ minutes to exceed minPeriodSeconds.
+	base := time.Date(2026, 4, 14, 8, 0, 0, 0, loc)
+	var readings []dynamo.ReadingItem
+	// 20 readings at 10s intervals = ~3.3 minutes of high load at 8:00
+	for i := range 20 {
+		readings = append(readings, dynamo.ReadingItem{
+			Timestamp: base.Add(time.Duration(i*10) * time.Second).Unix(),
+			Ppv:       100, Pload: 3000, Pbat: 0, Pgrid: 0, Soc: 50,
+		})
+	}
+	// A few low-load readings at 16:00 to bring the mean down
+	afternoon := time.Date(2026, 4, 14, 16, 0, 0, 0, loc)
+	for i := range 20 {
+		readings = append(readings, dynamo.ReadingItem{
+			Timestamp: afternoon.Add(time.Duration(i*10) * time.Second).Unix(),
+			Ppv:       0, Pload: 200, Pbat: 0, Pgrid: 0, Soc: 50,
+		})
+	}
+
+	mr := &mockReader{
+		queryReadingsFn: func(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
+			return readings, nil
+		},
+		getDailyEnergyFn: func(_ context.Context, _, _ string) (*dynamo.DailyEnergyItem, error) {
+			return nil, nil
+		},
+	}
+
+	h := NewHandler(mr, testSerial, testToken, "11:00", "14:00")
+
+	resp, err := h.Handle(context.Background(), dayRequest(map[string]string{"date": date}))
+	require.NoError(t, err)
+	assert.Equal(t, 200, resp.StatusCode)
+
+	dr := parseDayResponse(t, resp)
+	require.NotNil(t, dr.PeakPeriods)
+	require.NotEmpty(t, dr.PeakPeriods, "should detect the high-load period as a peak")
+	assert.Equal(t, roundPower(3000), dr.PeakPeriods[0].AvgLoadW)
+	assert.True(t, dr.PeakPeriods[0].EnergyWh > 0, "energy should be positive")
 }
 
 func TestHandleDayDateValidation(t *testing.T) {

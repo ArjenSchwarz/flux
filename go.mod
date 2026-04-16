@@ -11,6 +11,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.68.4
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/sync v0.20.0
+	pgregory.net/rapid v1.2.0
 )
 
 require (

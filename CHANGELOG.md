@@ -8,6 +8,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- `findPeakPeriods` precomputes an off-peak mask instead of calling `isOffpeak` twice per reading, halving timezone conversions on the `/day` hot path
+- `findPeakPeriods` uses `slices.SortFunc` with `cmp.Compare` in place of `sort.Slice` (per Go modernisation rules) and adds capacity hints to clusters/filtered/results slices
+- `findPeakPeriods` always returns a non-nil `[]PeakPeriod{}`; `handleDay` no longer re-assigns a defensive nil-to-empty local variable
+- Additional `findPeakPeriods` unit tests for single-reading input and the AEDT→AEST DST transition day (2026-04-05)
+
+### Added
+
+- `PeakUsageCard` SwiftUI view on day detail screen showing top peak usage periods with time range (24h format), average load (kW), and energy (Wh with grouping separator), styled to match existing summary card
+- Peak periods wired into `/day` endpoint — `handleDay` calls `findPeakPeriods` on raw readings and returns results in `peakPeriods` field (always `[]`, never null)
+- Integration tests for `/day` endpoint verifying `peakPeriods` presence across normal, fallback, no-data, and known-peak scenarios
+- `peakPeriods` property on iOS `DayDetailViewModel` with nil-coalescing from response and error-path reset
+- ViewModel unit tests for peak periods population, nil handling, error clearing, and backwards-compatible JSON decoding
+- `DateFormatting.clockTime24h(from:)` — locale-independent 24-hour time formatter (HH:mm) for Sydney timezone
+- `findPeakPeriods` algorithm in `compute.go` — 5-step threshold-based clustering that identifies top 3 peak household load periods from raw readings, excluding off-peak windows, with trapezoidal energy integration and configurable merge/duration/gap thresholds
+- Unit tests for `findPeakPeriods` covering 16 scenarios: empty input, off-peak exclusion, uniform load, single/multiple peaks, cluster merging within 5min, separate clusters >5min, short period filtering (<2min), top-3 ranking, 60s gap handling, off-peak boundary behaviour, transitive merging, zero-energy sparse periods, invalid off-peak parsing, negative Pload clamping, and unrounded energy ranking
+- Property-based tests for `findPeakPeriods` using `pgregory.net/rapid` verifying 6 invariants: result count ≤3, periods outside off-peak, non-overlapping, positive energy, descending energy order, and duration ≥2 minutes
+- Benchmark for `findPeakPeriods` with 8640 readings (full day at 10s intervals)
+- `pgregory.net/rapid` dependency for property-based testing
+- Named constants for peak period computation: merge gap (5min), minimum duration (2min), max pair gap (60s), max periods (3)
+- `PeakPeriod` model in iOS app (Codable, Sendable, Identifiable) with optional `peakPeriods` on `DayDetailResponse` for backwards compatibility
+- Sample peak period data in iOS mock API client for previews
+- Feature spec for Peak Usage Periods: requirements (19 acceptance criteria in EARS format), design (5-step threshold-based clustering algorithm for backend, PeakUsageCard for iOS), decision log (11 decisions), and task list (13 tasks across 2 parallel streams)
+- Implementation explanation for Peak Usage Periods at three expertise levels with completeness assessment
+
+### Changed
+
 - Battery hero cutoff estimate now uses the 15-minute rolling average instead of instantaneous power, reducing fluctuation in the displayed cutoff time
 - Day detail page chart order: power flow and battery load charts now appear above the battery percentage (SOC) chart
 
