@@ -171,11 +171,13 @@ func computeTodayEnergy(readings []dynamo.ReadingItem, midnightUnix int64) *Toda
 		curr := filtered[i]
 
 		dt := float64(curr.Timestamp - prev.Timestamp)
+		// Skip pairs with gaps longer than ~6 poll intervals (10s each).
+		// This prevents phantom energy accumulation during polling outages.
 		if dt > 60 {
 			continue
 		}
 
-		epvWh += ((prev.Ppv + curr.Ppv) / 2) * dt / 3600
+		epvWh += ((max(prev.Ppv, 0) + max(curr.Ppv, 0)) / 2) * dt / 3600
 		eInputWh += ((max(prev.Pgrid, 0) + max(curr.Pgrid, 0)) / 2) * dt / 3600
 		eOutputWh += ((max(-prev.Pgrid, 0) + max(-curr.Pgrid, 0)) / 2) * dt / 3600
 		eChargeWh += ((max(-prev.Pbat, 0) + max(-curr.Pbat, 0)) / 2) * dt / 3600
@@ -195,6 +197,9 @@ func reconcileEnergy(computed *TodayEnergy, stored *TodayEnergy) *TodayEnergy {
 	if computed == nil && stored == nil {
 		return nil
 	}
+	// When one side is nil, return the other pointer directly. This aliases
+	// the caller's input, which is safe because the result is only serialised
+	// to JSON and never mutated after assignment.
 	if computed == nil {
 		return stored
 	}
