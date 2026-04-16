@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Battery hero cutoff estimate now uses the 15-minute rolling average instead of instantaneous power, reducing fluctuation in the displayed cutoff time
+- Day detail page chart order: power flow and battery load charts now appear above the battery percentage (SOC) chart
+
 ### Added
 
 - `computeTodayEnergy()` function in Lambda API compute layer — integrates power readings from midnight using trapezoidal integration with clamped directional values, gap detection (>60s skip), and Wh-to-kWh conversion
