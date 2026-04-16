@@ -210,6 +210,115 @@ func TestHandleStatusNoTodayEnergy(t *testing.T) {
 	assert.Nil(t, sr.TodayEnergy, "todayEnergy should be null when no record")
 }
 
+func TestHandleStatusComputedEnergyNoDaily(t *testing.T) {
+	now := fixedNow()
+	midnightUnix := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, sydneyTZ).Unix()
+
+	mr := &mockReader{
+		queryReadingsFn: func(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
+			return []dynamo.ReadingItem{
+				// Before midnight — excluded by computeTodayEnergy.
+				{Timestamp: midnightUnix - 100, Ppv: 9999, Pload: 200, Pbat: 0, Pgrid: 0, Soc: 50},
+				// After midnight: 3600W solar, 1800W grid import, 3600W battery charging.
+				{Timestamp: midnightUnix + 100, Ppv: 3600, Pload: 2000, Pbat: -3600, Pgrid: 1800, Soc: 50},
+				{Timestamp: midnightUnix + 110, Ppv: 3600, Pload: 2000, Pbat: -3600, Pgrid: 1800, Soc: 50},
+				{Timestamp: midnightUnix + 120, Ppv: 3600, Pload: 2000, Pbat: -3600, Pgrid: 1800, Soc: 50},
+			}, nil
+		},
+		getDailyEnergyFn: func(_ context.Context, _, _ string) (*dynamo.DailyEnergyItem, error) {
+			return nil, nil
+		},
+	}
+
+	h := NewHandler(mr, testSerial, testToken, "11:00", "14:00")
+	h.nowFunc = func() time.Time { return now }
+
+	resp, err := h.Handle(context.Background(), statusRequest())
+	require.NoError(t, err)
+	assert.Equal(t, 200, resp.StatusCode)
+
+	sr := parseStatusResponse(t, resp)
+	require.NotNil(t, sr.TodayEnergy, "should have computed energy from readings")
+	// 2 pairs × (3600W × 10s / 3600s) / 1000 = 0.02 kWh
+	assert.Equal(t, 0.02, sr.TodayEnergy.Epv)
+	// 2 pairs × (1800W × 10s / 3600s) / 1000 = 0.01 kWh
+	assert.Equal(t, 0.01, sr.TodayEnergy.EInput)
+	assert.Equal(t, 0.0, sr.TodayEnergy.EOutput)
+	// 2 pairs × (3600W × 10s / 3600s) / 1000 = 0.02 kWh
+	assert.Equal(t, 0.02, sr.TodayEnergy.ECharge)
+	assert.Equal(t, 0.0, sr.TodayEnergy.EDischarge)
+}
+
+func TestHandleStatusReconciledEnergy(t *testing.T) {
+	now := fixedNow()
+	midnightUnix := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, sydneyTZ).Unix()
+
+	mr := &mockReader{
+		queryReadingsFn: func(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
+			return []dynamo.ReadingItem{
+				// 3 readings → computed: epv=0.02, eInput=0.01, eOutput=0.00, eCharge=0.02, eDischarge=0.00
+				{Timestamp: midnightUnix + 100, Ppv: 3600, Pload: 2000, Pbat: -3600, Pgrid: 1800, Soc: 50},
+				{Timestamp: midnightUnix + 110, Ppv: 3600, Pload: 2000, Pbat: -3600, Pgrid: 1800, Soc: 50},
+				{Timestamp: midnightUnix + 120, Ppv: 3600, Pload: 2000, Pbat: -3600, Pgrid: 1800, Soc: 50},
+			}, nil
+		},
+		getDailyEnergyFn: func(_ context.Context, _, _ string) (*dynamo.DailyEnergyItem, error) {
+			// Stored: some fields lower than computed, some higher.
+			return &dynamo.DailyEnergyItem{
+				Epv: 0.01, EInput: 0.05, EOutput: 0.03, ECharge: 0.01, EDischarge: 0.04,
+			}, nil
+		},
+	}
+
+	h := NewHandler(mr, testSerial, testToken, "11:00", "14:00")
+	h.nowFunc = func() time.Time { return now }
+
+	resp, err := h.Handle(context.Background(), statusRequest())
+	require.NoError(t, err)
+
+	sr := parseStatusResponse(t, resp)
+	require.NotNil(t, sr.TodayEnergy, "should have reconciled energy")
+	// Per-field max of computed vs stored:
+	assert.Equal(t, 0.02, sr.TodayEnergy.Epv, "computed (0.02) > stored (0.01)")
+	assert.Equal(t, 0.05, sr.TodayEnergy.EInput, "stored (0.05) > computed (0.01)")
+	assert.Equal(t, 0.03, sr.TodayEnergy.EOutput, "stored (0.03) > computed (0.00)")
+	assert.Equal(t, 0.02, sr.TodayEnergy.ECharge, "computed (0.02) > stored (0.01)")
+	assert.Equal(t, 0.04, sr.TodayEnergy.EDischarge, "stored (0.04) > computed (0.00)")
+}
+
+func TestHandleStatusSingleReadingWithDaily(t *testing.T) {
+	now := fixedNow()
+	midnightUnix := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, sydneyTZ).Unix()
+
+	mr := &mockReader{
+		queryReadingsFn: func(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
+			return []dynamo.ReadingItem{
+				// Single reading after midnight → computeTodayEnergy returns nil.
+				{Timestamp: midnightUnix + 100, Ppv: 5000, Pload: 2000, Pbat: -1000, Pgrid: 500, Soc: 80},
+			}, nil
+		},
+		getDailyEnergyFn: func(_ context.Context, _, _ string) (*dynamo.DailyEnergyItem, error) {
+			return &dynamo.DailyEnergyItem{
+				Epv: 10.5, EInput: 2.3, EOutput: 1.1, ECharge: 4.0, EDischarge: 3.5,
+			}, nil
+		},
+	}
+
+	h := NewHandler(mr, testSerial, testToken, "11:00", "14:00")
+	h.nowFunc = func() time.Time { return now }
+
+	resp, err := h.Handle(context.Background(), statusRequest())
+	require.NoError(t, err)
+
+	sr := parseStatusResponse(t, resp)
+	require.NotNil(t, sr.TodayEnergy, "should use DailyEnergyItem when < 2 readings")
+	assert.Equal(t, roundEnergy(10.5), sr.TodayEnergy.Epv)
+	assert.Equal(t, roundEnergy(2.3), sr.TodayEnergy.EInput)
+	assert.Equal(t, roundEnergy(1.1), sr.TodayEnergy.EOutput)
+	assert.Equal(t, roundEnergy(4.0), sr.TodayEnergy.ECharge)
+	assert.Equal(t, roundEnergy(3.5), sr.TodayEnergy.EDischarge)
+}
+
 func TestHandleStatusSystemMissingFallbackCapacity(t *testing.T) {
 	now := fixedNow()
 	nowUnix := now.Unix()

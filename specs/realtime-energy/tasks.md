@@ -46,7 +46,7 @@ references:
 
 ## Integration
 
-- [ ] 5. Write tests for computed energy in handleStatus <!-- id:ao4cq0a -->
+- [x] 5. Write tests for computed energy in handleStatus <!-- id:ao4cq0a -->
   - Add/update tests in internal/api/status_test.go
   - Test: readings present with no DailyEnergyItem returns computed energy
   - Test: both readings and DailyEnergyItem returns reconciled max values
@@ -56,7 +56,7 @@ references:
   - Stream: 1
   - Requirements: [1.5](requirements.md#1.5), [1.7](requirements.md#1.7), [2.1](requirements.md#2.1), [2.3](requirements.md#2.3), [2.4](requirements.md#2.4)
 
-- [ ] 6. Wire computeTodayEnergy and reconcileEnergy into handleStatus <!-- id:ao4cq0b -->
+- [x] 6. Wire computeTodayEnergy and reconcileEnergy into handleStatus <!-- id:ao4cq0b -->
   - Modify internal/api/status.go handleStatus function
   - Compute midnight Unix from now using sydneyTZ
   - Call computeTodayEnergy(allReadings, midnight)
