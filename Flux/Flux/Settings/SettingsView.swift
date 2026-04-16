@@ -33,7 +33,11 @@ struct SettingsView: View {
                 HStack {
                     Text("Load alert threshold")
                     Spacer()
-                    TextField("Watts", value: $viewModel.loadAlertThreshold, format: .number.precision(.fractionLength(0)))
+                    TextField(
+                        "Watts",
+                        value: $viewModel.loadAlertThreshold,
+                        format: .number.precision(.fractionLength(0))
+                    )
                         .keyboardType(.numberPad)
                         .multilineTextAlignment(.trailing)
                         .frame(maxWidth: 120)

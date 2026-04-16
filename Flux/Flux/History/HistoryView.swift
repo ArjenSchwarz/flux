@@ -152,6 +152,7 @@ struct HistoryView: View {
 #if DEBUG
 #Preview {
     let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+    // swiftlint:disable:next force_try
     let container = try! ModelContainer(for: CachedDayEnergy.self, configurations: configuration)
     NavigationStack {
         HistoryView(apiClient: MockFluxAPIClient.preview, modelContext: ModelContext(container))

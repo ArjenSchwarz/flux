@@ -71,7 +71,7 @@ struct PowerChartView: View {
             .chartForegroundStyleScale([
                 "Solar": Color.green.opacity(0.25),
                 "Load": Color.primary,
-                "Grid": Color.red,
+                "Grid": Color.red
             ])
             .chartXScale(domain: xDomain)
             .chartXAxis {

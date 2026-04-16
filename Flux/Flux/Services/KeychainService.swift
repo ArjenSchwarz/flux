@@ -62,7 +62,7 @@ final class KeychainService: Sendable {
         var query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: service,
-            kSecAttrAccount: account,
+            kSecAttrAccount: account
         ]
 
         if let accessGroup {

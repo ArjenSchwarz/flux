@@ -54,8 +54,7 @@ struct SOCChartView: View {
                 }
 
                 if let socLow = summary?.socLow,
-                   let socLowTime = summary?.socLowTime.flatMap(DateFormatting.parseTimestamp)
-                {
+                   let socLowTime = summary?.socLowTime.flatMap(DateFormatting.parseTimestamp) {
                     PointMark(
                         x: .value("Low Time", socLowTime),
                         y: .value("Low SOC", socLow)
