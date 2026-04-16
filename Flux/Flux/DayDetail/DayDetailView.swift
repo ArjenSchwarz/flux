@@ -18,14 +18,14 @@ struct DayDetailView: View {
                 dayNavigationHeader
 
                 if !viewModel.parsedReadings.isEmpty {
-                    SOCChartView(date: viewModel.date, readings: viewModel.parsedReadings, summary: viewModel.summary)
-
                     if viewModel.hasPowerData {
                         PowerChartView(date: viewModel.date, readings: viewModel.parsedReadings)
                         BatteryPowerChartView(date: viewModel.date, readings: viewModel.parsedReadings)
                     } else {
                         noPowerDataCard
                     }
+
+                    SOCChartView(date: viewModel.date, readings: viewModel.parsedReadings, summary: viewModel.summary)
                 } else if let error = viewModel.error {
                     errorCard(error: error)
                 } else if viewModel.isLoading {

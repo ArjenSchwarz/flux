@@ -2,7 +2,7 @@ import SwiftUI
 
 struct BatteryHeroView: View {
     let live: LiveData?
-    let battery: BatteryInfo?
+    let rolling15min: RollingAvg?
 
     var body: some View {
         let soc = live?.soc ?? 0
@@ -36,7 +36,7 @@ struct BatteryHeroView: View {
         }
 
         if live.pbat > 0 {
-            if let cutoff = battery?.estimatedCutoffTime.flatMap(DateFormatting.parseTimestamp) {
+            if let cutoff = rolling15min?.estimatedCutoffTime.flatMap(DateFormatting.parseTimestamp) {
                 return "Discharging at \(rate) · cutoff ~\(DateFormatting.clockTime(from: cutoff))"
             }
             return "Discharging at \(rate)"
@@ -56,7 +56,7 @@ struct BatteryHeroView: View {
     let status = MockFluxAPIClient.statusResponse
     BatteryHeroView(
         live: status.live,
-        battery: status.battery
+        rolling15min: status.rolling15min
     )
     .padding()
 }
