@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Cleared 43 pre-existing SwiftLint `--strict` violations across iOS app, test, and UI test targets. Production fixes include renaming `kw` → `kilowatts` in `PowerFormatting`, extracting locals in `BatteryPowerChartView` to shorten lines, wrapping argument lists in `SettingsView`/`HistoryChartView`, and a single scoped `force_try` suppression in the `HistoryView` Preview. Test fixes are either structural (wrapping long initializers, replacing a 4-tuple with a named struct in `ColoringTests`, dropping a `try!`) or rule-scoped suppressions on XCTest/URLProtocol class overrides and on cohesive test suites where splitting would reduce readability.
+
 ### Changed
 
 - `findPeakPeriods` precomputes an off-peak mask instead of calling `isOffpeak` twice per reading, halving timezone conversions on the `/day` hot path

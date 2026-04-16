@@ -12,11 +12,11 @@ enum PowerFormatting {
     static func formatAxis(_ watts: Double) -> String {
         let absolute = abs(watts)
         if absolute >= 1000 {
-            let kw = watts / 1000
-            if kw == kw.rounded() {
-                return String(format: "%.0f kW", kw)
+            let kilowatts = watts / 1000
+            if kilowatts == kilowatts.rounded() {
+                return String(format: "%.0f kW", kilowatts)
             }
-            return String(format: "%.1f kW", kw)
+            return String(format: "%.1f kW", kilowatts)
         }
         return String(format: "%.0f W", watts)
     }

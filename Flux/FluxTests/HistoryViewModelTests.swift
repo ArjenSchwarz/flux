@@ -9,7 +9,9 @@ struct HistoryViewModelTests {
     func loadHistoryFetchesFromAPIAndPopulatesDays() async throws {
         let modelContext = try makeModelContext()
         let apiClient = MockHistoryAPIClient()
-        let expectedDay = DayEnergy(date: "2026-04-15", epv: 8.4, eInput: 1.2, eOutput: 0.4, eCharge: 2.1, eDischarge: 3.3)
+        let expectedDay = DayEnergy(
+            date: "2026-04-15", epv: 8.4, eInput: 1.2, eOutput: 0.4, eCharge: 2.1, eDischarge: 3.3
+        )
         apiClient.historyResult = .success(HistoryResponse(days: [expectedDay]))
 
         let viewModel = HistoryViewModel(apiClient: apiClient, modelContext: modelContext)
@@ -34,14 +36,18 @@ struct HistoryViewModelTests {
 
         await viewModel.loadHistory(days: 7)
 
-        let cached = try modelContext.fetch(FetchDescriptor<CachedDayEnergy>(sortBy: [SortDescriptor(\CachedDayEnergy.date)]))
+        let cached = try modelContext.fetch(
+            FetchDescriptor<CachedDayEnergy>(sortBy: [SortDescriptor(\CachedDayEnergy.date)])
+        )
         #expect(cached.map(\.date) == ["2026-04-15"])
     }
 
     @Test
     func loadHistoryFallsBackToCacheWhenNetworkFails() async throws {
         let modelContext = try makeModelContext()
-        modelContext.insert(CachedDayEnergy(from: DayEnergy(date: "2026-04-14", epv: 5.2, eInput: 0.9, eOutput: 0.3, eCharge: 1.8, eDischarge: 2.7)))
+        modelContext.insert(CachedDayEnergy(from: DayEnergy(
+            date: "2026-04-14", epv: 5.2, eInput: 0.9, eOutput: 0.3, eCharge: 1.8, eDischarge: 2.7
+        )))
         try modelContext.save()
 
         let apiClient = MockHistoryAPIClient()
@@ -75,7 +81,9 @@ struct HistoryViewModelTests {
         let modelContext = try makeModelContext()
         let apiClient = MockHistoryAPIClient()
         let firstDay = DayEnergy(date: "2026-04-15", epv: 4.0, eInput: 1.0, eOutput: 0.4, eCharge: 1.5, eDischarge: 2.1)
-        let secondDay = DayEnergy(date: "2026-04-14", epv: 5.0, eInput: 1.2, eOutput: 0.3, eCharge: 1.7, eDischarge: 2.3)
+        let secondDay = DayEnergy(
+            date: "2026-04-14", epv: 5.0, eInput: 1.2, eOutput: 0.3, eCharge: 1.7, eDischarge: 2.3
+        )
         apiClient.historyResult = .success(HistoryResponse(days: [firstDay, secondDay]))
 
         let viewModel = HistoryViewModel(apiClient: apiClient, modelContext: modelContext)

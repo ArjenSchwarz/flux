@@ -2,13 +2,19 @@ import Foundation
 import Testing
 @testable import Flux
 
+// swiftlint:disable type_body_length
 @MainActor @Suite(.serialized)
 struct URLSessionAPIClientTests {
     @Test
     func fetchStatusReturnsDecodedResponseOn200() async throws {
         let session = makeSession()
         MockURLProtocol.requestHandler = { request in
-            let response = HTTPURLResponse(url: try #require(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!
+            let response = HTTPURLResponse(
+                url: try #require(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
             let body = """
             {
               "live": {
@@ -35,7 +41,12 @@ struct URLSessionAPIClientTests {
     func fetchHistoryBuildsQueryParameter() async throws {
         let session = makeSession()
         MockURLProtocol.requestHandler = { request in
-            let response = HTTPURLResponse(url: try #require(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!
+            let response = HTTPURLResponse(
+                url: try #require(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
             let body = """
             {
               "days": []
@@ -58,7 +69,12 @@ struct URLSessionAPIClientTests {
     func fetchDayBuildsQueryParameter() async throws {
         let session = makeSession()
         MockURLProtocol.requestHandler = { request in
-            let response = HTTPURLResponse(url: try #require(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!
+            let response = HTTPURLResponse(
+                url: try #require(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
             let body = """
             {
               "date": "2026-04-15",
@@ -83,7 +99,12 @@ struct URLSessionAPIClientTests {
     func includesBearerTokenInAuthorizationHeader() async throws {
         let session = makeSession()
         MockURLProtocol.requestHandler = { request in
-            let response = HTTPURLResponse(url: try #require(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!
+            let response = HTTPURLResponse(
+                url: try #require(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
             let body = """
             {
               "live": null,
@@ -96,7 +117,11 @@ struct URLSessionAPIClientTests {
             return (response, Data(body.utf8))
         }
 
-        let client = URLSessionAPIClient(baseURL: URL(string: "https://example.com")!, token: "abc123", session: session)
+        let client = URLSessionAPIClient(
+            baseURL: URL(string: "https://example.com")!,
+            token: "abc123",
+            session: session
+        )
         _ = try await client.fetchStatus()
 
         let request = try #require(MockURLProtocol.lastRequest)
@@ -104,15 +129,25 @@ struct URLSessionAPIClientTests {
     }
 
     @Test
+    // swiftlint:disable:next function_body_length
     func mapsHttpErrorsToFluxAPIErrorCases() async throws {
         let session = makeSession()
 
         MockURLProtocol.requestHandler = { request in
-            let response = HTTPURLResponse(url: try #require(request.url), statusCode: 401, httpVersion: nil, headerFields: nil)!
+            let response = HTTPURLResponse(
+                url: try #require(request.url),
+                statusCode: 401,
+                httpVersion: nil,
+                headerFields: nil
+            )!
             return (response, Data())
         }
         do {
-            let client = URLSessionAPIClient(baseURL: URL(string: "https://example.com")!, token: "token", session: session)
+            let client = URLSessionAPIClient(
+                baseURL: URL(string: "https://example.com")!,
+                token: "token",
+                session: session
+            )
             _ = try await client.fetchStatus()
             Issue.record("Expected unauthorized error")
         } catch let error as FluxAPIError {
@@ -120,12 +155,21 @@ struct URLSessionAPIClientTests {
         }
 
         MockURLProtocol.requestHandler = { request in
-            let response = HTTPURLResponse(url: try #require(request.url), statusCode: 400, httpVersion: nil, headerFields: nil)!
+            let response = HTTPURLResponse(
+                url: try #require(request.url),
+                statusCode: 400,
+                httpVersion: nil,
+                headerFields: nil
+            )!
             let body = #"{"error":"bad input"}"#
             return (response, Data(body.utf8))
         }
         do {
-            let client = URLSessionAPIClient(baseURL: URL(string: "https://example.com")!, token: "token", session: session)
+            let client = URLSessionAPIClient(
+                baseURL: URL(string: "https://example.com")!,
+                token: "token",
+                session: session
+            )
             _ = try await client.fetchStatus()
             Issue.record("Expected badRequest error")
         } catch let error as FluxAPIError {
@@ -133,11 +177,20 @@ struct URLSessionAPIClientTests {
         }
 
         MockURLProtocol.requestHandler = { request in
-            let response = HTTPURLResponse(url: try #require(request.url), statusCode: 500, httpVersion: nil, headerFields: nil)!
+            let response = HTTPURLResponse(
+                url: try #require(request.url),
+                statusCode: 500,
+                httpVersion: nil,
+                headerFields: nil
+            )!
             return (response, Data())
         }
         do {
-            let client = URLSessionAPIClient(baseURL: URL(string: "https://example.com")!, token: "token", session: session)
+            let client = URLSessionAPIClient(
+                baseURL: URL(string: "https://example.com")!,
+                token: "token",
+                session: session
+            )
             _ = try await client.fetchStatus()
             Issue.record("Expected serverError")
         } catch let error as FluxAPIError {
@@ -153,7 +206,11 @@ struct URLSessionAPIClientTests {
             throw URLError(.notConnectedToInternet)
         }
         do {
-            let client = URLSessionAPIClient(baseURL: URL(string: "https://example.com")!, token: "token", session: session)
+            let client = URLSessionAPIClient(
+                baseURL: URL(string: "https://example.com")!,
+                token: "token",
+                session: session
+            )
             _ = try await client.fetchStatus()
             Issue.record("Expected networkError")
         } catch let error as FluxAPIError {
@@ -164,11 +221,20 @@ struct URLSessionAPIClientTests {
         }
 
         MockURLProtocol.requestHandler = { request in
-            let response = HTTPURLResponse(url: try #require(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!
+            let response = HTTPURLResponse(
+                url: try #require(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
             return (response, Data(#"{"live":"bad"}"#.utf8))
         }
         do {
-            let client = URLSessionAPIClient(baseURL: URL(string: "https://example.com")!, token: "token", session: session)
+            let client = URLSessionAPIClient(
+                baseURL: URL(string: "https://example.com")!,
+                token: "token",
+                session: session
+            )
             _ = try await client.fetchStatus()
             Issue.record("Expected decodingError")
         } catch let error as FluxAPIError {
@@ -188,12 +254,21 @@ struct URLSessionAPIClientTests {
         )
         let session = makeSession()
         MockURLProtocol.requestHandler = { request in
-            let response = HTTPURLResponse(url: try #require(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!
+            let response = HTTPURLResponse(
+                url: try #require(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
             return (response, Data())
         }
 
         do {
-            let client = URLSessionAPIClient(baseURL: URL(string: "https://example.com")!, keychainService: keychain, session: session)
+            let client = URLSessionAPIClient(
+                baseURL: URL(string: "https://example.com")!,
+                keychainService: keychain,
+                session: session
+            )
             _ = try await client.fetchStatus()
             Issue.record("Expected notConfigured")
         } catch let error as FluxAPIError {
@@ -213,7 +288,12 @@ struct URLSessionAPIClientTests {
         try keychain.saveToken("stored-token")
 
         MockURLProtocol.requestHandler = { request in
-            let response = HTTPURLResponse(url: try #require(request.url), statusCode: 200, httpVersion: nil, headerFields: nil)!
+            let response = HTTPURLResponse(
+                url: try #require(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
             let body = """
             {
               "live": null,
@@ -226,7 +306,11 @@ struct URLSessionAPIClientTests {
             return (response, Data(body.utf8))
         }
 
-        let client = URLSessionAPIClient(baseURL: URL(string: "https://example.com")!, token: "validation-token", session: session)
+        let client = URLSessionAPIClient(
+            baseURL: URL(string: "https://example.com")!,
+            token: "validation-token",
+            session: session
+        )
         _ = try await client.fetchStatus()
 
         let request = try #require(MockURLProtocol.lastRequest)
@@ -239,6 +323,7 @@ struct URLSessionAPIClientTests {
         return URLSession(configuration: configuration)
     }
 }
+// swiftlint:enable type_body_length
 
 private final class MockURLProtocol: URLProtocol {
     private static let lock = NSLock()
@@ -272,10 +357,12 @@ private final class MockURLProtocol: URLProtocol {
         }
     }
 
+    // swiftlint:disable:next static_over_final_class
     override class func canInit(with request: URLRequest) -> Bool {
         true
     }
 
+    // swiftlint:disable:next static_over_final_class
     override class func canonicalRequest(for request: URLRequest) -> URLRequest {
         request
     }

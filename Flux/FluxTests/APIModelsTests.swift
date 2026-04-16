@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import Flux
 
+// swiftlint:disable type_body_length
 @Suite
 struct APIModelsTests {
     private let decoder = JSONDecoder()
@@ -9,6 +10,7 @@ struct APIModelsTests {
     // MARK: - /status response
 
     @Test
+    // swiftlint:disable:next function_body_length
     func decodeFullStatusResponse() throws {
         let json = """
         {
@@ -331,3 +333,4 @@ struct APIModelsTests {
         #expect(errorResponse.error == "Unauthorized")
     }
 }
+// swiftlint:enable type_body_length

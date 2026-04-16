@@ -133,8 +133,7 @@ struct DayDetailView: View {
         guard let low = viewModel.summary?.socLow else { return "—" }
         let lowText = String(format: "%.1f", low)
         if let lowTimeString = viewModel.summary?.socLowTime,
-           let lowTime = DateFormatting.parseTimestamp(lowTimeString)
-        {
+           let lowTime = DateFormatting.parseTimestamp(lowTimeString) {
             return "\(lowText)% at \(DateFormatting.clockTime(from: lowTime))"
         }
         return "\(lowText)%"

@@ -46,10 +46,10 @@ import Testing
     }
 
     @Test
-    func parseWindowTimeUsesSydneyTimezone() {
+    func parseWindowTimeUsesSydneyTimezone() throws {
         let now = makeSydneyDate(year: 2026, month: 4, day: 15, hour: 9, minute: 5)
         let windowDate = DateFormatting.parseWindowTime("11:00", on: now)
-        let parsed = try! #require(windowDate)
+        let parsed = try #require(windowDate)
         let components = sydneyCalendar.dateComponents([.year, .month, .day, .hour, .minute], from: parsed)
 
         #expect(components.year == 2026)

@@ -15,7 +15,9 @@ struct BatteryPowerChartView: View {
             if let selected = selectedReading {
                 let pbat = -selected.point.pbat
                 let label = pbat > 0 ? "charging" : pbat < 0 ? "discharging" : "idle"
-                Text("\(DateFormatting.clockTime(from: selected.date)): \(PowerFormatting.format(selected.point.pbat)) (\(label))")
+                let time = DateFormatting.clockTime(from: selected.date)
+                let power = PowerFormatting.format(selected.point.pbat)
+                Text("\(time): \(power) (\(label))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {

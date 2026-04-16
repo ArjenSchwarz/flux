@@ -7,8 +7,14 @@ struct DayDetailViewModelTests {
     @Test
     func loadDayPopulatesReadingsAndSummary() async {
         let apiClient = MockDayDetailAPIClient()
-        let readings = [TimeSeriesPoint(timestamp: "2026-04-15T00:00:00Z", ppv: 1200, pload: 500, pbat: -300, pgrid: -400, soc: 72)]
-        let summary = DaySummary(epv: 8.2, eInput: 1.3, eOutput: 0.7, eCharge: 2.4, eDischarge: 3.6, socLow: 21, socLowTime: "2026-04-15T20:00:00Z")
+        let readings = [TimeSeriesPoint(
+            timestamp: "2026-04-15T00:00:00Z",
+            ppv: 1200, pload: 500, pbat: -300, pgrid: -400, soc: 72
+        )]
+        let summary = DaySummary(
+            epv: 8.2, eInput: 1.3, eOutput: 0.7, eCharge: 2.4, eDischarge: 3.6,
+            socLow: 21, socLowTime: "2026-04-15T20:00:00Z"
+        )
         apiClient.dayResult = .success(DayDetailResponse(
             date: "2026-04-15", readings: readings, summary: summary, peakPeriods: nil
         ))

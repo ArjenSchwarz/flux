@@ -43,8 +43,12 @@ struct HistoryChartView: View {
                         .gesture(
                             DragGesture(minimumDistance: 0)
                                 .onChanged { value in
-                                    guard let date = dateFromOverlayLocation(value.location.x, proxy: proxy, geometry: geometry),
-                                          let nearestDay = nearestDay(to: date)
+                                    guard let date = dateFromOverlayLocation(
+                                        value.location.x,
+                                        proxy: proxy,
+                                        geometry: geometry
+                                    ),
+                                    let nearestDay = nearestDay(to: date)
                                     else {
                                         return
                                     }

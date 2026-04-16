@@ -10,7 +10,7 @@ struct DashboardViewModelTests {
         let firstStatus = makeStatusResponse(soc: 72)
         await apiClient.setStatusResults([
             .success(firstStatus),
-            .failure(FluxAPIError.serverError),
+            .failure(FluxAPIError.serverError)
         ])
         let viewModel = DashboardViewModel(apiClient: apiClient)
 

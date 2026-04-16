@@ -16,17 +16,24 @@ struct ColoringTests {
         #expect(BatteryColor.forSOC(100) == .green)
     }
 
+    private struct GridColorCase {
+        let pgrid: Double
+        let sustained: Bool
+        let inOffpeak: Bool
+        let expected: ColorTier
+    }
+
     @Test
     func gridColorRedOnlyForHighSustainedImportOutsideOffpeak() {
-        let cases: [(pgrid: Double, sustained: Bool, inOffpeak: Bool, expected: ColorTier)] = [
-            (400, false, false, .normal),
-            (400, false, true, .normal),
-            (400, true, false, .normal),
-            (400, true, true, .normal),
-            (600, false, false, .normal),
-            (600, false, true, .normal),
-            (600, true, true, .normal),
-            (600, true, false, .red)
+        let cases: [GridColorCase] = [
+            GridColorCase(pgrid: 400, sustained: false, inOffpeak: false, expected: .normal),
+            GridColorCase(pgrid: 400, sustained: false, inOffpeak: true, expected: .normal),
+            GridColorCase(pgrid: 400, sustained: true, inOffpeak: false, expected: .normal),
+            GridColorCase(pgrid: 400, sustained: true, inOffpeak: true, expected: .normal),
+            GridColorCase(pgrid: 600, sustained: false, inOffpeak: false, expected: .normal),
+            GridColorCase(pgrid: 600, sustained: false, inOffpeak: true, expected: .normal),
+            GridColorCase(pgrid: 600, sustained: true, inOffpeak: true, expected: .normal),
+            GridColorCase(pgrid: 600, sustained: true, inOffpeak: false, expected: .red)
         ]
 
         for testCase in cases {

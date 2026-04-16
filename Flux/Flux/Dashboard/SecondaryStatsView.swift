@@ -57,8 +57,7 @@ struct SecondaryStatsView: View {
             if let rolling15min {
                 Text(PowerFormatting.format(rolling15min.avgLoad))
                 if let estimatedCutoffTime = rolling15min.estimatedCutoffTime,
-                   let cutoffDate = DateFormatting.parseTimestamp(estimatedCutoffTime)
-                {
+                   let cutoffDate = DateFormatting.parseTimestamp(estimatedCutoffTime) {
                     let cutoffColor = CutoffTimeColor.forCutoff(
                         cutoffDate,
                         offpeakWindowStart: offpeak?.windowStart ?? OffpeakData.defaultWindowStart,
