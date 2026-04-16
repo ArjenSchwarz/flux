@@ -1,8 +1,9 @@
 package api
 
 import (
+	"cmp"
 	"math"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
@@ -225,27 +226,35 @@ func reconcileEnergy(computed *TodayEnergy, stored *TodayEnergy) *TodayEnergy {
 
 // findPeakPeriods identifies the top peak usage periods from raw readings.
 // It returns up to maxPeakPeriods periods ranked by energy consumed, excluding
-// readings within the off-peak window.
+// readings within the off-peak window. Always returns a non-nil slice.
 func findPeakPeriods(readings []dynamo.ReadingItem, offpeakStart, offpeakEnd string) []PeakPeriod {
+	out := []PeakPeriod{}
 	if len(readings) == 0 {
-		return nil
+		return out
 	}
 
-	// Step 1: Parse off-peak window.
+	// Step 1: Parse off-peak window and precompute a mask so each reading only
+	// incurs one timezone conversion (used in steps 2 and 3).
 	offpeakStartMin, offpeakEndMin, hasOffpeak := parseOffpeakWindow(offpeakStart, offpeakEnd)
+	offpeakMask := make([]bool, len(readings))
+	if hasOffpeak {
+		for i, r := range readings {
+			offpeakMask[i] = isOffpeak(r.Timestamp, offpeakStartMin, offpeakEndMin)
+		}
+	}
 
 	// Step 2: Compute mean Pload threshold from non-off-peak readings.
 	var sum float64
 	var count int
-	for _, r := range readings {
-		if hasOffpeak && isOffpeak(r.Timestamp, offpeakStartMin, offpeakEndMin) {
+	for i, r := range readings {
+		if offpeakMask[i] {
 			continue
 		}
 		sum += r.Pload
 		count++
 	}
 	if count == 0 {
-		return nil
+		return out
 	}
 	threshold := sum / float64(count)
 
@@ -255,12 +264,11 @@ func findPeakPeriods(readings []dynamo.ReadingItem, offpeakStart, offpeakEnd str
 		sum              float64
 		count            int
 	}
-	var clusters []cluster
+	clusters := make([]cluster, 0, 16)
 	var cur *cluster
 
 	for i, r := range readings {
-		offpk := hasOffpeak && isOffpeak(r.Timestamp, offpeakStartMin, offpeakEndMin)
-		if offpk || r.Pload <= threshold {
+		if offpeakMask[i] || r.Pload <= threshold {
 			if cur != nil {
 				clusters = append(clusters, *cur)
 				cur = nil
@@ -279,11 +287,12 @@ func findPeakPeriods(readings []dynamo.ReadingItem, offpeakStart, offpeakEnd str
 		clusters = append(clusters, *cur)
 	}
 	if len(clusters) == 0 {
-		return nil
+		return out
 	}
 
 	// Step 4: Merge clusters within mergeGapSeconds, then discard short periods.
-	merged := []cluster{clusters[0]}
+	merged := make([]cluster, 0, len(clusters))
+	merged = append(merged, clusters[0])
 	for _, c := range clusters[1:] {
 		last := &merged[len(merged)-1]
 		gap := readings[c.startIdx].Timestamp - readings[last.endIdx].Timestamp
@@ -297,7 +306,7 @@ func findPeakPeriods(readings []dynamo.ReadingItem, offpeakStart, offpeakEnd str
 	}
 
 	// Filter by minimum duration.
-	var filtered []cluster
+	filtered := make([]cluster, 0, len(merged))
 	for _, c := range merged {
 		duration := readings[c.endIdx].Timestamp - readings[c.startIdx].Timestamp
 		if duration >= minPeriodSeconds {
@@ -305,7 +314,7 @@ func findPeakPeriods(readings []dynamo.ReadingItem, offpeakStart, offpeakEnd str
 		}
 	}
 	if len(filtered) == 0 {
-		return nil
+		return out
 	}
 
 	// Step 5: Compute energy via trapezoidal integration, rank, and return top N.
@@ -313,7 +322,7 @@ func findPeakPeriods(readings []dynamo.ReadingItem, offpeakStart, offpeakEnd str
 		period   PeakPeriod
 		energyWh float64 // unrounded for sorting
 	}
-	var results []ranked
+	results := make([]ranked, 0, len(filtered))
 
 	for _, c := range filtered {
 		var energyWh float64
@@ -341,12 +350,12 @@ func findPeakPeriods(readings []dynamo.ReadingItem, offpeakStart, offpeakEnd str
 		})
 	}
 
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].energyWh > results[j].energyWh
+	slices.SortFunc(results, func(a, b ranked) int {
+		return cmp.Compare(b.energyWh, a.energyWh)
 	})
 
 	n := min(len(results), maxPeakPeriods)
-	out := make([]PeakPeriod, n)
+	out = make([]PeakPeriod, n)
 	for i := range n {
 		out[i] = results[i].period
 	}

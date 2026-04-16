@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- `findPeakPeriods` precomputes an off-peak mask instead of calling `isOffpeak` twice per reading, halving timezone conversions on the `/day` hot path
+- `findPeakPeriods` uses `slices.SortFunc` with `cmp.Compare` in place of `sort.Slice` (per Go modernisation rules) and adds capacity hints to clusters/filtered/results slices
+- `findPeakPeriods` always returns a non-nil `[]PeakPeriod{}`; `handleDay` no longer re-assigns a defensive nil-to-empty local variable
+- Additional `findPeakPeriods` unit tests for single-reading input and the AEDT→AEST DST transition day (2026-04-05)
+
 ### Added
 
 - `PeakUsageCard` SwiftUI view on day detail screen showing top peak usage periods with time range (24h format), average load (kW), and energy (Wh with grouping separator), styled to match existing summary card

@@ -867,6 +867,44 @@ func TestFindPeakPeriods(t *testing.T) {
 				assert.True(t, got[0].EnergyWh > 0)
 			},
 		},
+		"single reading": {
+			// A single reading cannot form a period: step 3 requires Pload > mean,
+			// but the reading's own Pload equals the mean, so it is filtered out.
+			readings:     []dynamo.ReadingItem{sydneyReading(8, 0, 0, 5000)},
+			offpeakStart: opStart, offpeakEnd: opEnd,
+			wantCount: 0,
+		},
+		"DST transition day (AEDT→AEST)": {
+			// Sydney DST ends first Sunday of April. In 2026 that's April 5:
+			// 03:00 AEDT → 02:00 AEST. Verify off-peak filtering still works on
+			// this day for a window well clear of the transition hour.
+			readings: func() []dynamo.ReadingItem {
+				var r []dynamo.ReadingItem
+				dst := func(h, m, s int, pload float64) dynamo.ReadingItem {
+					ts := time.Date(2026, 4, 5, h, m, s, 0, sydneyTZ)
+					return dynamo.ReadingItem{Timestamp: ts.Unix(), Pload: pload}
+				}
+				// Low baseline in the morning.
+				for i := range 6 {
+					r = append(r, dst(8, 0, i*10, 100))
+				}
+				// Readings inside the 11:00–14:00 off-peak window — must be ignored.
+				for i := range 6 {
+					r = append(r, dst(12, 0, i*10, 9000))
+				}
+				// Afternoon burst (13 readings = 120s) that should form one period.
+				for i := range 13 {
+					r = append(r, dst(15, 0, i*10, 5000))
+				}
+				return r
+			}(),
+			offpeakStart: opStart, offpeakEnd: opEnd,
+			wantCount: 1,
+			check: func(t *testing.T, got []PeakPeriod) {
+				// Period must be at 15:00 Sydney (post-DST = AEST, UTC+10 = 05:00 UTC).
+				assert.Contains(t, got[0].Start, "T05:00:00Z")
+			},
+		},
 		"two periods with same rounded energy ranked by unrounded": {
 			// Two periods that round to the same energy but differ in unrounded value
 			readings: func() []dynamo.ReadingItem {

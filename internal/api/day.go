@@ -79,16 +79,16 @@ func (h *Handler) handleDay(ctx context.Context, req events.LambdaFunctionURLReq
 	}
 
 	resp := &DayDetailResponse{
-		Date:     date,
-		Readings: points,
+		Date:        date,
+		Readings:    points,
+		PeakPeriods: peakPeriods,
 	}
 	if resp.Readings == nil {
 		resp.Readings = []TimeSeriesPoint{}
 	}
-	if peakPeriods == nil {
-		peakPeriods = []PeakPeriod{}
+	if resp.PeakPeriods == nil {
+		resp.PeakPeriods = []PeakPeriod{}
 	}
-	resp.PeakPeriods = peakPeriods
 
 	// Build summary: null when neither readings nor daily energy exist.
 	if hasReadings || deItem != nil {
