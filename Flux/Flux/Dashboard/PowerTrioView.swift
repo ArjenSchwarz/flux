@@ -33,7 +33,7 @@ struct PowerTrioView: View {
             )
 
             metricColumn(
-                title: "Grid",
+                title: gridTitle,
                 value: live?.pgrid ?? 0,
                 color: GridColor.forGrid(
                     pgrid: live?.pgrid ?? 0,
@@ -41,8 +41,7 @@ struct PowerTrioView: View {
                     offpeakWindowStart: offpeak?.windowStart ?? OffpeakData.defaultWindowStart,
                     offpeakWindowEnd: offpeak?.windowEnd ?? OffpeakData.defaultWindowEnd,
                     now: nowProvider()
-                ).color,
-                detail: gridDirection
+                ).color
             )
         }
         .frame(maxWidth: .infinity)
@@ -50,34 +49,25 @@ struct PowerTrioView: View {
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
-    private var gridDirection: String {
+    private var gridTitle: String {
         let pgrid = live?.pgrid ?? 0
-        if pgrid < 0 { return "Exporting" }
-        if pgrid > 0 { return "Importing" }
-        return "Idle"
+        if pgrid < 0 { return "Grid (export)" }
+        if pgrid > 0 { return "Grid (import)" }
+        return "Grid"
     }
 
     private func metricColumn(
         title: String,
         value: Double,
-        color: Color,
-        detail: String? = nil
+        color: Color
     ) -> some View {
         VStack(spacing: 4) {
             Text(title)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Text("\(Int(value.rounded()))W")
+            Text(PowerFormatting.format(value))
                 .font(.headline)
                 .foregroundStyle(color)
-            if let detail {
-                Text(detail)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            } else {
-                Text(" ")
-                    .font(.caption2)
-            }
         }
         .frame(maxWidth: .infinity)
     }

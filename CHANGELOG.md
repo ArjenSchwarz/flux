@@ -10,12 +10,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - iOS build, test, lint, device install, and App Store distribution targets to Makefile (`ios-build`, `ios-test`, `ios-install`, `ios-run`, `ios-archive`, `ios-upload`, etc.) with xcbeautify pipe, device auto-detection, and `make help` overview
 - Shell safety flags (`pipefail`, `errexit`) to Makefile for reliable error propagation
+- Battery charge/discharge rate display in `BatteryHeroView` status line (e.g. "Charging at 3.42 kW")
+- Shared `PowerFormatting.format()` helper for consistent watt/kW display across dashboard views (W below 1000, kW with 2 decimal places above)
 
 ### Changed
 
 - iOS deployment target lowered from 26.4 to 26.0 for device compatibility
 - `URLSessionAPIClient` now uses a no-cache `URLSession` instead of `.shared`, preventing stale HTTP responses for real-time polling data
 - HTTP 403 responses now map to `FluxAPIError.unauthorized` instead of `unexpectedStatus`, matching bearer token auth semantics
+- `PowerTrioView` grid column now shows direction in header ("Grid (import)" / "Grid (export)") instead of a separate detail row, reducing card height
+- `PowerTrioView` values now use `PowerFormatting` (kW with 2 decimals for 1000+) instead of raw integer watts
+- `TodayEnergyView` condensed from 5 rows to 3: solar, "Grid (import/export)", and "Battery (+/-)" with paired values
 
 ### Added
 

@@ -29,23 +29,26 @@ struct BatteryHeroView: View {
     private var statusLine: String {
         guard let live else { return "No live data" }
 
+        let rate = PowerFormatting.format(live.pbat)
+
         if live.soc >= 100, live.pbat < 0 {
             return "Full"
         }
 
         if live.pbat > 0 {
             if let cutoff = battery?.estimatedCutoffTime.flatMap(DateFormatting.parseTimestamp) {
-                return "Discharging · cutoff ~\(DateFormatting.clockTime(from: cutoff))"
+                return "Discharging at \(rate) · cutoff ~\(DateFormatting.clockTime(from: cutoff))"
             }
-            return "Discharging"
+            return "Discharging at \(rate)"
         }
 
         if live.pbat < 0 {
-            return "Charging"
+            return "Charging at \(rate)"
         }
 
         return "Idle"
     }
+
 }
 
 #if DEBUG

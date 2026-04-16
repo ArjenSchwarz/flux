@@ -9,10 +9,20 @@ struct TodayEnergyView: View {
                 .font(.headline)
 
             energyRow(title: "Solar", value: todayEnergy?.epv)
-            energyRow(title: "Grid in", value: todayEnergy?.eInput)
-            energyRow(title: "Grid out", value: todayEnergy?.eOutput)
-            energyRow(title: "Charged", value: todayEnergy?.eCharge)
-            energyRow(title: "Discharged", value: todayEnergy?.eDischarge)
+            pairedRow(
+                title: "Grid",
+                positive: todayEnergy?.eInput,
+                positiveLabel: "import",
+                negative: todayEnergy?.eOutput,
+                negativeLabel: "export"
+            )
+            pairedRow(
+                title: "Battery",
+                positive: todayEnergy?.eCharge,
+                positiveLabel: "+",
+                negative: todayEnergy?.eDischarge,
+                negativeLabel: "-"
+            )
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
@@ -24,12 +34,32 @@ struct TodayEnergyView: View {
             Text(title)
                 .foregroundStyle(.primary)
             Spacer()
-            Text(
-                value.map { "\($0, specifier: "%.2f") kWh" } ?? "—"
-            )
-            .foregroundStyle(.primary)
+            Text(formatKwh(value))
+                .foregroundStyle(.primary)
         }
         .font(.subheadline)
+    }
+
+    private func pairedRow(
+        title: String,
+        positive: Double?,
+        positiveLabel: String,
+        negative: Double?,
+        negativeLabel: String
+    ) -> some View {
+        HStack {
+            Text("\(title) (\(positiveLabel)/\(negativeLabel))")
+                .foregroundStyle(.primary)
+            Spacer()
+            Text("\(formatKwh(positive)) / \(formatKwh(negative))")
+                .foregroundStyle(.primary)
+        }
+        .font(.subheadline)
+    }
+
+    private func formatKwh(_ value: Double?) -> String {
+        guard let value else { return "—" }
+        return String(format: "%.2f kWh", value)
     }
 }
 
