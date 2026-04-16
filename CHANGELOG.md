@@ -90,8 +90,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Deployment README (`infrastructure/README.md`) with prerequisites, SecureString setup commands, build/package/deploy workflow, and update procedures for Lambda code, container image, configuration, and infrastructure changes
 - Infrastructure spec: implementation explanation at beginner, intermediate, and expert levels with completeness assessment
 
+### Breaking Changes
+
+- `OffPeakWindowStart` and `OffPeakWindowEnd` CloudFormation parameters no longer have defaults and must be supplied explicitly via the parameters file or `--parameter-overrides` on every deploy
+
 ### Fixed
 
+- Off-peak window parameters interpreted as integers (`11:00` → `660`, `14:00` → `840`) due to YAML 1.1 sexagesimal parsing after `aws cloudformation package` re-serializes the template and strips quotes. Defaults removed and `AllowedPattern` added for deploy-time validation.
+- Lambda `Code` path corrected from `./lambda/` to `../lambda/` (relative to template location)
+- Lambda Function URL returning 403 — added `lambda:InvokeFunction` permission alongside `lambda:InvokeFunctionUrl` in the resource policy, both are required for public access with `AuthType: NONE`
 - `computeCutoffTime` now guards against NaN/Inf results from very small `pbat` values and rejects `capacityKwh <= 0`, preventing unreasonable cutoff times from reaching the API response
 
 ### Changed
