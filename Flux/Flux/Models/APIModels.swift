@@ -85,6 +85,8 @@ struct PeakPeriod: Codable, Sendable, Identifiable {
     let avgLoadW: Double
     let energyWh: Double
 
+    // Periods in a single day response never overlap, so the RFC 3339 start
+    // timestamp is a stable, unique identifier for SwiftUI diffing.
     var id: String { start }
 }
 

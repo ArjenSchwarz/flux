@@ -244,13 +244,15 @@ func findPeakPeriods(readings []dynamo.ReadingItem, offpeakStart, offpeakEnd str
 	}
 
 	// Step 2: Compute mean Pload threshold from non-off-peak readings.
+	// Negative Pload readings (corrupted data or net-export accounting) are
+	// clamped to 0 to stay consistent with the energy integration in step 5.
 	var sum float64
 	var count int
 	for i, r := range readings {
 		if offpeakMask[i] {
 			continue
 		}
-		sum += r.Pload
+		sum += max(r.Pload, 0)
 		count++
 	}
 	if count == 0 {
@@ -335,7 +337,10 @@ func findPeakPeriods(readings []dynamo.ReadingItem, offpeakStart, offpeakEnd str
 			}
 			energyWh += (max(prev.Pload, 0) + max(curr.Pload, 0)) / 2 * dt / 3600
 		}
-		if energyWh == 0 {
+		// Filter on the rounded value: a period that displays as "0 Wh" is
+		// noise, not a peak.
+		rounded := math.Round(energyWh)
+		if rounded == 0 {
 			continue
 		}
 
@@ -344,7 +349,7 @@ func findPeakPeriods(readings []dynamo.ReadingItem, offpeakStart, offpeakEnd str
 				Start:    time.Unix(readings[c.startIdx].Timestamp, 0).UTC().Format(time.RFC3339),
 				End:      time.Unix(readings[c.endIdx].Timestamp, 0).UTC().Format(time.RFC3339),
 				AvgLoadW: roundPower(c.sum / float64(c.count)),
-				EnergyWh: math.Round(energyWh),
+				EnergyWh: rounded,
 			},
 			energyWh: energyWh,
 		})
@@ -372,7 +377,7 @@ func parseOffpeakWindow(startStr, endStr string) (int, int, bool) {
 		}
 		h := int(s[0]-'0')*10 + int(s[1]-'0')
 		m := int(s[3]-'0')*10 + int(s[4]-'0')
-		if h < 0 || h > 23 || m < 0 || m > 59 {
+		if h > 23 || m > 59 {
 			return 0, false
 		}
 		return h*60 + m, true

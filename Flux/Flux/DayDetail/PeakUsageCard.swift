@@ -52,8 +52,8 @@ struct PeakUsageCard: View {
 #if DEBUG
 #Preview {
     PeakUsageCard(periods: [
-        PeakPeriod(start: "2026-04-15T07:15:00Z", end: "2026-04-15T07:45:00Z", avgLoadW: 4200.3, energyWh: 2100),
         PeakPeriod(start: "2026-04-15T17:30:00Z", end: "2026-04-15T18:15:00Z", avgLoadW: 3800.1, energyWh: 2850),
+        PeakPeriod(start: "2026-04-15T07:15:00Z", end: "2026-04-15T07:45:00Z", avgLoadW: 4200.3, energyWh: 2100),
         PeakPeriod(start: "2026-04-15T12:00:00Z", end: "2026-04-15T12:20:00Z", avgLoadW: 2900.5, energyWh: 967)
     ])
     .padding()

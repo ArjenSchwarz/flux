@@ -1,9 +1,10 @@
 package api
 
 import (
+	"cmp"
 	"fmt"
 	"math"
-	"sort"
+	"slices"
 	"testing"
 	"time"
 
@@ -1023,7 +1024,7 @@ func TestFindPeakPeriodsProperties(t *testing.T) {
 			}
 			sorted := make([]PeakPeriod, len(got))
 			copy(sorted, got)
-			sort.Slice(sorted, func(i, j int) bool { return sorted[i].Start < sorted[j].Start })
+			slices.SortFunc(sorted, func(a, b PeakPeriod) int { return cmp.Compare(a.Start, b.Start) })
 			for i := 1; i < len(sorted); i++ {
 				assert.LessOrEqual(t, sorted[i-1].End, sorted[i].Start,
 					"periods overlap: %s-%s and %s-%s", sorted[i-1].Start, sorted[i-1].End, sorted[i].Start, sorted[i].End)
