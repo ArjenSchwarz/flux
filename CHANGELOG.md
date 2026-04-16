@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- `PeakUsageCard` SwiftUI view on day detail screen showing top peak usage periods with time range (24h format), average load (kW), and energy (Wh with grouping separator), styled to match existing summary card
 - Peak periods wired into `/day` endpoint — `handleDay` calls `findPeakPeriods` on raw readings and returns results in `peakPeriods` field (always `[]`, never null)
 - Integration tests for `/day` endpoint verifying `peakPeriods` presence across normal, fallback, no-data, and known-peak scenarios
 - `peakPeriods` property on iOS `DayDetailViewModel` with nil-coalescing from response and error-path reset

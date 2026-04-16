@@ -130,7 +130,7 @@ references:
   - Requirements: [3.3](requirements.md#3.3), [3.6](requirements.md#3.6)
   - References: Flux/Flux/Helpers/DateFormatting.swift
 
-- [ ] 12. Create PeakUsageCard SwiftUI view <!-- id:1x60rrr -->
+- [x] 12. Create PeakUsageCard SwiftUI view <!-- id:1x60rrr -->
   - Create new file Flux/Flux/DayDetail/PeakUsageCard.swift
   - Match summaryCard styling: .thinMaterial, RoundedRectangle(cornerRadius: 16, style: .continuous), .headline title, .subheadline rows
   - Title: Peak Usage
@@ -141,7 +141,7 @@ references:
   - Requirements: [3.3](requirements.md#3.3), [3.4](requirements.md#3.4), [3.6](requirements.md#3.6)
   - References: Flux/Flux/DayDetail/PeakUsageCard.swift, Flux/Flux/DayDetail/DayDetailView.swift
 
-- [ ] 13. Wire PeakUsageCard into DayDetailView <!-- id:1x60rrs -->
+- [x] 13. Wire PeakUsageCard into DayDetailView <!-- id:1x60rrs -->
   - Insert PeakUsageCard between SOCChartView and summaryCard in DayDetailView
   - Guard: if viewModel.hasPowerData && !viewModel.peakPeriods.isEmpty
   - Card hidden when peakPeriods is empty or hasPowerData is false

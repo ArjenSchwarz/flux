@@ -26,6 +26,10 @@ struct DayDetailView: View {
                     }
 
                     SOCChartView(date: viewModel.date, readings: viewModel.parsedReadings, summary: viewModel.summary)
+
+                    if viewModel.hasPowerData && !viewModel.peakPeriods.isEmpty {
+                        PeakUsageCard(periods: viewModel.peakPeriods)
+                    }
                 } else if let error = viewModel.error {
                     errorCard(error: error)
                 } else if viewModel.isLoading {
