@@ -11,6 +11,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.68.4
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/sync v0.20.0
+	pgregory.net/rapid v1.2.0
 )
 
 require (
@@ -31,5 +32,4 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	pgregory.net/rapid v1.2.0 // indirect
 )

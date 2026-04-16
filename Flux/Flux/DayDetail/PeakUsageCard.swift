@@ -44,8 +44,8 @@ struct PeakUsageCard: View {
         return "\(DateFormatting.clockTime24h(from: startDate)) – \(DateFormatting.clockTime24h(from: endDate))"
     }
 
-    private func formattedEnergy(_ wh: Double) -> String {
-        Self.energyFormatter.string(from: NSNumber(value: wh)) ?? "\(Int(wh))"
+    private func formattedEnergy(_ wattHours: Double) -> String {
+        Self.energyFormatter.string(from: NSNumber(value: wattHours)) ?? "\(Int(wattHours))"
     }
 }
 
@@ -54,7 +54,7 @@ struct PeakUsageCard: View {
     PeakUsageCard(periods: [
         PeakPeriod(start: "2026-04-15T07:15:00Z", end: "2026-04-15T07:45:00Z", avgLoadW: 4200.3, energyWh: 2100),
         PeakPeriod(start: "2026-04-15T17:30:00Z", end: "2026-04-15T18:15:00Z", avgLoadW: 3800.1, energyWh: 2850),
-        PeakPeriod(start: "2026-04-15T12:00:00Z", end: "2026-04-15T12:20:00Z", avgLoadW: 2900.5, energyWh: 967),
+        PeakPeriod(start: "2026-04-15T12:00:00Z", end: "2026-04-15T12:20:00Z", avgLoadW: 2900.5, energyWh: 967)
     ])
     .padding()
 }

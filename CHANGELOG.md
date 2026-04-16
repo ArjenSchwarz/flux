@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `PeakPeriod` model in iOS app (Codable, Sendable, Identifiable) with optional `peakPeriods` on `DayDetailResponse` for backwards compatibility
 - Sample peak period data in iOS mock API client for previews
 - Feature spec for Peak Usage Periods: requirements (19 acceptance criteria in EARS format), design (5-step threshold-based clustering algorithm for backend, PeakUsageCard for iOS), decision log (11 decisions), and task list (13 tasks across 2 parallel streams)
+- Implementation explanation for Peak Usage Periods at three expertise levels with completeness assessment
 
 ### Changed
 
