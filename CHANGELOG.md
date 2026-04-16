@@ -35,6 +35,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Power Flows and Battery Load chart y-axis labels now display in kW instead of raw watts
 - Power Flows chart uses named legend series (Solar, Load, Grid) instead of unnamed colors
 - Dashboard navigation changed from single "View history" link to side-by-side "Today detail" and "History" buttons
+- Dashboard now shows empty placeholder layout on initial load instead of error card, with data filling in once fetched
+- `DashboardViewModel.startAutoRefresh()` no longer cancels in-flight requests on repeated calls from view lifecycle
+- `DashboardViewModel.refresh()` ignores cancellation errors from view lifecycle instead of storing them as error state
+- Removed "Secondary Stats" heading from secondary stats card
+- 15m avg load now uses `PowerFormatting` for kW display
 
 ### Added
 

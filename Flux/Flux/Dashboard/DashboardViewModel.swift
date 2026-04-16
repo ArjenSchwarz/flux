@@ -29,7 +29,7 @@ final class DashboardViewModel {
     }
 
     func startAutoRefresh() {
-        refreshTask?.cancel()
+        guard refreshTask == nil else { return }
 
         refreshTask = Task { [weak self] in
             guard let self else { return }
@@ -62,6 +62,10 @@ final class DashboardViewModel {
             status = response
             lastSuccessfulFetch = nowProvider()
             error = nil
+        } catch is CancellationError {
+            // View lifecycle can cancel in-flight requests; not a real error.
+        } catch let urlError as URLError where urlError.code == .cancelled {
+            // URLSession reports cancellation as URLError.cancelled.
         } catch {
             self.error = FluxAPIError.from(error)
         }

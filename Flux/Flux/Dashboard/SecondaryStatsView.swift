@@ -20,9 +20,6 @@ struct SecondaryStatsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Secondary Stats")
-                .font(.headline)
-
             statRow(title: "24h low", value: low24hText)
             statRow(title: "Off-peak grid", value: offpeakGridText)
             statRow(title: "Off-peak Δ battery", value: offpeakDeltaText)
@@ -58,7 +55,7 @@ struct SecondaryStatsView: View {
             Spacer()
 
             if let rolling15min {
-                Text("\(Int(rolling15min.avgLoad.rounded()))W")
+                Text(PowerFormatting.format(rolling15min.avgLoad))
                 if let estimatedCutoffTime = rolling15min.estimatedCutoffTime,
                    let cutoffDate = DateFormatting.parseTimestamp(estimatedCutoffTime)
                 {

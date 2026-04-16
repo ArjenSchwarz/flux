@@ -27,14 +27,10 @@ struct DashboardView: View {
 
     var body: some View {
         ScrollView {
-            if viewModel.status == nil, let error = viewModel.error {
-                initialLoadErrorCard(error: error)
-                    .padding()
-            } else {
-                VStack(alignment: .leading, spacing: 16) {
-                    if viewModel.error != nil, viewModel.status != nil {
-                        stalenessBanner
-                    }
+            VStack(alignment: .leading, spacing: 16) {
+                if viewModel.error != nil {
+                    stalenessBanner
+                }
 
                     BatteryHeroView(
                         live: viewModel.status?.live,
@@ -75,7 +71,6 @@ struct DashboardView: View {
                     }
                 }
                 .padding()
-            }
         }
         .navigationTitle("Dashboard")
         .refreshable {
@@ -158,35 +153,12 @@ struct DashboardView: View {
         if case .some(.unauthorized) = viewModel.error {
             return "Authentication required"
         }
+        if viewModel.status == nil {
+            return "Unable to load data"
+        }
         return "Showing stale data"
     }
 
-    private func initialLoadErrorCard(error: FluxAPIError) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label("Unable to load dashboard", systemImage: "wifi.exclamationmark")
-                .font(.headline)
-            Text(error.message)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
-            HStack {
-                Button("Retry") {
-                    Task { await viewModel.refresh() }
-                }
-                .buttonStyle(.borderedProminent)
-
-                if error.suggestsSettings {
-                    Button("Settings") {
-                        showingSettings = true
-                    }
-                    .buttonStyle(.bordered)
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-    }
 }
 
 #if DEBUG
