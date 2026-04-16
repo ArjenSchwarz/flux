@@ -8,3 +8,6 @@ infrastructure/packaged.yaml
 # Xcode user-specific files
 xcuserdata/
 *.xcuserstate
+
+# Xcode derived data
+DerivedData/
