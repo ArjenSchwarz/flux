@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Feature spec for Peak Usage Periods: requirements (19 acceptance criteria in EARS format), design (5-step threshold-based clustering algorithm for backend, PeakUsageCard for iOS), decision log (11 decisions), and task list (13 tasks across 2 parallel streams)
+
 ### Changed
 
 - Battery hero cutoff estimate now uses the 15-minute rolling average instead of instantaneous power, reducing fluctuation in the displayed cutoff time
