@@ -8,7 +8,7 @@ references:
 
 ## Backend Types & Constants
 
-- [ ] 1. Add PeakPeriod type and named constants to backend <!-- id:1x60rrg -->
+- [x] 1. Add PeakPeriod type and named constants to backend <!-- id:1x60rrg -->
   - Add PeakPeriod struct to response.go with json tags (start, end, avgLoadW, energyWh)
   - Add PeakPeriods []PeakPeriod field to DayDetailResponse (json tag: peakPeriods)
   - Add named constants to compute.go: mergeGapSeconds=300, minPeriodSeconds=120, maxPairGapSeconds=60, maxPeakPeriods=3
@@ -86,7 +86,7 @@ references:
 
 ## iOS Models
 
-- [ ] 8. Add PeakPeriod model and update DayDetailResponse in iOS <!-- id:1x60rrn -->
+- [x] 8. Add PeakPeriod model and update DayDetailResponse in iOS <!-- id:1x60rrn -->
   - Add PeakPeriod struct to APIModels.swift: Codable, Sendable, Identifiable (id = start)
   - Fields: start (String), end (String), avgLoadW (Double), energyWh (Double)
   - Add optional peakPeriods: [PeakPeriod]? to DayDetailResponse

@@ -83,6 +83,13 @@ func computePgridSustained(readings []dynamo.ReadingItem) bool {
 // bucketsPerDay is the number of 5-minute buckets in a day (288).
 const bucketsPerDay = 288
 
+const (
+	mergeGapSeconds   = 300 //nolint:unused // max gap between clusters to merge (5 minutes)
+	minPeriodSeconds  = 120 //nolint:unused // minimum period duration (2 minutes)
+	maxPairGapSeconds = 60  //nolint:unused // max gap between reading pairs for energy integration
+	maxPeakPeriods    = 3   //nolint:unused // maximum number of peak periods to return
+)
+
 // downsample divides a day into 5-minute buckets and averages all readings
 // within each bucket. Empty buckets are omitted. The date parameter is in
 // YYYY-MM-DD format and is interpreted in Australia/Sydney timezone.

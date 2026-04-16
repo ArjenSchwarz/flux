@@ -9,7 +9,9 @@ struct DayDetailViewModelTests {
         let apiClient = MockDayDetailAPIClient()
         let readings = [TimeSeriesPoint(timestamp: "2026-04-15T00:00:00Z", ppv: 1200, pload: 500, pbat: -300, pgrid: -400, soc: 72)]
         let summary = DaySummary(epv: 8.2, eInput: 1.3, eOutput: 0.7, eCharge: 2.4, eDischarge: 3.6, socLow: 21, socLowTime: "2026-04-15T20:00:00Z")
-        apiClient.dayResult = .success(DayDetailResponse(date: "2026-04-15", readings: readings, summary: summary))
+        apiClient.dayResult = .success(DayDetailResponse(
+            date: "2026-04-15", readings: readings, summary: summary, peakPeriods: nil
+        ))
 
         let viewModel = DayDetailViewModel(date: "2026-04-15", apiClient: apiClient)
         await viewModel.loadDay()
@@ -53,7 +55,9 @@ struct DayDetailViewModelTests {
             TimeSeriesPoint(timestamp: "2026-04-15T00:00:00Z", ppv: 0, pload: 0, pbat: 0, pgrid: 0, soc: 45),
             TimeSeriesPoint(timestamp: "2026-04-15T00:05:00Z", ppv: 0, pload: 0, pbat: 0, pgrid: 0, soc: 44)
         ]
-        apiClient.dayResult = .success(DayDetailResponse(date: "2026-04-15", readings: fallbackReadings, summary: nil))
+        apiClient.dayResult = .success(DayDetailResponse(
+            date: "2026-04-15", readings: fallbackReadings, summary: nil, peakPeriods: nil
+        ))
 
         let viewModel = DayDetailViewModel(date: "2026-04-15", apiClient: apiClient)
         await viewModel.loadDay()
