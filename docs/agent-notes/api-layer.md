@@ -64,6 +64,7 @@
 
 - Package-level `sydneyTZ` var loaded once via init function — avoids repeated `time.LoadLocation` calls and silently discarded errors. Panics on load failure (fail-fast).
 - `computeCutoffTime(soc, pbat, capacityKwh, cutoffPercent, now)` — Linear extrapolation. Returns nil for charging/idle/SOC≤cutoff.
+- `nextOffpeakStart(now, offpeakStart, offpeakEnd)` — Absolute Sydney-local time of the next off-peak window start (today's start if `now < todayEnd`, tomorrow's start otherwise). Returns `(_, false)` for invalid off-peak config. Used by `/status` to suppress cutoff predictions that land at or after the next scheduled charging window (see T-827).
 - `computeRollingAverages(readings)` — Mean of pload and pbat. Returns (0,0) for empty.
 - `computePgridSustained(readings)` — Iterates backwards from end, counts consecutive pgrid>500 within 30s gaps. Needs 3+ consecutive. Expects ascending order input.
 - `downsample(readings, date)` — 288 five-minute buckets, averages per bucket, omits empty. Uses `sydneyTZ`. Output is already in chronological order (buckets iterated 0..287).
@@ -96,3 +97,5 @@
 - `DaySummary.SocLow` and `SocLowTime` are non-pointer types — they serialise as `0` and `""` when no readings exist instead of null. App must handle defensively. See `specs/lambda-api/implementation.md` validation findings.
 - `findMinSOCFromPower` does not validate `UploadTime` format — parsing failures silently produce zero time.
 - `computeCutoffTime` has NaN/Inf guards (added during consolidation) to prevent unreasonable cutoff times from very small pbat values.
+- `/status` filters computed cutoffs through `nextOffpeakStart`: if the cutoff time is at or after the next off-peak start, both `battery.estimatedCutoffTime` and `rolling15min.estimatedCutoffTime` are returned as null because the battery will be charged during that window (T-827).
+- `parseOffpeakWindow` rejects `start >= end`, so midnight-spanning tariff windows (e.g. 22:00–06:00) silently fail parse and the off-peak filter/suppression falls through as a no-op. Any future support for such windows needs this guard relaxed and the surrounding logic (cutoff suppression, peak period masking, off-peak delta attribution) updated to handle a window that straddles midnight.

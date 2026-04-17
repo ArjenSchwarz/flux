@@ -89,11 +89,19 @@ func (h *Handler) handleStatus(ctx context.Context, _ events.LambdaFunctionURLRe
 		CutoffPercent: cutoffPercent,
 	}
 
+	// nextOpWindowStart is the absolute Sydney-local time of the next off-peak
+	// window start. Cutoff predictions at or after this boundary are
+	// suppressed — the battery will be charged during that window, so any
+	// projected cutoff past the boundary never actually occurs.
+	nextOpWindowStart, hasOffpeakBoundary := nextOffpeakStart(now, h.offpeakStart, h.offpeakEnd)
+
 	if len(allReadings) > 0 {
 		latest := allReadings[len(allReadings)-1]
 		if ct := computeCutoffTime(latest.Soc, latest.Pbat, capacity, cutoffPercent, now); ct != nil {
-			s := ct.UTC().Format(time.RFC3339)
-			battery.EstimatedCutoff = &s
+			if !hasOffpeakBoundary || ct.Before(nextOpWindowStart) {
+				s := ct.UTC().Format(time.RFC3339)
+				battery.EstimatedCutoff = &s
+			}
 		}
 	}
 
@@ -116,8 +124,10 @@ func (h *Handler) handleStatus(ctx context.Context, _ events.LambdaFunctionURLRe
 		if len(allReadings) > 0 {
 			latest := allReadings[len(allReadings)-1]
 			if ct := computeCutoffTime(latest.Soc, avgPbat, capacity, cutoffPercent, now); ct != nil {
-				s := ct.UTC().Format(time.RFC3339)
-				rolling.EstimatedCutoff = &s
+				if !hasOffpeakBoundary || ct.Before(nextOpWindowStart) {
+					s := ct.UTC().Format(time.RFC3339)
+					rolling.EstimatedCutoff = &s
+				}
 			}
 		}
 		resp.Rolling15m = rolling
