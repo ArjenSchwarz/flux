@@ -74,15 +74,13 @@ struct HistoryView: View {
     }
 
     private func summaryCard(for day: DayEnergy) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
             Text(day.date)
                 .font(.headline)
 
-            metricRow(title: "Solar", value: day.epv)
-            metricRow(title: "Grid imported", value: day.eInput)
-            metricRow(title: "Grid exported", value: day.eOutput)
-            metricRow(title: "Battery charged", value: day.eCharge)
-            metricRow(title: "Battery discharged", value: day.eDischarge)
+            ForEach(EnergySummaryFormatter.rows(for: day), id: \.title) { row in
+                summaryRow(row)
+            }
 
             NavigationLink("View day detail") {
                 DayDetailView(viewModel: makeDayDetailViewModel(day.date))
@@ -112,12 +110,12 @@ struct HistoryView: View {
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
-    private func metricRow(title: String, value: Double) -> some View {
+    private func summaryRow(_ row: EnergySummaryRow) -> some View {
         HStack {
-            Text(title)
+            Text(row.title)
                 .foregroundStyle(.secondary)
             Spacer()
-            Text("\(value, specifier: "%.2f") kWh")
+            Text(row.value)
         }
         .font(.subheadline)
     }

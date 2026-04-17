@@ -100,21 +100,9 @@ struct DayDetailView: View {
             Text("Summary")
                 .font(.headline)
 
-            summaryRow("Solar", viewModel.summary?.epv)
-            pairedSummaryRow(
-                title: "Grid",
-                positive: viewModel.summary?.eInput,
-                positiveLabel: "import",
-                negative: viewModel.summary?.eOutput,
-                negativeLabel: "export"
-            )
-            pairedSummaryRow(
-                title: "Battery",
-                positive: viewModel.summary?.eCharge,
-                positiveLabel: "+",
-                negative: viewModel.summary?.eDischarge,
-                negativeLabel: "-"
-            )
+            ForEach(EnergySummaryFormatter.rows(for: viewModel.summary), id: \.title) { row in
+                summaryRow(row)
+            }
 
             HStack {
                 Text("24h low")
@@ -139,35 +127,14 @@ struct DayDetailView: View {
         return "\(lowText)%"
     }
 
-    private func summaryRow(_ title: String, _ value: Double?) -> some View {
+    private func summaryRow(_ row: EnergySummaryRow) -> some View {
         HStack {
-            Text(title)
+            Text(row.title)
                 .foregroundStyle(.secondary)
             Spacer()
-            Text(formatKwh(value))
+            Text(row.value)
         }
         .font(.subheadline)
-    }
-
-    private func pairedSummaryRow(
-        title: String,
-        positive: Double?,
-        positiveLabel: String,
-        negative: Double?,
-        negativeLabel: String
-    ) -> some View {
-        HStack {
-            Text("\(title) (\(positiveLabel)/\(negativeLabel))")
-                .foregroundStyle(.secondary)
-            Spacer()
-            Text("\(formatKwh(positive)) / \(formatKwh(negative))")
-        }
-        .font(.subheadline)
-    }
-
-    private func formatKwh(_ value: Double?) -> String {
-        guard let value else { return "—" }
-        return String(format: "%.2f kWh", value)
     }
 
     private var noPowerDataCard: some View {
