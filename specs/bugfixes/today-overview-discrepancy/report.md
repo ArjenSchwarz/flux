@@ -1,7 +1,7 @@
 # Bugfix Report: Today overview values differ between Dashboard and History/Detail
 
 **Date:** 2026-04-17
-**Status:** Investigating
+**Status:** Fixed
 **Transit:** T-828
 
 ## Description of the Issue
@@ -52,34 +52,54 @@ The stored `DailyEnergyItem` is refreshed hourly by the poller (`dailyEnergyInte
 
 ## Resolution for the Issue
 
-_(filled in after implementation)_
+Apply the same `reconcileEnergy(computed, stored)` primitive that `/status` already uses to the other two endpoints that serve today's totals, scoped to the current day only. `computeTodayEnergy` integrates live readings; `reconcileEnergy` takes the per-field max so the response never regresses below whichever source is more current.
+
+**Changes made:**
+
+- `internal/api/day.go` — Capture `now` via `h.nowFunc()` once per request. Build `storedEnergy` from `deItem`, and when `date == today` and readings are present, compute `todayComputed` by integrating `readings` from `dayStart.Unix()`. Populate the summary's energy fields via `reconcileEnergy(computed, stored)` so the values match `/status`.
+- `internal/api/history.go` — Add a concurrent `QueryReadings` for the last 24 h via `errgroup`. Compute today's integrated energy once. When mapping rows, reconcile only the row whose `Date == today`; past rows pass through the stored values unchanged. Wrapping in `errgroup` means the extra query runs in parallel with the daily-energy query, keeping latency flat.
+
+**Approach rationale:** Reuse the existing reconciliation primitive rather than inventing a new one. Scope strictly to today so finalized past days continue to return AlphaESS's authoritative totals. The concurrent query keeps `/history` latency essentially unchanged.
+
+**Alternatives considered:**
+
+- **Reconcile for any day within the 30-day readings TTL.** Rejected — past days have been finalized by the midnight finalizer; AlphaESS's totals are authoritative for them, and taking a per-field max with local integration would shadow that authority.
+- **Push the reconciliation into the poller (store a rolling computed total alongside stored).** Rejected — adds operational complexity (a second write path) and creates a second source of truth in DynamoDB.
+- **Change `/status` to stop reconciling (show only stored).** Rejected — the dashboard would visibly tick up only once per hour; poor UX.
 
 ## Regression Test
 
 **Test file:** `internal/api/day_test.go`, `internal/api/history_test.go`
 
 **Test names:**
-- `TestHandleDayTodayReconcilesEnergy` — verifies `/day` reconciles for today.
-- `TestHandleDayPastDateDoesNotReconcile` — locks in the scope: past dates keep the stored values.
-- `TestHandleHistoryReconcilesTodaysRow` — verifies `/history` reconciles today's row only.
+- `TestHandleDayTodayReconcilesEnergy`
+- `TestHandleDayPastDateDoesNotReconcile`
+- `TestHandleHistoryReconcilesTodaysRow`
 
-**What they verify:** When the stored `DailyEnergyItem` for today lags behind values integrated from recent readings, the API response reflects the per-field max (same contract as `/status`). Past days continue to pass stored values through unchanged.
+**What they verify:** When the stored `DailyEnergyItem` for today lags behind values integrated from recent readings, the `/day` and `/history` responses reflect the per-field max — matching `/status`. Past days continue to pass stored values through unchanged.
 
 **Run command:** `go test ./internal/api/ -run 'TestHandleDayTodayReconcilesEnergy|TestHandleDayPastDateDoesNotReconcile|TestHandleHistoryReconcilesTodaysRow' -v`
 
 ## Affected Files
 
-_(filled in after implementation)_
+| File | Change |
+|------|--------|
+| `internal/api/day.go` | Capture `now`; reconcile stored daily energy with live-readings integration when `date == today`. |
+| `internal/api/history.go` | Concurrently fetch today's readings; reconcile today's row only; past rows unchanged. |
+| `internal/api/day_test.go` | Add `TestHandleDayTodayReconcilesEnergy` and `TestHandleDayPastDateDoesNotReconcile`. |
+| `internal/api/history_test.go` | Add `TestHandleHistoryReconcilesTodaysRow`. |
+| `specs/bugfixes/today-overview-discrepancy/report.md` | This report. |
 
 ## Verification
 
 **Automated:**
-- [ ] Regression tests pass
-- [ ] Full test suite passes
-- [ ] `make lint` / golangci-lint passes
+- [x] Regression tests pass
+- [x] Full test suite passes (`go test ./...`)
+- [x] `make lint` / golangci-lint passes
+- [x] `go vet ./...` passes
 
 **Manual verification:**
-- Compare Dashboard vs Day Detail vs History summary on the iOS app after deploy.
+- After deploying the updated Lambda, compare Dashboard, Day Detail (today), and History's today row on the iOS app — all three should now show the same Grid and Battery totals.
 
 ## Prevention
 

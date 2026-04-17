@@ -25,6 +25,9 @@ func (h *Handler) handleDay(ctx context.Context, req events.LambdaFunctionURLReq
 		return errorResponse(400, "invalid or missing date parameter")
 	}
 
+	now := h.nowFunc().In(sydneyTZ)
+	today := now.Format("2006-01-02")
+
 	// Compute day boundaries in Sydney timezone.
 	dayStart, _ := time.ParseInLocation("2006-01-02", date, sydneyTZ)
 	dayEnd := dayStart.AddDate(0, 0, 1)
@@ -99,12 +102,30 @@ func (h *Handler) handleDay(ctx context.Context, req events.LambdaFunctionURLReq
 			slt := time.Unix(socLowTime, 0).UTC().Format(time.RFC3339)
 			summary.SocLowTime = &slt
 		}
+
+		var storedEnergy *TodayEnergy
 		if deItem != nil {
-			summary.Epv = floatPtr(roundEnergy(deItem.Epv))
-			summary.EInput = floatPtr(roundEnergy(deItem.EInput))
-			summary.EOutput = floatPtr(roundEnergy(deItem.EOutput))
-			summary.ECharge = floatPtr(roundEnergy(deItem.ECharge))
-			summary.EDischarge = floatPtr(roundEnergy(deItem.EDischarge))
+			storedEnergy = &TodayEnergy{
+				Epv:        roundEnergy(deItem.Epv),
+				EInput:     roundEnergy(deItem.EInput),
+				EOutput:    roundEnergy(deItem.EOutput),
+				ECharge:    roundEnergy(deItem.ECharge),
+				EDischarge: roundEnergy(deItem.EDischarge),
+			}
+		}
+		// Reconcile with live readings only for today: stored totals refresh
+		// hourly from AlphaESS and lag the real-time integration. Past days'
+		// stored totals are finalized at midnight and are authoritative.
+		var computedEnergy *TodayEnergy
+		if date == today && len(readings) > 0 {
+			computedEnergy = computeTodayEnergy(readings, dayStart.Unix())
+		}
+		if energy := reconcileEnergy(computedEnergy, storedEnergy); energy != nil {
+			summary.Epv = floatPtr(energy.Epv)
+			summary.EInput = floatPtr(energy.EInput)
+			summary.EOutput = floatPtr(energy.EOutput)
+			summary.ECharge = floatPtr(energy.ECharge)
+			summary.EDischarge = floatPtr(energy.EDischarge)
 		}
 		resp.Summary = summary
 	}
