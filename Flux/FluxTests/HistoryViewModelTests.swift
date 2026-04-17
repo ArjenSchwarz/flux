@@ -76,13 +76,7 @@ struct HistoryViewModelTests {
         #expect(viewModel.error == .serverError)
     }
 
-    // T-841 regression guards: the history chart must produce one chart entry
-    // per metric per day, across the full requested range — not only today.
-    // The rendering bug (invisible bars for non-today dates) was caused by
-    // pairing a continuous Date x-axis with .position(by:); the fix switches
-    // to the stable dayID string so each day gets a discrete axis slot. These
-    // tests lock in the structural invariant that every day in the response
-    // is represented in chartDays / chartEntries with a distinct dayID.
+    // T-841 regression: every returned day must produce one entry per metric with a distinct dayID.
     @Test
     func rebuildChartDataProducesOneEntryPerMetricPerDay() async throws {
         let modelContext = try makeModelContext()
@@ -107,10 +101,6 @@ struct HistoryViewModelTests {
 
     @Test
     func chartEntriesUseDiscreteDateKeyForEachDay() async throws {
-        // With a discrete (String) x-axis, each day maps to a unique axis
-        // category — this is what gives every day a visible slot on the chart.
-        // Using the underlying Date on a continuous axis caused bars for
-        // non-today dates to collapse to invisible widths.
         let modelContext = try makeModelContext()
         let apiClient = MockHistoryAPIClient()
         let days = (0 ..< 7).map { offset in
@@ -128,8 +118,6 @@ struct HistoryViewModelTests {
         let viewModel = HistoryViewModel(apiClient: apiClient, modelContext: modelContext)
         await viewModel.loadHistory(days: 7)
 
-        // Every day must contribute entries for every metric — proving the
-        // chart has data for every day, not only today.
         for day in days {
             let entriesForDay = viewModel.chartEntries.filter { $0.dayID == day.date }
             #expect(entriesForDay.count == HistoryViewModel.HistoryChartMetric.allCases.count,

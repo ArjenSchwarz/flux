@@ -86,10 +86,7 @@ struct HistoryChartView: View {
         ]
     }
 
-    // Maps a touch location to the day ID of the bar group under that
-    // x coordinate. Uses a discrete (String) axis because the chart groups
-    // bars per metric via .position(by:), which requires a categorical
-    // x-axis to allocate visible slot widths.
+    // Discrete String axis: .position(by:) requires categorical x to allocate visible slot widths (T-841).
     private func dayIDFromOverlayLocation(
         _ xLocation: CGFloat,
         proxy: ChartProxy,
@@ -106,8 +103,7 @@ struct HistoryChartView: View {
         return proxy.value(atX: relativeX, as: String.self)
     }
 
-    // Renders a "M/d" label from a YYYY-MM-DD day ID so the x-axis stays
-    // readable when the full range is plotted.
+    // Short M/d label so the axis stays readable across 7/14/30-day ranges.
     private func axisLabel(for dayID: String) -> String {
         let parts = dayID.split(separator: "-")
         guard parts.count == 3,
