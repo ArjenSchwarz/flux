@@ -20,13 +20,13 @@ struct HistoryChartView: View {
 
             Chart {
                 if let selectedChartDay = selectedChartDay {
-                    RectangleMark(x: .value("Date", selectedChartDay.day.date))
+                    RectangleMark(x: .value("Date", selectedChartDay.date))
                         .foregroundStyle(.gray.opacity(0.12))
                 }
 
                 ForEach(chartEntries) { entry in
                     BarMark(
-                        x: .value("Date", entry.dayID),
+                        x: .value("Date", entry.date),
                         y: .value("kWh", entry.value)
                     )
                     .foregroundStyle(by: .value("Metric", entry.metric.label))
@@ -35,15 +35,6 @@ struct HistoryChartView: View {
                 }
             }
             .chartForegroundStyleScale(metricColors)
-            .chartXAxis {
-                AxisMarks(values: .automatic) { value in
-                    AxisGridLine()
-                    AxisTick()
-                    if let dateString = value.as(String.self) {
-                        AxisValueLabel(axisLabel(for: dateString))
-                    }
-                }
-            }
             .chartOverlay { proxy in
                 GeometryReader { geometry in
                     Rectangle()
@@ -52,17 +43,17 @@ struct HistoryChartView: View {
                         .gesture(
                             DragGesture(minimumDistance: 0)
                                 .onChanged { value in
-                                    guard let dayID = dayIDFromOverlayLocation(
+                                    guard let date = dateFromOverlayLocation(
                                         value.location.x,
                                         proxy: proxy,
                                         geometry: geometry
                                     ),
-                                    let matchingDay = chartDays.first(where: { $0.day.date == dayID })
+                                    let nearestDay = nearestDay(to: date)
                                     else {
                                         return
                                     }
 
-                                    onSelectDay(matchingDay.day)
+                                    onSelectDay(nearestDay.day)
                                 }
                         )
                 }
@@ -86,12 +77,11 @@ struct HistoryChartView: View {
         ]
     }
 
-    // Discrete String axis: .position(by:) requires categorical x to allocate visible slot widths (T-841).
-    private func dayIDFromOverlayLocation(
+    private func dateFromOverlayLocation(
         _ xLocation: CGFloat,
         proxy: ChartProxy,
         geometry: GeometryProxy
-    ) -> String? {
+    ) -> Date? {
         guard let plotFrameAnchor = proxy.plotFrame else {
             return nil
         }
@@ -100,18 +90,13 @@ struct HistoryChartView: View {
         guard relativeX >= 0, relativeX <= proxy.plotSize.width else {
             return nil
         }
-        return proxy.value(atX: relativeX, as: String.self)
+        return proxy.value(atX: relativeX)
     }
 
-    // Short M/d label so the axis stays readable across 7/14/30-day ranges.
-    private func axisLabel(for dayID: String) -> String {
-        let parts = dayID.split(separator: "-")
-        guard parts.count == 3,
-              let month = Int(parts[1]),
-              let day = Int(parts[2]) else {
-            return dayID
+    private func nearestDay(to date: Date) -> HistoryViewModel.HistoryChartDay? {
+        chartDays.min {
+            abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date))
         }
-        return "\(month)/\(day)"
     }
 }
 
