@@ -78,6 +78,73 @@ func TestComputeCutoffTime(t *testing.T) {
 	}
 }
 
+func TestNextOffpeakStart(t *testing.T) {
+	// Off-peak window: 11:00 - 14:00 Sydney.
+	const opStart = "11:00"
+	const opEnd = "14:00"
+
+	// syd builds a Sydney-local time at the given hour/minute on 2026-04-15.
+	syd := func(h, m int) time.Time {
+		return time.Date(2026, 4, 15, h, m, 0, 0, sydneyTZ)
+	}
+
+	tests := map[string]struct {
+		now          time.Time
+		offpeakStart string
+		offpeakEnd   string
+		wantValid    bool
+		wantStart    time.Time
+	}{
+		"morning before window": {
+			now:          syd(9, 0),
+			offpeakStart: opStart, offpeakEnd: opEnd,
+			wantValid: true,
+			wantStart: syd(11, 0),
+		},
+		"exactly at window start": {
+			now:          syd(11, 0),
+			offpeakStart: opStart, offpeakEnd: opEnd,
+			wantValid: true,
+			wantStart: syd(11, 0),
+		},
+		"inside window": {
+			now:          syd(12, 30),
+			offpeakStart: opStart, offpeakEnd: opEnd,
+			wantValid: true,
+			wantStart: syd(11, 0),
+		},
+		"exactly at window end rolls to tomorrow": {
+			now:          syd(14, 0),
+			offpeakStart: opStart, offpeakEnd: opEnd,
+			wantValid: true,
+			wantStart: syd(11, 0).AddDate(0, 0, 1),
+		},
+		"after window same day": {
+			now:          syd(18, 0),
+			offpeakStart: opStart, offpeakEnd: opEnd,
+			wantValid: true,
+			wantStart: syd(11, 0).AddDate(0, 0, 1),
+		},
+		"invalid window returns false": {
+			now:          syd(9, 0),
+			offpeakStart: "bad", offpeakEnd: "also-bad",
+			wantValid: false,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			got, ok := nextOffpeakStart(tc.now, tc.offpeakStart, tc.offpeakEnd)
+			assert.Equal(t, tc.wantValid, ok)
+			if tc.wantValid {
+				assert.True(t, got.Equal(tc.wantStart),
+					"nextOffpeakStart(%s, %s, %s) = %s, want %s",
+					tc.now, tc.offpeakStart, tc.offpeakEnd, got, tc.wantStart)
+			}
+		})
+	}
+}
+
 func TestComputeRollingAverages(t *testing.T) {
 	tests := map[string]struct {
 		readings []dynamo.ReadingItem

@@ -367,6 +367,29 @@ func findPeakPeriods(readings []dynamo.ReadingItem, offpeakStart, offpeakEnd str
 	return out
 }
 
+// nextOffpeakStart returns the absolute time of the next off-peak window start
+// in Australia/Sydney local time, relative to now. If now is before today's
+// off-peak end (including while inside the window), today's window start is
+// returned — any future time will then be "at or after" the window start,
+// which is the condition we want for suppressing cutoff predictions that
+// would otherwise land inside or after the scheduled charging period.
+// If now is at or after today's off-peak end, tomorrow's window start is
+// returned. Returns (_, false) when the off-peak configuration is invalid.
+func nextOffpeakStart(now time.Time, offpeakStart, offpeakEnd string) (time.Time, bool) {
+	startMin, endMin, ok := parseOffpeakWindow(offpeakStart, offpeakEnd)
+	if !ok {
+		return time.Time{}, false
+	}
+	local := now.In(sydneyTZ)
+	dayStart := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, sydneyTZ)
+	todayStart := dayStart.Add(time.Duration(startMin) * time.Minute)
+	todayEnd := dayStart.Add(time.Duration(endMin) * time.Minute)
+	if !local.Before(todayEnd) {
+		return todayStart.AddDate(0, 0, 1), true
+	}
+	return todayStart, true
+}
+
 // parseOffpeakWindow parses "HH:MM" strings into minute-of-day values.
 // Returns (start, end, true) on success, or (0, 0, false) if parsing fails
 // or start >= end.
