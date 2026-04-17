@@ -242,21 +242,38 @@ func TestHandleHistoryReconcilesTodaysRow(t *testing.T) {
 }
 
 func TestHandleHistoryDynamoDBError(t *testing.T) {
-	now := fixedNow()
-	mr := &mockReader{
-		queryDailyEnergyFn: func(_ context.Context, _, _, _ string) ([]dynamo.DailyEnergyItem, error) {
-			return nil, errors.New("throttled")
+	tests := map[string]struct {
+		mock *mockReader
+	}{
+		"daily energy error": {
+			mock: &mockReader{
+				queryDailyEnergyFn: func(_ context.Context, _, _, _ string) ([]dynamo.DailyEnergyItem, error) {
+					return nil, errors.New("throttled")
+				},
+			},
+		},
+		"readings error": {
+			mock: &mockReader{
+				queryReadingsFn: func(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
+					return nil, errors.New("throttled")
+				},
+			},
 		},
 	}
 
-	h := NewHandler(mr, testSerial, testToken, "11:00", "14:00")
-	h.nowFunc = func() time.Time { return now }
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			now := fixedNow()
+			h := NewHandler(tc.mock, testSerial, testToken, "11:00", "14:00")
+			h.nowFunc = func() time.Time { return now }
 
-	resp, err := h.Handle(context.Background(), historyRequest(nil))
-	require.NoError(t, err)
-	assert.Equal(t, 500, resp.StatusCode)
+			resp, err := h.Handle(context.Background(), historyRequest(nil))
+			require.NoError(t, err)
+			assert.Equal(t, 500, resp.StatusCode)
 
-	var body map[string]string
-	require.NoError(t, json.Unmarshal([]byte(resp.Body), &body))
-	assert.Equal(t, "internal error", body["error"])
+			var body map[string]string
+			require.NoError(t, json.Unmarshal([]byte(resp.Body), &body))
+			assert.Equal(t, "internal error", body["error"])
+		})
+	}
 }

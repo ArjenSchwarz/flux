@@ -33,6 +33,9 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 	// Fetch daily energy rows and today's readings concurrently. Today's row is
 	// reconciled against a live integration so it matches the dashboard's
 	// /status view; past rows are already finalized and pass through unchanged.
+	// Readings are always fetched — the concurrent cost is negligible and the
+	// alternative (only fetching when today is in range) duplicates the gating
+	// logic below.
 	var (
 		items       []dynamo.DailyEnergyItem
 		allReadings []dynamo.ReadingItem
@@ -45,6 +48,8 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 		return err
 	})
 	g.Go(func() error {
+		// 24h window in Unix seconds; computeTodayEnergy filters to
+		// >= midnight Sydney, so any pre-midnight readings are discarded.
 		nowUnix := now.Unix()
 		result, err := h.reader.QueryReadings(gctx, h.serial, nowUnix-86400, nowUnix)
 		allReadings = result
