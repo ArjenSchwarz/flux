@@ -16,8 +16,7 @@ import (
 // fixedNow returns a deterministic "now" for status tests.
 // 2026-04-15 10:00:00 AEST (UTC+10) = 2026-04-15 00:00:00 UTC.
 func fixedNow() time.Time {
-	loc, _ := time.LoadLocation("Australia/Sydney")
-	return time.Date(2026, 4, 15, 10, 0, 0, 0, loc)
+	return time.Date(2026, 4, 15, 10, 0, 0, 0, sydneyTZ)
 }
 
 // statusRequest builds an authenticated GET /status request.
@@ -38,8 +37,7 @@ func TestHandleStatusAllDataPresent(t *testing.T) {
 	// extrapolation lands before the 11:00 off-peak window under the T-827
 	// filter. At Pbat ~1.4 kW and SOC 48% against a 13.34 kWh capacity the
 	// projected cutoff is ~3.6 h out → ~09:37, well before 11:00.
-	loc, _ := time.LoadLocation("Australia/Sydney")
-	now := time.Date(2026, 4, 15, 6, 0, 0, 0, loc)
+	now := time.Date(2026, 4, 15, 6, 0, 0, 0, sydneyTZ)
 	nowUnix := now.Unix()
 
 	mr := &mockReader{
@@ -488,8 +486,7 @@ func TestHandleStatusCutoffSuppressedWhenAfterOffpeak(t *testing.T) {
 	// now = 07:00 Sydney on 2026-04-15. Off-peak window: 11:00-14:00.
 	// Discharge rate is very low so the linear extrapolation lands well
 	// inside (or after) the off-peak window.
-	loc, _ := time.LoadLocation("Australia/Sydney")
-	now := time.Date(2026, 4, 15, 7, 0, 0, 0, loc)
+	now := time.Date(2026, 4, 15, 7, 0, 0, 0, sydneyTZ)
 	nowUnix := now.Unix()
 
 	mr := &mockReader{
@@ -529,8 +526,7 @@ func TestHandleStatusCutoffSuppressedWhenAfterOffpeak(t *testing.T) {
 func TestHandleStatusCutoffShownWhenBeforeOffpeak(t *testing.T) {
 	// now = 07:00 Sydney on 2026-04-15. Off-peak window: 11:00-14:00.
 	// Heavy discharge so cutoff is ~1 hour away, well before 11:00.
-	loc, _ := time.LoadLocation("Australia/Sydney")
-	now := time.Date(2026, 4, 15, 7, 0, 0, 0, loc)
+	now := time.Date(2026, 4, 15, 7, 0, 0, 0, sydneyTZ)
 	nowUnix := now.Unix()
 
 	mr := &mockReader{
@@ -568,8 +564,7 @@ func TestHandleStatusCutoffShownWhenBeforeOffpeak(t *testing.T) {
 // through as a no-op — a computed cutoff is still returned as-is rather than
 // silently suppressed.
 func TestHandleStatusCutoffShownWithInvalidOffpeakConfig(t *testing.T) {
-	loc, _ := time.LoadLocation("Australia/Sydney")
-	now := time.Date(2026, 4, 15, 7, 0, 0, 0, loc)
+	now := time.Date(2026, 4, 15, 7, 0, 0, 0, sydneyTZ)
 	nowUnix := now.Unix()
 
 	mr := &mockReader{
@@ -608,8 +603,12 @@ func TestHandleStatusCutoffShownWithInvalidOffpeakConfig(t *testing.T) {
 // misleading.
 func TestHandleStatusCutoffSuppressedDuringOffpeak(t *testing.T) {
 	// now = 12:00 Sydney, inside off-peak window 11:00-14:00.
-	loc, _ := time.LoadLocation("Australia/Sydney")
-	now := time.Date(2026, 4, 15, 12, 0, 0, 0, loc)
+	// Note: this edge case (discharging Pbat during off-peak) is not fully
+	// redundant with computeCutoffTime's Pbat<=0 guard — during real off-peak
+	// the battery charges so Pbat<=0 and the helper returns nil, but data
+	// glitches or throttled charging can produce discharge readings mid-window
+	// which would otherwise surface a misleading cutoff.
+	now := time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ)
 	nowUnix := now.Unix()
 
 	mr := &mockReader{

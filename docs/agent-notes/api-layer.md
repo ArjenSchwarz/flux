@@ -98,3 +98,4 @@
 - `findMinSOCFromPower` does not validate `UploadTime` format — parsing failures silently produce zero time.
 - `computeCutoffTime` has NaN/Inf guards (added during consolidation) to prevent unreasonable cutoff times from very small pbat values.
 - `/status` filters computed cutoffs through `nextOffpeakStart`: if the cutoff time is at or after the next off-peak start, both `battery.estimatedCutoffTime` and `rolling15min.estimatedCutoffTime` are returned as null because the battery will be charged during that window (T-827).
+- `parseOffpeakWindow` rejects `start >= end`, so midnight-spanning tariff windows (e.g. 22:00–06:00) silently fail parse and the off-peak filter/suppression falls through as a no-op. Any future support for such windows needs this guard relaxed and the surrounding logic (cutoff suppression, peak period masking, off-peak delta attribution) updated to handle a window that straddles midnight.
