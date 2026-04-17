@@ -2,16 +2,18 @@ import Foundation
 
 /// A single row in the shared energy summary card layout, as used by the
 /// History and Day Detail screens.
-struct EnergySummaryRow: Equatable {
+struct EnergySummaryRow: Equatable, Identifiable {
     let title: String
     let value: String
+
+    var id: String { title }
 }
 
 /// Builds the ordered list of rows rendered by the shared energy summary
-/// card. Both `HistoryView` and `DayDetailView` render these rows so the
-/// two screens stay in lockstep — see T-842.
+/// card. Shared between `HistoryView` and `DayDetailView` so the two
+/// screens stay in lockstep.
 enum EnergySummaryFormatter {
-    static func formatKwh(_ value: Double?) -> String {
+    private static func formatKwh(_ value: Double?) -> String {
         guard let value else { return "—" }
         return String(format: "%.2f kWh", value)
     }

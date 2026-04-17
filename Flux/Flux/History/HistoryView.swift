@@ -78,7 +78,7 @@ struct HistoryView: View {
             Text(day.date)
                 .font(.headline)
 
-            ForEach(EnergySummaryFormatter.rows(for: day), id: \.title) { row in
+            ForEach(EnergySummaryFormatter.rows(for: day)) { row in
                 summaryRow(row)
             }
 

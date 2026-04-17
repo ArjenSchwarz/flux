@@ -4,10 +4,9 @@ import Testing
 
 @Suite
 struct EnergySummaryFormatterTests {
-    // Regression test for T-842: History summary card rendered energy data
-    // differently from the Day Detail summary card (five separate rows
-    // vs. a Solar row plus paired Grid/Battery rows). This test locks in
-    // the shared row structure so the two screens stay consistent.
+    // Locks in the shared row structure (Solar row plus paired Grid and
+    // Battery rows) so the History and Day Detail summary cards stay
+    // consistent.
 
     @Test
     func rowsUsePairedGridAndBatteryLayout() {
@@ -68,5 +67,16 @@ struct EnergySummaryFormatterTests {
         let dayDetailRows = EnergySummaryFormatter.rows(for: summary)
 
         #expect(historyRows == dayDetailRows)
+    }
+
+    @Test
+    func nilSummaryRendersAllEmDashes() {
+        let rows = EnergySummaryFormatter.rows(for: nil as DaySummary?)
+
+        #expect(rows == [
+            EnergySummaryRow(title: "Solar", value: "—"),
+            EnergySummaryRow(title: "Grid (import/export)", value: "— / —"),
+            EnergySummaryRow(title: "Battery (+/-)", value: "— / —")
+        ])
     }
 }

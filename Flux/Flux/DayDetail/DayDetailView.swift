@@ -100,7 +100,7 @@ struct DayDetailView: View {
             Text("Summary")
                 .font(.headline)
 
-            ForEach(EnergySummaryFormatter.rows(for: viewModel.summary), id: \.title) { row in
+            ForEach(EnergySummaryFormatter.rows(for: viewModel.summary)) { row in
                 summaryRow(row)
             }
 
