@@ -317,6 +317,35 @@ func TestFetchAndStoreDailyEnergy_DryRun_LogsPayload(t *testing.T) {
 	assert.True(t, logContains(buf, "12.5"))
 }
 
+// T-841 regression: AlphaESS returns all-zero values for "yesterday" during the
+// day-finalisation window. Writing that response overwrites real running totals
+// accumulated by the hourly poll.
+func TestFetchAndStoreDailyEnergy_AllZero_SkipsWrite(t *testing.T) {
+	buf, restore := captureLog()
+	defer restore()
+
+	mc := &mockClient{oneDateEnergy: &alphaess.EnergyData{}}
+	ms := &mockStore{}
+	p := testPoller(mc, ms)
+
+	p.fetchAndStoreDailyEnergy(context.Background(), "2026-04-17")
+
+	assert.Equal(t, 1, mc.oneDateEnergyCalls)
+	assert.Equal(t, 0, ms.dailyEnergyWritten, "must not overwrite existing row with zeros")
+	assert.True(t, logContains(buf, "2026-04-17"))
+	assert.True(t, logContains(buf, "all-zero"))
+}
+
+func TestFetchAndStoreDailyEnergy_PartialZero_StillWrites(t *testing.T) {
+	mc := &mockClient{oneDateEnergy: &alphaess.EnergyData{Epv: 0, EInput: 0, EOutput: 0, ECharge: 0.01, EDischarge: 0}}
+	ms := &mockStore{}
+	p := testPoller(mc, ms)
+
+	p.fetchAndStoreDailyEnergy(context.Background(), "")
+
+	assert.Equal(t, 1, ms.dailyEnergyWritten, "any non-zero field means AlphaESS has data")
+}
+
 // --- Tests for fetchAndStoreSystemInfo ---
 
 func TestFetchAndStoreSystemInfo_Success(t *testing.T) {

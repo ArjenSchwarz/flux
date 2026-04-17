@@ -201,6 +201,14 @@ func (p *Poller) fetchAndStoreDailyEnergy(ctx context.Context, date string) {
 		logDryRunPayload("getOneDateEnergyBySn", data)
 	}
 
+	// AlphaESS returns all-zero totals for "yesterday" during a finalisation
+	// window that extends past Sydney midnight. Writing those zeros would
+	// overwrite real running totals the hourly poll has already stored.
+	if isAllZeroEnergy(data) {
+		slog.Warn("skipping daily energy write: AlphaESS returned all-zero response", "date", date)
+		return
+	}
+
 	item := dynamo.NewDailyEnergyItem(p.cfg.Serial, date, data)
 	if err := p.store.WriteDailyEnergy(ctx, item); err != nil {
 		slog.Error("write daily energy failed", "date", date, "error", err)
@@ -226,6 +234,14 @@ func (p *Poller) fetchAndStoreSystemInfo(ctx context.Context) {
 		return
 	}
 	slog.Info("stored system info")
+}
+
+// isAllZeroEnergy reports whether every energy total in the AlphaESS response
+// is zero. A working battery system never produces all-zero daily totals, so
+// such a response means AlphaESS has not finalised the day's data yet.
+func isAllZeroEnergy(d *alphaess.EnergyData) bool {
+	return d.Epv == 0 && d.EInput == 0 && d.EOutput == 0 &&
+		d.ECharge == 0 && d.EDischarge == 0 && d.EGridCharge == 0
 }
 
 // logDryRunPayload logs the raw API response payload at info level.
