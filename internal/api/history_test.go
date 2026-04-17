@@ -191,6 +191,56 @@ func TestHandleHistoryEnergyRounding(t *testing.T) {
 	assert.Equal(t, roundEnergy(4.565), hr.Days[0].EDischarge)
 }
 
+// TestHandleHistoryReconcilesTodaysRow reproduces T-828: when today is part of
+// the requested range, today's row must reconcile stored daily energy with
+// values integrated from live readings — matching the dashboard's /status
+// values and the day-detail summary. Rows for past days are untouched.
+func TestHandleHistoryReconcilesTodaysRow(t *testing.T) {
+	loc, _ := time.LoadLocation("Australia/Sydney")
+	now := fixedNow()
+	today := now.In(loc).Format("2006-01-02")
+
+	t1 := time.Date(2026, 4, 15, 9, 0, 0, 0, loc).Unix()
+	t2 := t1 + 60
+
+	mr := &mockReader{
+		queryDailyEnergyFn: func(_ context.Context, _, _, _ string) ([]dynamo.DailyEnergyItem, error) {
+			return []dynamo.DailyEnergyItem{
+				{Date: "2026-04-14", Epv: 20, EInput: 4, EOutput: 1, ECharge: 10, EDischarge: 8},
+				{Date: today, Epv: 0.05, EInput: 0.05, EOutput: 0, ECharge: 0, EDischarge: 0.05},
+			}, nil
+		},
+		queryReadingsFn: func(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
+			return []dynamo.ReadingItem{
+				{Timestamp: t1, Ppv: 6000, Pload: 500, Pbat: 6000, Pgrid: 6000, Soc: 80},
+				{Timestamp: t2, Ppv: 6000, Pload: 500, Pbat: 6000, Pgrid: 6000, Soc: 79},
+			}, nil
+		},
+	}
+
+	h := NewHandler(mr, testSerial, testToken, "11:00", "14:00")
+	h.nowFunc = func() time.Time { return now }
+
+	resp, err := h.Handle(context.Background(), historyRequest(nil))
+	require.NoError(t, err)
+	assert.Equal(t, 200, resp.StatusCode)
+
+	hr := parseHistoryResponse(t, resp)
+	require.Len(t, hr.Days, 2)
+
+	// Yesterday: stored values pass through unchanged.
+	assert.Equal(t, "2026-04-14", hr.Days[0].Date)
+	assert.Equal(t, 20.0, hr.Days[0].Epv)
+	assert.Equal(t, 4.0, hr.Days[0].EInput)
+	assert.Equal(t, 8.0, hr.Days[0].EDischarge)
+
+	// Today: reconciled against live readings.
+	assert.Equal(t, today, hr.Days[1].Date)
+	assert.InDelta(t, 0.1, hr.Days[1].Epv, 0.001, "today's epv should be reconciled")
+	assert.InDelta(t, 0.1, hr.Days[1].EInput, 0.001, "today's eInput should be reconciled")
+	assert.InDelta(t, 0.1, hr.Days[1].EDischarge, 0.001, "today's eDischarge should be reconciled")
+}
+
 func TestHandleHistoryDynamoDBError(t *testing.T) {
 	now := fixedNow()
 	mr := &mockReader{
