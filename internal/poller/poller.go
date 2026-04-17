@@ -204,8 +204,10 @@ func (p *Poller) fetchAndStoreDailyEnergy(ctx context.Context, date string) {
 	// AlphaESS returns all-zero totals for "yesterday" during a finalisation
 	// window that extends past Sydney midnight. Writing those zeros would
 	// overwrite real running totals the hourly poll has already stored.
-	if isAllZeroEnergy(data) {
-		slog.Warn("skipping daily energy write: AlphaESS returned all-zero response", "date", date)
+	// The nil check is defensive: the current client can't return (nil, nil),
+	// but a future refactor shouldn't be able to introduce a panic here.
+	if data == nil || isAllZeroEnergy(data) {
+		slog.Warn("skipping daily energy write: AlphaESS returned nil or all-zero response", "date", date)
 		return
 	}
 

@@ -336,6 +336,22 @@ func TestFetchAndStoreDailyEnergy_AllZero_SkipsWrite(t *testing.T) {
 	assert.True(t, logContains(buf, "all-zero"))
 }
 
+// Defensive: GetOneDateEnergy can't currently return (nil, nil), but the
+// poller shouldn't panic if a future refactor changes that.
+func TestFetchAndStoreDailyEnergy_NilData_SkipsWrite(t *testing.T) {
+	buf, restore := captureLog()
+	defer restore()
+
+	mc := &mockClient{oneDateEnergy: nil}
+	ms := &mockStore{}
+	p := testPoller(mc, ms)
+
+	p.fetchAndStoreDailyEnergy(context.Background(), "2026-04-17")
+
+	assert.Equal(t, 0, ms.dailyEnergyWritten)
+	assert.True(t, logContains(buf, "nil or all-zero"))
+}
+
 func TestFetchAndStoreDailyEnergy_PartialZero_StillWrites(t *testing.T) {
 	mc := &mockClient{oneDateEnergy: &alphaess.EnergyData{Epv: 0, EInput: 0, EOutput: 0, ECharge: 0.01, EDischarge: 0}}
 	ms := &mockStore{}
