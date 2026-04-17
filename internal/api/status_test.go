@@ -34,27 +34,27 @@ func parseStatusResponse(t *testing.T, resp events.LambdaFunctionURLResponse) St
 }
 
 func TestHandleStatusAllDataPresent(t *testing.T) {
-	now := fixedNow()
+	// Use an early-morning "now" (06:00 AEST) so the linear cutoff
+	// extrapolation lands before the 11:00 off-peak window under the T-827
+	// filter. At Pbat ~1.4 kW and SOC 48% against a 13.34 kWh capacity the
+	// projected cutoff is ~3.6 h out → ~09:37, well before 11:00.
+	loc, _ := time.LoadLocation("Australia/Sydney")
+	now := time.Date(2026, 4, 15, 6, 0, 0, 0, loc)
 	nowUnix := now.Unix()
 
 	mr := &mockReader{
 		queryReadingsFn: func(_ context.Context, serial string, from, to int64) ([]dynamo.ReadingItem, error) {
 			assert.Equal(t, testSerial, serial)
 			// Return readings spanning 24h with a few in the last 15min and 60s.
-			// Pbat values are high enough that the extrapolated cutoff lands
-			// before the 11:00 off-peak window (now is 10:00) — otherwise the
-			// cutoff would be suppressed by the T-827 off-peak filter.
-			// remaining = (48-10)/100 * 13.34 = 5.069 kWh; at ~11 kW that's
-			// ~28 minutes → cutoff at ~10:28, well before 11:00.
 			return []dynamo.ReadingItem{
 				// Old reading (24h ago) — lowest SOC.
 				{Timestamp: nowUnix - 86000, Ppv: 100, Pload: 200, Pbat: 300, Pgrid: 50, Soc: 20},
 				// 15min ago.
-				{Timestamp: nowUnix - 800, Ppv: 500, Pload: 10500, Pbat: 10800, Pgrid: 100, Soc: 55},
+				{Timestamp: nowUnix - 800, Ppv: 500, Pload: 1000, Pbat: 800, Pgrid: 100, Soc: 55},
 				// Within 60s — 3 consecutive readings with pgrid > 500.
-				{Timestamp: nowUnix - 30, Ppv: 1000, Pload: 11000, Pbat: 11200, Pgrid: 600, Soc: 50},
-				{Timestamp: nowUnix - 20, Ppv: 1100, Pload: 11000, Pbat: 11300, Pgrid: 700, Soc: 49},
-				{Timestamp: nowUnix - 10, Ppv: 1200, Pload: 11000, Pbat: 11400, Pgrid: 800, Soc: 48},
+				{Timestamp: nowUnix - 30, Ppv: 1000, Pload: 1500, Pbat: 1200, Pgrid: 600, Soc: 50},
+				{Timestamp: nowUnix - 20, Ppv: 1100, Pload: 1600, Pbat: 1300, Pgrid: 700, Soc: 49},
+				{Timestamp: nowUnix - 10, Ppv: 1200, Pload: 1700, Pbat: 1400, Pgrid: 800, Soc: 48},
 			}, nil
 		},
 		getSystemFn: func(_ context.Context, serial string) (*dynamo.SystemItem, error) {
@@ -87,8 +87,8 @@ func TestHandleStatusAllDataPresent(t *testing.T) {
 	// Live: last reading with rounding.
 	require.NotNil(t, sr.Live)
 	assert.Equal(t, roundPower(1200), sr.Live.Ppv)
-	assert.Equal(t, roundPower(11000), sr.Live.Pload)
-	assert.Equal(t, roundPower(11400), sr.Live.Pbat)
+	assert.Equal(t, roundPower(1700), sr.Live.Pload)
+	assert.Equal(t, roundPower(1400), sr.Live.Pbat)
 	assert.Equal(t, roundPower(800), sr.Live.Pgrid)
 	assert.Equal(t, roundPower(48), sr.Live.Soc)
 	assert.True(t, sr.Live.PgridSustained)
@@ -561,6 +561,45 @@ func TestHandleStatusCutoffShownWhenBeforeOffpeak(t *testing.T) {
 	require.NotNil(t, sr.Rolling15m)
 	require.NotNil(t, sr.Rolling15m.EstimatedCutoff,
 		"rolling15min.estimatedCutoffTime should be present when cutoff is before next off-peak")
+}
+
+// TestHandleStatusCutoffShownWithInvalidOffpeakConfig verifies that when the
+// off-peak window is misconfigured (unparseable), the cutoff filter falls
+// through as a no-op — a computed cutoff is still returned as-is rather than
+// silently suppressed.
+func TestHandleStatusCutoffShownWithInvalidOffpeakConfig(t *testing.T) {
+	loc, _ := time.LoadLocation("Australia/Sydney")
+	now := time.Date(2026, 4, 15, 7, 0, 0, 0, loc)
+	nowUnix := now.Unix()
+
+	mr := &mockReader{
+		queryReadingsFn: func(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
+			// Light discharge that would otherwise land inside the off-peak
+			// window if off-peak were configured.
+			return []dynamo.ReadingItem{
+				{Timestamp: nowUnix - 60, Ppv: 0, Pload: 100, Pbat: 100, Pgrid: 0, Soc: 50},
+				{Timestamp: nowUnix - 10, Ppv: 0, Pload: 100, Pbat: 100, Pgrid: 0, Soc: 50},
+			}, nil
+		},
+		getSystemFn: func(_ context.Context, serial string) (*dynamo.SystemItem, error) {
+			return &dynamo.SystemItem{SysSn: serial, Cobat: 13.34}, nil
+		},
+	}
+
+	h := NewHandler(mr, testSerial, testToken, "bad", "also-bad")
+	h.nowFunc = func() time.Time { return now }
+
+	resp, err := h.Handle(context.Background(), statusRequest())
+	require.NoError(t, err)
+	assert.Equal(t, 200, resp.StatusCode)
+
+	sr := parseStatusResponse(t, resp)
+	require.NotNil(t, sr.Battery)
+	require.NotNil(t, sr.Battery.EstimatedCutoff,
+		"cutoff should be returned when off-peak config is invalid (no suppression)")
+	require.NotNil(t, sr.Rolling15m)
+	require.NotNil(t, sr.Rolling15m.EstimatedCutoff,
+		"rolling cutoff should be returned when off-peak config is invalid")
 }
 
 // TestHandleStatusCutoffSuppressedDuringOffpeak verifies that when "now" is
