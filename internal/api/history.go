@@ -4,8 +4,11 @@ import (
 	"context"
 	"log/slog"
 	"strconv"
+	"time"
 
+	"github.com/ArjenSchwarz/flux/internal/dynamo"
 	"github.com/aws/aws-lambda-go/events"
+	"golang.org/x/sync/errgroup"
 )
 
 // validDays is the set of accepted values for the days query parameter.
@@ -27,21 +30,63 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 
 	startDate := now.AddDate(0, 0, -(days - 1)).Format("2006-01-02")
 
-	items, err := h.reader.QueryDailyEnergy(ctx, h.serial, startDate, today)
-	if err != nil {
+	// Fetch daily energy rows and today's readings concurrently. Today's row is
+	// reconciled against a live integration so it matches the dashboard's
+	// /status view; past rows are already finalized and pass through unchanged.
+	// Readings are always fetched — the concurrent cost is negligible and the
+	// alternative (only fetching when today is in range) duplicates the gating
+	// logic below.
+	var (
+		items       []dynamo.DailyEnergyItem
+		allReadings []dynamo.ReadingItem
+	)
+
+	g, gctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		result, err := h.reader.QueryDailyEnergy(gctx, h.serial, startDate, today)
+		items = result
+		return err
+	})
+	g.Go(func() error {
+		// 24h window in Unix seconds; computeTodayEnergy filters to
+		// >= midnight Sydney, so any pre-midnight readings are discarded.
+		nowUnix := now.Unix()
+		result, err := h.reader.QueryReadings(gctx, h.serial, nowUnix-86400, nowUnix)
+		allReadings = result
+		return err
+	})
+
+	if err := g.Wait(); err != nil {
 		slog.Error("history query failed", "error", err)
 		return errorResponse(500, "internal error")
 	}
 
+	var todayComputed *TodayEnergy
+	if len(allReadings) > 0 {
+		midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, sydneyTZ).Unix()
+		todayComputed = computeTodayEnergy(allReadings, midnight)
+	}
+
 	result := make([]DayEnergy, len(items))
 	for i, item := range items {
-		result[i] = DayEnergy{
-			Date:       item.Date,
+		stored := &TodayEnergy{
 			Epv:        roundEnergy(item.Epv),
 			EInput:     roundEnergy(item.EInput),
 			EOutput:    roundEnergy(item.EOutput),
 			ECharge:    roundEnergy(item.ECharge),
 			EDischarge: roundEnergy(item.EDischarge),
+		}
+		energy := stored
+		if item.Date == today {
+			energy = reconcileEnergy(todayComputed, stored)
+		}
+		result[i] = DayEnergy{
+			Date:       item.Date,
+			Epv:        energy.Epv,
+			EInput:     energy.EInput,
+			EOutput:    energy.EOutput,
+			ECharge:    energy.ECharge,
+			EDischarge: energy.EDischarge,
 		}
 	}
 

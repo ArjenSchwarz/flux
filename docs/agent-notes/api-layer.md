@@ -45,6 +45,8 @@
 - Date range: `today.AddDate(0, 0, -(days-1))` to today.
 - Results come pre-sorted from DynamoDB (ScanIndexForward: true).
 - All energy values rounded via `roundEnergy`.
+- Concurrent queries via errgroup: daily energy rows + last 24h of readings. The readings are used to compute today's integrated energy via `computeTodayEnergy`; only the row whose `Date == today` is then reconciled with `reconcileEnergy`. Past rows pass through untouched (the midnight finalizer has already written their authoritative totals).
+- This keeps today's row consistent with `/status` and `/day` for today — see T-828.
 
 ## Day Endpoint
 
@@ -56,6 +58,7 @@
 - `findMinSOCFromPower` — separate helper for daily power items since they use `Cbat` and `UploadTime` instead of `Soc` and `Timestamp`.
 - `mapDailyPowerToPoints` — parses `UploadTime` using package-level `sydneyTZ`.
 - Summary is null when neither readings nor daily energy exist.
+- `nowFunc` is captured once at the top of the handler. When the requested `date` equals today (Sydney local), the summary's energy fields are `reconcileEnergy(computed, stored)` so they match `/status`. For past dates the stored `DailyEnergyItem` passes through untouched. See T-828.
 
 ## Compute Functions
 

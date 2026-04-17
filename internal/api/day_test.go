@@ -318,6 +318,93 @@ func TestHandleDaySocLowFromRawNotDownsampled(t *testing.T) {
 	assert.Equal(t, roundPower(20), *dr.Summary.SocLow, "socLow should come from raw data, not downsampled")
 }
 
+// TestHandleDayTodayReconcilesEnergy reproduces T-828: the Day Detail summary
+// for today must reconcile stored daily energy with values integrated from live
+// readings — so it matches the dashboard's /status view. When the stored
+// DailyEnergyItem lags behind (it is refreshed hourly from AlphaESS), the
+// response should still reflect the larger, integration-based figures.
+func TestHandleDayTodayReconcilesEnergy(t *testing.T) {
+	loc, _ := time.LoadLocation("Australia/Sydney")
+	now := fixedNow() // 2026-04-15 10:00 AEST
+	date := now.In(loc).Format("2006-01-02")
+
+	// Two readings 60s apart today: each directional field integrates to
+	// exactly 100 Wh (0.1 kWh after rounding).
+	t1 := time.Date(2026, 4, 15, 9, 0, 0, 0, loc).Unix()
+	t2 := t1 + 60
+	readings := []dynamo.ReadingItem{
+		{Timestamp: t1, Ppv: 6000, Pload: 500, Pbat: 6000, Pgrid: 6000, Soc: 80},
+		{Timestamp: t2, Ppv: 6000, Pload: 500, Pbat: 6000, Pgrid: 6000, Soc: 79},
+	}
+
+	mr := &mockReader{
+		queryReadingsFn: func(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
+			return readings, nil
+		},
+		getDailyEnergyFn: func(_ context.Context, _, _ string) (*dynamo.DailyEnergyItem, error) {
+			// Stored values lag behind live readings (hourly refresh).
+			return &dynamo.DailyEnergyItem{
+				Date: date, Epv: 0.05, EInput: 0.05, EOutput: 0, ECharge: 0, EDischarge: 0.05,
+			}, nil
+		},
+	}
+
+	h := NewHandler(mr, testSerial, testToken, "11:00", "14:00")
+	h.nowFunc = func() time.Time { return now }
+
+	resp, err := h.Handle(context.Background(), dayRequest(map[string]string{"date": date}))
+	require.NoError(t, err)
+	assert.Equal(t, 200, resp.StatusCode)
+
+	dr := parseDayResponse(t, resp)
+	require.NotNil(t, dr.Summary)
+	require.NotNil(t, dr.Summary.Epv)
+	require.NotNil(t, dr.Summary.EInput)
+	require.NotNil(t, dr.Summary.EDischarge)
+
+	assert.InDelta(t, 0.1, *dr.Summary.Epv, 0.001, "epv should be reconciled (max of computed and stored)")
+	assert.InDelta(t, 0.1, *dr.Summary.EInput, 0.001, "eInput (grid import) should be reconciled")
+	assert.InDelta(t, 0.1, *dr.Summary.EDischarge, 0.001, "eDischarge (battery) should be reconciled")
+}
+
+// TestHandleDayPastDateDoesNotReconcile locks in the scope of the T-828 fix:
+// reconciliation is for today only. Past-date requests continue to return the
+// authoritative stored values because finalized totals are written at midnight.
+func TestHandleDayPastDateDoesNotReconcile(t *testing.T) {
+	loc, _ := time.LoadLocation("Australia/Sydney")
+	now := fixedNow()
+	pastDate := "2026-04-14"
+
+	mr := &mockReader{
+		queryReadingsFn: func(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
+			// Readings exist for the past date (within the 30d TTL window).
+			t1 := time.Date(2026, 4, 14, 9, 0, 0, 0, loc).Unix()
+			return []dynamo.ReadingItem{
+				{Timestamp: t1, Ppv: 6000, Pload: 500, Pbat: 6000, Pgrid: 6000, Soc: 80},
+				{Timestamp: t1 + 60, Ppv: 6000, Pload: 500, Pbat: 6000, Pgrid: 6000, Soc: 79},
+			}, nil
+		},
+		getDailyEnergyFn: func(_ context.Context, _, _ string) (*dynamo.DailyEnergyItem, error) {
+			return &dynamo.DailyEnergyItem{
+				Date: pastDate, Epv: 0.05, EInput: 0.05, EOutput: 0, ECharge: 0, EDischarge: 0.05,
+			}, nil
+		},
+	}
+
+	h := NewHandler(mr, testSerial, testToken, "11:00", "14:00")
+	h.nowFunc = func() time.Time { return now }
+
+	resp, err := h.Handle(context.Background(), dayRequest(map[string]string{"date": pastDate}))
+	require.NoError(t, err)
+
+	dr := parseDayResponse(t, resp)
+	require.NotNil(t, dr.Summary)
+	require.NotNil(t, dr.Summary.Epv)
+	assert.Equal(t, 0.05, *dr.Summary.Epv, "past dates use stored totals directly")
+	assert.Equal(t, 0.05, *dr.Summary.EInput)
+	assert.Equal(t, 0.05, *dr.Summary.EDischarge)
+}
+
 func TestHandleDayDynamoDBError(t *testing.T) {
 	dbErr := errors.New("timeout")
 
