@@ -638,7 +638,7 @@ Uses SwiftUI Charts `Chart` with `BarMark` and `.position(by:)` for grouped bars
 ```swift
 Chart(chartData) { item in
     BarMark(
-        x: .value("Date", item.date),
+        x: .value("Date", item.dayID),
         y: .value("kWh", item.value)
     )
     .foregroundStyle(by: .value("Metric", item.metric))
@@ -647,11 +647,13 @@ Chart(chartData) { item in
 }
 ```
 
+The x-axis binds to `item.dayID` — the YYYY-MM-DD String — rather than the parsed `Date`. `.position(by:)` subdivides the x-slot for each category into one sub-bar per metric, which requires a discrete axis; binding a continuous `Date` collapses every bar to a near-zero width and hides non-today data (T-841).
+
 The `chartData` is a flattened array where each `DayEnergy` becomes 5 rows (one per metric: solar, grid imported, grid exported, battery charged, battery discharged). The `.position(by:)` modifier creates side-by-side grouped bars within each date. This transformation is computed once in the view model (as a computed property from `days`) and cached — not recomputed on every view body evaluation.
 
 A `Picker` with `.pickerStyle(.segmented)` provides the 7/14/30 day range selector. This gets Liquid Glass styling automatically on iOS 26.
 
-Day selection uses `.chartOverlay` with a `DragGesture` to detect taps, mapping the x-position to the nearest date using `ChartProxy.value(atX:)`. The selected day gets a subtle background highlight via a `RectangleMark` rendered behind the bar group:
+Day selection uses `.chartOverlay` with a `DragGesture` to detect taps. The x-position is resolved to a `dayID` string via `proxy.value(atX:, as: String.self)`, then matched back to the corresponding `HistoryChartDay`. The selected day gets a subtle background highlight via a `RectangleMark` rendered behind the bar group:
 
 ```swift
 if let selected = viewModel.selectedDay {
