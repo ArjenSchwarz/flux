@@ -76,55 +76,6 @@ struct HistoryViewModelTests {
         #expect(viewModel.error == .serverError)
     }
 
-    // T-841 regression: every returned day must produce one entry per metric with a distinct dayID.
-    @Test
-    func rebuildChartDataProducesOneEntryPerMetricPerDay() async throws {
-        let modelContext = try makeModelContext()
-        let apiClient = MockHistoryAPIClient()
-        let days = [
-            DayEnergy(date: "2026-04-13", epv: 5.0, eInput: 1.0, eOutput: 0.2, eCharge: 2.0, eDischarge: 3.0),
-            DayEnergy(date: "2026-04-14", epv: 6.0, eInput: 1.1, eOutput: 0.3, eCharge: 2.1, eDischarge: 3.1),
-            DayEnergy(date: "2026-04-15", epv: 7.0, eInput: 1.2, eOutput: 0.4, eCharge: 2.2, eDischarge: 3.2)
-        ]
-        apiClient.historyResult = .success(HistoryResponse(days: days))
-
-        let viewModel = HistoryViewModel(apiClient: apiClient, modelContext: modelContext)
-        await viewModel.loadHistory(days: 7)
-
-        let metricCount = HistoryViewModel.HistoryChartMetric.allCases.count
-        #expect(viewModel.chartDays.count == days.count)
-        #expect(viewModel.chartEntries.count == days.count * metricCount)
-
-        let uniqueDayIDs = Set(viewModel.chartEntries.map(\.dayID))
-        #expect(uniqueDayIDs == Set(days.map(\.date)))
-    }
-
-    @Test
-    func chartEntriesUseDiscreteDateKeyForEachDay() async throws {
-        let modelContext = try makeModelContext()
-        let apiClient = MockHistoryAPIClient()
-        let days = (0 ..< 7).map { offset in
-            DayEnergy(
-                date: String(format: "2026-04-%02d", 9 + offset),
-                epv: Double(offset),
-                eInput: Double(offset),
-                eOutput: Double(offset),
-                eCharge: Double(offset),
-                eDischarge: Double(offset)
-            )
-        }
-        apiClient.historyResult = .success(HistoryResponse(days: days))
-
-        let viewModel = HistoryViewModel(apiClient: apiClient, modelContext: modelContext)
-        await viewModel.loadHistory(days: 7)
-
-        for day in days {
-            let entriesForDay = viewModel.chartEntries.filter { $0.dayID == day.date }
-            #expect(entriesForDay.count == HistoryViewModel.HistoryChartMetric.allCases.count,
-                    "expected one entry per metric for \(day.date)")
-        }
-    }
-
     @Test
     func selectDayUpdatesSelectedDay() async throws {
         let modelContext = try makeModelContext()

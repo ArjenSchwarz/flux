@@ -10,7 +10,7 @@
 
 ## History Views (History/)
 
-- **HistoryChartView** — Grouped BarMark with metrics, day range picker (7/14/30). Chart data comes pre-computed from HistoryViewModel. The x-axis uses the `dayID` String (not the `Date`): `.position(by:)` for grouped bars requires a discrete axis, and a continuous `Date` axis caused bars for non-today days to collapse to invisible widths (T-841). Drag-to-select reads `proxy.value(atX:, as: String.self)` and looks up the matching `HistoryChartDay` by string.
+- **HistoryChartView** — Grouped BarMark with metrics, day range picker (7/14/30). Chart data comes pre-computed from HistoryViewModel.
 - **HistoryView** — Chart + summary card, `ContentUnavailableView` when empty. Error card with retry/settings for empty-cache failures.
 
 ## Day Detail Views (DayDetail/)
