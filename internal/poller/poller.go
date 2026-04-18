@@ -19,7 +19,6 @@ const (
 	dailyEnergyInterval  = 1 * time.Hour
 	systemInfoInterval   = 24 * time.Hour
 	shutdownDrainTimeout = 25 * time.Second
-	midnightDelay        = 5 * time.Minute
 	dateLayout           = "2006-01-02"
 )
 
@@ -57,13 +56,12 @@ func (p *Poller) Run(ctx context.Context) error {
 	defer drainCancel()
 
 	var wg sync.WaitGroup
-	wg.Add(6)
+	wg.Add(5)
 	go p.pollLiveData(ctx, drainCtx, &wg)
 	go p.pollDailyPower(ctx, drainCtx, &wg)
 	go p.pollDailyEnergy(ctx, drainCtx, &wg)
 	go p.pollSystemInfo(ctx, drainCtx, &wg)
 	go p.offpeak.Run(ctx, drainCtx, &wg)
-	go p.midnightFinalizer(ctx, drainCtx, &wg)
 
 	<-ctx.Done()
 	slog.Info("poller stopping")
@@ -106,9 +104,18 @@ func (p *Poller) pollDailyPower(loopCtx, drainCtx context.Context, wg *sync.Wait
 	pollLoop(loopCtx, drainCtx, wg, dailyPowerInterval, p.fetchAndStoreDailyPower)
 }
 
+// pollDailyEnergy polls both today's and yesterday's energy totals every hour.
+// Yesterday is re-polled because AlphaESS's day-finalisation latency extends
+// past Sydney midnight — the first few polls after midnight return all-zero
+// for yesterday, and fetchAndStoreDailyEnergy's zero-guard skips those writes
+// until AlphaESS returns real values, at which point yesterday's row gets its
+// final totals. Before the zero-guard, this same retry pattern would have
+// corrupted yesterday by overwriting real data with zeros.
 func (p *Poller) pollDailyEnergy(loopCtx, drainCtx context.Context, wg *sync.WaitGroup) {
 	pollLoop(loopCtx, drainCtx, wg, dailyEnergyInterval, func(ctx context.Context) {
 		p.fetchAndStoreDailyEnergy(ctx, "")
+		yesterday := p.now().In(p.cfg.Location).AddDate(0, 0, -1).Format(dateLayout)
+		p.fetchAndStoreDailyEnergy(ctx, yesterday)
 	})
 }
 
@@ -116,32 +123,6 @@ func (p *Poller) pollSystemInfo(loopCtx, drainCtx context.Context, wg *sync.Wait
 	pollLoop(loopCtx, drainCtx, wg, systemInfoInterval, p.fetchAndStoreSystemInfo)
 }
 
-// midnightFinalizer waits until midnight+5min local time, then writes
-// yesterday's final energy totals. Loops daily.
-func (p *Poller) midnightFinalizer(loopCtx, drainCtx context.Context, wg *sync.WaitGroup) {
-	defer wg.Done()
-	for {
-		now := p.now().In(p.cfg.Location)
-		next := nextLocalMidnight(now, p.cfg.Location)
-		delay := time.Until(next) + midnightDelay
-
-		select {
-		case <-loopCtx.Done():
-			return
-		case <-time.After(delay):
-			yesterday := p.now().In(p.cfg.Location).AddDate(0, 0, -1).Format(dateLayout)
-			slog.Debug("midnight finalizer running", "date", yesterday)
-			p.fetchAndStoreDailyEnergy(drainCtx, yesterday)
-		}
-	}
-}
-
-// nextLocalMidnight returns the next midnight in the given location after now.
-// Uses time.Date for DST safety.
-func nextLocalMidnight(now time.Time, loc *time.Location) time.Time {
-	local := now.In(loc)
-	return time.Date(local.Year(), local.Month(), local.Day()+1, 0, 0, 0, 0, loc)
-}
 
 // --- fetchAndStore helpers ---
 

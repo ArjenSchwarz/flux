@@ -48,16 +48,18 @@ The poller's `midnightFinalizer` (`internal/poller/poller.go:121`) runs at Sydne
 ## Resolution for the Issue
 
 **Changes made:**
-- `internal/poller/poller.go` — In `fetchAndStoreDailyEnergy`, skip the write and log a warning when every energy field in the AlphaESS response is zero. No legitimate day on an operating battery system produces all-zero totals; treating such a response as "not-yet-finalised" is safe.
-- `internal/poller/poller_test.go` — New regression test `TestFetchAndStoreDailyEnergy_AllZero_SkipsWrite` locks in the guard.
+- `internal/poller/poller.go` — In `fetchAndStoreDailyEnergy`, skip the write and log a warning when the AlphaESS response is nil or every energy field is zero. No legitimate day on an operating battery system produces all-zero totals; treating such a response as "not-yet-finalised" is safe.
+- `internal/poller/poller.go` — `pollDailyEnergy` now polls both today and yesterday every hour. Yesterday gets re-polled throughout the day; once AlphaESS finalises, its real values replace the hourly-accumulated row. Before the zero-guard this would have corrupted yesterday every hour; with the guard, each pre-finalisation response is harmlessly skipped.
+- `internal/poller/poller.go` — Removed `midnightFinalizer` and `nextLocalMidnight`. Its purpose (write yesterday's final totals) is now served by the hourly yesterday poll, which is more robust because it retries through the entire day until AlphaESS has data ready.
+- `internal/poller/poller_test.go` — New regression tests: `TestFetchAndStoreDailyEnergy_AllZero_SkipsWrite`, `TestFetchAndStoreDailyEnergy_NilData_SkipsWrite`, `TestFetchAndStoreDailyEnergy_PartialZero_StillWrites`, `TestPollDailyEnergy_PollsTodayAndYesterday`. Removed now-obsolete `TestNextLocalMidnight` / `TestNextLocalMidnight_DST` / `TestFetchAndStoreDailyEnergy_MidnightFinalizer_UsesYesterday`.
 
 **Backfill:** A one-off invocation re-queried AlphaESS for 2026-04-15 and 2026-04-16 and wrote the real values to `flux-daily-energy`, replacing the zero rows.
 
-**Approach rationale:** A pure data-layer defensive guard. The poller has no reliable way to distinguish "AlphaESS hasn't finalised yesterday yet" from "the day really had zero activity", but for a working battery system the latter cannot happen. Filtering by the all-zero predicate protects against this issue and any similar AlphaESS glitches without depending on timezone assumptions.
+**Approach rationale:** A pure data-layer defensive guard combined with a retry-until-finalised poll pattern. The poller has no reliable way to distinguish "AlphaESS hasn't finalised yesterday yet" from "the day really had zero activity", but for a working battery system the latter cannot happen. Filtering by the all-zero predicate protects against this issue and any similar AlphaESS glitches without depending on timezone assumptions. Re-polling yesterday every hour self-heals: the hourly poll keeps trying until AlphaESS returns real values, at which point yesterday's row gets its final totals.
 
 **Alternatives considered:**
-- *Shift the midnight finalizer later (e.g., to T+48h)* — Rejected as primary fix because we don't know AlphaESS's exact finalisation window; a guard is still required to be safe. May be layered on later as an optimisation.
-- *Remove the midnight finalizer entirely* — Rejected because the hourly poll's last-of-day value may be a few minutes stale relative to AlphaESS's actual final. The finalizer (with the zero-guard) still serves a purpose once AlphaESS's finalisation propagates.
+- *Keep the midnight finalizer alongside the hourly yesterday poll* — Rejected to avoid two code paths doing the same job. The hourly poll will hit yesterday within 55 minutes of the old finalizer's scheduled time; simpler to have one mechanism.
+- *Shift the midnight finalizer later (e.g., to T+48h)* — Rejected because we don't know AlphaESS's exact finalisation window; a write-time guard is still required to be safe, and with the guard in place the hourly-retry pattern is strictly better.
 - *Fix SwiftUI Charts to show zero-value bars visibly* — Rejected. That masks a backend data integrity bug.
 
 ## Regression Test
@@ -73,8 +75,8 @@ The poller's `midnightFinalizer` (`internal/poller/poller.go:121`) runs at Sydne
 
 | File | Change |
 |------|--------|
-| `internal/poller/poller.go` | Added `isAllZeroEnergy` guard in `fetchAndStoreDailyEnergy`. |
-| `internal/poller/poller_test.go` | Added regression test for the zero-overwrite guard. |
+| `internal/poller/poller.go` | Added `isAllZeroEnergy` + nil guard in `fetchAndStoreDailyEnergy`; `pollDailyEnergy` now polls both today and yesterday; removed `midnightFinalizer` and `nextLocalMidnight`. |
+| `internal/poller/poller_test.go` | Added regression tests for zero/nil guards and the today+yesterday poll; removed obsolete midnight-finalizer tests. |
 
 ## Verification
 
