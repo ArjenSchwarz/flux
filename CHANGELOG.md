@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- `PeakUsageCard` displays period energy as kWh (one decimal) instead of Wh, and adds a caption header row ("Timespan" / "Average · Total") above the entries
+
 ### Fixed
 
 - `/status` no longer returns an `estimatedCutoffTime` (in either `battery` or `rolling15min`) when the extrapolated cutoff falls at or after the next off-peak window — the battery will be charged during that window so the predicted cutoff is misleading. Implemented via a new `nextOffpeakStart` helper that returns today's window start when `now < todayEnd`, otherwise tomorrow's window start (T-827).
