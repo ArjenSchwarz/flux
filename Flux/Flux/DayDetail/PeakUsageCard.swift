@@ -3,18 +3,12 @@ import SwiftUI
 struct PeakUsageCard: View {
     let periods: [PeakPeriod]
 
-    private static let energyFormatter: NumberFormatter = {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.maximumFractionDigits = 0
-        formatter.usesGroupingSeparator = true
-        return formatter
-    }()
-
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Peak Usage")
                 .font(.headline)
+
+            headerRow
 
             ForEach(periods) { period in
                 periodRow(period)
@@ -25,12 +19,24 @@ struct PeakUsageCard: View {
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
-    private func periodRow(_ period: PeakPeriod) -> some View {
+    private var headerRow: some View {
         HStack {
+            Text("Timespan")
+            Spacer()
+            Text("Average · Total")
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+    }
+
+    private func periodRow(_ period: PeakPeriod) -> some View {
+        let avgKW = String(format: "%.1f", period.avgLoadW / 1000)
+        let totalKWh = String(format: "%.1f", period.energyWh / 1000)
+        return HStack {
             Text(timeRange(period))
                 .foregroundStyle(.secondary)
             Spacer()
-            Text("\(String(format: "%.1f", period.avgLoadW / 1000)) kW · \(formattedEnergy(period.energyWh)) Wh")
+            Text("\(avgKW) kW · \(totalKWh) kWh")
         }
         .font(.subheadline)
     }
@@ -42,10 +48,6 @@ struct PeakUsageCard: View {
             return "—"
         }
         return "\(DateFormatting.clockTime24h(from: startDate)) – \(DateFormatting.clockTime24h(from: endDate))"
-    }
-
-    private func formattedEnergy(_ wattHours: Double) -> String {
-        Self.energyFormatter.string(from: NSNumber(value: wattHours)) ?? "\(Int(wattHours))"
     }
 }
 
