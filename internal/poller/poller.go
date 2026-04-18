@@ -104,13 +104,7 @@ func (p *Poller) pollDailyPower(loopCtx, drainCtx context.Context, wg *sync.Wait
 	pollLoop(loopCtx, drainCtx, wg, dailyPowerInterval, p.fetchAndStoreDailyPower)
 }
 
-// pollDailyEnergy polls both today's and yesterday's energy totals every hour.
-// Yesterday is re-polled because AlphaESS's day-finalisation latency extends
-// past Sydney midnight — the first few polls after midnight return all-zero
-// for yesterday, and fetchAndStoreDailyEnergy's zero-guard skips those writes
-// until AlphaESS returns real values, at which point yesterday's row gets its
-// final totals. Before the zero-guard, this same retry pattern would have
-// corrupted yesterday by overwriting real data with zeros.
+// pollDailyEnergy polls today and yesterday hourly; the zero-guard retries yesterday until AlphaESS finalises.
 func (p *Poller) pollDailyEnergy(loopCtx, drainCtx context.Context, wg *sync.WaitGroup) {
 	pollLoop(loopCtx, drainCtx, wg, dailyEnergyInterval, func(ctx context.Context) {
 		p.fetchAndStoreDailyEnergy(ctx, "")
@@ -122,7 +116,6 @@ func (p *Poller) pollDailyEnergy(loopCtx, drainCtx context.Context, wg *sync.Wai
 func (p *Poller) pollSystemInfo(loopCtx, drainCtx context.Context, wg *sync.WaitGroup) {
 	pollLoop(loopCtx, drainCtx, wg, systemInfoInterval, p.fetchAndStoreSystemInfo)
 }
-
 
 // --- fetchAndStore helpers ---
 
@@ -182,13 +175,14 @@ func (p *Poller) fetchAndStoreDailyEnergy(ctx context.Context, date string) {
 		logDryRunPayload("getOneDateEnergyBySn", data)
 	}
 
-	// AlphaESS returns all-zero totals for "yesterday" during a finalisation
-	// window that extends past Sydney midnight. Writing those zeros would
-	// overwrite real running totals the hourly poll has already stored.
-	// The nil check is defensive: the current client can't return (nil, nil),
-	// but a future refactor shouldn't be able to introduce a panic here.
-	if data == nil || isAllZeroEnergy(data) {
-		slog.Warn("skipping daily energy write: AlphaESS returned nil or all-zero response", "date", date)
+	// Defensive: current client can't return (nil, nil) but a future refactor shouldn't be able to panic here.
+	if data == nil {
+		slog.Warn("skipping daily energy write: nil response from AlphaESS", "date", date)
+		return
+	}
+	// AlphaESS returns all-zero for yesterday during its finalisation window (extends past Sydney midnight).
+	if isAllZeroEnergy(data) {
+		slog.Warn("skipping daily energy write: AlphaESS returned all-zero (day not finalised yet)", "date", date)
 		return
 	}
 

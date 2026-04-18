@@ -350,7 +350,8 @@ func TestFetchAndStoreDailyEnergy_NilData_SkipsWrite(t *testing.T) {
 	p.fetchAndStoreDailyEnergy(context.Background(), "2026-04-17")
 
 	assert.Equal(t, 0, ms.dailyEnergyWritten)
-	assert.True(t, logContains(buf, "nil or all-zero"))
+	assert.True(t, logContains(buf, "nil response"))
+	assert.True(t, logContains(buf, "2026-04-17"))
 }
 
 func TestFetchAndStoreDailyEnergy_PartialZero_StillWrites(t *testing.T) {
