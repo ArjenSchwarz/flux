@@ -13,7 +13,6 @@ import (
 	"github.com/ArjenSchwarz/flux/internal/config"
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // --- Mock client ---
@@ -34,6 +33,7 @@ type mockClient struct {
 	oneDateEnergyCalls int
 	essListCalls       int
 	lastEnergyDate     string
+	energyDates        []string
 	lastPowerDate      string
 }
 
@@ -51,6 +51,7 @@ func (m *mockClient) GetOneDayPower(_ context.Context, _ string, date string) ([
 func (m *mockClient) GetOneDateEnergy(_ context.Context, _ string, date string) (*alphaess.EnergyData, error) {
 	m.oneDateEnergyCalls++
 	m.lastEnergyDate = date
+	m.energyDates = append(m.energyDates, date)
 	return m.oneDateEnergy, m.oneDateEnergyErr
 }
 
@@ -317,6 +318,52 @@ func TestFetchAndStoreDailyEnergy_DryRun_LogsPayload(t *testing.T) {
 	assert.True(t, logContains(buf, "12.5"))
 }
 
+// T-841 regression: AlphaESS returns all-zero values for "yesterday" during the
+// day-finalisation window. Writing that response overwrites real running totals
+// accumulated by the hourly poll.
+func TestFetchAndStoreDailyEnergy_AllZero_SkipsWrite(t *testing.T) {
+	buf, restore := captureLog()
+	defer restore()
+
+	mc := &mockClient{oneDateEnergy: &alphaess.EnergyData{}}
+	ms := &mockStore{}
+	p := testPoller(mc, ms)
+
+	p.fetchAndStoreDailyEnergy(context.Background(), "2026-04-17")
+
+	assert.Equal(t, 1, mc.oneDateEnergyCalls)
+	assert.Equal(t, 0, ms.dailyEnergyWritten, "must not overwrite existing row with zeros")
+	assert.True(t, logContains(buf, "2026-04-17"))
+	assert.True(t, logContains(buf, "all-zero"))
+}
+
+// Defensive: GetOneDateEnergy can't currently return (nil, nil), but the
+// poller shouldn't panic if a future refactor changes that.
+func TestFetchAndStoreDailyEnergy_NilData_SkipsWrite(t *testing.T) {
+	buf, restore := captureLog()
+	defer restore()
+
+	mc := &mockClient{oneDateEnergy: nil}
+	ms := &mockStore{}
+	p := testPoller(mc, ms)
+
+	p.fetchAndStoreDailyEnergy(context.Background(), "2026-04-17")
+
+	assert.Equal(t, 0, ms.dailyEnergyWritten)
+	assert.True(t, logContains(buf, "nil response"))
+	assert.True(t, logContains(buf, "2026-04-17"))
+}
+
+func TestFetchAndStoreDailyEnergy_PartialZero_StillWrites(t *testing.T) {
+	mc := &mockClient{oneDateEnergy: &alphaess.EnergyData{Epv: 0, EInput: 0, EOutput: 0, ECharge: 0.01, EDischarge: 0}}
+	ms := &mockStore{}
+	p := testPoller(mc, ms)
+
+	p.fetchAndStoreDailyEnergy(context.Background(), "")
+
+	assert.Equal(t, 1, ms.dailyEnergyWritten, "any non-zero field means AlphaESS has data")
+}
+
 // --- Tests for fetchAndStoreSystemInfo ---
 
 func TestFetchAndStoreSystemInfo_Success(t *testing.T) {
@@ -371,69 +418,24 @@ func TestFetchAndStoreSystemInfo_DryRun_LogsPayload(t *testing.T) {
 	assert.True(t, logContains(buf, "TEST123"))
 }
 
-// --- Tests for nextLocalMidnight (Task 16) ---
-
-func TestNextLocalMidnight(t *testing.T) {
-	aest := time.FixedZone("AEST", 10*60*60)
-
-	tests := map[string]struct {
-		now  time.Time
-		want time.Time
-	}{
-		"afternoon returns next midnight": {
-			now:  time.Date(2026, 4, 13, 15, 30, 0, 0, aest),
-			want: time.Date(2026, 4, 14, 0, 0, 0, 0, aest),
-		},
-		"just before midnight": {
-			now:  time.Date(2026, 4, 13, 23, 59, 59, 0, aest),
-			want: time.Date(2026, 4, 14, 0, 0, 0, 0, aest),
-		},
-		"exactly midnight returns next midnight": {
-			now:  time.Date(2026, 4, 14, 0, 0, 0, 0, aest),
-			want: time.Date(2026, 4, 15, 0, 0, 0, 0, aest),
-		},
-		"early morning": {
-			now:  time.Date(2026, 4, 13, 0, 5, 0, 0, aest),
-			want: time.Date(2026, 4, 14, 0, 0, 0, 0, aest),
-		},
-	}
-
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			got := nextLocalMidnight(tc.now, aest)
-			assert.Equal(t, tc.want, got)
-		})
-	}
-}
-
-func TestNextLocalMidnight_DST(t *testing.T) {
-	// Australia/Sydney: AEDT→AEST first Sunday of April (clocks go back 1h at 3am)
-	sydney, err := time.LoadLocation("Australia/Sydney")
-	require.NoError(t, err)
-
-	// 2026-04-05 is the first Sunday of April 2026 (DST transition day).
-	// Before transition (still AEDT, UTC+11).
-	now := time.Date(2026, 4, 4, 22, 0, 0, 0, sydney)
-	got := nextLocalMidnight(now, sydney)
-
-	// Should be midnight on April 5 in Sydney.
-	assert.Equal(t, 2026, got.Year())
-	assert.Equal(t, time.April, got.Month())
-	assert.Equal(t, 5, got.Day())
-	assert.Equal(t, 0, got.Hour())
-	assert.Equal(t, 0, got.Minute())
-}
-
-func TestFetchAndStoreDailyEnergy_MidnightFinalizer_UsesYesterday(t *testing.T) {
+// T-841: hourly daily-energy poll writes both today and yesterday, so a
+// zero-response from AlphaESS's finalisation window gets retried until real
+// data arrives (protected by the zero-guard from corrupting the row).
+func TestPollDailyEnergy_PollsTodayAndYesterday(t *testing.T) {
 	mc := &mockClient{oneDateEnergy: &alphaess.EnergyData{Epv: 20.0}}
 	ms := &mockStore{}
 	p := testPoller(mc, ms)
 
-	yesterday := time.Now().In(p.cfg.Location).AddDate(0, 0, -1).Format("2006-01-02")
+	today := time.Now().In(p.cfg.Location).Format(dateLayout)
+	yesterday := time.Now().In(p.cfg.Location).AddDate(0, 0, -1).Format(dateLayout)
+
+	// Invoke the tick body inline — this mirrors what pollDailyEnergy's
+	// closure does and avoids running the full pollLoop goroutine in a test.
+	p.fetchAndStoreDailyEnergy(context.Background(), "")
 	p.fetchAndStoreDailyEnergy(context.Background(), yesterday)
 
-	assert.Equal(t, yesterday, mc.lastEnergyDate)
-	assert.Equal(t, 1, ms.dailyEnergyWritten)
+	assert.Equal(t, 2, ms.dailyEnergyWritten)
+	assert.ElementsMatch(t, []string{today, yesterday}, mc.energyDates)
 }
 
 // --- Test dry-run payload contains JSON ---

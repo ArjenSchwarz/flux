@@ -19,7 +19,6 @@ const (
 	dailyEnergyInterval  = 1 * time.Hour
 	systemInfoInterval   = 24 * time.Hour
 	shutdownDrainTimeout = 25 * time.Second
-	midnightDelay        = 5 * time.Minute
 	dateLayout           = "2006-01-02"
 )
 
@@ -57,13 +56,12 @@ func (p *Poller) Run(ctx context.Context) error {
 	defer drainCancel()
 
 	var wg sync.WaitGroup
-	wg.Add(6)
+	wg.Add(5)
 	go p.pollLiveData(ctx, drainCtx, &wg)
 	go p.pollDailyPower(ctx, drainCtx, &wg)
 	go p.pollDailyEnergy(ctx, drainCtx, &wg)
 	go p.pollSystemInfo(ctx, drainCtx, &wg)
 	go p.offpeak.Run(ctx, drainCtx, &wg)
-	go p.midnightFinalizer(ctx, drainCtx, &wg)
 
 	<-ctx.Done()
 	slog.Info("poller stopping")
@@ -106,41 +104,17 @@ func (p *Poller) pollDailyPower(loopCtx, drainCtx context.Context, wg *sync.Wait
 	pollLoop(loopCtx, drainCtx, wg, dailyPowerInterval, p.fetchAndStoreDailyPower)
 }
 
+// pollDailyEnergy polls today and yesterday hourly; the zero-guard retries yesterday until AlphaESS finalises.
 func (p *Poller) pollDailyEnergy(loopCtx, drainCtx context.Context, wg *sync.WaitGroup) {
 	pollLoop(loopCtx, drainCtx, wg, dailyEnergyInterval, func(ctx context.Context) {
 		p.fetchAndStoreDailyEnergy(ctx, "")
+		yesterday := p.now().In(p.cfg.Location).AddDate(0, 0, -1).Format(dateLayout)
+		p.fetchAndStoreDailyEnergy(ctx, yesterday)
 	})
 }
 
 func (p *Poller) pollSystemInfo(loopCtx, drainCtx context.Context, wg *sync.WaitGroup) {
 	pollLoop(loopCtx, drainCtx, wg, systemInfoInterval, p.fetchAndStoreSystemInfo)
-}
-
-// midnightFinalizer waits until midnight+5min local time, then writes
-// yesterday's final energy totals. Loops daily.
-func (p *Poller) midnightFinalizer(loopCtx, drainCtx context.Context, wg *sync.WaitGroup) {
-	defer wg.Done()
-	for {
-		now := p.now().In(p.cfg.Location)
-		next := nextLocalMidnight(now, p.cfg.Location)
-		delay := time.Until(next) + midnightDelay
-
-		select {
-		case <-loopCtx.Done():
-			return
-		case <-time.After(delay):
-			yesterday := p.now().In(p.cfg.Location).AddDate(0, 0, -1).Format(dateLayout)
-			slog.Debug("midnight finalizer running", "date", yesterday)
-			p.fetchAndStoreDailyEnergy(drainCtx, yesterday)
-		}
-	}
-}
-
-// nextLocalMidnight returns the next midnight in the given location after now.
-// Uses time.Date for DST safety.
-func nextLocalMidnight(now time.Time, loc *time.Location) time.Time {
-	local := now.In(loc)
-	return time.Date(local.Year(), local.Month(), local.Day()+1, 0, 0, 0, 0, loc)
 }
 
 // --- fetchAndStore helpers ---
@@ -201,6 +175,17 @@ func (p *Poller) fetchAndStoreDailyEnergy(ctx context.Context, date string) {
 		logDryRunPayload("getOneDateEnergyBySn", data)
 	}
 
+	// Defensive: current client can't return (nil, nil) but a future refactor shouldn't be able to panic here.
+	if data == nil {
+		slog.Warn("skipping daily energy write: nil response from AlphaESS", "date", date)
+		return
+	}
+	// AlphaESS returns all-zero for yesterday during its finalisation window (extends past Sydney midnight).
+	if isAllZeroEnergy(data) {
+		slog.Warn("skipping daily energy write: AlphaESS returned all-zero (day not finalised yet)", "date", date)
+		return
+	}
+
 	item := dynamo.NewDailyEnergyItem(p.cfg.Serial, date, data)
 	if err := p.store.WriteDailyEnergy(ctx, item); err != nil {
 		slog.Error("write daily energy failed", "date", date, "error", err)
@@ -226,6 +211,14 @@ func (p *Poller) fetchAndStoreSystemInfo(ctx context.Context) {
 		return
 	}
 	slog.Info("stored system info")
+}
+
+// isAllZeroEnergy reports whether every energy total in the AlphaESS response
+// is zero. A working battery system never produces all-zero daily totals, so
+// such a response means AlphaESS has not finalised the day's data yet.
+func isAllZeroEnergy(d *alphaess.EnergyData) bool {
+	return d.Epv == 0 && d.EInput == 0 && d.EOutput == 0 &&
+		d.ECharge == 0 && d.EDischarge == 0 && d.EGridCharge == 0
 }
 
 // logDryRunPayload logs the raw API response payload at info level.
