@@ -1,6 +1,6 @@
 import Foundation
 
-enum FluxAPIError: Error, Sendable, Equatable {
+public enum FluxAPIError: Error, Sendable, Equatable {
     case notConfigured
     case unauthorized
     case badRequest(String)
@@ -11,14 +11,14 @@ enum FluxAPIError: Error, Sendable, Equatable {
 }
 
 extension FluxAPIError {
-    static func from(_ error: Error) -> FluxAPIError {
+    public static func from(_ error: Error) -> FluxAPIError {
         if let apiError = error as? FluxAPIError {
             return apiError
         }
         return .networkError(error.localizedDescription)
     }
 
-    var message: String {
+    public var message: String {
         switch self {
         case .notConfigured:
             return "Set your API URL and token in Settings."
@@ -37,7 +37,7 @@ extension FluxAPIError {
         }
     }
 
-    var suggestsSettings: Bool {
+    public var suggestsSettings: Bool {
         switch self {
         case .notConfigured, .unauthorized:
             return true

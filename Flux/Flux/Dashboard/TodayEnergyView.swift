@@ -1,3 +1,4 @@
+import FluxCore
 import SwiftUI
 
 struct TodayEnergyView: View {

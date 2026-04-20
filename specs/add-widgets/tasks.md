@@ -19,7 +19,7 @@ references:
   - Stream: 1
   - Requirements: [9.1](requirements.md#9.1)
 
-- [ ] 2. Migrate models (APIModels, FluxAPIError) to FluxCore <!-- id:behjcae -->
+- [x] 2. Migrate models (APIModels, FluxAPIError) to FluxCore <!-- id:behjcae -->
   - Move Flux/Flux/Models/APIModels.swift to Sources/FluxCore/Models/.
   - Make public: StatusResponse, LiveData, BatteryInfo, Low24h, RollingAvg, OffpeakData, TodayEnergy, HistoryResponse, DayEnergy, DayDetailResponse, TimeSeriesPoint, DaySummary, PeakPeriod, APIErrorResponse (all types + stored properties + inits).
   - Move Flux/Flux/Models/FluxAPIError.swift to Sources/FluxCore/Models/ and make the enum + extensions (.from, .message, .suggestsSettings) public.
@@ -28,7 +28,7 @@ references:
   - Stream: 1
   - Requirements: [9.2](requirements.md#9.2), [9.3](requirements.md#9.3)
 
-- [ ] 3. Migrate networking (FluxAPIClient + URLSessionAPIClient) to FluxCore <!-- id:behjcaf -->
+- [x] 3. Migrate networking (FluxAPIClient + URLSessionAPIClient) to FluxCore <!-- id:behjcaf -->
   - Move FluxAPIClient protocol to Sources/FluxCore/Networking/ and make protocol + all methods public.
   - Move URLSessionAPIClient to Sources/FluxCore/Networking/ and make class + both initialisers public.
   - Preserve Sendable conformance and the existing noCacheSession static.
@@ -37,7 +37,7 @@ references:
   - Stream: 1
   - Requirements: [9.2](requirements.md#9.2), [9.3](requirements.md#9.3)
 
-- [ ] 4. Migrate security (KeychainService) to FluxCore <!-- id:behjcag -->
+- [x] 4. Migrate security (KeychainService) to FluxCore <!-- id:behjcag -->
   - Move KeychainService to Sources/FluxCore/Security/.
   - Make class + init + saveToken + loadToken + deleteToken public.
   - Leave the accessibility class parameter at its current value — the KeychainAccessibility enum and explicit accessibility parameter are added in task 19.
@@ -45,7 +45,7 @@ references:
   - Stream: 1
   - Requirements: [9.2](requirements.md#9.2), [9.3](requirements.md#9.3), [11.1](requirements.md#11.1)
 
-- [ ] 5. Migrate helpers (DateFormatting, PowerFormatting, colour helpers) to FluxCore <!-- id:behjcah -->
+- [x] 5. Migrate helpers (DateFormatting, PowerFormatting, colour helpers) to FluxCore <!-- id:behjcah -->
   - Move DateFormatting, PowerFormatting, BatteryColor, GridColor, CutoffTimeColor to Sources/FluxCore/Helpers/.
   - Extract ColorTier into its own Sources/FluxCore/Helpers/ColorTier.swift.
   - Keep ColorTier public + Sendable + Equatable but REMOVE the SwiftUI Color accessor — the package must compile without importing SwiftUI.
@@ -54,7 +54,7 @@ references:
   - Stream: 1
   - Requirements: [9.2](requirements.md#9.2), [9.3](requirements.md#9.3)
 
-- [ ] 6. Migrate existing unit tests to FluxCoreTests <!-- id:behjcai -->
+- [x] 6. Migrate existing unit tests to FluxCoreTests <!-- id:behjcai -->
   - Move APIModelsTests, DateFormattingTests, ColoringTests, KeychainServiceTests, URLSessionAPIClientTests from FluxTests/ to Packages/FluxCore/Tests/FluxCoreTests/.
   - Replace @testable import Flux with import FluxCore (or @testable import FluxCore where internals are needed).
   - ColoringTests references ColorTier.color — add a private SwiftUI Color extension at the top of the test file so the existing assertions keep working.
@@ -62,7 +62,7 @@ references:
   - Stream: 1
   - Requirements: [9.5](requirements.md#9.5)
 
-- [ ] 7. Update main-app imports; add SwiftUI Color extension; delete migrated originals; verify build <!-- id:behjcaj -->
+- [x] 7. Update main-app imports; add SwiftUI Color extension; delete migrated originals; verify build <!-- id:behjcaj -->
   - Delete the originals from Flux/Flux/Models/, Flux/Flux/Services/, Flux/Flux/Helpers/ (everything migrated in tasks 2–5).
   - Add import FluxCore to every remaining main-app file that references migrated types.
   - Create Flux/Flux/Helpers/ColorTier+Color.swift containing the SwiftUI Color extension on ColorTier.

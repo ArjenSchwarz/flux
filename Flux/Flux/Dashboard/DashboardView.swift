@@ -1,5 +1,6 @@
-import SwiftUI
+import FluxCore
 import SwiftData
+import SwiftUI
 
 struct DashboardView: View {
     @Environment(\.scenePhase) private var scenePhase

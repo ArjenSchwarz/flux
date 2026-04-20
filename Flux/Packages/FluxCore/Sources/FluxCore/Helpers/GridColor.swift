@@ -1,7 +1,7 @@
 import Foundation
 
-enum GridColor {
-    static func forGrid(
+public enum GridColor {
+    public static func forGrid(
         pgrid: Double,
         pgridSustained: Bool,
         offpeakWindowStart: String,

@@ -1,7 +1,7 @@
 import Foundation
 
-enum CutoffTimeColor {
-    static func forCutoff(
+public enum CutoffTimeColor {
+    public static func forCutoff(
         _ cutoffTime: Date,
         offpeakWindowStart: String,
         now: Date = .now

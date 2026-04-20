@@ -8,7 +8,14 @@ let package = Package(
         .library(name: "FluxCore", targets: ["FluxCore"])
     ],
     targets: [
-        .target(name: "FluxCore"),
-        .testTarget(name: "FluxCoreTests", dependencies: ["FluxCore"])
+        .target(
+            name: "FluxCore",
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
+        .testTarget(
+            name: "FluxCoreTests",
+            dependencies: ["FluxCore"],
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        )
     ]
 )

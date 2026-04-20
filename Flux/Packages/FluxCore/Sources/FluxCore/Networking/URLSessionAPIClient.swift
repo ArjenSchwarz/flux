@@ -1,6 +1,6 @@
 import Foundation
 
-final class URLSessionAPIClient: FluxAPIClient, Sendable {
+public final class URLSessionAPIClient: FluxAPIClient, Sendable {
     private let session: URLSession
     private let baseURL: URL
     private let tokenProvider: @Sendable () -> String?
@@ -13,32 +13,32 @@ final class URLSessionAPIClient: FluxAPIClient, Sendable {
         return URLSession(configuration: config)
     }()
 
-    init(baseURL: URL, keychainService: KeychainService, session: URLSession? = nil) {
+    public init(baseURL: URL, keychainService: KeychainService, session: URLSession? = nil) {
         self.session = session ?? Self.noCacheSession
         self.baseURL = baseURL
         self.tokenProvider = { keychainService.loadToken() }
         self.decoder = JSONDecoder()
     }
 
-    init(baseURL: URL, token: String, session: URLSession? = nil) {
+    public init(baseURL: URL, token: String, session: URLSession? = nil) {
         self.session = session ?? Self.noCacheSession
         self.baseURL = baseURL
         self.tokenProvider = { token }
         self.decoder = JSONDecoder()
     }
 
-    func fetchStatus() async throws -> StatusResponse {
+    public func fetchStatus() async throws -> StatusResponse {
         try await performRequest(path: "status", queryItems: [])
     }
 
-    func fetchHistory(days: Int) async throws -> HistoryResponse {
+    public func fetchHistory(days: Int) async throws -> HistoryResponse {
         try await performRequest(
             path: "history",
             queryItems: [URLQueryItem(name: "days", value: String(days))]
         )
     }
 
-    func fetchDay(date: String) async throws -> DayDetailResponse {
+    public func fetchDay(date: String) async throws -> DayDetailResponse {
         try await performRequest(
             path: "day",
             queryItems: [URLQueryItem(name: "date", value: date)]

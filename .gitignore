@@ -15,5 +15,6 @@ DerivedData/
 
 # Swift Package Manager build artifacts
 .build/
+.build-xc/
 Packages/**/.swiftpm/
 

@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import Flux
+@testable import FluxCore
 
 @Suite struct DateFormattingTests {
     @Test

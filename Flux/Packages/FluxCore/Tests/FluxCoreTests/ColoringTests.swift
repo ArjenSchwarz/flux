@@ -1,6 +1,19 @@
 import Foundation
+import SwiftUI
 import Testing
-@testable import Flux
+@testable import FluxCore
+
+private extension ColorTier {
+    var color: Color {
+        switch self {
+        case .green: .green
+        case .red: .red
+        case .orange: .orange
+        case .amber: .yellow
+        case .normal: .primary
+        }
+    }
+}
 
 @MainActor @Suite(.serialized)
 struct ColoringTests {
@@ -77,6 +90,13 @@ struct ColoringTests {
         #expect(CutoffTimeColor.forCutoff(redCutoff, offpeakWindowStart: "11:00", now: now) == .red)
         #expect(CutoffTimeColor.forCutoff(amberCutoff, offpeakWindowStart: "11:00", now: now) == .orange)
         #expect(CutoffTimeColor.forCutoff(defaultCutoff, offpeakWindowStart: "11:00", now: now) == .normal)
+    }
+
+    @Test
+    func batteryColorTierProducesSwiftUIColor() {
+        // Confirms the SwiftUI extension at the top of the file still works for
+        // renderable tiers.
+        _ = BatteryColor.forSOC(50).color
     }
 
     private var sydneyCalendar: Calendar {

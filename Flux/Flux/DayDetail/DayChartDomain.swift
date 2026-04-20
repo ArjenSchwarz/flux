@@ -1,3 +1,4 @@
+import FluxCore
 import Foundation
 
 enum DayChartDomain {

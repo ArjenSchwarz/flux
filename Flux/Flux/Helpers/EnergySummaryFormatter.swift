@@ -1,3 +1,4 @@
+import FluxCore
 import Foundation
 
 /// A single row in the shared energy summary card layout, as used by the

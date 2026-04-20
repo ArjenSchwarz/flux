@@ -1,9 +1,9 @@
 import Foundation
 
-enum DateFormatting {
-    static let sydneyTimeZone = TimeZone(identifier: "Australia/Sydney")!
+public enum DateFormatting {
+    public static let sydneyTimeZone = TimeZone(identifier: "Australia/Sydney")!
 
-    static let sydneyCalendar: Calendar = {
+    public static let sydneyCalendar: Calendar = {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = sydneyTimeZone
         return calendar
@@ -21,7 +21,7 @@ enum DateFormatting {
         return formatter
     }()
 
-    static let dayFormatter: DateFormatter = {
+    public static let dayFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         formatter.timeZone = sydneyTimeZone
@@ -36,11 +36,11 @@ enum DateFormatting {
         return formatter
     }()
 
-    static func parseTimestamp(_ string: String) -> Date? {
+    public static func parseTimestamp(_ string: String) -> Date? {
         isoFormatter.date(from: string) ?? isoFormatterNoFractionalSeconds.date(from: string)
     }
 
-    static func clockTime(from date: Date) -> String {
+    public static func clockTime(from date: Date) -> String {
         clockFormatter.string(from: date)
     }
 
@@ -51,23 +51,23 @@ enum DateFormatting {
         return formatter
     }()
 
-    static func clockTime24h(from date: Date) -> String {
+    public static func clockTime24h(from date: Date) -> String {
         clock24hFormatter.string(from: date)
     }
 
-    static func todayDateString(now: Date = .now) -> String {
+    public static func todayDateString(now: Date = .now) -> String {
         dayFormatter.string(from: now)
     }
 
-    static func parseDayDate(_ dateString: String) -> Date? {
+    public static func parseDayDate(_ dateString: String) -> Date? {
         dayFormatter.date(from: dateString)
     }
 
-    static func dayDateString(from date: Date) -> String {
+    public static func dayDateString(from date: Date) -> String {
         dayFormatter.string(from: date)
     }
 
-    static func parseWindowTime(_ timeString: String, on date: Date = .now) -> Date? {
+    public static func parseWindowTime(_ timeString: String, on date: Date = .now) -> Date? {
         let parts = timeString.split(separator: ":", omittingEmptySubsequences: false)
         guard parts.count == 2,
               let hour = Int(parts[0]),
@@ -80,7 +80,7 @@ enum DateFormatting {
         return sydneyCalendar.date(bySettingHour: hour, minute: minute, second: 0, of: date)
     }
 
-    static func isInOffpeakWindow(start: String, end: String, now: Date = .now) -> Bool {
+    public static func isInOffpeakWindow(start: String, end: String, now: Date = .now) -> Bool {
         guard let startDate = parseWindowTime(start, on: now),
               let endDate = parseWindowTime(end, on: now) else {
             return false
@@ -88,7 +88,7 @@ enum DateFormatting {
         return now >= startDate && now < endDate
     }
 
-    static func isToday(_ dateString: String, now: Date = .now) -> Bool {
+    public static func isToday(_ dateString: String, now: Date = .now) -> Bool {
         dateString == todayDateString(now: now)
     }
 }

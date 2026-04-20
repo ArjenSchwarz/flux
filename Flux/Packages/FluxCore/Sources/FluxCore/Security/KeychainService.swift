@@ -1,16 +1,16 @@
 import Foundation
 import Security
 
-enum KeychainServiceError: Error, Sendable, Equatable {
+public enum KeychainServiceError: Error, Sendable, Equatable {
     case unexpectedStatus(OSStatus)
 }
 
-final class KeychainService: Sendable {
+public final class KeychainService: Sendable {
     private let service: String
     private let account: String
     private let accessGroup: String?
 
-    init(
+    public init(
         service: String = "me.nore.ig.flux",
         account: String = "api-token",
         accessGroup: String? = "group.me.nore.ig.flux"
@@ -20,7 +20,7 @@ final class KeychainService: Sendable {
         self.accessGroup = accessGroup
     }
 
-    func saveToken(_ token: String) throws {
+    public func saveToken(_ token: String) throws {
         try deleteToken()
 
         var query = keychainQuery()
@@ -32,7 +32,7 @@ final class KeychainService: Sendable {
         }
     }
 
-    func loadToken() -> String? {
+    public func loadToken() -> String? {
         var query = keychainQuery()
         query[kSecReturnData] = kCFBooleanTrue
         query[kSecMatchLimit] = kSecMatchLimitOne
@@ -51,7 +51,7 @@ final class KeychainService: Sendable {
         return String(data: data, encoding: .utf8)
     }
 
-    func deleteToken() throws {
+    public func deleteToken() throws {
         let status = SecItemDelete(keychainQuery() as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw KeychainServiceError.unexpectedStatus(status)
