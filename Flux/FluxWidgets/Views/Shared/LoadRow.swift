@@ -4,16 +4,8 @@ import SwiftUI
 struct LoadRow: View {
     let entry: StatusEntry
 
-    private static let suite = "group.me.nore.ig.flux"
-
-    private var loadAlertThreshold: Double {
-        guard let defaults = UserDefaults(suiteName: Self.suite) else { return 3000 }
-        let stored = defaults.double(forKey: "loadAlertThreshold")
-        return stored > 0 ? stored : 3000
-    }
-
     var body: some View {
-        let over = entry.pload > loadAlertThreshold
+        let over = entry.pload > UserDefaults.fluxAppGroup.loadAlertThreshold
         let color: Color = entry.staleness == .offline
             ? .secondary
             : (over ? .red : .primary)

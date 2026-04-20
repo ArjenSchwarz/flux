@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - Shared models, networking, Keychain, and formatting/colouring helpers migrated into a new local `FluxCore` Swift Package consumed by both the main app and the `FluxWidgets` extension. Pure refactor — no observable app behaviour change.
+- `UserDefaults+Settings` moved into `FluxCore` so the widget extension consumes the same `UserDefaults.fluxAppGroup` accessor, `apiURL`, and `loadAlertThreshold` logic as the main app; `LoadRow`, `PowerTrioColumns`, and `StatusTimelineProvider` now read through the shared extension instead of hand-rolled suite/key strings. New `WidgetKinds.battery`/`.accessory` constants in `FluxCore` replace the stringly-typed identifiers previously duplicated across `FluxBatteryWidget`, `FluxAccessoryWidget`, and `DashboardViewModel`. Added `specs/add-widgets/implementation.md` capturing the three-level implementation explanation and requirement-by-requirement completeness assessment
 - `UserDefaults+Settings` exposes a new static `UserDefaults.fluxAppGroup` accessor backed by `group.me.nore.ig.flux`; `apiURL` and `loadAlertThreshold` read/write that suite by default and transparently fall back to `UserDefaults.standard` when the suite is empty (covers the transient state before `SettingsSuiteMigrator` has run on upgrade). Call sites in `SettingsViewModel`, `PowerTrioView`, and `AppNavigationView.makeAPIClient` switched from `UserDefaults.standard` to `UserDefaults.fluxAppGroup`
 
 ### Changed

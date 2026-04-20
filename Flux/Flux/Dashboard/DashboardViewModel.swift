@@ -25,8 +25,8 @@ final class DashboardViewModel {
         refreshInterval: Duration = .seconds(10),
         widgetCache: WidgetSnapshotCache = WidgetSnapshotCache(),
         widgetReloadTrigger: @escaping @Sendable () -> Void = {
-            WidgetCenter.shared.reloadTimelines(ofKind: "me.nore.ig.flux.widget.battery")
-            WidgetCenter.shared.reloadTimelines(ofKind: "me.nore.ig.flux.widget.accessory")
+            WidgetCenter.shared.reloadTimelines(ofKind: WidgetKinds.battery)
+            WidgetCenter.shared.reloadTimelines(ofKind: WidgetKinds.accessory)
         },
         widgetReloadDebounce: TimeInterval = 5 * 60,
         nowProvider: @escaping @Sendable () -> Date = { .now },

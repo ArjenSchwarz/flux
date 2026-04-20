@@ -7,7 +7,7 @@ public final class WidgetSnapshotCache: Sendable {
     private let nowProvider: @Sendable () -> Date
 
     public init(
-        suiteName: String = "group.me.nore.ig.flux",
+        suiteName: String = UserDefaults.fluxAppGroupSuiteName,
         nowProvider: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.defaults = UserDefaults(suiteName: suiteName)

@@ -3,7 +3,7 @@ import SwiftUI
 import WidgetKit
 
 struct FluxAccessoryWidget: Widget {
-    let kind: String = "me.nore.ig.flux.widget.accessory"
+    let kind: String = WidgetKinds.accessory
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: StatusTimelineProvider()) { entry in

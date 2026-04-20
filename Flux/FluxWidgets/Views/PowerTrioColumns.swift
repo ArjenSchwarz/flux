@@ -4,14 +4,6 @@ import SwiftUI
 struct PowerTrioColumns: View {
     let entry: StatusEntry
 
-    private static let suite = "group.me.nore.ig.flux"
-
-    private var loadAlertThreshold: Double {
-        guard let defaults = UserDefaults(suiteName: Self.suite) else { return 3000 }
-        let stored = defaults.double(forKey: "loadAlertThreshold")
-        return stored > 0 ? stored : 3000
-    }
-
     private var offpeakStart: String {
         entry.offpeak?.windowStart ?? OffpeakData.defaultWindowStart
     }
@@ -27,7 +19,7 @@ struct PowerTrioColumns: View {
             : (entry.ppv > 0 ? .green : .secondary)
         let loadColor: Color = offline
             ? .secondary
-            : (entry.pload > loadAlertThreshold ? .red : .primary)
+            : (entry.pload > UserDefaults.fluxAppGroup.loadAlertThreshold ? .red : .primary)
         let gridColor: Color = offline
             ? .secondary
             : GridColor.forGrid(

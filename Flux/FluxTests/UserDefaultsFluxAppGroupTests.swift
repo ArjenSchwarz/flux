@@ -1,6 +1,6 @@
+import FluxCore
 import Foundation
 import Testing
-@testable import Flux
 
 @MainActor @Suite(.serialized)
 struct UserDefaultsFluxAppGroupTests {

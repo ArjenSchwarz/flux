@@ -3,8 +3,6 @@ import Foundation
 import WidgetKit
 
 struct StatusTimelineProvider: TimelineProvider {
-    static let appGroupSuite = "group.me.nore.ig.flux"
-
     private static let widgetSession: URLSession = {
         let config = URLSessionConfiguration.default
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
@@ -45,7 +43,7 @@ struct StatusTimelineProvider: TimelineProvider {
     }
 
     private static func makeLogic() -> StatusTimelineLogic {
-        let cache = WidgetSnapshotCache(suiteName: appGroupSuite)
+        let cache = WidgetSnapshotCache()
         let keychain = KeychainService()
         let client = makeAPIClient(keychain: keychain)
         return StatusTimelineLogic(
@@ -56,8 +54,8 @@ struct StatusTimelineProvider: TimelineProvider {
     }
 
     private static func makeAPIClient(keychain: KeychainService) -> (any FluxAPIClient)? {
-        guard let suite = UserDefaults(suiteName: appGroupSuite) else { return nil }
-        guard let raw = suite.string(forKey: "apiURL")?.trimmingCharacters(in: .whitespacesAndNewlines),
+        guard let raw = UserDefaults.fluxAppGroup.apiURL?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
               !raw.isEmpty,
               let url = URL(string: raw) else {
             return nil

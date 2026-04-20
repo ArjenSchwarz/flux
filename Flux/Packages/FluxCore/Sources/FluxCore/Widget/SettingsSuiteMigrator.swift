@@ -10,7 +10,7 @@ public enum SettingsSuiteMigrator {
     @discardableResult
     public static func run(
         standard: UserDefaults = .standard,
-        suite: UserDefaults = UserDefaults(suiteName: "group.me.nore.ig.flux")!
+        suite: UserDefaults = .fluxAppGroup
     ) -> Bool {
         if suite.integer(forKey: versionKey) >= currentVersion {
             return false
