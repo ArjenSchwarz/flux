@@ -1,6 +1,7 @@
 import FluxCore
 import Foundation
 import Observation
+import WidgetKit
 
 @MainActor @Observable
 final class DashboardViewModel {
@@ -13,11 +14,21 @@ final class DashboardViewModel {
     private let nowProvider: @Sendable () -> Date
     private let refreshInterval: Duration
     private let sleep: @Sendable (Duration) async throws -> Void
+    private let widgetCache: WidgetSnapshotCache
+    private let widgetReloadTrigger: @Sendable () -> Void
+    private let widgetReloadDebounce: TimeInterval
     private var refreshTask: Task<Void, Never>?
+    private var lastWidgetReload: Date?
 
     init(
         apiClient: any FluxAPIClient,
         refreshInterval: Duration = .seconds(10),
+        widgetCache: WidgetSnapshotCache = WidgetSnapshotCache(),
+        widgetReloadTrigger: @escaping @Sendable () -> Void = {
+            WidgetCenter.shared.reloadTimelines(ofKind: "me.nore.ig.flux.widget.battery")
+            WidgetCenter.shared.reloadTimelines(ofKind: "me.nore.ig.flux.widget.accessory")
+        },
+        widgetReloadDebounce: TimeInterval = 5 * 60,
         nowProvider: @escaping @Sendable () -> Date = { .now },
         sleep: @escaping @Sendable (Duration) async throws -> Void = { duration in
             try await Task.sleep(for: duration)
@@ -25,6 +36,9 @@ final class DashboardViewModel {
     ) {
         self.apiClient = apiClient
         self.refreshInterval = refreshInterval
+        self.widgetCache = widgetCache
+        self.widgetReloadTrigger = widgetReloadTrigger
+        self.widgetReloadDebounce = widgetReloadDebounce
         self.nowProvider = nowProvider
         self.sleep = sleep
     }
@@ -60,9 +74,18 @@ final class DashboardViewModel {
 
         do {
             let response = try await apiClient.fetchStatus()
+            let fetchedAt = nowProvider()
             status = response
-            lastSuccessfulFetch = nowProvider()
+            lastSuccessfulFetch = fetchedAt
             error = nil
+
+            let envelope = StatusSnapshotEnvelope(fetchedAt: fetchedAt, status: response)
+            let wrote = widgetCache.writeIfNewer(envelope)
+
+            if wrote, shouldTriggerWidgetReload(at: fetchedAt) {
+                widgetReloadTrigger()
+                lastWidgetReload = fetchedAt
+            }
         } catch is CancellationError {
             // View lifecycle can cancel in-flight requests; not a real error.
         } catch let urlError as URLError where urlError.code == .cancelled {
@@ -70,5 +93,10 @@ final class DashboardViewModel {
         } catch {
             self.error = FluxAPIError.from(error)
         }
+    }
+
+    private func shouldTriggerWidgetReload(at fetchedAt: Date) -> Bool {
+        guard let last = lastWidgetReload else { return true }
+        return fetchedAt.timeIntervalSince(last) >= widgetReloadDebounce
     }
 }

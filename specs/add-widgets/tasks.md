@@ -210,7 +210,7 @@ references:
 
 ## Phase 3 — Main-app integration
 
-- [ ] 20. Write tests for KeychainAccessibilityMigrator <!-- id:behjcaw -->
+- [x] 20. Write tests for KeychainAccessibilityMigrator <!-- id:behjcaw -->
   - Create KeychainAccessibilityMigratorTests.swift in FluxTests (NOT in FluxCoreTests — the migrator lives in the app target).
   - No token stored → returns false, nothing mutated.
   - Token stored with correct class → returns false, nothing mutated.
@@ -220,7 +220,7 @@ references:
   - Stream: 2
   - Requirements: [11.5](requirements.md#11.5)
 
-- [ ] 21. Implement KeychainAccessibilityMigrator <!-- id:behjcax -->
+- [x] 21. Implement KeychainAccessibilityMigrator <!-- id:behjcax -->
   - Create Flux/Flux/WidgetBridge/KeychainAccessibilityMigrator.swift.
   - enum KeychainAccessibilityMigrator with static required = KeychainAccessibility.afterFirstUnlockThisDeviceOnly.
   - @discardableResult static func run(keychain: KeychainService = KeychainService()) -> Bool.
@@ -231,7 +231,7 @@ references:
   - Stream: 2
   - Requirements: [11.5](requirements.md#11.5)
 
-- [ ] 22. Write tests for UserDefaults+Settings on App Group suite <!-- id:behjcay -->
+- [x] 22. Write tests for UserDefaults+Settings on App Group suite <!-- id:behjcay -->
   - Create UserDefaultsFluxAppGroupTests.swift in FluxTests.
   - apiURL getter/setter reads/writes the App Group suite (inject via a test helper that exposes a nonstandard suite).
   - loadAlertThreshold default is 3000 when the suite has no value.
@@ -241,7 +241,7 @@ references:
   - Stream: 2
   - Requirements: [10.5](requirements.md#10.5)
 
-- [ ] 23. Migrate UserDefaults+Settings to App Group suite; update call sites <!-- id:behjcaz -->
+- [x] 23. Migrate UserDefaults+Settings to App Group suite; update call sites <!-- id:behjcaz -->
   - Update Flux/Flux/Settings/UserDefaults+Settings.swift to expose a static fluxAppGroup: UserDefaults accessor (suite 'group.me.nore.ig.flux'); fatalError if the suite cannot be created.
   - Change existing extension getters/setters to read/write this suite by default. Keep the extension parameterisable (UserDefaults instance) so tests can inject.
   - Fallback behaviour: if a getter reads an empty value from the suite AND .standard still has a non-empty value, transparently return the .standard value. This covers the transient state between this task landing and FluxApp.init running SettingsSuiteMigrator (task 24).
@@ -251,7 +251,7 @@ references:
   - Stream: 2
   - Requirements: [10.5](requirements.md#10.5)
 
-- [ ] 24. Wire FluxApp.init to run both migrators <!-- id:behjcb0 -->
+- [x] 24. Wire FluxApp.init to run both migrators <!-- id:behjcb0 -->
   - Add init() to FluxApp struct calling SettingsSuiteMigrator.run() then KeychainAccessibilityMigrator.run().
   - Order matters (Decision 9 + 15 + rollout diagram in design.md) — settings first, keychain second.
   - Both migrators are idempotent; safe on every launch.
@@ -259,14 +259,14 @@ references:
   - Stream: 2
   - Requirements: [10.6](requirements.md#10.6), [10.7](requirements.md#10.7), [11.5](requirements.md#11.5)
 
-- [ ] 25. Register flux:// URL scheme in Info.plist <!-- id:behjcb1 -->
+- [x] 25. Register flux:// URL scheme in Info.plist <!-- id:behjcb1 -->
   - Edit Flux/Flux/Info.plist (or the Xcode-managed URL-types section).
   - Add CFBundleURLTypes array with one entry: CFBundleURLName = me.nore.ig.flux.deeplink, CFBundleURLSchemes = ['flux'].
   - Verify in Xcode target settings → Info → URL Types that the scheme shows up.
   - Stream: 2
   - Requirements: [8.3](requirements.md#8.3)
 
-- [ ] 26. Write tests for AppNavigationView deep-link handling <!-- id:behjcb2 -->
+- [x] 26. Write tests for AppNavigationView deep-link handling <!-- id:behjcb2 -->
   - Create AppNavigationViewDeepLinkTests.swift (or extend existing navigation tests).
   - Testable wrapper: expose the URL-handling logic as a pure function taking the URL and the current (selectedScreen, navigationPath) and returning updated values.
   - flux://dashboard → selectedScreen = .dashboard, navigationPath empty.
@@ -276,7 +276,7 @@ references:
   - Stream: 2
   - Requirements: [8.3](requirements.md#8.3)
 
-- [ ] 27. Implement AppNavigationView.onOpenURL handler <!-- id:behjcb3 -->
+- [x] 27. Implement AppNavigationView.onOpenURL handler <!-- id:behjcb3 -->
   - Add .onOpenURL modifier on AppNavigationView's root.
   - Use WidgetDeepLink.parse; switch on the returned destination.
   - For .dashboard: set selectedScreen = .dashboard, navigationPath = NavigationPath().
@@ -285,7 +285,7 @@ references:
   - Stream: 2
   - Requirements: [8.3](requirements.md#8.3)
 
-- [ ] 28. Write tests for DashboardViewModel cache write + debounced reload <!-- id:behjcb4 -->
+- [x] 28. Write tests for DashboardViewModel cache write + debounced reload <!-- id:behjcb4 -->
   - Extend FluxTests/DashboardViewModelTests.swift.
   - Successful refresh writes a StatusSnapshotEnvelope (verify via a spy WidgetSnapshotCache pointing at a test suite).
   - Failed refresh does NOT write to the cache.
@@ -297,7 +297,7 @@ references:
   - Stream: 2
   - Requirements: [4.5](requirements.md#4.5), [5.3](requirements.md#5.3)
 
-- [ ] 29. Implement DashboardViewModel cache write + debounced reload <!-- id:behjcb5 -->
+- [x] 29. Implement DashboardViewModel cache write + debounced reload <!-- id:behjcb5 -->
   - Add initialiser-injected widgetCache: WidgetSnapshotCache = WidgetSnapshotCache(); widgetReloadTrigger closure; widgetReloadDebounce: TimeInterval = 5*60.
   - Default widgetReloadTrigger calls WidgetCenter.shared.reloadTimelines(ofKind: 'me.nore.ig.flux.widget.battery') then same for 'me.nore.ig.flux.widget.accessory' (Decision 13, updated Req 5.3).
   - Add private var lastWidgetReload: Date?.

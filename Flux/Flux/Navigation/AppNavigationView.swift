@@ -30,6 +30,15 @@ struct AppNavigationView: View {
                 reloadDependencies()
             }
         }
+        .onOpenURL { url in
+            switch DeepLinkHandler.handle(url) {
+            case let .navigate(screen):
+                selectedScreen = screen
+                navigationPath = NavigationPath()
+            case .none:
+                break
+            }
+        }
     }
 
     @ViewBuilder
@@ -69,7 +78,7 @@ struct AppNavigationView: View {
     }
 
     private func makeAPIClient() -> (any FluxAPIClient)? {
-        guard let urlString = UserDefaults.standard.apiURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+        guard let urlString = UserDefaults.fluxAppGroup.apiURL?.trimmingCharacters(in: .whitespacesAndNewlines),
               let url = URL(string: urlString),
               keychainService.loadToken()?.isEmpty == false
         else {
