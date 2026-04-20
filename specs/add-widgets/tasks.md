@@ -451,7 +451,7 @@ references:
 
 ## Phase 5 — Documentation
 
-- [ ] 43. Add CHANGELOG entry for widget introduction <!-- id:behjcbj -->
+- [x] 43. Add CHANGELOG entry for widget introduction <!-- id:behjcbj -->
   - Edit CHANGELOG.md.
   - Under the '## [Unreleased]' section add an 'Added' subsection (or extend if present) listing: widget extension with home-screen (small/medium/large) and lock-screen (circular/rectangular/inline) families showing battery SOC and power data; App Group cache + shared Keychain migration; flux:// deep link to Dashboard.
   - Also note the shared FluxCore Swift Package migration under 'Changed' (no observable app behaviour change — pure refactor).

@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Widgets (T-843): home-screen (`systemSmall`/`systemMedium`/`systemLarge`) and lock-screen (`accessoryCircular`/`accessoryRectangular`/`accessoryInline`) widget families showing battery state of charge and, where the family size allows, the solar/load/grid power trio. Widgets read from a shared App Group cache (`group.me.nore.ig.flux`) that the app writes on every successful `/status` refresh, and refresh independently by calling the Lambda directly with the shared Keychain bearer token (migrated to `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` so lock-screen widgets can read it). Tapping a home-screen widget opens the app at the Dashboard via the new `flux://dashboard` deep link.
 - Spec for T-843 "Add widgets to the app" under `specs/add-widgets/`: EARS requirements, design (new `FluxCore` local Swift Package + widget extension target + App Group cache + Keychain accessibility migration + flux:// deep link), 20-entry decision log, 43-task implementation plan across 5 phases / 3 streams, and a prerequisites doc covering the one-sitting Xcode setup
 - `FluxCore` local Swift Package skeleton at `Flux/Packages/FluxCore/` (task 1): `Package.swift` (swift-tools 6.2, iOS 26), empty `Sources/FluxCore/{Models,Networking,Security,Helpers,Widget}` and `Tests/FluxCoreTests/` directories with placeholder files so the package compiles
 - `FluxWidgetsExtension` widget-extension target in Xcode with App Groups + Keychain Sharing capabilities (shares `group.me.nore.ig.flux` with the main app), plus Xcode-generated template files as placeholders to be replaced in Phase 4
@@ -19,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Shared models, networking, Keychain, and formatting/colouring helpers migrated into a new local `FluxCore` Swift Package consumed by both the main app and the `FluxWidgets` extension. Pure refactor — no observable app behaviour change.
 - `UserDefaults+Settings` exposes a new static `UserDefaults.fluxAppGroup` accessor backed by `group.me.nore.ig.flux`; `apiURL` and `loadAlertThreshold` read/write that suite by default and transparently fall back to `UserDefaults.standard` when the suite is empty (covers the transient state before `SettingsSuiteMigrator` has run on upgrade). Call sites in `SettingsViewModel`, `PowerTrioView`, and `AppNavigationView.makeAPIClient` switched from `UserDefaults.standard` to `UserDefaults.fluxAppGroup`
 
 ### Changed
