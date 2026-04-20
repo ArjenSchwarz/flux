@@ -74,7 +74,7 @@ references:
 
 ## Phase 2 — New FluxCore types (TDD)
 
-- [ ] 8. Write tests for StatusSnapshotEnvelope <!-- id:behjcak -->
+- [x] 8. Write tests for StatusSnapshotEnvelope <!-- id:behjcak -->
   - Create StatusSnapshotEnvelopeTests.swift in FluxCoreTests.
   - Round-trip: encode+decode returns an equal value (all fields preserved).
   - Payload JSON has top-level keys schemaVersion, fetchedAt, status.
@@ -84,7 +84,7 @@ references:
   - Stream: 1
   - Requirements: [4.7](requirements.md#4.7), [10.3](requirements.md#10.3)
 
-- [ ] 9. Implement StatusSnapshotEnvelope <!-- id:behjcal -->
+- [x] 9. Implement StatusSnapshotEnvelope <!-- id:behjcal -->
   - Create Sources/FluxCore/Widget/StatusSnapshotEnvelope.swift.
   - public struct with public static let currentSchemaVersion: Int = 1, public let schemaVersion: Int, public let fetchedAt: Date, public let status: StatusResponse.
   - Codable + Sendable.
@@ -93,7 +93,7 @@ references:
   - Stream: 1
   - Requirements: [4.7](requirements.md#4.7), [10.3](requirements.md#10.3)
 
-- [ ] 10. Write tests for WidgetSnapshotCache <!-- id:behjcam -->
+- [x] 10. Write tests for WidgetSnapshotCache <!-- id:behjcam -->
   - Create WidgetSnapshotCacheTests.swift in FluxCoreTests.
   - Each test uses a unique suite name (test.widget.<UUID>) and clears it on teardown.
   - writeIfNewer returns true on empty cache; read returns the same envelope.
@@ -107,7 +107,7 @@ references:
   - Stream: 1
   - Requirements: [4.6](requirements.md#4.6), [4.7](requirements.md#4.7), [4.8](requirements.md#4.8), [10.2](requirements.md#10.2), [10.4](requirements.md#10.4)
 
-- [ ] 11. Implement WidgetSnapshotCache <!-- id:behjcan -->
+- [x] 11. Implement WidgetSnapshotCache <!-- id:behjcan -->
   - Create Sources/FluxCore/Widget/WidgetSnapshotCache.swift.
   - Storage key 'widgetSnapshotV1' in UserDefaults(suiteName:).
   - Use JSONEncoder/Decoder with .iso8601 date strategy.
@@ -119,7 +119,7 @@ references:
   - Stream: 1
   - Requirements: [4.6](requirements.md#4.6), [4.7](requirements.md#4.7), [4.8](requirements.md#4.8), [10.2](requirements.md#10.2), [10.4](requirements.md#10.4)
 
-- [ ] 12. Write tests for StalenessClassifier <!-- id:behjcao -->
+- [x] 12. Write tests for StalenessClassifier <!-- id:behjcao -->
   - Create StalenessClassifierTests.swift in FluxCoreTests.
   - Table-driven: age 0 → .fresh, 44 min → .fresh, 45 min → .stale, 179 min → .stale, 180 min → .offline, 1000 min → .offline.
   - Boundary tests exactly at freshThreshold and offlineThreshold (>= → next bucket).
@@ -130,7 +130,7 @@ references:
   - Stream: 1
   - Requirements: [6.1](requirements.md#6.1), [15.2](requirements.md#15.2)
 
-- [ ] 13. Implement StalenessClassifier <!-- id:behjcap -->
+- [x] 13. Implement StalenessClassifier <!-- id:behjcap -->
   - Create Sources/FluxCore/Widget/StalenessClassifier.swift.
   - public enum Staleness { case fresh, stale, offline } (Sendable, Equatable).
   - public enum StalenessClassifier with static freshThreshold = 45*60, offlineThreshold = 3*3600.
@@ -141,7 +141,7 @@ references:
   - Stream: 1
   - Requirements: [6.1](requirements.md#6.1), [15.2](requirements.md#15.2)
 
-- [ ] 14. Write tests for WidgetDeepLink <!-- id:behjcaq -->
+- [x] 14. Write tests for WidgetDeepLink <!-- id:behjcaq -->
   - Create WidgetDeepLinkTests.swift in FluxCoreTests.
   - parse('flux://dashboard') returns .dashboard.
   - parse('flux://dashboard/extra') returns .dashboard (extra path ignored).
@@ -152,7 +152,7 @@ references:
   - Stream: 1
   - Requirements: [8.1](requirements.md#8.1), [8.3](requirements.md#8.3)
 
-- [ ] 15. Implement WidgetDeepLink <!-- id:behjcar -->
+- [x] 15. Implement WidgetDeepLink <!-- id:behjcar -->
   - Create Sources/FluxCore/Widget/WidgetDeepLink.swift.
   - public enum WidgetDeepLink with static scheme = 'flux' and static dashboardURL.
   - public enum Destination { case dashboard } (Equatable).
@@ -161,7 +161,7 @@ references:
   - Stream: 1
   - Requirements: [8.1](requirements.md#8.1), [8.3](requirements.md#8.3)
 
-- [ ] 16. Write tests for SettingsSuiteMigrator <!-- id:behjcas -->
+- [x] 16. Write tests for SettingsSuiteMigrator <!-- id:behjcas -->
   - Create SettingsSuiteMigratorTests.swift in FluxCoreTests.
   - Each test uses unique suite names for both 'standard' and 'fluxAppGroup' (inject both via init).
   - Standard has apiURL + threshold, suite empty → both copied; version written = 1; returns true.
@@ -172,7 +172,7 @@ references:
   - Stream: 1
   - Requirements: [10.5](requirements.md#10.5), [10.6](requirements.md#10.6), [10.7](requirements.md#10.7)
 
-- [ ] 17. Implement SettingsSuiteMigrator <!-- id:behjcat -->
+- [x] 17. Implement SettingsSuiteMigrator <!-- id:behjcat -->
   - Create Sources/FluxCore/Widget/SettingsSuiteMigrator.swift.
   - public enum SettingsSuiteMigrator with static currentVersion = 1.
   - static func run(standard: UserDefaults = .standard, suite: UserDefaults = UserDefaults(suiteName: 'group.me.nore.ig.flux')!) -> Bool.
@@ -185,7 +185,7 @@ references:
   - Stream: 1
   - Requirements: [10.5](requirements.md#10.5), [10.6](requirements.md#10.6), [10.7](requirements.md#10.7)
 
-- [ ] 18. Write tests for KeychainAccessibility + readAccessibility + updateAccessibility <!-- id:behjcau -->
+- [x] 18. Write tests for KeychainAccessibility + readAccessibility + updateAccessibility <!-- id:behjcau -->
   - Extend KeychainServiceTests in FluxCoreTests.
   - KeychainAccessibility Equatable: .afterFirstUnlockThisDeviceOnly == itself, != .other('foo').
   - readAccessibility returns nil when no item exists.
@@ -197,7 +197,7 @@ references:
   - Stream: 1
   - Requirements: [11.5](requirements.md#11.5)
 
-- [ ] 19. Implement KeychainAccessibility + readAccessibility + updateAccessibility <!-- id:behjcav -->
+- [x] 19. Implement KeychainAccessibility + readAccessibility + updateAccessibility <!-- id:behjcav -->
   - Add public enum KeychainAccessibility { case afterFirstUnlockThisDeviceOnly, other(String), missing } — Sendable, Equatable.
   - Add internal var cfString: CFString on the enum for mapping back.
   - Change KeychainService.init to accept accessibility: KeychainAccessibility = .afterFirstUnlockThisDeviceOnly (defaulted so existing callers compile).
