@@ -310,28 +310,28 @@ references:
 
 ## Phase 4 — Widget extension
 
-- [ ] 30. Create FluxWidgets Info.plist <!-- id:behjcb6 -->
+- [x] 30. Create FluxWidgets Info.plist <!-- id:behjcb6 -->
   - Already exists from prerequisites.md Xcode sitting: Flux/FluxWidgets/Info.plist with NSExtension = {NSExtensionPointIdentifier = com.apple.widgetkit-extension}.
   - Task verifies the file exists and contains the required keys; updates CFBundleDisplayName if needed.
   - (The Xcode-generated Info.plist from target creation is probably correct already; this task is a sanity check.)
   - Stream: 3
   - Requirements: [1.1](requirements.md#1.1), [1.2](requirements.md#1.2), [1.4](requirements.md#1.4)
 
-- [ ] 31. Create FluxWidgets.entitlements <!-- id:behjcb7 -->
+- [x] 31. Create FluxWidgets.entitlements <!-- id:behjcb7 -->
   - Already exists from prerequisites.md Xcode sitting: Flux/FluxWidgets/FluxWidgets.entitlements with com.apple.security.application-groups = [group.me.nore.ig.flux].
   - Note: keychain-access-groups is NOT added — KeychainService uses the App Group identifier directly as the access group, per Decision 19 / prerequisites Step 4.
   - Task verifies the file exists and contains the App Group; no-op if Xcode already wrote it.
   - Stream: 3
   - Requirements: [10.1](requirements.md#10.1), [11.1](requirements.md#11.1), [11.5](requirements.md#11.5)
 
-- [ ] 32. Add SwiftUI Color extension on ColorTier in FluxWidgets target <!-- id:behjcb8 -->
+- [x] 32. Add SwiftUI Color extension on ColorTier in FluxWidgets target <!-- id:behjcb8 -->
   - Create Flux/FluxWidgets/ColorTier+Color.swift mirroring the app-side extension from task 7.
   - Keeps FluxCore free of SwiftUI; each consuming target owns its own Color mapping.
   - Blocked-by: behjcaj (Update main-app imports; add SwiftUI Color extension; delete migrated originals; verify build)
   - Stream: 3
   - Requirements: [12.1](requirements.md#12.1)
 
-- [ ] 33. Write tests for RelevanceScoring (in FluxCoreTests) <!-- id:behjcb9 -->
+- [x] 33. Write tests for RelevanceScoring (in FluxCoreTests) <!-- id:behjcb9 -->
   - Create Packages/FluxCore/Tests/FluxCoreTests/RelevanceScoringTests.swift (Decision 19 — widget-testable logic lives in FluxCore).
   - fresh + discharging with soc <= cutoffPercent + 5 → 0.9.
   - fresh + discharging with soc <= cutoffPercent + 20 → 0.7.
@@ -343,7 +343,7 @@ references:
   - Stream: 3
   - Requirements: [5.2](requirements.md#5.2)
 
-- [ ] 34. Implement RelevanceScoring in FluxCore <!-- id:behjcba -->
+- [x] 34. Implement RelevanceScoring in FluxCore <!-- id:behjcba -->
   - Create Packages/FluxCore/Sources/FluxCore/Widget/RelevanceScoring.swift.
   - public enum RelevanceScoring with static func score(staleness: Staleness, live: LiveData?, battery: BatteryInfo?) -> TimelineEntryRelevance.
   - FluxCore imports WidgetKit (iOS-only; FluxCore already targets iOS only).
@@ -352,7 +352,7 @@ references:
   - Stream: 3
   - Requirements: [5.2](requirements.md#5.2)
 
-- [ ] 35. Write tests for WidgetAccessibility (in FluxCoreTests) <!-- id:behjcbb -->
+- [x] 35. Write tests for WidgetAccessibility (in FluxCoreTests) <!-- id:behjcbb -->
   - Create Packages/FluxCore/Tests/FluxCoreTests/WidgetAccessibilityTests.swift (Decision 19).
   - systemMedium normal: label contains SOC%, discharging verb, power trio values.
   - accessoryInline: label is one sentence with SOC + status word.
@@ -364,7 +364,7 @@ references:
   - Stream: 3
   - Requirements: [13.1](requirements.md#13.1), [13.2](requirements.md#13.2), [13.4](requirements.md#13.4)
 
-- [ ] 36. Implement WidgetAccessibility in FluxCore <!-- id:behjcbc -->
+- [x] 36. Implement WidgetAccessibility in FluxCore <!-- id:behjcbc -->
   - Create Packages/FluxCore/Sources/FluxCore/Widget/WidgetAccessibility.swift (Decision 19).
   - public enum WidgetAccessibility with static func label(for entry: StatusEntry, family: WidgetFamily) -> String.
   - FluxCore imports WidgetKit for WidgetFamily.
@@ -375,7 +375,7 @@ references:
   - Stream: 3
   - Requirements: [13.1](requirements.md#13.1), [13.2](requirements.md#13.2), [13.3](requirements.md#13.3), [13.4](requirements.md#13.4)
 
-- [ ] 37. Write tests for StatusTimelineLogic (in FluxCoreTests) <!-- id:behjcbd -->
+- [x] 37. Write tests for StatusTimelineLogic (in FluxCoreTests) <!-- id:behjcbd -->
   - Create Packages/FluxCore/Tests/FluxCoreTests/StatusTimelineLogicTests.swift.
   - Widget-logic is consolidated into FluxCore per Decision 19; the widget-extension StatusTimelineProvider is a thin WidgetKit shim over this testable logic type.
   - placeholder-for-context returns an entry with source == .placeholder and plausible fixture data.
@@ -395,7 +395,7 @@ references:
   - Stream: 3
   - Requirements: [4.1](requirements.md#4.1), [4.2](requirements.md#4.2), [4.3](requirements.md#4.3), [4.4](requirements.md#4.4), [5.1](requirements.md#5.1), [5.2](requirements.md#5.2), [5.4](requirements.md#5.4), [5.5](requirements.md#5.5), [11.4](requirements.md#11.4), [11.6](requirements.md#11.6), [14.1](requirements.md#14.1), [14.3](requirements.md#14.3), [14.4](requirements.md#14.4), [15.1](requirements.md#15.1)
 
-- [ ] 38. Implement StatusTimelineLogic + thin StatusTimelineProvider shim <!-- id:behjcbe -->
+- [x] 38. Implement StatusTimelineLogic + thin StatusTimelineProvider shim <!-- id:behjcbe -->
   - Create Packages/FluxCore/Sources/FluxCore/Widget/StatusTimelineLogic.swift — all orchestration (cache read, keychain, fetch-with-timeout, entry-stack, policy).
   - Create Packages/FluxCore/Sources/FluxCore/Widget/StatusEntry.swift — TimelineEntry-conforming value type with date, envelope (optional), staleness, source, relevance.
   - Create Flux/FluxWidgets/StatusTimelineProvider.swift in the widget extension — TimelineProvider conformance that constructs a StatusTimelineLogic with the widget-local URLSession and delegates getTimeline/getSnapshot/placeholder to it.
@@ -407,7 +407,7 @@ references:
   - Stream: 3
   - Requirements: [4.1](requirements.md#4.1), [4.2](requirements.md#4.2), [4.3](requirements.md#4.3), [4.4](requirements.md#4.4), [5.1](requirements.md#5.1), [5.2](requirements.md#5.2), [5.4](requirements.md#5.4), [5.5](requirements.md#5.5), [11.4](requirements.md#11.4), [11.6](requirements.md#11.6), [14.1](requirements.md#14.1), [14.3](requirements.md#14.3), [14.4](requirements.md#14.4), [15.1](requirements.md#15.1)
 
-- [ ] 39. Implement shared widget view components <!-- id:behjcbf -->
+- [x] 39. Implement shared widget view components <!-- id:behjcbf -->
   - Create Flux/FluxWidgets/Views/Shared/SOCHeroLabel.swift — SOC percentage with BatteryColor.forSOC tint; size parameter for per-family scaling.
   - Create Flux/FluxWidgets/Views/Shared/StatusLineLabel.swift — renders BatteryHeroView.statusLine-equivalent text with .full / .short / .word styles.
   - Create Flux/FluxWidgets/Views/Shared/LoadRow.swift — Load column used by systemSmall; reads loadAlertThreshold from App Group suite (via UserDefaults+Settings accessor added in task 23); red when over threshold.
@@ -417,7 +417,7 @@ references:
   - Stream: 3
   - Requirements: [2.1](requirements.md#2.1), [2.2](requirements.md#2.2), [2.3](requirements.md#2.3), [2.4](requirements.md#2.4), [2.6](requirements.md#2.6), [3.1](requirements.md#3.1), [3.2](requirements.md#3.2), [3.3](requirements.md#3.3), [3.4](requirements.md#3.4), [3.5](requirements.md#3.5), [6.2](requirements.md#6.2), [6.3](requirements.md#6.3), [6.4](requirements.md#6.4), [12.1](requirements.md#12.1), [12.2](requirements.md#12.2)
 
-- [ ] 40. Implement home-screen views (SystemSmall/Medium/Large) <!-- id:behjcbg -->
+- [x] 40. Implement home-screen views (SystemSmall/Medium/Large) <!-- id:behjcbg -->
   - Create Flux/FluxWidgets/Views/SystemSmallView.swift — SOC hero + status line + Load row + staleness footnote when stale/offline.
   - Create Flux/FluxWidgets/Views/SystemMediumView.swift — two-column HStack with SOC hero + status line on left, power trio on right + staleness footnote.
   - Create Flux/FluxWidgets/Views/SystemLargeView.swift — medium layout plus a stats row (24h low + off-peak summary) modelled on SecondaryStatsView.
@@ -429,7 +429,7 @@ references:
   - Stream: 3
   - Requirements: [1.1](requirements.md#1.1), [1.3](requirements.md#1.3), [2.1](requirements.md#2.1), [2.2](requirements.md#2.2), [2.3](requirements.md#2.3), [3.1](requirements.md#3.1), [3.2](requirements.md#3.2), [3.3](requirements.md#3.3), [3.4](requirements.md#3.4), [3.5](requirements.md#3.5), [3.6](requirements.md#3.6), [6.2](requirements.md#6.2), [6.3](requirements.md#6.3), [8.1](requirements.md#8.1), [12.1](requirements.md#12.1), [12.2](requirements.md#12.2), [13.1](requirements.md#13.1), [14.2](requirements.md#14.2)
 
-- [ ] 41. Implement lock-screen views (AccessoryCircular/Rectangular/Inline) <!-- id:behjcbh -->
+- [x] 41. Implement lock-screen views (AccessoryCircular/Rectangular/Inline) <!-- id:behjcbh -->
   - Create AccessoryCircularView using Gauge + .accessoryCircularCapacity; tint = BatteryColor.forSOC in .fullColor rendering mode; tint = .primary in .accented/.vibrant; .opacity(0.5) when offline.
   - Create AccessoryRectangularView showing SOC + short status line + staleness only when != fresh; use .widgetAccentable() on leading icon glyph.
   - Create AccessoryInlineView producing one-line Text: 'Flux: NN% · <word>' or 'Flux: offline' when offline.
@@ -440,7 +440,7 @@ references:
   - Stream: 3
   - Requirements: [1.2](requirements.md#1.2), [1.3](requirements.md#1.3), [2.1](requirements.md#2.1), [2.2](requirements.md#2.2), [2.5](requirements.md#2.5), [2.6](requirements.md#2.6), [6.3](requirements.md#6.3), [6.4](requirements.md#6.4), [8.2](requirements.md#8.2), [12.1](requirements.md#12.1), [12.2](requirements.md#12.2), [12.4](requirements.md#12.4), [13.2](requirements.md#13.2), [13.4](requirements.md#13.4)
 
-- [ ] 42. Wire FluxBatteryWidget + FluxAccessoryWidget + FluxWidgetsBundle <!-- id:behjcbi -->
+- [x] 42. Wire FluxBatteryWidget + FluxAccessoryWidget + FluxWidgetsBundle <!-- id:behjcbi -->
   - Create Flux/FluxWidgets/FluxBatteryWidget.swift — StaticConfiguration with kind 'me.nore.ig.flux.widget.battery', StatusTimelineProvider, supportedFamilies = [.systemSmall, .systemMedium, .systemLarge]; configurationDisplayName 'Flux Battery'.
   - Create Flux/FluxWidgets/FluxAccessoryWidget.swift — StaticConfiguration with kind 'me.nore.ig.flux.widget.accessory', supportedFamilies = [.accessoryCircular, .accessoryRectangular, .accessoryInline]; configurationDisplayName 'Flux Accessory'.
   - Create Flux/FluxWidgets/FluxWidgetsBundle.swift — @main struct FluxWidgetsBundle: WidgetBundle with both widgets.

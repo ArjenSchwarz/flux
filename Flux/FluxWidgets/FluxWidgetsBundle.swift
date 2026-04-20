@@ -4,6 +4,7 @@ import WidgetKit
 @main
 struct FluxWidgetsBundle: WidgetBundle {
     var body: some Widget {
-        FluxWidgets()
+        FluxBatteryWidget()
+        FluxAccessoryWidget()
     }
 }
