@@ -8,7 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- Spec for T-843 "Add widgets to the app" under `specs/add-widgets/`: EARS requirements, design (new `FluxCore` local Swift Package + widget extension target + App Group cache + Keychain accessibility migration + flux:// deep link), 18-entry decision log, 43-task implementation plan across 5 phases / 3 streams, and a prerequisites doc covering the one-sitting Xcode setup
+- Spec for T-843 "Add widgets to the app" under `specs/add-widgets/`: EARS requirements, design (new `FluxCore` local Swift Package + widget extension target + App Group cache + Keychain accessibility migration + flux:// deep link), 20-entry decision log, 43-task implementation plan across 5 phases / 3 streams, and a prerequisites doc covering the one-sitting Xcode setup
+- `FluxCore` local Swift Package skeleton at `Flux/Packages/FluxCore/` (task 1): `Package.swift` (swift-tools 6.2, iOS 26), empty `Sources/FluxCore/{Models,Networking,Security,Helpers,Widget}` and `Tests/FluxCoreTests/` directories with placeholder files so the package compiles
+- `FluxWidgetsExtension` widget-extension target in Xcode with App Groups + Keychain Sharing capabilities (shares `group.me.nore.ig.flux` with the main app), plus Xcode-generated template files as placeholders to be replaced in Phase 4
+
+### Changed
+
+- Decision log: added Decision 19 (consolidate widget-testable logic into `FluxCore`, no separate `FluxWidgetsTests` target — Xcode doesn't allow app-extension-hosted test bundles) and Decision 20 (accept Xcode's auto-appended `Extension` suffix on the target name)
+- `specs/add-widgets/design.md` and `tasks.md` updated to reflect the consolidation: `RelevanceScoring`, `WidgetAccessibility`, and `StatusTimelineLogic` now live in `FluxCore`; widget extension is a thin WidgetKit shim
+- `prerequisites.md` rewritten as a record of the completed Xcode setup with the actual paths Xcode used (entitlements at `Flux/FluxWidgetsExtension.entitlements`, not `Flux/FluxWidgets/FluxWidgets.entitlements`)
+- `.gitignore` excludes `.build/` and `Packages/**/.swiftpm/` for the local Swift Package
 
 ### Changed
 

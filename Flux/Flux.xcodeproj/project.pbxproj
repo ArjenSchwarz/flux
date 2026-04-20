@@ -6,6 +6,15 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		D4EDCC472F9643B4002D980A /* FluxCore in Frameworks */ = {isa = PBXBuildFile; productRef = D4EDCC462F9643B4002D980A /* FluxCore */; };
+		D4EDCC4A2F9643D0002D980A /* FluxCore in Frameworks */ = {isa = PBXBuildFile; productRef = D4EDCC492F9643D0002D980A /* FluxCore */; };
+		D4EDCCE42F9648E5002D980A /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D4EDCC502F96448C002D980A /* WidgetKit.framework */; };
+		D4EDCCE52F9648E5002D980A /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D4EDCC522F96448C002D980A /* SwiftUI.framework */; };
+		D4EDCCF42F9648E6002D980A /* FluxWidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = D4EDCCE32F9648E5002D980A /* FluxWidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		D4EDCD062F9648EE002D980A /* FluxCore in Frameworks */ = {isa = PBXBuildFile; productRef = D4EDCD052F9648EE002D980A /* FluxCore */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		D4EDCADB2F8FAE60002D980A /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -21,12 +30,37 @@
 			remoteGlobalIDString = D4EDCAC82F8FAE5E002D980A;
 			remoteInfo = Flux;
 		};
+		D4EDCCF22F9648E6002D980A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D4EDCAC12F8FAE5E002D980A /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D4EDCCE22F9648E5002D980A;
+			remoteInfo = FluxWidgetsExtension;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		D4EDCC672F96448D002D980A /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				D4EDCCF42F9648E6002D980A /* FluxWidgetsExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		D4EDCAC92F8FAE5E002D980A /* Flux.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Flux.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D4EDCADA2F8FAE60002D980A /* FluxTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FluxTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		D4EDCAE42F8FAE60002D980A /* FluxUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FluxUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		D4EDCC502F96448C002D980A /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		D4EDCC522F96448C002D980A /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		D4EDCCE32F9648E5002D980A /* FluxWidgetsExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = FluxWidgetsExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		D4EDCD072F9649BC002D980A /* FluxWidgetsExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FluxWidgetsExtension.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -36,6 +70,13 @@
 				Info.plist,
 			);
 			target = D4EDCAC82F8FAE5E002D980A /* Flux */;
+		};
+		D4EDCCF82F9648E6002D980A /* Exceptions for "FluxWidgets" folder in "FluxWidgetsExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = D4EDCCE22F9648E5002D980A /* FluxWidgetsExtension */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -58,6 +99,19 @@
 			path = FluxUITests;
 			sourceTree = "<group>";
 		};
+		D4EDCC542F96448C002D980A /* FluxWidgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = FluxWidgets;
+			sourceTree = "<group>";
+		};
+		D4EDCCE62F9648E5002D980A /* FluxWidgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				D4EDCCF82F9648E6002D980A /* Exceptions for "FluxWidgets" folder in "FluxWidgetsExtension" target */,
+			);
+			path = FluxWidgets;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -65,6 +119,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D4EDCC472F9643B4002D980A /* FluxCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -72,6 +127,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D4EDCC4A2F9643D0002D980A /* FluxCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -82,15 +138,29 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D4EDCCE02F9648E5002D980A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D4EDCCE52F9648E5002D980A /* SwiftUI.framework in Frameworks */,
+				D4EDCD062F9648EE002D980A /* FluxCore in Frameworks */,
+				D4EDCCE42F9648E5002D980A /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		D4EDCAC02F8FAE5E002D980A = {
 			isa = PBXGroup;
 			children = (
+				D4EDCD072F9649BC002D980A /* FluxWidgetsExtension.entitlements */,
 				D4EDCACB2F8FAE5E002D980A /* Flux */,
 				D4EDCADD2F8FAE60002D980A /* FluxTests */,
 				D4EDCAE72F8FAE60002D980A /* FluxUITests */,
+				D4EDCC542F96448C002D980A /* FluxWidgets */,
+				D4EDCCE62F9648E5002D980A /* FluxWidgets */,
+				D4EDCC482F9643D0002D980A /* Frameworks */,
 				D4EDCACA2F8FAE5E002D980A /* Products */,
 			);
 			sourceTree = "<group>";
@@ -101,8 +171,18 @@
 				D4EDCAC92F8FAE5E002D980A /* Flux.app */,
 				D4EDCADA2F8FAE60002D980A /* FluxTests.xctest */,
 				D4EDCAE42F8FAE60002D980A /* FluxUITests.xctest */,
+				D4EDCCE32F9648E5002D980A /* FluxWidgetsExtension.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		D4EDCC482F9643D0002D980A /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				D4EDCC502F96448C002D980A /* WidgetKit.framework */,
+				D4EDCC522F96448C002D980A /* SwiftUI.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -115,16 +195,19 @@
 				D4EDCAC52F8FAE5E002D980A /* Sources */,
 				D4EDCAC62F8FAE5E002D980A /* Frameworks */,
 				D4EDCAC72F8FAE5E002D980A /* Resources */,
+				D4EDCC672F96448D002D980A /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				D4EDCCF32F9648E6002D980A /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				D4EDCACB2F8FAE5E002D980A /* Flux */,
 			);
 			name = Flux;
 			packageProductDependencies = (
+				D4EDCC462F9643B4002D980A /* FluxCore */,
 			);
 			productName = Flux;
 			productReference = D4EDCAC92F8FAE5E002D980A /* Flux.app */;
@@ -148,6 +231,7 @@
 			);
 			name = FluxTests;
 			packageProductDependencies = (
+				D4EDCC492F9643D0002D980A /* FluxCore */,
 			);
 			productName = FluxTests;
 			productReference = D4EDCADA2F8FAE60002D980A /* FluxTests.xctest */;
@@ -176,6 +260,29 @@
 			productReference = D4EDCAE42F8FAE60002D980A /* FluxUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		D4EDCCE22F9648E5002D980A /* FluxWidgetsExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D4EDCCF52F9648E6002D980A /* Build configuration list for PBXNativeTarget "FluxWidgetsExtension" */;
+			buildPhases = (
+				D4EDCCDF2F9648E5002D980A /* Sources */,
+				D4EDCCE02F9648E5002D980A /* Frameworks */,
+				D4EDCCE12F9648E5002D980A /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				D4EDCCE62F9648E5002D980A /* FluxWidgets */,
+			);
+			name = FluxWidgetsExtension;
+			packageProductDependencies = (
+				D4EDCD052F9648EE002D980A /* FluxCore */,
+			);
+			productName = FluxWidgetsExtension;
+			productReference = D4EDCCE32F9648E5002D980A /* FluxWidgetsExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -197,6 +304,9 @@
 						CreatedOnToolsVersion = 26.4;
 						TestTargetID = D4EDCAC82F8FAE5E002D980A;
 					};
+					D4EDCCE22F9648E5002D980A = {
+						CreatedOnToolsVersion = 26.4;
+					};
 				};
 			};
 			buildConfigurationList = D4EDCAC42F8FAE5E002D980A /* Build configuration list for PBXProject "Flux" */;
@@ -208,6 +318,9 @@
 			);
 			mainGroup = D4EDCAC02F8FAE5E002D980A;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				D4EDCC452F9643B4002D980A /* XCLocalSwiftPackageReference "Packages/FluxCore" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = D4EDCACA2F8FAE5E002D980A /* Products */;
 			projectDirPath = "";
@@ -216,6 +329,7 @@
 				D4EDCAC82F8FAE5E002D980A /* Flux */,
 				D4EDCAD92F8FAE60002D980A /* FluxTests */,
 				D4EDCAE32F8FAE60002D980A /* FluxUITests */,
+				D4EDCCE22F9648E5002D980A /* FluxWidgetsExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -236,6 +350,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		D4EDCAE22F8FAE60002D980A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D4EDCCE12F9648E5002D980A /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -266,6 +387,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D4EDCCDF2F9648E5002D980A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -278,6 +406,11 @@
 			isa = PBXTargetDependency;
 			target = D4EDCAC82F8FAE5E002D980A /* Flux */;
 			targetProxy = D4EDCAE52F8FAE60002D980A /* PBXContainerItemProxy */;
+		};
+		D4EDCCF32F9648E6002D980A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D4EDCCE22F9648E5002D980A /* FluxWidgetsExtension */;
+			targetProxy = D4EDCCF22F9648E6002D980A /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -596,6 +729,73 @@
 			};
 			name = Release;
 		};
+		D4EDCCF62F9648E6002D980A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = FluxWidgetsExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = V24684SCZN;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = FluxWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = FluxWidgets;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = me.nore.ig.Flux.FluxWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		D4EDCCF72F9648E6002D980A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = FluxWidgetsExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = V24684SCZN;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = FluxWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = FluxWidgets;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = me.nore.ig.Flux.FluxWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -635,7 +835,40 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		D4EDCCF52F9648E6002D980A /* Build configuration list for PBXNativeTarget "FluxWidgetsExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D4EDCCF62F9648E6002D980A /* Debug */,
+				D4EDCCF72F9648E6002D980A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		D4EDCC452F9643B4002D980A /* XCLocalSwiftPackageReference "Packages/FluxCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/FluxCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		D4EDCC462F9643B4002D980A /* FluxCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = FluxCore;
+		};
+		D4EDCC492F9643D0002D980A /* FluxCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D4EDCC452F9643B4002D980A /* XCLocalSwiftPackageReference "Packages/FluxCore" */;
+			productName = FluxCore;
+		};
+		D4EDCD052F9648EE002D980A /* FluxCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D4EDCC452F9643B4002D980A /* XCLocalSwiftPackageReference "Packages/FluxCore" */;
+			productName = FluxCore;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = D4EDCAC12F8FAE5E002D980A /* Project object */;
 }

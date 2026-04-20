@@ -582,7 +582,7 @@ The initial design marked `TimelineEntryRelevance` as "optional polish, skip if 
 
 ### Decision
 
-Every `StatusEntry` carries a `TimelineEntryRelevance` score derived from staleness and proximity-to-cutoff. Scoring logic lives in a standalone `RelevanceScoring` module in the widget extension, with its own unit tests.
+Every `StatusEntry` carries a `TimelineEntryRelevance` score derived from staleness and proximity-to-cutoff. Scoring logic lives in a standalone `RelevanceScoring` module in `FluxCore` (consolidated there per Decision 19), with its own unit tests.
 
 ### Rationale
 
@@ -602,4 +602,70 @@ Relevance scoring is two lines of code at the entry-construction site plus a sco
 
 ---
 
+## Decision 19: Consolidate widget-testable logic into `FluxCore`; no `FluxWidgetsTests` target
+
+**Date**: 2026-04-20
+**Status**: accepted
+
+### Context
+
+The original design created a separate `FluxWidgetsTests` unit-test bundle hosted by the widget extension. Xcode's "Unit Testing Bundle" template on iOS 26.4 does not allow an `.appex` (app extension) to be selected as the target-to-be-tested — only apps (and sometimes frameworks) can host unit tests. Without a host, a widget-extension logic test bundle has no way to `@testable import` the widget target's modules.
+
+### Decision
+
+Widget-testable logic is consolidated into `FluxCore` and tested in `FluxCoreTests`. The widget extension (`FluxWidgetsExtension`) is kept as a thin shell containing only `@main WidgetBundle`, the two `Widget` declarations, the SwiftUI views, and a thin `StatusTimelineProvider` that delegates to a testable `StatusTimelineLogic` type in `FluxCore`. Types moved into `FluxCore` as a result: `RelevanceScoring`, `WidgetAccessibility`, `StatusTimelineLogic`, `StatusEntry` (the `TimelineEntry`-conforming value type).
+
+### Rationale
+
+`WidgetKit` is iOS-only but importable from any iOS-targeting SPM package, including `FluxCore`. Moving the orchestration/pure-function types into the package makes them testable without the host-extension limitation, and keeps the widget extension itself as thin as WidgetKit requires. This aligns with the "`FluxCore` is the testability boundary" principle already established in Decision 2.
+
+### Alternatives Considered
+
+- **Host the test bundle on the main `Flux` app**: Rejected — you still can't `@testable import FluxWidgetsExtension` from a bundle hosted by the main app, so the tests couldn't reach widget types.
+- **Add widget-extension source files as members of a separate test target**: Rejected — requires duplicating file membership across targets, which re-introduces the "never copy files between targets" anti-pattern from Decision 2.
+- **Skip unit tests for widget logic, rely on `#Preview` blocks**: Rejected — requirement [15.1](requirements.md#15.1) mandates testability of the timeline provider with injected dependencies.
+
+### Consequences
+
+**Positive:**
+- One test target for all widget logic (`FluxCoreTests`).
+- The widget extension stays as thin as possible, reducing code that needs WidgetKit-runtime testing.
+- No Xcode GUI fight to wrestle the test bundle into an unsupported hosting configuration.
+
+**Negative:**
+- `FluxCore` imports `WidgetKit`, which means any future non-iOS consumer of `FluxCore` would need to wrap the WidgetKit-dependent types behind `#if os(iOS)`. For v1 there is no such consumer, so this is a latent cost, not an immediate one.
+
+---
+
+## Decision 20: Widget extension target is named `FluxWidgetsExtension`
+
+**Date**: 2026-04-20
+**Status**: accepted
+
+### Context
+
+Xcode 26.4's "Widget Extension" template auto-appends the suffix "Extension" to whatever name the user types in the target-creation wizard. Attempting to rename the target after creation did not trigger Xcode's usual scheme/product-name rename prompt.
+
+### Decision
+
+Accept the name `FluxWidgetsExtension` for the target. The architectural names that matter in code (folder path `Flux/FluxWidgets/`, widget kinds `me.nore.ig.flux.widget.battery` and `…accessory`, bundle identifier `me.nore.ig.Flux.FluxWidgetsExtension`) are unchanged.
+
+### Rationale
+
+The target name is cosmetic — it does not appear in any user-facing surface. Fighting Xcode over a template default is not worth the churn. Documentation is updated to refer to `FluxWidgetsExtension` where it refers to the target, and `FluxWidgets` where it refers to the folder or conceptual grouping.
+
+### Alternatives Considered
+
+- **Rename the target via pbxproj hand-edit**: Rejected — the agent tried this with hand-generated UUIDs; UUID length was wrong (23 vs 24 chars) and the operation was aborted. Not worth retrying when the default name is harmless.
+- **Delete and recreate**: Rejected — Xcode always auto-appends "Extension"; no starting name avoids the suffix.
+
+### Consequences
+
+**Positive:**
+- Zero-risk setup — Xcode's template defaults are preserved.
+
+**Negative:**
+- The target name does not match the folder name (`FluxWidgets` vs `FluxWidgetsExtension`). A new reader briefly has to reconcile the two.
+
+---
 

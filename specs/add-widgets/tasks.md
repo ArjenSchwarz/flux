@@ -9,9 +9,13 @@ references:
 
 ## Phase 1 — FluxCore package and file migration
 
-- [ ] 1. Create FluxCore Swift Package scaffolding <!-- id:behjcad -->
-  - After this task completes
-  - STOP and execute prerequisites.md (one Xcode sitting) before task 2 runs.
+- [x] 1. Create FluxCore Swift Package scaffolding <!-- id:behjcad -->
+  - Create Flux/Packages/FluxCore directory.
+  - Write Flux/Packages/FluxCore/Package.swift with swift-tools 6.0, platforms [.iOS(.v26)], FluxCore library product, FluxCoreTests test target (per design.md § 'Package.swift').
+  - Create Sources/FluxCore/{Models,Networking,Security,Helpers,Widget} and Tests/FluxCoreTests/ directories.
+  - Add a placeholder _placeholder.swift in both Sources/FluxCore and Tests/FluxCoreTests so the empty package compiles. These are deleted in task 2 when real sources migrate in.
+  - Verify 'swift build' inside Flux/Packages/FluxCore compiles empty with no errors.
+  - After this task completes, STOP and execute prerequisites.md (one Xcode sitting) before task 2 runs.
   - Stream: 1
   - Requirements: [9.1](requirements.md#9.1)
 
@@ -307,19 +311,16 @@ references:
 ## Phase 4 — Widget extension
 
 - [ ] 30. Create FluxWidgets Info.plist <!-- id:behjcb6 -->
-  - Create Flux/FluxWidgets/Info.plist.
-  - NSExtension dictionary with NSExtensionPointIdentifier = com.apple.widgetkit-extension.
-  - No NSExtensionPrincipalClass — WidgetBundle uses @main.
-  - CFBundleDisplayName = 'Flux Widgets'.
+  - Already exists from prerequisites.md Xcode sitting: Flux/FluxWidgets/Info.plist with NSExtension = {NSExtensionPointIdentifier = com.apple.widgetkit-extension}.
+  - Task verifies the file exists and contains the required keys; updates CFBundleDisplayName if needed.
+  - (The Xcode-generated Info.plist from target creation is probably correct already; this task is a sanity check.)
   - Stream: 3
   - Requirements: [1.1](requirements.md#1.1), [1.2](requirements.md#1.2), [1.4](requirements.md#1.4)
 
 - [ ] 31. Create FluxWidgets.entitlements <!-- id:behjcb7 -->
-  - Create Flux/FluxWidgets/FluxWidgets.entitlements.
-  - com.apple.security.application-groups: ['group.me.nore.ig.flux'].
-  - keychain-access-groups: ['$(AppIdentifierPrefix)group.me.nore.ig.flux'].
-  - Verify same keychain-access-groups entry is present in Flux.entitlements (main app) — add if missing.
-  - Prerequisites.md Block B documents the Xcode capability setup; this task just creates the file Xcode will manage.
+  - Already exists from prerequisites.md Xcode sitting: Flux/FluxWidgets/FluxWidgets.entitlements with com.apple.security.application-groups = [group.me.nore.ig.flux].
+  - Note: keychain-access-groups is NOT added — KeychainService uses the App Group identifier directly as the access group, per Decision 19 / prerequisites Step 4.
+  - Task verifies the file exists and contains the App Group; no-op if Xcode already wrote it.
   - Stream: 3
   - Requirements: [10.1](requirements.md#10.1), [11.1](requirements.md#11.1), [11.5](requirements.md#11.5)
 
@@ -330,8 +331,8 @@ references:
   - Stream: 3
   - Requirements: [12.1](requirements.md#12.1)
 
-- [ ] 33. Write tests for RelevanceScoring <!-- id:behjcb9 -->
-  - Create RelevanceScoringTests.swift in FluxWidgetsTests.
+- [ ] 33. Write tests for RelevanceScoring (in FluxCoreTests) <!-- id:behjcb9 -->
+  - Create Packages/FluxCore/Tests/FluxCoreTests/RelevanceScoringTests.swift (Decision 19 — widget-testable logic lives in FluxCore).
   - fresh + discharging with soc <= cutoffPercent + 5 → 0.9.
   - fresh + discharging with soc <= cutoffPercent + 20 → 0.7.
   - fresh otherwise → 0.5.
@@ -342,17 +343,17 @@ references:
   - Stream: 3
   - Requirements: [5.2](requirements.md#5.2)
 
-- [ ] 34. Implement RelevanceScoring <!-- id:behjcba -->
-  - Create Flux/FluxWidgets/RelevanceScoring.swift.
-  - enum RelevanceScoring with static func score(staleness: Staleness, live: LiveData?, battery: BatteryInfo?) -> TimelineEntryRelevance.
-  - Inputs are FluxCore types so the function is unit-testable without a live widget host.
-  - Return value uses TimelineEntryRelevance(score:) from WidgetKit.
-  - Blocked-by: behjcb9 (Write tests for RelevanceScoring)
+- [ ] 34. Implement RelevanceScoring in FluxCore <!-- id:behjcba -->
+  - Create Packages/FluxCore/Sources/FluxCore/Widget/RelevanceScoring.swift.
+  - public enum RelevanceScoring with static func score(staleness: Staleness, live: LiveData?, battery: BatteryInfo?) -> TimelineEntryRelevance.
+  - FluxCore imports WidgetKit (iOS-only; FluxCore already targets iOS only).
+  - Inputs are FluxCore types so the function is unit-testable via FluxCoreTests.
+  - Blocked-by: behjcb9 (Write tests for RelevanceScoring (in FluxCoreTests))
   - Stream: 3
   - Requirements: [5.2](requirements.md#5.2)
 
-- [ ] 35. Write tests for WidgetAccessibility labels <!-- id:behjcbb -->
-  - Create WidgetAccessibilityTests.swift in FluxWidgetsTests.
+- [ ] 35. Write tests for WidgetAccessibility (in FluxCoreTests) <!-- id:behjcbb -->
+  - Create Packages/FluxCore/Tests/FluxCoreTests/WidgetAccessibilityTests.swift (Decision 19).
   - systemMedium normal: label contains SOC%, discharging verb, power trio values.
   - accessoryInline: label is one sentence with SOC + status word.
   - Offline state: label begins with 'Offline.' regardless of family (Req 13.4).
@@ -363,47 +364,46 @@ references:
   - Stream: 3
   - Requirements: [13.1](requirements.md#13.1), [13.2](requirements.md#13.2), [13.4](requirements.md#13.4)
 
-- [ ] 36. Implement WidgetAccessibility <!-- id:behjcbc -->
-  - Create Flux/FluxWidgets/Accessibility/WidgetAccessibility.swift.
-  - enum WidgetAccessibility with static func label(for entry: StatusEntry, family: WidgetFamily) -> String.
+- [ ] 36. Implement WidgetAccessibility in FluxCore <!-- id:behjcbc -->
+  - Create Packages/FluxCore/Sources/FluxCore/Widget/WidgetAccessibility.swift (Decision 19).
+  - public enum WidgetAccessibility with static func label(for entry: StatusEntry, family: WidgetFamily) -> String.
+  - FluxCore imports WidgetKit for WidgetFamily.
   - Branch per family for length-appropriate phrasing.
   - Always prepend 'Offline. ' when staleness == .offline.
-  - Always include battery percentage, status verb (charging/discharging/idle/full), and where relevant power trio numbers in plain English.
-  - Blocked-by: behjcbb (Write tests for WidgetAccessibility labels)
+  - Always include battery percentage, status verb, and where relevant power trio numbers in plain English.
+  - Blocked-by: behjcbb (Write tests for WidgetAccessibility (in FluxCoreTests))
   - Stream: 3
   - Requirements: [13.1](requirements.md#13.1), [13.2](requirements.md#13.2), [13.3](requirements.md#13.3), [13.4](requirements.md#13.4)
 
-- [ ] 37. Write tests for StatusTimelineProvider <!-- id:behjcbd -->
-  - Create StatusTimelineProviderTests.swift in FluxWidgetsTests (see prerequisites Block B for the test target).
-  - placeholder(in:) returns an entry with source == .placeholder and plausible fixture data.
-  - getTimeline with empty cache + no token → single 'No data yet' entry; policy = .after(now + 30 min).
-  - getTimeline with token + empty cache + successful fetch → cache is written; timeline contains entries at now, fresh→stale boundary, stale→offline boundary.
-  - getTimeline with token + empty cache + fetch throws → single placeholder entry.
-  - getTimeline with cache present + fetch throws → entry sourced from cache with correct staleness.
-  - getTimeline with cache present + fetch succeeds + new fetchedAt > cache → cache overwritten.
-  - getTimeline with cache present + fetch succeeds + new fetchedAt == cache → cache written (strict >).
-  - getTimeline with Keychain errSecInteractionNotAllowed → cache-only path; no fetch attempted.
-  - Cache-fallback on fetch timeout: inject a delayed FluxAPIClient mock that sleeps past the provider's configured timeout; assert the timeline entry comes from the cache.
-  - Session-config guarantee: assert StatusTimelineProvider.widgetSession.configuration.timeoutIntervalForRequest == 5 and timeoutIntervalForResource == 5 and waitsForConnectivity == false.
+- [ ] 37. Write tests for StatusTimelineLogic (in FluxCoreTests) <!-- id:behjcbd -->
+  - Create Packages/FluxCore/Tests/FluxCoreTests/StatusTimelineLogicTests.swift.
+  - Widget-logic is consolidated into FluxCore per Decision 19; the widget-extension StatusTimelineProvider is a thin WidgetKit shim over this testable logic type.
+  - placeholder-for-context returns an entry with source == .placeholder and plausible fixture data.
+  - timeline with empty cache + no token → single 'No data yet' entry; policy = .after(now + 30 min).
+  - timeline with token + empty cache + successful fetch → cache is written; timeline contains entries at now, fresh→stale boundary, stale→offline boundary.
+  - timeline with token + empty cache + fetch throws → single placeholder entry.
+  - timeline with cache present + fetch throws → entry sourced from cache with correct staleness.
+  - timeline with cache present + fetch succeeds + new fetchedAt > cache → cache overwritten.
+  - timeline with cache present + fetch succeeds + new fetchedAt == cache → cache written (strict >).
+  - timeline with Keychain errSecInteractionNotAllowed → cache-only path; no fetch attempted.
+  - Cache-fallback on fetch timeout: inject a delayed FluxAPIClient mock that sleeps past the configured timeout; assert the entry comes from the cache.
+  - Session-config guarantee lives in the thin StatusTimelineProvider in the extension target (no unit test — assert via a FluxCore-side helper that takes a URLSessionConfiguration and confirms request/resource timeouts are 5s).
   - Bucket-transition entries reuse the same envelope but advance displayAge/staleness classification.
   - Each timeline entry carries a non-default TimelineEntryRelevance (source: RelevanceScoring).
-  - getTimeline calls SettingsSuiteMigrator.run() at the top (verify via a spy).
+  - timeline calls SettingsSuiteMigrator.run() at the top (verify via a spy).
   - Blocked-by: behjcan (Implement WidgetSnapshotCache), behjcap (Implement StalenessClassifier), behjcat (Implement SettingsSuiteMigrator), behjcav (Implement KeychainAccessibility + readAccessibility + updateAccessibility)
   - Stream: 3
   - Requirements: [4.1](requirements.md#4.1), [4.2](requirements.md#4.2), [4.3](requirements.md#4.3), [4.4](requirements.md#4.4), [5.1](requirements.md#5.1), [5.2](requirements.md#5.2), [5.4](requirements.md#5.4), [5.5](requirements.md#5.5), [11.4](requirements.md#11.4), [11.6](requirements.md#11.6), [14.1](requirements.md#14.1), [14.3](requirements.md#14.3), [14.4](requirements.md#14.4), [15.1](requirements.md#15.1)
 
-- [ ] 38. Implement StatusTimelineProvider <!-- id:behjcbe -->
-  - Create Flux/FluxWidgets/StatusTimelineProvider.swift.
-  - struct StatusEntry: TimelineEntry with date, envelope (optional), staleness, source (.live/.cache/.placeholder), relevance (optional).
-  - struct StatusTimelineProvider: TimelineProvider with initialiser-injected apiClient, cache, keychain, nowProvider, fetchTimeout.
-  - Widget-local URLSession: static let with timeoutIntervalForRequest = 5, timeoutIntervalForResource = 5, waitsForConnectivity = false.
+- [ ] 38. Implement StatusTimelineLogic + thin StatusTimelineProvider shim <!-- id:behjcbe -->
+  - Create Packages/FluxCore/Sources/FluxCore/Widget/StatusTimelineLogic.swift — all orchestration (cache read, keychain, fetch-with-timeout, entry-stack, policy).
+  - Create Packages/FluxCore/Sources/FluxCore/Widget/StatusEntry.swift — TimelineEntry-conforming value type with date, envelope (optional), staleness, source, relevance.
+  - Create Flux/FluxWidgets/StatusTimelineProvider.swift in the widget extension — TimelineProvider conformance that constructs a StatusTimelineLogic with the widget-local URLSession and delegates getTimeline/getSnapshot/placeholder to it.
+  - Widget-local URLSession: static let in the extension with timeoutIntervalForRequest = 5, timeoutIntervalForResource = 5, waitsForConnectivity = false.
   - Default apiClient constructor reads apiURL from App Group suite; if missing or invalid URL, apiClient is nil → skip fetch.
-  - placeholder/getSnapshot/getTimeline per design §Timeline provider architecture.
-  - Emit up to three entries: now, nextTransition (fresh→stale), and offline boundary; all reuse the same envelope.
-  - Attach TimelineEntryRelevance via RelevanceScoring.
   - Policy = .after(now + 30*60).
-  - Call SettingsSuiteMigrator.run() at the top of getTimeline (idempotent; ensures App Group suite is populated even if the user adds the widget before first app launch).
-  - Blocked-by: behjcbd (Write tests for StatusTimelineProvider)
+  - Attach TimelineEntryRelevance via RelevanceScoring.
+  - Blocked-by: behjcbd (Write tests for StatusTimelineLogic (in FluxCoreTests))
   - Stream: 3
   - Requirements: [4.1](requirements.md#4.1), [4.2](requirements.md#4.2), [4.3](requirements.md#4.3), [4.4](requirements.md#4.4), [5.1](requirements.md#5.1), [5.2](requirements.md#5.2), [5.4](requirements.md#5.4), [5.5](requirements.md#5.5), [11.4](requirements.md#11.4), [11.6](requirements.md#11.6), [14.1](requirements.md#14.1), [14.3](requirements.md#14.3), [14.4](requirements.md#14.4), [15.1](requirements.md#15.1)
 
@@ -413,7 +413,7 @@ references:
   - Create Flux/FluxWidgets/Views/Shared/LoadRow.swift — Load column used by systemSmall; reads loadAlertThreshold from App Group suite (via UserDefaults+Settings accessor added in task 23); red when over threshold.
   - Create Flux/FluxWidgets/Views/Shared/StalenessFootnote.swift — secondary-coloured relative timestamp; renders only when staleness != .fresh.
   - All files are #Preview-wrapped (#if DEBUG) with fixture entries.
-  - Blocked-by: behjcbe (Implement StatusTimelineProvider), behjcb8 (Add SwiftUI Color extension on ColorTier in FluxWidgets target), behjcaz (Migrate UserDefaults+Settings to App Group suite; update call sites)
+  - Blocked-by: behjcbe (Implement StatusTimelineLogic + thin StatusTimelineProvider shim), behjcb8 (Add SwiftUI Color extension on ColorTier in FluxWidgets target), behjcaz (Migrate UserDefaults+Settings to App Group suite; update call sites)
   - Stream: 3
   - Requirements: [2.1](requirements.md#2.1), [2.2](requirements.md#2.2), [2.3](requirements.md#2.3), [2.4](requirements.md#2.4), [2.6](requirements.md#2.6), [3.1](requirements.md#3.1), [3.2](requirements.md#3.2), [3.3](requirements.md#3.3), [3.4](requirements.md#3.4), [3.5](requirements.md#3.5), [6.2](requirements.md#6.2), [6.3](requirements.md#6.3), [6.4](requirements.md#6.4), [12.1](requirements.md#12.1), [12.2](requirements.md#12.2)
 
@@ -445,7 +445,7 @@ references:
   - Create Flux/FluxWidgets/FluxAccessoryWidget.swift — StaticConfiguration with kind 'me.nore.ig.flux.widget.accessory', supportedFamilies = [.accessoryCircular, .accessoryRectangular, .accessoryInline]; configurationDisplayName 'Flux Accessory'.
   - Create Flux/FluxWidgets/FluxWidgetsBundle.swift — @main struct FluxWidgetsBundle: WidgetBundle with both widgets.
   - Verify xcodebuild builds both targets.
-  - Blocked-by: behjcbe (Implement StatusTimelineProvider), behjcbg (Implement home-screen views (SystemSmall/Medium/Large)), behjcbh (Implement lock-screen views (AccessoryCircular/Rectangular/Inline))
+  - Blocked-by: behjcbe (Implement StatusTimelineLogic + thin StatusTimelineProvider shim), behjcbg (Implement home-screen views (SystemSmall/Medium/Large)), behjcbh (Implement lock-screen views (AccessoryCircular/Rectangular/Inline))
   - Stream: 3
   - Requirements: [1.1](requirements.md#1.1), [1.2](requirements.md#1.2), [1.4](requirements.md#1.4), [1.5](requirements.md#1.5), [7.1](requirements.md#7.1), [7.2](requirements.md#7.2)
 

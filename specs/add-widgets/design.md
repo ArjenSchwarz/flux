@@ -141,13 +141,12 @@ flux/
 │   │   │   └── SettingsSuiteMigrator.swift
 │   │   ├── Flux.entitlements
 │   │   └── Info.plist                 (registers flux:// URL scheme)
-│   ├── FluxWidgets/                   (NEW — widget extension target)
+│   ├── FluxWidgets/                   (NEW — widget extension target; Xcode target name is `FluxWidgetsExtension`)
 │   │   ├── FluxWidgetsBundle.swift
 │   │   ├── FluxBatteryWidget.swift
 │   │   ├── FluxAccessoryWidget.swift
-│   │   ├── StatusTimelineProvider.swift
-│   │   ├── RelevanceScoring.swift
-│   │   ├── ColorTier+Color.swift                (SwiftUI extension on FluxCore's ColorTier)
+│   │   ├── StatusTimelineProvider.swift   (thin WidgetKit shim over StatusTimelineLogic in FluxCore)
+│   │   ├── ColorTier+Color.swift          (SwiftUI extension on FluxCore's ColorTier)
 │   │   ├── Views/
 │   │   │   ├── SystemSmallView.swift
 │   │   │   ├── SystemMediumView.swift
@@ -159,14 +158,8 @@ flux/
 │   │   │   ├── Shared/StatusLineLabel.swift
 │   │   │   ├── Shared/LoadRow.swift
 │   │   │   └── Shared/StalenessFootnote.swift
-│   │   ├── Accessibility/WidgetAccessibility.swift
-│   │   ├── Fixtures/WidgetFixtures.swift        (#if DEBUG only)
-│   │   ├── Info.plist
-│   │   └── FluxWidgets.entitlements             (App Group + Keychain sharing)
-│   ├── FluxWidgetsTests/                 (NEW — widget-target unit tests)
-│   │   ├── StatusTimelineProviderTests.swift
-│   │   ├── RelevanceScoringTests.swift
-│   │   └── WidgetAccessibilityTests.swift
+│   │   └── Info.plist
+│   ├── FluxWidgetsExtension.entitlements  (App Group + Keychain Sharing; Xcode auto-placed at project root)
 │   ├── FluxTests/                     (unchanged)
 │   ├── FluxUITests/                   (unchanged)
 │   └── Packages/
@@ -187,7 +180,12 @@ flux/
 │           │   ├── Widget/WidgetSnapshotCache.swift
 │           │   ├── Widget/StatusSnapshotEnvelope.swift
 │           │   ├── Widget/StalenessClassifier.swift
-│           │   └── Widget/WidgetDeepLink.swift
+│           │   ├── Widget/WidgetDeepLink.swift
+│           │   ├── Widget/SettingsSuiteMigrator.swift
+│           │   ├── Widget/StatusEntry.swift            (TimelineEntry-conforming value type)
+│           │   ├── Widget/StatusTimelineLogic.swift    (testable orchestration; provider delegates to this)
+│           │   ├── Widget/RelevanceScoring.swift       (moved from widget target per Decision 19)
+│           │   └── Widget/WidgetAccessibility.swift    (moved from widget target per Decision 19)
 │           └── Tests/FluxCoreTests/
 │               ├── APIModelsTests.swift           (migrated)
 │               ├── DateFormattingTests.swift      (migrated)
@@ -196,7 +194,11 @@ flux/
 │               ├── URLSessionAPIClientTests.swift (migrated)
 │               ├── WidgetSnapshotCacheTests.swift (NEW)
 │               ├── StalenessClassifierTests.swift (NEW)
-│               └── WidgetDeepLinkTests.swift      (NEW)
+│               ├── WidgetDeepLinkTests.swift      (NEW)
+│               ├── SettingsSuiteMigratorTests.swift  (NEW)
+│               ├── StatusTimelineLogicTests.swift    (NEW — all widget-logic scenarios)
+│               ├── RelevanceScoringTests.swift       (NEW)
+│               └── WidgetAccessibilityTests.swift    (NEW)
 ├── Makefile                           (add widget build targets)
 ├── CHANGELOG.md                       (add entry under Unreleased)
 └── ...
@@ -585,7 +587,7 @@ struct StatusEntry: TimelineEntry {
 }
 ```
 
-The scoring function lives in `FluxWidgets` (uses `TimelineEntryRelevance`, which is WidgetKit-only) but takes only `Staleness` + `BatteryInfo?` + `LiveData?` as inputs so it is unit-testable without WidgetKit dependencies beyond the return type.
+The scoring function lives in `FluxCore` (Decision 19 — widget-testable logic consolidates into the package). It uses `TimelineEntryRelevance` from `WidgetKit`, which `FluxCore` can import since the package targets iOS. The function takes only `Staleness` + `BatteryInfo?` + `LiveData?` as inputs so it is unit-testable without WidgetKit-runtime dependencies beyond the return type.
 
 ### Widget declarations
 
@@ -1207,12 +1209,12 @@ Plus `nextTransition` tests for each bucket boundary.
 - `parse("other://dashboard")` returns `nil`.
 - `parse("flux://dashboard/extra/path")` returns `.dashboard` (extra path components ignored).
 
-### Widget extension tests — `FluxWidgetsTests`
+### Widget-logic tests — `FluxCoreTests` (per Decision 19)
 
-Mirrors the app's `MockFluxAPIClient` pattern:
+The testable widget orchestration lives in `FluxCore.StatusTimelineLogic`; the widget-extension's `StatusTimelineProvider` is a thin `TimelineProvider` conformance that calls into it. All of the following scenarios are covered at the logic layer, not via WidgetKit-hosted tests:
 
 ```swift
-@Suite struct StatusTimelineProviderTests {
+@Suite struct StatusTimelineLogicTests {
     @Test func emptyCacheNoToken_returnsPlaceholder() async { ... }
     @Test func emptyCacheTokenPresent_fetchSuccess_returnsLive() async { ... }
     @Test func emptyCacheTokenPresent_fetchFails_returnsPlaceholder() async { ... }
@@ -1222,14 +1224,17 @@ Mirrors the app's `MockFluxAPIClient` pattern:
     @Test func cachePresent_emitsBucketTransitionEntries() async { ... }
     @Test func offlineCachedData_classifiedAsOffline() async { ... }
     @Test func fetchWriteIsNewerWins_notClobberedByStaleFetch() async { ... }
+    @Test func keychainErrSecInteractionNotAllowed_cachesOnly() async { ... }
 }
 ```
 
-The provider takes all dependencies via initializer, so tests inject:
+`StatusTimelineLogic` takes all dependencies via initializer so tests inject:
 
 - `MockFluxAPIClient` with configurable response/delay/error.
 - `WidgetSnapshotCache` pointing at a unique test suite.
 - Deterministic `nowProvider` closure.
+
+`RelevanceScoringTests` and `WidgetAccessibilityTests` similarly live in `FluxCoreTests` (both types moved into `FluxCore` per Decision 19) — the scoring table and accessibility-label scenarios are straight table-driven pure-function tests.
 
 ### App-side tests — `FluxTests`
 
