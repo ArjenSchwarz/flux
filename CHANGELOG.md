@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Spec for T-843 "Add widgets to the app" under `specs/add-widgets/`: EARS requirements, design (new `FluxCore` local Swift Package + widget extension target + App Group cache + Keychain accessibility migration + flux:// deep link), 18-entry decision log, 43-task implementation plan across 5 phases / 3 streams, and a prerequisites doc covering the one-sitting Xcode setup
+
 ### Changed
 
 - `PeakUsageCard` displays period energy as kWh (one decimal) instead of Wh, and adds a caption header row ("Timespan" / "Average · Total") above the entries
