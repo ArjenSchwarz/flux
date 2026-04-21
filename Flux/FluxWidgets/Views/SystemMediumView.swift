@@ -30,7 +30,7 @@ struct SystemMediumView: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(WidgetAccessibility.label(for: entry, family: .systemMedium))
         .widgetURL(WidgetDeepLink.dashboardURL)
-        .containerBackground(.thinMaterial, for: .widget)
+        .containerBackground(.ultraThinMaterial, for: .widget)
     }
 
     private var timeLabel: String? {
