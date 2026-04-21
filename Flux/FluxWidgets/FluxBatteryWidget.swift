@@ -12,6 +12,7 @@ struct FluxBatteryWidget: Widget {
         .configurationDisplayName("Flux Battery")
         .description("Battery state and household power at a glance.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
+        .containerBackgroundRemovable(true)
     }
 }
 
