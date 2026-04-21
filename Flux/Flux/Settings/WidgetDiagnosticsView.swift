@@ -1,3 +1,4 @@
+#if DEBUG
 import FluxCore
 import SwiftUI
 
@@ -37,6 +38,7 @@ struct WidgetDiagnosticsView: View {
         group.set(marker, forKey: "fluxDiagnosticMarker")
         let readBack = group.string(forKey: "fluxDiagnosticMarker")
         let roundTrip = readBack == marker
+        group.removeObject(forKey: "fluxDiagnosticMarker")
 
         return [
             DiagnosticLine(
@@ -150,3 +152,4 @@ private struct DiagnosticLine: Identifiable {
     let detail: String
     let passed: Bool
 }
+#endif

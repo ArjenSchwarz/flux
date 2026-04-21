@@ -66,7 +66,9 @@ struct SettingsView: View {
                 }
             }
 
+            #if DEBUG
             WidgetDiagnosticsView()
+            #endif
         }
         .navigationTitle("Settings")
         .onAppear {

@@ -38,11 +38,14 @@ struct StatusTimelineProvider: TimelineProvider {
     func getTimeline(in context: Context, completion: @escaping (Timeline<StatusEntry>) -> Void) {
         Task {
             let timeline = await logic.timeline()
+            #if DEBUG
             Self.writeHeartbeat(firstEntry: timeline.entries.first)
+            #endif
             completion(timeline)
         }
     }
 
+    #if DEBUG
     private static func writeHeartbeat(firstEntry: StatusEntry?) {
         let group = UserDefaults(suiteName: UserDefaults.fluxAppGroupSuiteName)
         let shared = group ?? .standard
@@ -68,6 +71,7 @@ struct StatusTimelineProvider: TimelineProvider {
         }
         shared.set(sourceString, forKey: WidgetDiagnosticKeys.lastSource)
     }
+    #endif
 
     private static func makeLogic() -> StatusTimelineLogic {
         let cache = WidgetSnapshotCache()
