@@ -6,6 +6,7 @@ struct PillRow: View {
     let color: Color
     var font: Font = .subheadline
     var redacted: Bool = false
+    var tight: Bool = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -13,7 +14,9 @@ struct PillRow: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-            Spacer(minLength: 4)
+            if !tight {
+                Spacer(minLength: 4)
+            }
             Text(value)
                 .font(font)
                 .monospacedDigit()

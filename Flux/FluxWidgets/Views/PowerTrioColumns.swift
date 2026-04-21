@@ -5,6 +5,7 @@ struct PowerTrioColumns: View {
     let entry: StatusEntry
     var font: Font = .subheadline
     var spacing: CGFloat = 4
+    var tight: Bool = false
 
     private var offpeakStart: String {
         entry.offpeak?.windowStart ?? OffpeakData.defaultWindowStart
@@ -38,21 +39,24 @@ struct PowerTrioColumns: View {
                 value: PowerFormatting.format(entry.ppv),
                 color: solarColor,
                 font: font,
-                redacted: entry.isPlaceholder
+                redacted: entry.isPlaceholder,
+                tight: tight
             )
             PillRow(
                 title: "Load",
                 value: PowerFormatting.format(entry.pload),
                 color: loadColor,
                 font: font,
-                redacted: entry.isPlaceholder
+                redacted: entry.isPlaceholder,
+                tight: tight
             )
             PillRow(
                 title: entry.gridTitle,
                 value: PowerFormatting.format(entry.pgrid),
                 color: gridColor,
                 font: font,
-                redacted: entry.isPlaceholder
+                redacted: entry.isPlaceholder,
+                tight: tight
             )
         }
     }

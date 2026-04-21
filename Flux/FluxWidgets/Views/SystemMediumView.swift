@@ -7,7 +7,7 @@ struct SystemMediumView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .top, spacing: 24) {
+            HStack(alignment: .top, spacing: 32) {
                 VStack(spacing: 14) {
                     SOCRing(entry: entry, diameter: 100, lineWidth: 9)
                     if let timeLabel {
@@ -19,7 +19,7 @@ struct SystemMediumView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 10) {
-                    PowerTrioColumns(entry: entry, font: .body, spacing: 10)
+                    PowerTrioColumns(entry: entry, font: .body, spacing: 10, tight: true)
                     batteryStateRow
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -49,7 +49,8 @@ struct SystemMediumView: View {
             value: batteryStateValue,
             color: entry.batteryStateColor,
             font: .body,
-            redacted: entry.isPlaceholder
+            redacted: entry.isPlaceholder,
+            tight: true
         )
     }
 
