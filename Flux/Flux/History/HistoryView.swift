@@ -1,3 +1,4 @@
+import FluxCore
 import SwiftData
 import SwiftUI
 

@@ -10,5 +10,9 @@
 	<array>
 		<string>group.me.nore.ig.flux</string>
 	</array>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)group.me.nore.ig.flux</string>
+	</array>
 </dict>
 </plist>

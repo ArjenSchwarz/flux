@@ -1,3 +1,4 @@
+import FluxCore
 import SwiftUI
 
 struct PowerTrioView: View {
@@ -9,7 +10,7 @@ struct PowerTrioView: View {
     init(
         live: LiveData?,
         offpeak: OffpeakData?,
-        loadAlertThreshold: Double = UserDefaults.standard.loadAlertThreshold,
+        loadAlertThreshold: Double = UserDefaults.fluxAppGroup.loadAlertThreshold,
         nowProvider: @escaping () -> Date = { .now }
     ) {
         self.live = live

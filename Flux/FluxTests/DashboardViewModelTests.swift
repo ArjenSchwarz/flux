@@ -1,3 +1,4 @@
+import FluxCore
 import Foundation
 import Testing
 @testable import Flux
@@ -91,6 +92,189 @@ struct DashboardViewModelTests {
         for _ in 0 ..< 50 where await apiClient.fetchStatusCallCount < expectedCount {
             await Task.yield()
         }
+    }
+}
+
+@MainActor @Suite(.serialized)
+struct DashboardViewModelWidgetCacheTests {
+    @Test
+    func successfulRefreshWritesEnvelopeToCache() async {
+        let context = makeContext()
+        defer { context.cleanUp() }
+        await context.apiClient.setStatusResults([.success(makeStatusResponse(soc: 62))])
+
+        await context.viewModel.refresh()
+
+        let envelope = context.cache.read()
+        #expect(envelope?.status.live?.soc == 62)
+        #expect(envelope?.fetchedAt == context.now)
+    }
+
+    @Test
+    func failedRefreshDoesNotWriteToCache() async {
+        let context = makeContext()
+        defer { context.cleanUp() }
+        await context.apiClient.setStatusResults([.failure(FluxAPIError.serverError)])
+
+        await context.viewModel.refresh()
+
+        #expect(context.cache.read() == nil)
+        #expect(context.reloadCounter.count == 0)
+    }
+
+    @Test
+    func successfulRefreshTriggersReloadExactlyOnce() async {
+        let context = makeContext()
+        defer { context.cleanUp() }
+        await context.apiClient.setStatusResults([.success(makeStatusResponse(soc: 55))])
+
+        await context.viewModel.refresh()
+
+        #expect(context.reloadCounter.count == 1)
+    }
+
+    @Test
+    func reloadIsNotTriggeredWhenWriteIfNewerReturnsFalse() async {
+        let context = makeContext()
+        defer { context.cleanUp() }
+
+        let futureEnvelope = StatusSnapshotEnvelope(
+            fetchedAt: context.now.addingTimeInterval(60),
+            status: makeStatusResponse(soc: 90)
+        )
+        _ = context.cache.writeIfNewer(futureEnvelope)
+
+        await context.apiClient.setStatusResults([.success(makeStatusResponse(soc: 33))])
+
+        await context.viewModel.refresh()
+
+        #expect(context.reloadCounter.count == 0)
+        #expect(context.cache.read()?.status.live?.soc == 90)
+    }
+
+    @Test
+    func secondRefreshWithinDebounceDoesNotTriggerReload() async {
+        let timeline = TestClock(start: Date(timeIntervalSince1970: 1_000))
+        let context = makeContext(clock: timeline)
+        defer { context.cleanUp() }
+        await context.apiClient.setStatusResults([
+            .success(makeStatusResponse(soc: 60)),
+            .success(makeStatusResponse(soc: 61))
+        ])
+
+        await context.viewModel.refresh()
+        timeline.advance(by: 60) // 1 minute later, still within debounce
+        await context.viewModel.refresh()
+
+        #expect(context.reloadCounter.count == 1)
+    }
+
+    @Test
+    func secondRefreshAfterDebounceTriggersReload() async {
+        let timeline = TestClock(start: Date(timeIntervalSince1970: 2_000))
+        let context = makeContext(clock: timeline)
+        defer { context.cleanUp() }
+        await context.apiClient.setStatusResults([
+            .success(makeStatusResponse(soc: 60)),
+            .success(makeStatusResponse(soc: 61))
+        ])
+
+        await context.viewModel.refresh()
+        timeline.advance(by: 5 * 60) // exactly at debounce boundary
+        await context.viewModel.refresh()
+
+        #expect(context.reloadCounter.count == 2)
+    }
+
+    private struct Context {
+        let viewModel: DashboardViewModel
+        let apiClient: MockDashboardAPIClient
+        let cache: WidgetSnapshotCache
+        let reloadCounter: ReloadCounter
+        let now: Date
+        let cleanUp: () -> Void
+    }
+
+    private func makeContext(clock: TestClock? = nil) -> Context {
+        let apiClient = MockDashboardAPIClient()
+        let suiteName = "DashboardViewModelWidgetCacheTests.\(UUID().uuidString)"
+        let cache = WidgetSnapshotCache(suiteName: suiteName)
+        let reloadCounter = ReloadCounter()
+
+        let fixedNow = Date(timeIntervalSince1970: 3_000)
+        let nowProvider: @Sendable () -> Date = clock.map { c in { c.now } } ?? { fixedNow }
+        let currentNow: Date = clock?.now ?? fixedNow
+
+        let viewModel = DashboardViewModel(
+            apiClient: apiClient,
+            widgetCache: cache,
+            widgetReloadTrigger: { reloadCounter.increment() },
+            nowProvider: nowProvider
+        )
+
+        return Context(
+            viewModel: viewModel,
+            apiClient: apiClient,
+            cache: cache,
+            reloadCounter: reloadCounter,
+            now: currentNow,
+            cleanUp: {
+                cache.clear()
+                UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
+            }
+        )
+    }
+}
+
+private func makeStatusResponse(soc: Double) -> StatusResponse {
+    StatusResponse(
+        live: LiveData(
+            ppv: 1000,
+            pload: 700,
+            pbat: -250,
+            pgrid: -50,
+            pgridSustained: false,
+            soc: soc,
+            timestamp: "2026-04-15T00:00:00Z"
+        ),
+        battery: nil,
+        rolling15min: nil,
+        offpeak: nil,
+        todayEnergy: nil
+    )
+}
+
+private final class ReloadCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _count = 0
+
+    var count: Int {
+        lock.lock(); defer { lock.unlock() }
+        return _count
+    }
+
+    func increment() {
+        lock.lock(); defer { lock.unlock() }
+        _count += 1
+    }
+}
+
+private final class TestClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var current: Date
+
+    init(start: Date) {
+        self.current = start
+    }
+
+    var now: Date {
+        lock.lock(); defer { lock.unlock() }
+        return current
+    }
+
+    func advance(by seconds: TimeInterval) {
+        lock.lock(); defer { lock.unlock() }
+        current = current.addingTimeInterval(seconds)
     }
 }
 

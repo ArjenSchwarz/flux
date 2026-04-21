@@ -1,4 +1,5 @@
 import Charts
+import FluxCore
 import SwiftUI
 
 struct SOCChartView: View {

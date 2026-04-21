@@ -1,3 +1,4 @@
+import FluxCore
 import Foundation
 import Observation
 
@@ -17,7 +18,7 @@ final class SettingsViewModel {
 
     init(
         keychainService: KeychainService = KeychainService(),
-        userDefaults: UserDefaults = .standard,
+        userDefaults: UserDefaults = .fluxAppGroup,
         apiClientFactory: @escaping @Sendable (URL, String) -> any FluxAPIClient = { baseURL, token in
             URLSessionAPIClient(baseURL: baseURL, token: token)
         }

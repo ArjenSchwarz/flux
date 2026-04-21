@@ -1,4 +1,5 @@
 #if DEBUG
+import FluxCore
 import Foundation
 
 final actor MockFluxAPIClient: FluxAPIClient {

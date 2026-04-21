@@ -138,6 +138,10 @@ ios-build:
 		$(PIPE_PRETTY)
 
 .PHONY: ios-test
+# Runs FluxTests and FluxUITests. FluxCoreTests live in the local Swift Package
+# (Flux/Packages/FluxCore) and are not picked up by xcodebuild from this scheme
+# — Xcode's Test Navigator runs them fine from the IDE, but from the CLI they
+# need to be run separately (see `make ios-test-core`).
 ios-test:
 	xcodebuild test \
 		-project $(IOS_PROJECT) \
@@ -148,6 +152,15 @@ ios-test:
 		-parallel-testing-worker-count 1 \
 		-maximum-concurrent-test-simulator-destinations 1 \
 		$(PIPE_PRETTY)
+
+.PHONY: ios-test-core
+# Builds the Flux app (which pulls in the FluxCore package) and then tells the
+# user to run FluxCoreTests from Xcode's Test Navigator. xcodebuild from the
+# CLI cannot currently run package test targets that aren't bound to a project
+# target — see the `ios-test` note above.
+ios-test-core:
+	@echo "FluxCoreTests are run from Xcode's Test Navigator."
+	@echo "Open Flux/Flux.xcodeproj, select the Flux scheme, then ⌘U on FluxCoreTests."
 
 .PHONY: ios-test-ui
 ios-test-ui:
