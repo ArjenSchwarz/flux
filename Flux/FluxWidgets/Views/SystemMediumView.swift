@@ -24,7 +24,7 @@ struct SystemMediumView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.top, 12)
+            .padding(.top, 14)
 
             if entry.staleness != .fresh {
                 StalenessFootnote(entry: entry)
