@@ -28,7 +28,7 @@ private struct FluxAccessoryEntryView: View {
             AccessoryRectangularView(entry: entry)
         case .accessoryInline:
             AccessoryInlineView(entry: entry)
-        default:
+        @unknown default:
             AccessoryCircularView(entry: entry)
         }
     }
