@@ -4,7 +4,7 @@
 
 Xcode project at `Flux/` with app source in `Flux/Flux/` and tests in `Flux/FluxTests/`. Uses `PBXFileSystemSynchronizedRootGroup` for automatic file pickup (new files are discovered without manual Xcode configuration).
 
-**Build settings:** `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, `SWIFT_APPROACHABLE_CONCURRENCY = YES`, deployment target iOS 26.4. Simulator uses iPhone 17 Pro.
+**Build settings:** `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, `SWIFT_APPROACHABLE_CONCURRENCY = YES`, deployment target iOS 26.0. Simulator uses iPhone 17 Pro.
 
 **Build & test:**
 ```bash
