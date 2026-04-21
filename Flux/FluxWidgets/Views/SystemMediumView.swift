@@ -77,7 +77,7 @@ struct SystemMediumView: View {
     private var batteryStateTitle: String {
         if entry.staleness == .offline { return "Offline" }
         guard let live = entry.live else { return "Battery" }
-        if live.soc >= 100, live.pbat <= 0 { return "Full" }
+        if live.soc >= 99.95, live.pbat <= 0 { return "Full" }
         if live.pbat > 0 { return "Discharging" }
         if live.pbat < 0 { return "Charging" }
         return "Idle"
@@ -85,7 +85,7 @@ struct SystemMediumView: View {
 
     private var batteryStateValue: String {
         guard let live = entry.live, entry.staleness != .offline else { return "—" }
-        if live.soc >= 100, live.pbat <= 0 { return "—" }
+        if live.soc >= 99.95, live.pbat <= 0 { return "—" }
         if abs(live.pbat) < 1 { return "—" }
         return PowerFormatting.format(live.pbat)
     }

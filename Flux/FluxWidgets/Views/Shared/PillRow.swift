@@ -25,6 +25,9 @@ struct PillRow: View {
                 .monospacedDigit()
                 .foregroundStyle(color)
                 .lineLimit(1)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(color.opacity(0.15), in: Capsule())
                 .redacted(reason: redacted ? .placeholder : [])
         }
     }

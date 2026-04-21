@@ -38,7 +38,7 @@ extension StatusEntry {
     var batteryStateColor: Color {
         if staleness == .offline { return .secondary }
         guard let live else { return .secondary }
-        if live.soc >= 100, live.pbat <= 0 { return .secondary } // Full
+        if live.soc >= 99.95, live.pbat <= 0 { return .secondary } // Full
         if let cutoffColor = cutoffRiskColor { return cutoffColor }
         if live.pbat < 0 { return .green }
         if live.pbat > 0 { return .primary }
