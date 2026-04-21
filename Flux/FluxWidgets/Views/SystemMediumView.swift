@@ -8,7 +8,7 @@ struct SystemMediumView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .top, spacing: 16) {
-                VStack(spacing: 10) {
+                VStack(spacing: 14) {
                     SOCRing(entry: entry, diameter: 110, lineWidth: 10)
                     if let timeLabel {
                         Text(timeLabel)
@@ -17,6 +17,7 @@ struct SystemMediumView: View {
                             .redacted(reason: entry.isPlaceholder ? .placeholder : [])
                     }
                 }
+                .padding(.top, 4)
 
                 VStack(alignment: .leading, spacing: 4) {
                     PowerTrioColumns(entry: entry, font: .body)
