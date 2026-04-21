@@ -30,23 +30,28 @@ struct PowerTrioColumns: View {
                 now: entry.date
             ).color
 
-        HStack(alignment: .top, spacing: 12) {
-            column(title: "Solar", value: entry.ppv, color: solarColor)
-            column(title: "Load", value: entry.pload, color: loadColor)
-            column(title: entry.gridTitle, value: entry.pgrid, color: gridColor)
+        VStack(alignment: .leading, spacing: 4) {
+            row(title: "Solar", value: entry.ppv, color: solarColor)
+            row(title: "Load", value: entry.pload, color: loadColor)
+            row(title: entry.gridTitle, value: entry.pgrid, color: gridColor)
         }
     }
 
-    private func column(title: String, value: Double, color: Color) -> some View {
-        VStack(spacing: 2) {
+    private func row(title: String, value: Double, color: Color) -> some View {
+        HStack(spacing: 8) {
             Text(title)
-                .font(.caption)
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Spacer(minLength: 4)
             Text(PowerFormatting.format(value))
-                .font(.subheadline)
+                .monospacedDigit()
                 .foregroundStyle(color)
+                .lineLimit(1)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 2)
+                .background(color.opacity(0.15), in: Capsule())
                 .redacted(reason: entry.isPlaceholder ? .placeholder : [])
         }
-        .frame(maxWidth: .infinity)
+        .font(.subheadline)
     }
 }
