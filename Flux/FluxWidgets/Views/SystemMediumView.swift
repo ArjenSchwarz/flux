@@ -22,6 +22,7 @@ struct SystemMediumView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.top, 14)
+            .padding(.leading, 16)
 
             Spacer(minLength: 0)
         }
