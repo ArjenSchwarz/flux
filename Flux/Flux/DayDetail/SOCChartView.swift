@@ -15,7 +15,7 @@ struct SOCChartView: View {
                 .font(.headline)
 
             if let selected = selectedReading {
-                Text("\(DateFormatting.clockTime(from: selected.date)): \(selected.point.soc, specifier: "%.1f")%")
+                Text("\(DateFormatting.clockTime(from: selected.date)): \(SOCFormatting.format(selected.point.soc))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -63,7 +63,7 @@ struct SOCChartView: View {
                     .symbolSize(50)
                     .foregroundStyle(.purple)
                     .annotation(position: .top) {
-                        Text("\(socLow, specifier: "%.1f")% at \(DateFormatting.clockTime(from: socLowTime))")
+                        Text("\(SOCFormatting.format(socLow)) at \(DateFormatting.clockTime(from: socLowTime))")
                             .font(.caption2)
                             .padding(4)
                             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 6, style: .continuous))

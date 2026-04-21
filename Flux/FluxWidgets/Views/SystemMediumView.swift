@@ -8,14 +8,13 @@ struct SystemMediumView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .top, spacing: 16) {
-                VStack(alignment: .leading, spacing: 4) {
-                    SOCHeroLabel(entry: entry, size: .medium)
+                SOCRing(entry: entry, diameter: 110, lineWidth: 10)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    PowerTrioColumns(entry: entry)
                     StatusLineLabel(entry: entry, style: .full)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-
-                PowerTrioColumns(entry: entry)
-                    .frame(maxWidth: .infinity)
             }
 
             if entry.staleness != .fresh {
@@ -36,6 +35,12 @@ struct SystemMediumView: View {
     FluxBatteryWidget()
 } timeline: {
     WidgetFixtures.entry()
+}
+
+#Preview("full", as: .systemMedium) {
+    FluxBatteryWidget()
+} timeline: {
+    WidgetFixtures.entry(soc: 100, pbat: -200)
 }
 
 #Preview("stale", as: .systemMedium) {

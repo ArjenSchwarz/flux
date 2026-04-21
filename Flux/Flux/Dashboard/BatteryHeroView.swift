@@ -10,7 +10,7 @@ struct BatteryHeroView: View {
         let batteryColor = BatteryColor.forSOC(soc).color
 
         VStack(spacing: 12) {
-            Text("\(soc, specifier: "%.1f")%")
+            Text(SOCFormatting.format(soc))
                 .font(.system(size: 56, weight: .bold, design: .rounded))
                 .foregroundStyle(batteryColor)
                 .frame(maxWidth: .infinity, alignment: .center)

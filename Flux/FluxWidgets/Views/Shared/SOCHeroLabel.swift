@@ -26,7 +26,7 @@ struct SOCHeroLabel: View {
             ? .secondary
             : BatteryColor.forSOC(entry.soc).color
 
-        Text("\(entry.soc, specifier: "%.1f")%")
+        Text(SOCFormatting.format(entry.soc))
             .font(size.font)
             .foregroundStyle(tint)
             .minimumScaleFactor(0.5)

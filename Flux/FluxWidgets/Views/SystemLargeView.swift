@@ -45,7 +45,7 @@ struct SystemLargeView: View {
     private var low24hText: String {
         guard let low = entry.battery?.low24h else { return "—" }
         let timeText = DateFormatting.parseTimestamp(low.timestamp).map(DateFormatting.clockTime(from:)) ?? "—"
-        return "\(String(format: "%.1f", low.soc))% at \(timeText)"
+        return "\(SOCFormatting.format(low.soc)) at \(timeText)"
     }
 
     private var offpeakGridText: String {

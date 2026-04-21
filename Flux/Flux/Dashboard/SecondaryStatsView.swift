@@ -34,7 +34,7 @@ struct SecondaryStatsView: View {
     private var low24hText: String {
         guard let low24h = battery?.low24h else { return "—" }
         let timeText = DateFormatting.parseTimestamp(low24h.timestamp).map(DateFormatting.clockTime(from:)) ?? "—"
-        return "\(String(format: "%.1f", low24h.soc))% at \(timeText)"
+        return "\(SOCFormatting.format(low24h.soc)) at \(timeText)"
     }
 
     private var offpeakGridText: String {
