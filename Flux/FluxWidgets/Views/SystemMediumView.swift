@@ -31,7 +31,7 @@ struct SystemMediumView: View {
         .accessibilityLabel(WidgetAccessibility.label(for: entry, family: .systemMedium))
         .widgetURL(WidgetDeepLink.dashboardURL)
         .containerBackground(for: .widget) {
-            AccessoryWidgetBackground()
+            Color.primary.opacity(0.1)
         }
     }
 
