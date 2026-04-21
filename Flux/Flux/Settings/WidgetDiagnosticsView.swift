@@ -76,14 +76,62 @@ struct WidgetDiagnosticsView: View {
         let keychain = KeychainService()
         if let token = keychain.loadToken(), !token.isEmpty {
             new.append(DiagnosticLine(
-                title: "Keychain token",
+                title: "Keychain token (main app)",
                 detail: "present (\(token.prefix(4))…\(token.suffix(4)), \(token.count) chars)",
                 ok: true
             ))
         } else {
             new.append(DiagnosticLine(
-                title: "Keychain token",
+                title: "Keychain token (main app)",
                 detail: "not readable — widget cannot fetch live",
+                ok: false
+            ))
+        }
+
+        // Heartbeat written by StatusTimelineProvider from inside the widget extension process.
+        if let runAt = group.object(forKey: "widgetLastRunAt") as? Date {
+            let fmt = DateFormatter()
+            fmt.dateStyle = .short
+            fmt.timeStyle = .medium
+            new.append(DiagnosticLine(
+                title: "Widget last heartbeat",
+                detail: fmt.string(from: runAt),
+                ok: true
+            ))
+            let canReadGroup = group.bool(forKey: "widgetCanReadGroup")
+            new.append(DiagnosticLine(
+                title: "Widget sees App Group",
+                detail: canReadGroup ? "yes" : "NO — widget process can't open the shared suite",
+                ok: canReadGroup
+            ))
+            let cacheReadable = group.bool(forKey: "widgetCacheReadable")
+            new.append(DiagnosticLine(
+                title: "Widget reads cache envelope",
+                detail: cacheReadable ? "yes" : "NO — widget cache.read() returns nil",
+                ok: cacheReadable
+            ))
+            let tokenReadable = group.bool(forKey: "widgetTokenReadable")
+            new.append(DiagnosticLine(
+                title: "Widget reads Keychain token",
+                detail: tokenReadable ? "yes" : "NO — widget can't load the token",
+                ok: tokenReadable
+            ))
+            let widgetAPIURL = group.string(forKey: "widgetAPIURL") ?? ""
+            new.append(DiagnosticLine(
+                title: "Widget sees apiURL",
+                detail: widgetAPIURL.isEmpty ? "(empty)" : widgetAPIURL,
+                ok: !widgetAPIURL.isEmpty
+            ))
+            let lastSource = group.string(forKey: "widgetLastSource") ?? "(none)"
+            new.append(DiagnosticLine(
+                title: "Widget last entry source",
+                detail: lastSource,
+                ok: lastSource == "live" || lastSource == "cache"
+            ))
+        } else {
+            new.append(DiagnosticLine(
+                title: "Widget last heartbeat",
+                detail: "never — widget has not produced a timeline (or can't write to App Group)",
                 ok: false
             ))
         }

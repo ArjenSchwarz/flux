@@ -38,8 +38,35 @@ struct StatusTimelineProvider: TimelineProvider {
     func getTimeline(in context: Context, completion: @escaping (Timeline<StatusEntry>) -> Void) {
         Task {
             let timeline = await logic.timeline()
+            Self.writeHeartbeat(firstEntry: timeline.entries.first)
             completion(timeline)
         }
+    }
+
+    private static func writeHeartbeat(firstEntry: StatusEntry?) {
+        let group = UserDefaults(suiteName: UserDefaults.fluxAppGroupSuiteName)
+        let shared = group ?? .standard
+
+        shared.set(Date(), forKey: "widgetLastRunAt")
+        shared.set(group != nil, forKey: "widgetCanReadGroup")
+
+        let cache = WidgetSnapshotCache()
+        shared.set(cache.read() != nil, forKey: "widgetCacheReadable")
+
+        let keychain = KeychainService()
+        let token = keychain.loadToken()
+        shared.set(token != nil && !(token!.isEmpty), forKey: "widgetTokenReadable")
+
+        shared.set(UserDefaults.fluxAppGroup.apiURL ?? "", forKey: "widgetAPIURL")
+
+        let sourceString: String
+        switch firstEntry?.source {
+        case .live: sourceString = "live"
+        case .cache: sourceString = "cache"
+        case .placeholder: sourceString = "placeholder"
+        case .none: sourceString = "no entry"
+        }
+        shared.set(sourceString, forKey: "widgetLastSource")
     }
 
     private static func makeLogic() -> StatusTimelineLogic {
