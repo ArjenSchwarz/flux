@@ -3,6 +3,9 @@ import SwiftUI
 
 struct PowerTrioColumns: View {
     let entry: StatusEntry
+    var font: Font = .subheadline
+    var spacing: CGFloat = 4
+    var tight: Bool = false
 
     private var offpeakStart: String {
         entry.offpeak?.windowStart ?? OffpeakData.defaultWindowStart
@@ -30,28 +33,31 @@ struct PowerTrioColumns: View {
                 now: entry.date
             ).color
 
-        VStack(alignment: .leading, spacing: 4) {
-            row(title: "Solar", value: entry.ppv, color: solarColor)
-            row(title: "Load", value: entry.pload, color: loadColor)
-            row(title: entry.gridTitle, value: entry.pgrid, color: gridColor)
+        VStack(alignment: .leading, spacing: spacing) {
+            PillRow(
+                title: "Solar",
+                value: PowerFormatting.format(entry.ppv),
+                color: solarColor,
+                valueFont: font,
+                redacted: entry.isPlaceholder,
+                tight: tight
+            )
+            PillRow(
+                title: "Load",
+                value: PowerFormatting.format(entry.pload),
+                color: loadColor,
+                valueFont: font,
+                redacted: entry.isPlaceholder,
+                tight: tight
+            )
+            PillRow(
+                title: entry.gridTitle,
+                value: PowerFormatting.format(entry.pgrid),
+                color: gridColor,
+                valueFont: font,
+                redacted: entry.isPlaceholder,
+                tight: tight
+            )
         }
-    }
-
-    private func row(title: String, value: Double, color: Color) -> some View {
-        HStack(spacing: 8) {
-            Text(title)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-            Spacer(minLength: 4)
-            Text(PowerFormatting.format(value))
-                .monospacedDigit()
-                .foregroundStyle(color)
-                .lineLimit(1)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 2)
-                .background(color.opacity(0.15), in: Capsule())
-                .redacted(reason: entry.isPlaceholder ? .placeholder : [])
-        }
-        .font(.subheadline)
     }
 }

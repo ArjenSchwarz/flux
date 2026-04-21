@@ -65,6 +65,10 @@ struct SettingsView: View {
                         .foregroundStyle(.red)
                 }
             }
+
+            #if DEBUG
+            WidgetDiagnosticsView()
+            #endif
         }
         .navigationTitle("Settings")
         .onAppear {

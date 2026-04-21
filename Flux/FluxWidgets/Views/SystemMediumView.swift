@@ -7,27 +7,87 @@ struct SystemMediumView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .top, spacing: 16) {
-                VStack(alignment: .leading, spacing: 4) {
-                    SOCHeroLabel(entry: entry, size: .medium)
-                    StatusLineLabel(entry: entry, style: .full)
+            HStack(alignment: .top, spacing: 32) {
+                VStack(spacing: 14) {
+                    SOCRing(entry: entry, diameter: 100, lineWidth: 9)
+                    if let timeLabel {
+                        Text(timeLabel)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .redacted(reason: entry.isPlaceholder ? .placeholder : [])
+                    }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
 
-                PowerTrioColumns(entry: entry)
-                    .frame(maxWidth: .infinity)
+                statsGrid
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .padding(.top, 14)
+            .padding(.leading, 16)
 
-            if entry.staleness != .fresh {
-                StalenessFootnote(entry: entry)
-            }
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(WidgetAccessibility.label(for: entry, family: .systemMedium))
         .widgetURL(WidgetDeepLink.dashboardURL)
-        .containerBackground(for: .widget) { Color.clear }
+        .containerBackground(for: .widget) {
+            Image("Earthset")
+                .resizable()
+                .scaledToFill()
+        }
+    }
+
+    private var timeLabel: String? {
+        if let timestamp = entry.live?.timestamp,
+           let date = DateFormatting.parseTimestamp(timestamp) {
+            return DateFormatting.clockTime(from: date)
+        }
+        if let fetchedAt = entry.envelope?.fetchedAt {
+            return DateFormatting.clockTime(from: fetchedAt)
+        }
+        return nil
+    }
+
+    private var statsGrid: some View {
+        Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 10) {
+            row(label: "Solar", value: PowerFormatting.format(entry.ppv), color: entry.solarColor)
+            row(label: "Load", value: PowerFormatting.format(entry.pload), color: entry.loadColor)
+            row(label: entry.gridTitle, value: PowerFormatting.format(entry.pgrid), color: entry.gridTintColor)
+            row(label: batteryStateTitle, value: batteryStateValue, color: entry.batteryStateColor)
+        }
+    }
+
+    @ViewBuilder
+    private func row(label: String, value: String, color: Color) -> some View {
+        GridRow {
+            Text(label)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .gridColumnAlignment(.trailing)
+            Text(value)
+                .font(.body)
+                .monospacedDigit()
+                .foregroundStyle(color)
+                .lineLimit(1)
+                .redacted(reason: entry.isPlaceholder ? .placeholder : [])
+        }
+    }
+
+    private var batteryStateTitle: String {
+        if entry.staleness == .offline { return "Offline" }
+        guard let live = entry.live else { return "Battery" }
+        if live.soc >= 99.95, live.pbat <= 0 { return "Full" }
+        if live.pbat > 0 { return "Discharging" }
+        if live.pbat < 0 { return "Charging" }
+        return "Idle"
+    }
+
+    private var batteryStateValue: String {
+        guard let live = entry.live, entry.staleness != .offline else { return "—" }
+        if live.soc >= 99.95, live.pbat <= 0 { return "—" }
+        if abs(live.pbat) < 1 { return "—" }
+        return PowerFormatting.format(live.pbat)
     }
 }
 
@@ -36,6 +96,18 @@ struct SystemMediumView: View {
     FluxBatteryWidget()
 } timeline: {
     WidgetFixtures.entry()
+}
+
+#Preview("full", as: .systemMedium) {
+    FluxBatteryWidget()
+} timeline: {
+    WidgetFixtures.entry(soc: 100, pbat: -200)
+}
+
+#Preview("cutoff-risk", as: .systemMedium) {
+    FluxBatteryWidget()
+} timeline: {
+    WidgetFixtures.entry(soc: 45, pbat: 3200)
 }
 
 #Preview("stale", as: .systemMedium) {
