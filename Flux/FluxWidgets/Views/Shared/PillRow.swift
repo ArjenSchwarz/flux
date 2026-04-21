@@ -4,7 +4,10 @@ struct PillRow: View {
     let title: String
     let value: String
     let color: Color
-    var font: Font = .subheadline
+    /// Font applied to the value text. The title is always rendered at
+    /// `.subheadline` so the row has a smaller-label / larger-value rhythm when
+    /// `valueFont` is something bigger like `.body`.
+    var valueFont: Font = .subheadline
     var redacted: Bool = false
     var tight: Bool = false
 
@@ -18,7 +21,7 @@ struct PillRow: View {
                 Spacer(minLength: 4)
             }
             Text(value)
-                .font(font)
+                .font(valueFont)
                 .monospacedDigit()
                 .foregroundStyle(color)
                 .lineLimit(1)

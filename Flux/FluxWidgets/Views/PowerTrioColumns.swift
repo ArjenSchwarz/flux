@@ -38,7 +38,7 @@ struct PowerTrioColumns: View {
                 title: "Solar",
                 value: PowerFormatting.format(entry.ppv),
                 color: solarColor,
-                font: font,
+                valueFont: font,
                 redacted: entry.isPlaceholder,
                 tight: tight
             )
@@ -46,7 +46,7 @@ struct PowerTrioColumns: View {
                 title: "Load",
                 value: PowerFormatting.format(entry.pload),
                 color: loadColor,
-                font: font,
+                valueFont: font,
                 redacted: entry.isPlaceholder,
                 tight: tight
             )
@@ -54,7 +54,7 @@ struct PowerTrioColumns: View {
                 title: entry.gridTitle,
                 value: PowerFormatting.format(entry.pgrid),
                 color: gridColor,
-                font: font,
+                valueFont: font,
                 redacted: entry.isPlaceholder,
                 tight: tight
             )

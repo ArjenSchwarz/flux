@@ -38,11 +38,14 @@ struct SystemMediumView: View {
     }
 
     private var timeLabel: String? {
-        guard let timestamp = entry.live?.timestamp,
-              let date = DateFormatting.parseTimestamp(timestamp) else {
-            return nil
+        if let timestamp = entry.live?.timestamp,
+           let date = DateFormatting.parseTimestamp(timestamp) {
+            return DateFormatting.clockTime(from: date)
         }
-        return DateFormatting.clockTime(from: date)
+        if let fetchedAt = entry.envelope?.fetchedAt {
+            return DateFormatting.clockTime(from: fetchedAt)
+        }
+        return nil
     }
 
     private var statsGrid: some View {

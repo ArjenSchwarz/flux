@@ -47,17 +47,17 @@ struct StatusTimelineProvider: TimelineProvider {
         let group = UserDefaults(suiteName: UserDefaults.fluxAppGroupSuiteName)
         let shared = group ?? .standard
 
-        shared.set(Date(), forKey: "widgetLastRunAt")
-        shared.set(group != nil, forKey: "widgetCanReadGroup")
+        shared.set(Date(), forKey: WidgetDiagnosticKeys.lastRunAt)
+        shared.set(group != nil, forKey: WidgetDiagnosticKeys.canReadGroup)
 
         let cache = WidgetSnapshotCache()
-        shared.set(cache.read() != nil, forKey: "widgetCacheReadable")
+        shared.set(cache.read() != nil, forKey: WidgetDiagnosticKeys.cacheReadable)
 
         let keychain = KeychainService()
-        let token = keychain.loadToken()
-        shared.set(token != nil && !(token!.isEmpty), forKey: "widgetTokenReadable")
+        let tokenPresent = (keychain.loadToken()?.isEmpty == false)
+        shared.set(tokenPresent, forKey: WidgetDiagnosticKeys.tokenReadable)
 
-        shared.set(UserDefaults.fluxAppGroup.apiURL ?? "", forKey: "widgetAPIURL")
+        shared.set(UserDefaults.fluxAppGroup.apiURL ?? "", forKey: WidgetDiagnosticKeys.apiURL)
 
         let sourceString: String
         switch firstEntry?.source {
@@ -66,7 +66,7 @@ struct StatusTimelineProvider: TimelineProvider {
         case .placeholder: sourceString = "placeholder"
         case .none: sourceString = "no entry"
         }
-        shared.set(sourceString, forKey: "widgetLastSource")
+        shared.set(sourceString, forKey: WidgetDiagnosticKeys.lastSource)
     }
 
     private static func makeLogic() -> StatusTimelineLogic {
