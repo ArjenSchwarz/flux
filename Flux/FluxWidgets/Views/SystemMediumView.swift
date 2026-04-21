@@ -31,14 +31,9 @@ struct SystemMediumView: View {
         .accessibilityLabel(WidgetAccessibility.label(for: entry, family: .systemMedium))
         .widgetURL(WidgetDeepLink.dashboardURL)
         .containerBackground(for: .widget) {
-            LinearGradient(
-                colors: [
-                    Color(red: 0.12, green: 0.28, blue: 0.35),
-                    Color(red: 0.06, green: 0.12, blue: 0.18)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            Image("Earthset")
+                .resizable()
+                .scaledToFill()
         }
     }
 
