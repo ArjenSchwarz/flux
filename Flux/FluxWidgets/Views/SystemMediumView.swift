@@ -5,6 +5,8 @@ import WidgetKit
 struct SystemMediumView: View {
     let entry: StatusEntry
 
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .top, spacing: 32) {
@@ -30,7 +32,15 @@ struct SystemMediumView: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(WidgetAccessibility.label(for: entry, family: .systemMedium))
         .widgetURL(WidgetDeepLink.dashboardURL)
-        .containerBackground(for: .widget) { Color.clear }
+        .containerBackground(for: .widget) {
+            if colorScheme == .dark {
+                Image("Earthset")
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Color.clear
+            }
+        }
     }
 
     private var timeLabel: String? {
