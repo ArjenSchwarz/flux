@@ -7,9 +7,7 @@ struct SOCRing: View {
     let lineWidth: CGFloat
 
     var body: some View {
-        let tint: Color = entry.staleness == .offline
-            ? .secondary
-            : BatteryColor.forSOC(entry.soc).color
+        let tint = entry.effectiveBatteryColor
         let progress = min(max(entry.soc / 100.0, 0), 1)
 
         ZStack {

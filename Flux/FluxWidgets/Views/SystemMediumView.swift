@@ -8,11 +8,19 @@ struct SystemMediumView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .top, spacing: 16) {
-                SOCRing(entry: entry, diameter: 110, lineWidth: 10)
+                VStack(spacing: 4) {
+                    SOCRing(entry: entry, diameter: 110, lineWidth: 10)
+                    if let timeLabel {
+                        Text(timeLabel)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .redacted(reason: entry.isPlaceholder ? .placeholder : [])
+                    }
+                }
 
-                VStack(alignment: .leading, spacing: 6) {
-                    PowerTrioColumns(entry: entry)
-                    StatusLineLabel(entry: entry, style: .full)
+                VStack(alignment: .leading, spacing: 4) {
+                    PowerTrioColumns(entry: entry, font: .body)
+                    batteryStateRow
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -28,6 +36,40 @@ struct SystemMediumView: View {
         .widgetURL(WidgetDeepLink.dashboardURL)
         .containerBackground(for: .widget) { Color.clear }
     }
+
+    private var timeLabel: String? {
+        guard let timestamp = entry.live?.timestamp,
+              let date = DateFormatting.parseTimestamp(timestamp) else {
+            return nil
+        }
+        return DateFormatting.clockTime(from: date)
+    }
+
+    private var batteryStateRow: some View {
+        PillRow(
+            title: batteryStateTitle,
+            value: batteryStateValue,
+            color: entry.effectiveBatteryColor,
+            font: .body,
+            redacted: entry.isPlaceholder
+        )
+    }
+
+    private var batteryStateTitle: String {
+        if entry.staleness == .offline { return "Offline" }
+        guard let live = entry.live else { return "Battery" }
+        if live.soc >= 100, live.pbat <= 0 { return "Full" }
+        if live.pbat > 0 { return "Discharging" }
+        if live.pbat < 0 { return "Charging" }
+        return "Idle"
+    }
+
+    private var batteryStateValue: String {
+        guard let live = entry.live, entry.staleness != .offline else { return "—" }
+        if live.soc >= 100, live.pbat <= 0 { return "—" }
+        if abs(live.pbat) < 1 { return "—" }
+        return PowerFormatting.format(live.pbat)
+    }
 }
 
 #if DEBUG
@@ -41,6 +83,12 @@ struct SystemMediumView: View {
     FluxBatteryWidget()
 } timeline: {
     WidgetFixtures.entry(soc: 100, pbat: -200)
+}
+
+#Preview("cutoff-risk", as: .systemMedium) {
+    FluxBatteryWidget()
+} timeline: {
+    WidgetFixtures.entry(soc: 45, pbat: 3200)
 }
 
 #Preview("stale", as: .systemMedium) {

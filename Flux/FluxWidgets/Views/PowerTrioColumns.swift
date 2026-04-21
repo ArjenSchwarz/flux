@@ -3,6 +3,7 @@ import SwiftUI
 
 struct PowerTrioColumns: View {
     let entry: StatusEntry
+    var font: Font = .subheadline
 
     private var offpeakStart: String {
         entry.offpeak?.windowStart ?? OffpeakData.defaultWindowStart
@@ -31,27 +32,27 @@ struct PowerTrioColumns: View {
             ).color
 
         VStack(alignment: .leading, spacing: 4) {
-            row(title: "Solar", value: entry.ppv, color: solarColor)
-            row(title: "Load", value: entry.pload, color: loadColor)
-            row(title: entry.gridTitle, value: entry.pgrid, color: gridColor)
+            PillRow(
+                title: "Solar",
+                value: PowerFormatting.format(entry.ppv),
+                color: solarColor,
+                font: font,
+                redacted: entry.isPlaceholder
+            )
+            PillRow(
+                title: "Load",
+                value: PowerFormatting.format(entry.pload),
+                color: loadColor,
+                font: font,
+                redacted: entry.isPlaceholder
+            )
+            PillRow(
+                title: entry.gridTitle,
+                value: PowerFormatting.format(entry.pgrid),
+                color: gridColor,
+                font: font,
+                redacted: entry.isPlaceholder
+            )
         }
-    }
-
-    private func row(title: String, value: Double, color: Color) -> some View {
-        HStack(spacing: 8) {
-            Text(title)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-            Spacer(minLength: 4)
-            Text(PowerFormatting.format(value))
-                .monospacedDigit()
-                .foregroundStyle(color)
-                .lineLimit(1)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 2)
-                .background(color.opacity(0.15), in: Capsule())
-                .redacted(reason: entry.isPlaceholder ? .placeholder : [])
-        }
-        .font(.subheadline)
     }
 }
