@@ -26,6 +26,9 @@ extension StatusEntry {
         guard let cutoff = rolling15min?.estimatedCutoffTime.flatMap(DateFormatting.parseTimestamp) else {
             return nil
         }
+        // Only escalate when the cutoff is actually close — distant predictions
+        // would otherwise paint the ring orange all afternoon on a normal day.
+        if cutoff.timeIntervalSince(date) > 6 * 60 * 60 { return nil }
         let windowStart = offpeak?.windowStart ?? OffpeakData.defaultWindowStart
         return CutoffTimeColor.forCutoff(cutoff, offpeakWindowStart: windowStart, now: date).color
     }
