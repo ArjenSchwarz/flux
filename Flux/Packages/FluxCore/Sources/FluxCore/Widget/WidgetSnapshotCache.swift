@@ -47,7 +47,7 @@ public final class WidgetSnapshotCache: Sendable {
     public func writeIfNewer(_ envelope: StatusSnapshotEnvelope) -> Bool {
         guard let defaults else { return false }
 
-        // Strict > so equal timestamps overwrite (Decision 17).
+        // Existing strictly newer → skip. Equal timestamps fall through and overwrite (Decision 17).
         if let existing = read(), existing.fetchedAt > envelope.fetchedAt {
             return false
         }
