@@ -3,6 +3,18 @@ import Foundation
 public final class WidgetSnapshotCache: Sendable {
     private static let storageKey = "widgetSnapshotV1"
 
+    private static let decoder: JSONDecoder = {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
+    }()
+
+    private static let encoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }()
+
     private let defaults: UserDefaults?
     private let nowProvider: @Sendable () -> Date
 
@@ -20,10 +32,7 @@ public final class WidgetSnapshotCache: Sendable {
             return nil
         }
 
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-
-        guard let envelope = try? decoder.decode(StatusSnapshotEnvelope.self, from: data) else {
+        guard let envelope = try? Self.decoder.decode(StatusSnapshotEnvelope.self, from: data) else {
             return nil
         }
 
@@ -38,14 +47,12 @@ public final class WidgetSnapshotCache: Sendable {
     public func writeIfNewer(_ envelope: StatusSnapshotEnvelope) -> Bool {
         guard let defaults else { return false }
 
+        // Strict > so equal timestamps overwrite (Decision 17).
         if let existing = read(), existing.fetchedAt > envelope.fetchedAt {
             return false
         }
 
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-
-        guard let data = try? encoder.encode(envelope) else {
+        guard let data = try? Self.encoder.encode(envelope) else {
             return false
         }
 

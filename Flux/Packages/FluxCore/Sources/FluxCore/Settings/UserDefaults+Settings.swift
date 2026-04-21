@@ -3,12 +3,7 @@ import Foundation
 extension UserDefaults {
     public static let fluxAppGroupSuiteName = "group.me.nore.ig.flux"
 
-    public static let fluxAppGroup: UserDefaults = {
-        guard let defaults = UserDefaults(suiteName: fluxAppGroupSuiteName) else {
-            fatalError("App Group '\(fluxAppGroupSuiteName)' is not configured.")
-        }
-        return defaults
-    }()
+    public static let fluxAppGroup: UserDefaults = UserDefaults(suiteName: fluxAppGroupSuiteName) ?? .standard
 
     private enum Keys {
         static let apiURL = "apiURL"

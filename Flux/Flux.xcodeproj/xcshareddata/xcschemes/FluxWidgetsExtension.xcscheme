@@ -16,9 +16,9 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "D4EDCC4E2F96448C002D980A"
-               BuildableName = "FluxWidgets.appex"
-               BlueprintName = "FluxWidgets"
+               BlueprintIdentifier = "D4EDCCE22F9648E5002D980A"
+               BuildableName = "FluxWidgetsExtension.appex"
+               BlueprintName = "FluxWidgetsExtension"
                ReferencedContainer = "container:Flux.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>

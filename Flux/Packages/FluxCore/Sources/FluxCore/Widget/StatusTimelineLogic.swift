@@ -152,8 +152,9 @@ public struct StatusTimelineLogic: Sendable {
         config.timeoutIntervalForRequest == 5 && config.timeoutIntervalForResource == 5
     }
 
+    private static let placeholderTimestampFormatter = ISO8601DateFormatter()
+
     public static func placeholderEnvelope(now: Date) -> StatusSnapshotEnvelope {
-        let formatter = ISO8601DateFormatter()
         let live = LiveData(
             ppv: 1800,
             pload: 412,
@@ -161,7 +162,7 @@ public struct StatusTimelineLogic: Sendable {
             pgrid: 210,
             pgridSustained: false,
             soc: 68,
-            timestamp: formatter.string(from: now)
+            timestamp: Self.placeholderTimestampFormatter.string(from: now)
         )
         let battery = BatteryInfo(
             capacityKwh: 10,
