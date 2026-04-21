@@ -18,11 +18,8 @@ struct SystemMediumView: View {
                     }
                 }
 
-                VStack(alignment: .leading, spacing: 10) {
-                    PowerTrioColumns(entry: entry, font: .body, spacing: 10, tight: true)
-                    batteryStateRow
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                statsGrid
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.top, 14)
 
@@ -43,15 +40,30 @@ struct SystemMediumView: View {
         return DateFormatting.clockTime(from: date)
     }
 
-    private var batteryStateRow: some View {
-        PillRow(
-            title: batteryStateTitle,
-            value: batteryStateValue,
-            color: entry.batteryStateColor,
-            font: .body,
-            redacted: entry.isPlaceholder,
-            tight: true
-        )
+    private var statsGrid: some View {
+        Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 10) {
+            row(label: "Solar", value: PowerFormatting.format(entry.ppv), color: entry.solarColor)
+            row(label: "Load", value: PowerFormatting.format(entry.pload), color: entry.loadColor)
+            row(label: entry.gridTitle, value: PowerFormatting.format(entry.pgrid), color: entry.gridTintColor)
+            row(label: batteryStateTitle, value: batteryStateValue, color: entry.batteryStateColor)
+        }
+    }
+
+    @ViewBuilder
+    private func row(label: String, value: String, color: Color) -> some View {
+        GridRow {
+            Text(label)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .gridColumnAlignment(.trailing)
+            Text(value)
+                .font(.body)
+                .monospacedDigit()
+                .foregroundStyle(color)
+                .lineLimit(1)
+                .redacted(reason: entry.isPlaceholder ? .placeholder : [])
+        }
     }
 
     private var batteryStateTitle: String {

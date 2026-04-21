@@ -2,6 +2,29 @@ import FluxCore
 import SwiftUI
 
 extension StatusEntry {
+    var solarColor: Color {
+        if staleness == .offline { return .secondary }
+        return ppv > 0 ? .green : .secondary
+    }
+
+    var loadColor: Color {
+        if staleness == .offline { return .secondary }
+        return pload > UserDefaults.fluxAppGroup.loadAlertThreshold ? .red : .primary
+    }
+
+    var gridTintColor: Color {
+        if staleness == .offline { return .secondary }
+        let windowStart = offpeak?.windowStart ?? OffpeakData.defaultWindowStart
+        let windowEnd = offpeak?.windowEnd ?? OffpeakData.defaultWindowEnd
+        return GridColor.forGrid(
+            pgrid: pgrid,
+            pgridSustained: live?.pgridSustained ?? false,
+            offpeakWindowStart: windowStart,
+            offpeakWindowEnd: windowEnd,
+            now: date
+        ).color
+    }
+
     /// Ring tint: level-driven (BatteryColor) unless a cutoff is predicted, in which case
     /// the cutoff-risk tier (red/orange) escalates regardless of SOC.
     var effectiveBatteryColor: Color {
