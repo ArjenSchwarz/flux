@@ -9,7 +9,7 @@ struct SystemMediumView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .top, spacing: 24) {
                 VStack(spacing: 14) {
-                    SOCRing(entry: entry, diameter: 110, lineWidth: 10)
+                    SOCRing(entry: entry, diameter: 100, lineWidth: 9)
                     if let timeLabel {
                         Text(timeLabel)
                             .font(.caption2)

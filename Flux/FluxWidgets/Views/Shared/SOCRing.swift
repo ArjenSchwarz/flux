@@ -20,7 +20,7 @@ struct SOCRing: View {
                 .rotationEffect(.degrees(-90))
 
             Text(SOCFormatting.format(entry.soc))
-                .font(.system(size: diameter * 0.28, weight: .bold, design: .rounded))
+                .font(.system(size: diameter * 0.24, weight: .bold, design: .rounded))
                 .foregroundStyle(tint)
                 .minimumScaleFactor(0.5)
                 .lineLimit(1)
