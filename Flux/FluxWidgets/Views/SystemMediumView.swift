@@ -30,7 +30,16 @@ struct SystemMediumView: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(WidgetAccessibility.label(for: entry, family: .systemMedium))
         .widgetURL(WidgetDeepLink.dashboardURL)
-        .containerBackground(for: .widget) { Color.clear }
+        .containerBackground(for: .widget) {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.12, green: 0.28, blue: 0.35),
+                    Color(red: 0.06, green: 0.12, blue: 0.18)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
     }
 
     private var timeLabel: String? {
