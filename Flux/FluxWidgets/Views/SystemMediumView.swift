@@ -17,7 +17,6 @@ struct SystemMediumView: View {
                             .redacted(reason: entry.isPlaceholder ? .placeholder : [])
                     }
                 }
-                .padding(.top, 4)
 
                 VStack(alignment: .leading, spacing: 4) {
                     PowerTrioColumns(entry: entry, font: .body)
@@ -25,6 +24,7 @@ struct SystemMediumView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .padding(.top, 12)
 
             if entry.staleness != .fresh {
                 StalenessFootnote(entry: entry)
