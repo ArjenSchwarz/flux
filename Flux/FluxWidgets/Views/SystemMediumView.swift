@@ -26,9 +26,6 @@ struct SystemMediumView: View {
             }
             .padding(.top, 14)
 
-            if entry.staleness != .fresh {
-                StalenessFootnote(entry: entry)
-            }
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
