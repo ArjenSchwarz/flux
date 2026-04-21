@@ -4,6 +4,7 @@ import SwiftUI
 struct PowerTrioColumns: View {
     let entry: StatusEntry
     var font: Font = .subheadline
+    var spacing: CGFloat = 4
 
     private var offpeakStart: String {
         entry.offpeak?.windowStart ?? OffpeakData.defaultWindowStart
@@ -31,7 +32,7 @@ struct PowerTrioColumns: View {
                 now: entry.date
             ).color
 
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: spacing) {
             PillRow(
                 title: "Solar",
                 value: PowerFormatting.format(entry.ppv),

@@ -10,15 +10,16 @@ struct PillRow: View {
     var body: some View {
         HStack(spacing: 8) {
             Text(title)
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
             Spacer(minLength: 4)
             Text(value)
+                .font(font)
                 .monospacedDigit()
                 .foregroundStyle(color)
                 .lineLimit(1)
                 .redacted(reason: redacted ? .placeholder : [])
         }
-        .font(font)
     }
 }

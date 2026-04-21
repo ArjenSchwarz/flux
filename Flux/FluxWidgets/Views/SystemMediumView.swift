@@ -18,8 +18,8 @@ struct SystemMediumView: View {
                     }
                 }
 
-                VStack(alignment: .leading, spacing: 4) {
-                    PowerTrioColumns(entry: entry, font: .body)
+                VStack(alignment: .leading, spacing: 10) {
+                    PowerTrioColumns(entry: entry, font: .body, spacing: 10)
                     batteryStateRow
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
