@@ -8,7 +8,7 @@ struct SystemMediumView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .top, spacing: 16) {
-                VStack(spacing: 4) {
+                VStack(spacing: 10) {
                     SOCRing(entry: entry, diameter: 110, lineWidth: 10)
                     if let timeLabel {
                         Text(timeLabel)
@@ -49,7 +49,7 @@ struct SystemMediumView: View {
         PillRow(
             title: batteryStateTitle,
             value: batteryStateValue,
-            color: entry.effectiveBatteryColor,
+            color: entry.batteryStateColor,
             font: .body,
             redacted: entry.isPlaceholder
         )
