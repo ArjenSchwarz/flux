@@ -54,39 +54,46 @@ struct SystemMediumView: View {
         return nil
     }
 
-    private var usesSymbols: Bool {
-        UserDefaults.fluxAppGroup.widgetUsesSymbols
-    }
-
     private var statsGrid: some View {
-        Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 10) {
+        let useSymbols = UserDefaults.fluxAppGroup.widgetUsesSymbols
+        return Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 10) {
             row(
                 label: "Solar",
                 symbol: "sun.max.fill",
                 value: PowerFormatting.format(entry.ppv),
-                color: entry.solarColor
+                color: entry.solarColor,
+                useSymbols: useSymbols
             )
             row(
                 label: "Load",
                 symbol: "house.fill",
                 value: PowerFormatting.format(entry.pload),
-                color: entry.loadColor
+                color: entry.loadColor,
+                useSymbols: useSymbols
             )
             row(
                 label: entry.gridTitle,
                 symbol: gridSymbol,
                 value: PowerFormatting.format(entry.pgrid),
-                color: entry.gridTintColor
+                color: entry.gridTintColor,
+                useSymbols: useSymbols
             )
             row(
                 label: batteryStateTitle,
                 symbol: batteryStateSymbol,
                 value: batteryStateValue,
-                color: entry.batteryStateColor
+                color: entry.batteryStateColor,
+                useSymbols: useSymbols
             )
             if let empty = emptyAt {
                 GridRow {
-                    label(text: "Empty", symbol: "clock", font: .caption, symbolColor: empty.color)
+                    rowLabel(
+                        text: "Empty",
+                        symbol: "clock",
+                        font: .caption,
+                        symbolColor: empty.color,
+                        useSymbols: useSymbols
+                    )
                     Text("~\(DateFormatting.clockTime(from: empty.date))")
                         .font(.footnote)
                         .monospacedDigit()
@@ -112,9 +119,15 @@ struct SystemMediumView: View {
     }
 
     @ViewBuilder
-    private func row(label: String, symbol: String, value: String, color: Color) -> some View {
+    private func row(
+        label: String,
+        symbol: String,
+        value: String,
+        color: Color,
+        useSymbols: Bool
+    ) -> some View {
         GridRow {
-            self.label(text: label, symbol: symbol, font: .subheadline, symbolColor: color)
+            rowLabel(text: label, symbol: symbol, font: .subheadline, symbolColor: color, useSymbols: useSymbols)
             Text(value)
                 .font(.body)
                 .monospacedDigit()
@@ -125,8 +138,14 @@ struct SystemMediumView: View {
     }
 
     @ViewBuilder
-    private func label(text: String, symbol: String, font: Font, symbolColor: Color) -> some View {
-        if usesSymbols {
+    private func rowLabel(
+        text: String,
+        symbol: String,
+        font: Font,
+        symbolColor: Color,
+        useSymbols: Bool
+    ) -> some View {
+        if useSymbols {
             Image(systemName: symbol)
                 .font(font)
                 .foregroundStyle(symbolColor)
@@ -158,9 +177,18 @@ struct SystemMediumView: View {
     private var batteryStateSymbol: String {
         if entry.staleness == .offline { return "bolt.slash" }
         guard let live = entry.live else { return "battery.50percent" }
-        if live.pbat > 0 { return "battery.25percent" }
         if live.pbat < 0 { return "battery.100percent.bolt" }
-        return "battery.50percent"
+        return socBatterySymbol(soc: live.soc)
+    }
+
+    private func socBatterySymbol(soc: Double) -> String {
+        switch soc {
+        case ..<13: return "battery.0percent"
+        case ..<38: return "battery.25percent"
+        case ..<63: return "battery.50percent"
+        case ..<88: return "battery.75percent"
+        default: return "battery.100percent"
+        }
     }
 
     private var gridSymbol: String {
