@@ -183,13 +183,15 @@ struct WidgetAccessibilityTests {
     }
 
     @Test
-    func fullVerbAppearsAtHundredPercentCharging() {
+    func chargingVerbAppearsAtHundredPercentCharging() {
         let env = StatusSnapshotEnvelope(
             fetchedAt: Date(timeIntervalSince1970: 0),
             status: status(soc: 100, pbat: -10)
         )
         let label = WidgetAccessibility.label(for: entry(envelope: env), family: .accessoryInline)
 
-        #expect(label.lowercased().contains("full"))
+        #expect(label.lowercased().contains("charging"))
+        #expect(!label.lowercased().contains("discharging"))
+        #expect(!label.lowercased().contains("full"))
     }
 }

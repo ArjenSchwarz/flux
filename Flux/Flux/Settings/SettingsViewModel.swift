@@ -1,12 +1,14 @@
 import FluxCore
 import Foundation
 import Observation
+import WidgetKit
 
 @MainActor @Observable
 final class SettingsViewModel {
     var apiURL = ""
     var apiToken = ""
     var loadAlertThreshold: Double = 3000
+    var widgetUsesSymbols = false
 
     private(set) var isValidating = false
     private(set) var validationError: String?
@@ -34,6 +36,7 @@ final class SettingsViewModel {
         let capturedURLString = apiURL.trimmingCharacters(in: .whitespacesAndNewlines)
         let capturedToken = apiToken
         let capturedThreshold = loadAlertThreshold
+        let capturedUsesSymbols = widgetUsesSymbols
 
         guard let baseURL = URL(string: capturedURLString), capturedToken.isEmpty == false else {
             validationError = "Enter a valid API URL and token."
@@ -57,6 +60,8 @@ final class SettingsViewModel {
             try keychainService.saveToken(capturedToken)
             userDefaults.apiURL = capturedURLString
             userDefaults.loadAlertThreshold = capturedThreshold
+            userDefaults.widgetUsesSymbols = capturedUsesSymbols
+            WidgetCenter.shared.reloadAllTimelines()
             shouldDismiss = true
         } catch let apiError as FluxAPIError {
             validationError = message(for: apiError)
@@ -69,6 +74,7 @@ final class SettingsViewModel {
         apiURL = userDefaults.apiURL ?? ""
         apiToken = keychainService.loadToken() ?? ""
         loadAlertThreshold = userDefaults.loadAlertThreshold
+        widgetUsesSymbols = userDefaults.widgetUsesSymbols
     }
 
     private func message(for error: FluxAPIError) -> String {
