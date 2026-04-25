@@ -32,10 +32,6 @@ struct BatteryHeroView: View {
 
         let rate = PowerFormatting.format(live.pbat)
 
-        if live.soc >= 100, live.pbat < 0 {
-            return "Full"
-        }
-
         if live.pbat > 0 {
             if let cutoff = rolling15min?.estimatedCutoffTime.flatMap(DateFormatting.parseTimestamp) {
                 return "Discharging at \(rate) · cutoff ~\(DateFormatting.clockTime(from: cutoff))"

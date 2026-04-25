@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Medium widget stats grid gained an "Empty" row (smaller `.caption`/`.footnote` font) showing the 15-minute rolling-average cutoff time when discharging, tinted by `CutoffTimeColor` rules (red < 2 h, orange before off-peak, primary otherwise)
+- Settings toggle "Widget icons instead of labels" persists to the App Group suite (`widgetUsesSymbols`) and switches the medium-widget row labels between text and SF Symbols (`sun.max.fill`, `house.fill`, directional grid arrows, battery-state glyph, `clock`). Symbols inherit each row's semantic colour, so the sun greys out at night, the grid arrow turns green on export / red on sustained import, etc. Saving reloads all widget timelines so the change is visible immediately
+
+### Changed
+
+- Battery SOC colouring stays green at any healthy level: `BatteryColor.forSOC` now returns `.green` for SOC ≥ 30 % (was 30–60 % `.normal`/primary, > 60 % `.green`). The medium-widget SOC ring and percentage no longer flip black/white in light/dark mode
+- Cutoff-risk escalation on the SOC ring (`StatusEntry.effectiveBatteryColor` / `batteryStateColor`) now only applies when the cutoff tier is actually red, orange, or amber — the `.normal` tier no longer overrides the green level color, so a distant predicted cutoff doesn't wash the ring to primary
+- "Full" status removed from dashboard hero, medium-widget battery row, status-line label, status word, and VoiceOver verb; at 100 % SOC the views now reflect the raw `pbat` reading (charging / discharging / idle). Updated `WidgetAccessibilityTests` accordingly
+
+### Added
+
 - Widgets (T-843): home-screen (`systemSmall`/`systemMedium`/`systemLarge`) and lock-screen (`accessoryCircular`/`accessoryRectangular`/`accessoryInline`) widget families showing battery state of charge and, where the family size allows, the solar/load/grid power trio. Widgets read from a shared App Group cache (`group.me.nore.ig.flux`) that the app writes on every successful `/status` refresh, and refresh independently by calling the Lambda directly with the shared Keychain bearer token (migrated to `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` so lock-screen widgets can read it). Tapping a home-screen widget opens the app at the Dashboard via the new `flux://dashboard` deep link.
 - Spec for T-843 "Add widgets to the app" under `specs/add-widgets/`: EARS requirements, design (new `FluxCore` local Swift Package + widget extension target + App Group cache + Keychain accessibility migration + flux:// deep link), 20-entry decision log, 43-task implementation plan across 5 phases / 3 streams, and a prerequisites doc covering the one-sitting Xcode setup
 - `FluxCore` local Swift Package skeleton at `Flux/Packages/FluxCore/` (task 1): `Package.swift` (swift-tools 6.2, iOS 26), empty `Sources/FluxCore/{Models,Networking,Security,Helpers,Widget}` and `Tests/FluxCoreTests/` directories with placeholder files so the package compiles

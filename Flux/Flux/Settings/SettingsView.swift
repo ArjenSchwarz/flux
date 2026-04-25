@@ -42,6 +42,8 @@ struct SettingsView: View {
                         .multilineTextAlignment(.trailing)
                         .frame(maxWidth: 120)
                 }
+
+                Toggle("Widget icons instead of labels", isOn: $viewModel.widgetUsesSymbols)
             }
 
             Section {

@@ -46,7 +46,6 @@ public enum WidgetAccessibility {
 
     private static func statusVerb(live: LiveData?) -> String {
         guard let live else { return "no live data" }
-        if live.soc >= 100, live.pbat <= 0 { return "full" }
         if live.pbat > 0 { return "discharging" }
         if live.pbat < 0 { return "charging" }
         return "idle"

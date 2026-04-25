@@ -34,11 +34,10 @@ extension StatusEntry {
     }
 
     /// Battery-state pill tint: action-driven. Green for charging, primary for discharging,
-    /// secondary for idle/full/offline. Cutoff-risk tier (red/orange) escalates when present.
+    /// secondary for idle/offline. Cutoff-risk tier (red/orange) escalates when present.
     var batteryStateColor: Color {
         if staleness == .offline { return .secondary }
         guard let live else { return .secondary }
-        if live.soc >= 99.95, live.pbat <= 0 { return .secondary } // Full
         if let cutoffColor = cutoffRiskColor { return cutoffColor }
         if live.pbat < 0 { return .green }
         if live.pbat > 0 { return .primary }
@@ -53,6 +52,12 @@ extension StatusEntry {
         // would otherwise paint the ring orange all afternoon on a normal day.
         if cutoff.timeIntervalSince(date) > 6 * 60 * 60 { return nil }
         let windowStart = offpeak?.windowStart ?? OffpeakData.defaultWindowStart
-        return CutoffTimeColor.forCutoff(cutoff, offpeakWindowStart: windowStart, now: date).color
+        let tier = CutoffTimeColor.forCutoff(cutoff, offpeakWindowStart: windowStart, now: date)
+        switch tier {
+        case .red, .orange, .amber:
+            return tier.color
+        case .green, .normal:
+            return nil
+        }
     }
 }

@@ -54,23 +54,67 @@ struct SystemMediumView: View {
         return nil
     }
 
+    private var usesSymbols: Bool {
+        UserDefaults.fluxAppGroup.widgetUsesSymbols
+    }
+
     private var statsGrid: some View {
         Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 10) {
-            row(label: "Solar", value: PowerFormatting.format(entry.ppv), color: entry.solarColor)
-            row(label: "Load", value: PowerFormatting.format(entry.pload), color: entry.loadColor)
-            row(label: entry.gridTitle, value: PowerFormatting.format(entry.pgrid), color: entry.gridTintColor)
-            row(label: batteryStateTitle, value: batteryStateValue, color: entry.batteryStateColor)
+            row(
+                label: "Solar",
+                symbol: "sun.max.fill",
+                value: PowerFormatting.format(entry.ppv),
+                color: entry.solarColor
+            )
+            row(
+                label: "Load",
+                symbol: "house.fill",
+                value: PowerFormatting.format(entry.pload),
+                color: entry.loadColor
+            )
+            row(
+                label: entry.gridTitle,
+                symbol: gridSymbol,
+                value: PowerFormatting.format(entry.pgrid),
+                color: entry.gridTintColor
+            )
+            row(
+                label: batteryStateTitle,
+                symbol: batteryStateSymbol,
+                value: batteryStateValue,
+                color: entry.batteryStateColor
+            )
+            if let empty = emptyAt {
+                GridRow {
+                    label(text: "Empty", symbol: "clock", font: .caption, symbolColor: empty.color)
+                    Text("~\(DateFormatting.clockTime(from: empty.date))")
+                        .font(.footnote)
+                        .monospacedDigit()
+                        .foregroundStyle(empty.color)
+                        .lineLimit(1)
+                        .redacted(reason: entry.isPlaceholder ? .placeholder : [])
+                }
+            }
         }
     }
 
+    private var emptyAt: (date: Date, color: Color)? {
+        guard entry.staleness != .offline,
+              let live = entry.live,
+              live.pbat > 0,
+              let cutoffString = entry.rolling15min?.estimatedCutoffTime,
+              let cutoffDate = DateFormatting.parseTimestamp(cutoffString) else {
+            return nil
+        }
+        let windowStart = entry.offpeak?.windowStart ?? OffpeakData.defaultWindowStart
+        let tier = CutoffTimeColor.forCutoff(cutoffDate, offpeakWindowStart: windowStart, now: entry.date)
+        return (cutoffDate, tier.color)
+    }
+
     @ViewBuilder
-    private func row(label: String, value: String, color: Color) -> some View {
+    private func row(label: String, symbol: String, value: String, color: Color) -> some View {
         GridRow {
-            Text(label)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .gridColumnAlignment(.trailing)
+            self.label(text: label, symbol: symbol, font: .subheadline, symbolColor: color)
             Text(value)
                 .font(.body)
                 .monospacedDigit()
@@ -80,10 +124,26 @@ struct SystemMediumView: View {
         }
     }
 
+    @ViewBuilder
+    private func label(text: String, symbol: String, font: Font, symbolColor: Color) -> some View {
+        if usesSymbols {
+            Image(systemName: symbol)
+                .font(font)
+                .foregroundStyle(symbolColor)
+                .gridColumnAlignment(.trailing)
+                .accessibilityLabel(text)
+        } else {
+            Text(text)
+                .font(font)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .gridColumnAlignment(.trailing)
+        }
+    }
+
     private var batteryStateTitle: String {
         if entry.staleness == .offline { return "Offline" }
         guard let live = entry.live else { return "Battery" }
-        if live.soc >= 99.95, live.pbat <= 0 { return "Full" }
         if live.pbat > 0 { return "Discharging" }
         if live.pbat < 0 { return "Charging" }
         return "Idle"
@@ -91,9 +151,22 @@ struct SystemMediumView: View {
 
     private var batteryStateValue: String {
         guard let live = entry.live, entry.staleness != .offline else { return "—" }
-        if live.soc >= 99.95, live.pbat <= 0 { return "—" }
         if abs(live.pbat) < 1 { return "—" }
         return PowerFormatting.format(live.pbat)
+    }
+
+    private var batteryStateSymbol: String {
+        if entry.staleness == .offline { return "bolt.slash" }
+        guard let live = entry.live else { return "battery.50percent" }
+        if live.pbat > 0 { return "battery.25percent" }
+        if live.pbat < 0 { return "battery.100percent.bolt" }
+        return "battery.50percent"
+    }
+
+    private var gridSymbol: String {
+        if entry.pgrid < 0 { return "arrow.up.circle" }
+        if entry.pgrid > 0 { return "arrow.down.circle" }
+        return "bolt.horizontal"
     }
 }
 

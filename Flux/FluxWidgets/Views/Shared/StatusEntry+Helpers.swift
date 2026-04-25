@@ -22,7 +22,6 @@ extension StatusEntry {
     var statusWord: String {
         if staleness == .offline { return "offline" }
         guard let live else { return "idle" }
-        if live.soc >= 100, live.pbat <= 0 { return "full" }
         if live.pbat > 0 { return "discharging" }
         if live.pbat < 0 { return "charging" }
         return "idle"
@@ -45,9 +44,6 @@ extension StatusEntry {
             return word
         case .full:
             let rate = PowerFormatting.format(live.pbat)
-            if live.soc >= 100, live.pbat <= 0 {
-                return "Full"
-            }
             if live.pbat > 0 {
                 if let cutoff = rolling15min?.estimatedCutoffTime.flatMap(DateFormatting.parseTimestamp) {
                     return "Discharging at \(rate) · cutoff ~\(DateFormatting.clockTime(from: cutoff))"

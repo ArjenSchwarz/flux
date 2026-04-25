@@ -23,8 +23,8 @@ struct ColoringTests {
         #expect(BatteryColor.forSOC(14.9) == .red)
         #expect(BatteryColor.forSOC(15) == .orange)
         #expect(BatteryColor.forSOC(29.9) == .orange)
-        #expect(BatteryColor.forSOC(30) == .normal)
-        #expect(BatteryColor.forSOC(60) == .normal)
+        #expect(BatteryColor.forSOC(30) == .green)
+        #expect(BatteryColor.forSOC(60) == .green)
         #expect(BatteryColor.forSOC(60.1) == .green)
         #expect(BatteryColor.forSOC(100) == .green)
     }

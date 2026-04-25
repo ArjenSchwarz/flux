@@ -8,6 +8,7 @@ extension UserDefaults {
     private enum Keys {
         static let apiURL = "apiURL"
         static let loadAlertThreshold = "loadAlertThreshold"
+        static let widgetUsesSymbols = "widgetUsesSymbols"
     }
 
     public static let loadAlertThresholdDefault: Double = 3000
@@ -39,5 +40,10 @@ extension UserDefaults {
             return Self.loadAlertThresholdDefault
         }
         set { set(newValue, forKey: Keys.loadAlertThreshold) }
+    }
+
+    public var widgetUsesSymbols: Bool {
+        get { bool(forKey: Keys.widgetUsesSymbols) }
+        set { set(newValue, forKey: Keys.widgetUsesSymbols) }
     }
 }
