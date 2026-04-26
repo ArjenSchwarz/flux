@@ -4,7 +4,7 @@ import SwiftUI
 
 struct HistoryView: View {
     @State private var viewModel: HistoryViewModel
-    @State private var selectedRange: Int
+    @State private var selectedRange: Int = 7
     @State private var showingSettings = false
 
     private let makeDayDetailViewModel: (String) -> DayDetailViewModel
@@ -12,7 +12,6 @@ struct HistoryView: View {
     init(apiClient: any FluxAPIClient, modelContext: ModelContext) {
         let viewModel = HistoryViewModel(apiClient: apiClient, modelContext: modelContext)
         _viewModel = State(initialValue: viewModel)
-        _selectedRange = State(initialValue: viewModel.selectedDayRange)
         makeDayDetailViewModel = { date in
             DayDetailViewModel(date: date, apiClient: apiClient)
         }
@@ -23,7 +22,6 @@ struct HistoryView: View {
         makeDayDetailViewModel: @escaping (String) -> DayDetailViewModel
     ) {
         _viewModel = State(initialValue: viewModel)
-        _selectedRange = State(initialValue: viewModel.selectedDayRange)
         self.makeDayDetailViewModel = makeDayDetailViewModel
     }
 
@@ -42,24 +40,27 @@ struct HistoryView: View {
                 } else if viewModel.days.isEmpty, !viewModel.isLoading {
                     emptyState
                 } else {
+                    let selectedDate = viewModel.selectedDay
+                        .flatMap { DateFormatting.parseDayDate($0.date) }
+
                     HistorySolarCard(
                         entries: viewModel.solarSeries,
                         summary: viewModel.summary,
-                        selectedDayID: viewModel.selectedDay?.date,
+                        selectedDate: selectedDate,
                         onSelect: selectDay
                     )
 
                     HistoryGridUsageCard(
                         entries: viewModel.gridSeries,
                         summary: viewModel.summary,
-                        selectedDayID: viewModel.selectedDay?.date,
+                        selectedDate: selectedDate,
                         onSelect: selectDay
                     )
 
                     HistoryBatteryCard(
                         entries: viewModel.batterySeries,
                         summary: viewModel.summary,
-                        selectedDayID: viewModel.selectedDay?.date,
+                        selectedDate: selectedDate,
                         onSelect: selectDay
                     )
 

@@ -97,12 +97,17 @@ public struct OffpeakData: Codable, Sendable {
     public static let defaultWindowStart = "11:00"
     public static let defaultWindowEnd = "14:00"
 
-    public static let statusComplete = "complete"
-    public static let statusPending = "pending"
+    /// Lifecycle of the off-peak record for the day. `pending` covers the
+    /// in-progress window where deltas are projected against today's
+    /// running totals; `complete` is the final post-window record.
+    public enum Status: String, Codable, Sendable {
+        case pending
+        case complete
+    }
 
     public let windowStart: String
     public let windowEnd: String
-    public let status: String?
+    public let status: Status?
     public let gridUsageKwh: Double?
     public let solarKwh: Double?
     public let batteryChargeKwh: Double?
@@ -110,12 +115,12 @@ public struct OffpeakData: Codable, Sendable {
     public let gridExportKwh: Double?
     public let batteryDeltaPercent: Double?
 
-    public var isInProgress: Bool { status == Self.statusPending }
+    public var isInProgress: Bool { status == .pending }
 
     public init(
         windowStart: String,
         windowEnd: String,
-        status: String? = nil,
+        status: Status? = nil,
         gridUsageKwh: Double?,
         solarKwh: Double?,
         batteryChargeKwh: Double?,

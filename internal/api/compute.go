@@ -19,6 +19,46 @@ var sydneyTZ = func() *time.Location {
 	return loc
 }()
 
+// offpeakDeltas resolves the energy deltas for an off-peak record.
+//
+// A complete record carries final deltas from the poller. A pending record
+// requires a current snapshot (today's running totals) to project against
+// the start snapshot; without one the deltas are unknown. Returns ok=false
+// when the data is not usable.
+func offpeakDeltas(op dynamo.OffpeakItem, today *TodayEnergy) (deltas offpeakDeltaValues, ok bool) {
+	switch op.Status {
+	case dynamo.OffpeakStatusComplete:
+		return offpeakDeltaValues{
+			GridImport:       op.GridUsageKwh,
+			Solar:            op.SolarKwh,
+			BatteryCharge:    op.BatteryChargeKwh,
+			BatteryDischarge: op.BatteryDischargeKwh,
+			GridExport:       op.GridExportKwh,
+		}, true
+	case dynamo.OffpeakStatusPending:
+		if today == nil {
+			return offpeakDeltaValues{}, false
+		}
+		return offpeakDeltaValues{
+			GridImport:       today.EInput - op.StartEInput,
+			Solar:            today.Epv - op.StartEpv,
+			BatteryCharge:    today.ECharge - op.StartECharge,
+			BatteryDischarge: today.EDischarge - op.StartEDischarge,
+			GridExport:       today.EOutput - op.StartEOutput,
+		}, true
+	}
+	return offpeakDeltaValues{}, false
+}
+
+// offpeakDeltaValues holds the five energy deltas derived from an off-peak record.
+type offpeakDeltaValues struct {
+	GridImport       float64
+	Solar            float64
+	BatteryCharge    float64
+	BatteryDischarge float64
+	GridExport       float64
+}
+
 // computeCutoffTime estimates when the battery will reach the cutoff percentage
 // using linear extrapolation. Returns nil if the battery is not discharging or
 // SOC is already at/below cutoff.

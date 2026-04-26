@@ -119,16 +119,12 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 // are reported as missing rather than zero. Returns hasSplit=false when the
 // data is not usable.
 func offpeakSplit(op dynamo.OffpeakItem, energy *TodayEnergy, isToday bool) (imp, exp float64, hasSplit bool) {
-	switch op.Status {
-	case dynamo.OffpeakStatusComplete:
-		return roundEnergy(op.GridUsageKwh), roundEnergy(op.GridExportKwh), true
-	case dynamo.OffpeakStatusPending:
-		if !isToday {
-			return 0, 0, false
-		}
-		return roundEnergy(energy.EInput - op.StartEInput),
-			roundEnergy(energy.EOutput - op.StartEOutput),
-			true
+	if op.Status == dynamo.OffpeakStatusPending && !isToday {
+		return 0, 0, false
 	}
-	return 0, 0, false
+	deltas, ok := offpeakDeltas(op, energy)
+	if !ok {
+		return 0, 0, false
+	}
+	return roundEnergy(deltas.GridImport), roundEnergy(deltas.GridExport), true
 }

@@ -4,7 +4,7 @@ import SwiftUI
 struct HistoryGridUsageCard: View {
     let entries: [HistoryViewModel.GridEntry]
     let summary: HistoryViewModel.PeriodSummary
-    let selectedDayID: String?
+    let selectedDate: Date?
     let onSelect: (String) -> Void
 
     var body: some View {
@@ -38,9 +38,8 @@ struct HistoryGridUsageCard: View {
     @ViewBuilder
     private var chart: some View {
         Chart {
-            if let selectedDayID,
-               let selected = entries.first(where: { $0.dayID == selectedDayID }) {
-                RuleMark(x: .value("Day", selected.date))
+            if let selectedDate {
+                RuleMark(x: .value("Day", selectedDate))
                     .foregroundStyle(.gray.opacity(0.18))
                     .lineStyle(StrokeStyle(lineWidth: 12))
             }
