@@ -1,5 +1,15 @@
 # Deploys the Lambda API and forces an ECS redeploy of the poller on push to main.
 #
+# Preconditions:
+#   - The CloudFormation stack must already exist. Initial creation is a manual
+#     one-shot (see CLAUDE.md) because parameters like AlphaESSAppId have no
+#     defaults; on subsequent updates this workflow only passes ContainerImageUri
+#     and inherits the rest from the existing stack.
+#   - When a push touches both poller and API code, deploy-api runs immediately
+#     while Poller CI is still building the new image. ECS keeps the old image
+#     until update-containers fires from the workflow_run trigger a few minutes
+#     later. That ordering is intentional, not a race.
+#
 # Required secrets:
 #   AWS_DEPLOY_ROLE_ARN  IAM role ARN to assume via OIDC. Trust policy must allow
 #                        this repository on the main branch (token.actions.githubusercontent.com).
@@ -32,6 +42,13 @@ on:
 permissions:
   id-token: write
   contents: read
+
+# Serialise stack updates: two pushes in quick succession would otherwise race
+# on the same CloudFormation stack and risk leaving it in UPDATE_ROLLBACK_FAILED.
+# cancel-in-progress is false so we don't kill an in-flight deploy mid-update.
+concurrency:
+  group: deploy-${{ github.workflow }}
+  cancel-in-progress: false
 
 env:
   AWS_REGION: ${{ vars.AWS_REGION || 'ap-southeast-2' }}
