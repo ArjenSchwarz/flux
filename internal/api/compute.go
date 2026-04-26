@@ -19,6 +19,52 @@ var sydneyTZ = func() *time.Location {
 	return loc
 }()
 
+// offpeakDeltas resolves the energy deltas for an off-peak record.
+//
+// A complete record carries final deltas from the poller. A pending record
+// requires a current snapshot (the running totals for the same day as op)
+// to project against the start snapshot; without one the deltas are
+// unknown. Returns ok=false when the data is not usable.
+func offpeakDeltas(op dynamo.OffpeakItem, current *TodayEnergy) (deltas offpeakDeltaValues, ok bool) {
+	switch op.Status {
+	case dynamo.OffpeakStatusComplete:
+		return offpeakDeltaValues{
+			GridImport:       op.GridUsageKwh,
+			Solar:            op.SolarKwh,
+			BatteryCharge:    op.BatteryChargeKwh,
+			BatteryDischarge: op.BatteryDischargeKwh,
+			GridExport:       op.GridExportKwh,
+		}, true
+	case dynamo.OffpeakStatusPending:
+		if current == nil {
+			return offpeakDeltaValues{}, false
+		}
+		// Energy counters are monotonically non-decreasing, so deltas
+		// should never be negative. They can briefly appear negative if
+		// the running snapshot lags the start snapshot (poller writes the
+		// start record, then a later reconciliation reduces the running
+		// total). Clamp to zero so the dashboard never shows nonsense
+		// like "-0.1 kWh imported".
+		return offpeakDeltaValues{
+			GridImport:       max(0, current.EInput-op.StartEInput),
+			Solar:            max(0, current.Epv-op.StartEpv),
+			BatteryCharge:    max(0, current.ECharge-op.StartECharge),
+			BatteryDischarge: max(0, current.EDischarge-op.StartEDischarge),
+			GridExport:       max(0, current.EOutput-op.StartEOutput),
+		}, true
+	}
+	return offpeakDeltaValues{}, false
+}
+
+// offpeakDeltaValues holds the five energy deltas derived from an off-peak record.
+type offpeakDeltaValues struct {
+	GridImport       float64
+	Solar            float64
+	BatteryCharge    float64
+	BatteryDischarge float64
+	GridExport       float64
+}
+
 // computeCutoffTime estimates when the battery will reach the cutoff percentage
 // using linear extrapolation. Returns nil if the battery is not discharging or
 // SOC is already at/below cutoff.

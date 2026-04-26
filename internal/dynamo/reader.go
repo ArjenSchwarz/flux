@@ -14,6 +14,7 @@ type Reader interface {
 	QueryReadings(ctx context.Context, serial string, from, to int64) ([]ReadingItem, error)
 	GetSystem(ctx context.Context, serial string) (*SystemItem, error)
 	GetOffpeak(ctx context.Context, serial, date string) (*OffpeakItem, error)
+	QueryOffpeak(ctx context.Context, serial, startDate, endDate string) ([]OffpeakItem, error)
 	GetDailyEnergy(ctx context.Context, serial, date string) (*DailyEnergyItem, error)
 	QueryDailyEnergy(ctx context.Context, serial, startDate, endDate string) ([]DailyEnergyItem, error)
 	QueryDailyPower(ctx context.Context, serial, date string) ([]DailyPowerItem, error)
@@ -102,6 +103,18 @@ func (r *DynamoReader) GetDailyEnergy(ctx context.Context, serial, date string) 
 			"date":  &types.AttributeValueMemberS{Value: date},
 		},
 		fmt.Sprintf("daily energy (table=%s, sysSn=%s, date=%s)", r.tables.DailyEnergy, serial, date),
+	)
+}
+
+func (r *DynamoReader) QueryOffpeak(ctx context.Context, serial, startDate, endDate string) ([]OffpeakItem, error) {
+	return queryAll[OffpeakItem](ctx, r.client, r.tables.Offpeak, "offpeak",
+		"sysSn = :serial AND #d BETWEEN :start AND :end",
+		map[string]string{"#d": "date"},
+		map[string]types.AttributeValue{
+			":serial": &types.AttributeValueMemberS{Value: serial},
+			":start":  &types.AttributeValueMemberS{Value: startDate},
+			":end":    &types.AttributeValueMemberS{Value: endDate},
+		},
 	)
 }
 

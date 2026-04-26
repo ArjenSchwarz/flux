@@ -106,6 +106,7 @@ func TestHandleStatusAllDataPresent(t *testing.T) {
 	require.NotNil(t, sr.Offpeak)
 	assert.Equal(t, "11:00", sr.Offpeak.WindowStart)
 	assert.Equal(t, "14:00", sr.Offpeak.WindowEnd)
+	assert.Equal(t, dynamo.OffpeakStatusComplete, sr.Offpeak.Status)
 	require.NotNil(t, sr.Offpeak.GridUsageKwh)
 	assert.Equal(t, 2.5, *sr.Offpeak.GridUsageKwh)
 
@@ -135,7 +136,7 @@ func TestHandleStatusNoReadings(t *testing.T) {
 	assert.Nil(t, sr.Battery.Low24h, "low24h should be null when no readings")
 }
 
-func TestHandleStatusOffpeakPending(t *testing.T) {
+func TestHandleStatusOffpeakPendingNoDailyEnergy(t *testing.T) {
 	now := fixedNow()
 	mr := &mockReader{
 		getOffpeakFn: func(_ context.Context, _, _ string) (*dynamo.OffpeakItem, error) {
@@ -153,12 +154,56 @@ func TestHandleStatusOffpeakPending(t *testing.T) {
 	require.NotNil(t, sr.Offpeak)
 	assert.Equal(t, "11:00", sr.Offpeak.WindowStart)
 	assert.Equal(t, "14:00", sr.Offpeak.WindowEnd)
-	assert.Nil(t, sr.Offpeak.GridUsageKwh, "delta fields should be null when pending")
+	assert.Empty(t, sr.Offpeak.Status, "no status when deltas cannot be computed")
+	assert.Nil(t, sr.Offpeak.GridUsageKwh, "delta fields should be null without daily energy")
 	assert.Nil(t, sr.Offpeak.SolarKwh)
 	assert.Nil(t, sr.Offpeak.BatteryChargeKwh)
 	assert.Nil(t, sr.Offpeak.BatteryDischargeKwh)
 	assert.Nil(t, sr.Offpeak.GridExportKwh)
 	assert.Nil(t, sr.Offpeak.BatteryDeltaPercent)
+}
+
+func TestHandleStatusOffpeakInProgress(t *testing.T) {
+	now := fixedNow()
+	mr := &mockReader{
+		getOffpeakFn: func(_ context.Context, _, _ string) (*dynamo.OffpeakItem, error) {
+			return &dynamo.OffpeakItem{
+				Status:          dynamo.OffpeakStatusPending,
+				StartEpv:        10.0,
+				StartEInput:     2.0,
+				StartEOutput:    0.5,
+				StartECharge:    1.0,
+				StartEDischarge: 3.0,
+			}, nil
+		},
+		getDailyEnergyFn: func(_ context.Context, serial, date string) (*dynamo.DailyEnergyItem, error) {
+			return &dynamo.DailyEnergyItem{
+				SysSn: serial, Date: date,
+				Epv: 12.5, EInput: 3.5, EOutput: 0.6, ECharge: 1.8, EDischarge: 3.4,
+			}, nil
+		},
+	}
+
+	h := NewHandler(mr, testSerial, testToken, "11:00", "14:00")
+	h.nowFunc = func() time.Time { return now }
+
+	resp, err := h.Handle(context.Background(), statusRequest())
+	require.NoError(t, err)
+	sr := parseStatusResponse(t, resp)
+
+	require.NotNil(t, sr.Offpeak)
+	assert.Equal(t, dynamo.OffpeakStatusPending, sr.Offpeak.Status)
+	require.NotNil(t, sr.Offpeak.GridUsageKwh)
+	assert.InDelta(t, 1.5, *sr.Offpeak.GridUsageKwh, 0.001)
+	require.NotNil(t, sr.Offpeak.SolarKwh)
+	assert.InDelta(t, 2.5, *sr.Offpeak.SolarKwh, 0.001)
+	require.NotNil(t, sr.Offpeak.BatteryChargeKwh)
+	assert.InDelta(t, 0.8, *sr.Offpeak.BatteryChargeKwh, 0.001)
+	require.NotNil(t, sr.Offpeak.BatteryDischargeKwh)
+	assert.InDelta(t, 0.4, *sr.Offpeak.BatteryDischargeKwh, 0.001)
+	require.NotNil(t, sr.Offpeak.GridExportKwh)
+	assert.InDelta(t, 0.1, *sr.Offpeak.GridExportKwh, 0.001)
+	assert.Nil(t, sr.Offpeak.BatteryDeltaPercent, "battery delta percent unavailable mid-window")
 }
 
 func TestHandleStatusOffpeakComplete(t *testing.T) {
@@ -181,6 +226,7 @@ func TestHandleStatusOffpeakComplete(t *testing.T) {
 	sr := parseStatusResponse(t, resp)
 
 	require.NotNil(t, sr.Offpeak)
+	assert.Equal(t, dynamo.OffpeakStatusComplete, sr.Offpeak.Status)
 	require.NotNil(t, sr.Offpeak.GridUsageKwh)
 	assert.Equal(t, 3.0, *sr.Offpeak.GridUsageKwh)
 	require.NotNil(t, sr.Offpeak.SolarKwh)

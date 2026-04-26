@@ -4,7 +4,7 @@ import SwiftUI
 
 struct HistoryView: View {
     @State private var viewModel: HistoryViewModel
-    @State private var selectedRange: Int
+    @State private var selectedRange: Int = 7
     @State private var showingSettings = false
 
     private let makeDayDetailViewModel: (String) -> DayDetailViewModel
@@ -12,7 +12,6 @@ struct HistoryView: View {
     init(apiClient: any FluxAPIClient, modelContext: ModelContext) {
         let viewModel = HistoryViewModel(apiClient: apiClient, modelContext: modelContext)
         _viewModel = State(initialValue: viewModel)
-        _selectedRange = State(initialValue: viewModel.selectedDayRange)
         makeDayDetailViewModel = { date in
             DayDetailViewModel(date: date, apiClient: apiClient)
         }
@@ -23,29 +22,56 @@ struct HistoryView: View {
         makeDayDetailViewModel: @escaping (String) -> DayDetailViewModel
     ) {
         _viewModel = State(initialValue: viewModel)
-        _selectedRange = State(initialValue: viewModel.selectedDayRange)
         self.makeDayDetailViewModel = makeDayDetailViewModel
     }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                HistoryChartView(
-                    selectedRange: $selectedRange,
-                    chartDays: viewModel.chartDays,
-                    chartEntries: viewModel.chartEntries,
-                    selectedDay: viewModel.selectedDay,
-                    onSelectDay: viewModel.selectDay
-                )
-                .padding()
-                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                Picker("Range", selection: $selectedRange) {
+                    Text("7d").tag(7)
+                    Text("14d").tag(14)
+                    Text("30d").tag(30)
+                }
+                .pickerStyle(.segmented)
 
-                if let selectedDay = viewModel.selectedDay {
-                    summaryCard(for: selectedDay)
-                } else if let error = viewModel.error, viewModel.days.isEmpty, !viewModel.isLoading {
+                if viewModel.days.isEmpty, let error = viewModel.error, !viewModel.isLoading {
                     errorState(error)
-                } else if !viewModel.isLoading {
+                } else if viewModel.days.isEmpty, !viewModel.isLoading {
                     emptyState
+                } else {
+                    let derived = viewModel.derived
+                    let selectedDate = viewModel.selectedDay
+                        .flatMap { DateFormatting.parseDayDate($0.date) }
+
+                    VStack(alignment: .leading, spacing: 16) {
+                        HistorySolarCard(
+                            entries: derived.solar,
+                            summary: derived.summary,
+                            selectedDate: selectedDate,
+                            onSelect: selectDay
+                        )
+
+                        HistoryGridUsageCard(
+                            entries: derived.grid,
+                            summary: derived.summary,
+                            selectedDate: selectedDate,
+                            onSelect: selectDay
+                        )
+
+                        HistoryBatteryCard(
+                            entries: derived.battery,
+                            summary: derived.summary,
+                            selectedDate: selectedDate,
+                            onSelect: selectDay
+                        )
+
+                        if let selectedDay = viewModel.selectedDay {
+                            summaryCard(for: selectedDay)
+                        }
+                    }
+                    .opacity(viewModel.isLoading ? 0.5 : 1.0)
+                    .animation(.easeInOut(duration: 0.15), value: viewModel.isLoading)
                 }
             }
             .padding()
@@ -71,6 +97,12 @@ struct HistoryView: View {
                         }
                     }
             }
+        }
+    }
+
+    private func selectDay(_ dayID: String) {
+        if let day = viewModel.days.first(where: { $0.date == dayID }) {
+            viewModel.selectDay(day)
         }
     }
 

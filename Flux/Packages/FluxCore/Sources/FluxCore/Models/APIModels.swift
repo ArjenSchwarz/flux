@@ -97,8 +97,17 @@ public struct OffpeakData: Codable, Sendable {
     public static let defaultWindowStart = "11:00"
     public static let defaultWindowEnd = "14:00"
 
+    /// Lifecycle of the off-peak record for the day. `pending` covers the
+    /// in-progress window where deltas are projected against today's
+    /// running totals; `complete` is the final post-window record.
+    public enum Status: String, Codable, Sendable {
+        case pending
+        case complete
+    }
+
     public let windowStart: String
     public let windowEnd: String
+    public let status: Status?
     public let gridUsageKwh: Double?
     public let solarKwh: Double?
     public let batteryChargeKwh: Double?
@@ -109,6 +118,7 @@ public struct OffpeakData: Codable, Sendable {
     public init(
         windowStart: String,
         windowEnd: String,
+        status: Status? = nil,
         gridUsageKwh: Double?,
         solarKwh: Double?,
         batteryChargeKwh: Double?,
@@ -118,6 +128,7 @@ public struct OffpeakData: Codable, Sendable {
     ) {
         self.windowStart = windowStart
         self.windowEnd = windowEnd
+        self.status = status
         self.gridUsageKwh = gridUsageKwh
         self.solarKwh = solarKwh
         self.batteryChargeKwh = batteryChargeKwh
@@ -160,8 +171,23 @@ public struct DayEnergy: Codable, Sendable, Identifiable {
     public let eOutput: Double
     public let eCharge: Double
     public let eDischarge: Double
+    public let offpeakGridImportKwh: Double?
+    /// Banked from the API for parity but currently unread by the UI: the
+    /// History grid card uses `eOutput` (full-day exports) rather than the
+    /// off-peak portion. Kept on the model so the field is available for a
+    /// future "off-peak vs peak export" view without another schema change.
+    public let offpeakGridExportKwh: Double?
 
     public var id: String { date }
+
+    /// Grid imports outside the off-peak window, derived by subtracting the
+    /// off-peak portion from the day's total. Returns `nil` when no off-peak
+    /// data is available for the day, so callers can distinguish "unknown"
+    /// from a true zero.
+    public var peakGridImportKwh: Double? {
+        guard let offpeak = offpeakGridImportKwh else { return nil }
+        return max(0, eInput - offpeak)
+    }
 
     public init(
         date: String,
@@ -169,7 +195,9 @@ public struct DayEnergy: Codable, Sendable, Identifiable {
         eInput: Double,
         eOutput: Double,
         eCharge: Double,
-        eDischarge: Double
+        eDischarge: Double,
+        offpeakGridImportKwh: Double? = nil,
+        offpeakGridExportKwh: Double? = nil
     ) {
         self.date = date
         self.epv = epv
@@ -177,6 +205,8 @@ public struct DayEnergy: Codable, Sendable, Identifiable {
         self.eOutput = eOutput
         self.eCharge = eCharge
         self.eDischarge = eDischarge
+        self.offpeakGridImportKwh = offpeakGridImportKwh
+        self.offpeakGridExportKwh = offpeakGridExportKwh
     }
 }
 

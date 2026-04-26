@@ -78,6 +78,62 @@ struct HistoryViewModelTests {
     }
 
     @Test
+    func gridSeriesOnlyIncludesDaysWithOffpeakData() async throws {
+        let modelContext = try makeModelContext()
+        let apiClient = MockHistoryAPIClient()
+        apiClient.historyResult = .success(HistoryResponse(days: [
+            // No off-peak data — should be excluded from grid series.
+            DayEnergy(date: "2026-04-13", epv: 5.0, eInput: 4.0, eOutput: 1.0, eCharge: 2.0, eDischarge: 1.5),
+            // Has off-peak split — included.
+            DayEnergy(
+                date: "2026-04-14", epv: 6.0, eInput: 5.0, eOutput: 1.5, eCharge: 2.5, eDischarge: 2.0,
+                offpeakGridImportKwh: 3.0, offpeakGridExportKwh: 0.4
+            )
+        ]))
+
+        let now = makeUTCDate(year: 2026, month: 4, day: 15, hour: 14, minute: 30)
+        let viewModel = HistoryViewModel(apiClient: apiClient, modelContext: modelContext, nowProvider: { now })
+        await viewModel.loadHistory(days: 7)
+
+        #expect(viewModel.solarSeries.count == 2, "solar shows every day")
+        #expect(viewModel.batterySeries.count == 2, "battery shows every day")
+        #expect(viewModel.gridSeries.count == 1, "grid only shows days with off-peak data")
+        let gridEntry = try #require(viewModel.gridSeries.first)
+        #expect(gridEntry.dayID == "2026-04-14")
+        #expect(abs(gridEntry.peakImportKwh - 2.0) < 0.001, "peak = total import - off-peak import")
+        #expect(abs(gridEntry.offpeakImportKwh - 3.0) < 0.001)
+    }
+
+    @Test
+    func summaryExcludesTodayFromAveragesButCountsOffpeakAlways() async throws {
+        let modelContext = try makeModelContext()
+        let apiClient = MockHistoryAPIClient()
+        // nowProvider below is 14:30 UTC on 2026-04-15 = 00:30 AEST on
+        // 2026-04-16, so 2026-04-16 is the Sydney "today" used by the VM.
+        apiClient.historyResult = .success(HistoryResponse(days: [
+            DayEnergy(
+                date: "2026-04-15", epv: 10.0, eInput: 4.0, eOutput: 1.0, eCharge: 5.0, eDischarge: 4.0,
+                offpeakGridImportKwh: 2.5, offpeakGridExportKwh: 0.3
+            ),
+            DayEnergy(
+                date: "2026-04-16", epv: 8.0, eInput: 3.0, eOutput: 0.5, eCharge: 4.0, eDischarge: 3.0,
+                offpeakGridImportKwh: 1.5, offpeakGridExportKwh: 0.2
+            )
+        ]))
+
+        let now = makeUTCDate(year: 2026, month: 4, day: 15, hour: 14, minute: 30)
+        let viewModel = HistoryViewModel(apiClient: apiClient, modelContext: modelContext, nowProvider: { now })
+        await viewModel.loadHistory(days: 7)
+
+        let summary = viewModel.summary
+        #expect(summary.solarDayCount == 1, "today is excluded from completed-day count")
+        #expect(abs(summary.solarTotalKwh - 10.0) < 0.001, "today's solar excluded from total")
+        #expect(summary.gridDayCount == 2, "today's grid is still counted in the off-peak split")
+        #expect(abs(summary.peakImportTotalKwh - (1.5 + 1.5)) < 0.001, "peak = (4-2.5) + (3-1.5)")
+        #expect(abs(summary.offpeakImportTotalKwh - 4.0) < 0.001)
+    }
+
+    @Test
     func selectDayUpdatesSelectedDay() async throws {
         let modelContext = try makeModelContext()
         let apiClient = MockHistoryAPIClient()

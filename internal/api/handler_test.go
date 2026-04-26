@@ -16,6 +16,7 @@ type mockReader struct {
 	queryReadingsFn    func(ctx context.Context, serial string, from, to int64) ([]dynamo.ReadingItem, error)
 	getSystemFn        func(ctx context.Context, serial string) (*dynamo.SystemItem, error)
 	getOffpeakFn       func(ctx context.Context, serial, date string) (*dynamo.OffpeakItem, error)
+	queryOffpeakFn     func(ctx context.Context, serial, start, end string) ([]dynamo.OffpeakItem, error)
 	getDailyEnergyFn   func(ctx context.Context, serial, date string) (*dynamo.DailyEnergyItem, error)
 	queryDailyEnergyFn func(ctx context.Context, serial, start, end string) ([]dynamo.DailyEnergyItem, error)
 	queryDailyPowerFn  func(ctx context.Context, serial, date string) ([]dynamo.DailyPowerItem, error)
@@ -40,6 +41,13 @@ func (m *mockReader) GetOffpeak(ctx context.Context, serial, date string) (*dyna
 		return m.getOffpeakFn(ctx, serial, date)
 	}
 	return nil, nil
+}
+
+func (m *mockReader) QueryOffpeak(ctx context.Context, serial, start, end string) ([]dynamo.OffpeakItem, error) {
+	if m.queryOffpeakFn != nil {
+		return m.queryOffpeakFn(ctx, serial, start, end)
+	}
+	return []dynamo.OffpeakItem{}, nil
 }
 
 func (m *mockReader) GetDailyEnergy(ctx context.Context, serial, date string) (*dynamo.DailyEnergyItem, error) {

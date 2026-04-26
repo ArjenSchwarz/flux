@@ -43,9 +43,15 @@ type RollingAvg struct {
 }
 
 // OffpeakData contains off-peak window times and energy deltas.
+//
+// Status is "complete" once the window has closed and final deltas are
+// written, or "pending" while the window is open and deltas are derived
+// from the current daily-energy snapshot. Empty when no record exists or
+// when deltas cannot be computed.
 type OffpeakData struct {
 	WindowStart         string   `json:"windowStart"`
 	WindowEnd           string   `json:"windowEnd"`
+	Status              string   `json:"status,omitempty"`
 	GridUsageKwh        *float64 `json:"gridUsageKwh"`
 	SolarKwh            *float64 `json:"solarKwh"`
 	BatteryChargeKwh    *float64 `json:"batteryChargeKwh"`
@@ -69,13 +75,19 @@ type HistoryResponse struct {
 }
 
 // DayEnergy contains daily energy totals for a single date.
+//
+// OffpeakGridImportKwh and OffpeakGridExportKwh are populated when an
+// off-peak record exists for the date; they let clients separate intentional
+// off-peak imports from peak imports.
 type DayEnergy struct {
-	Date       string  `json:"date"`
-	Epv        float64 `json:"epv"`
-	EInput     float64 `json:"eInput"`
-	EOutput    float64 `json:"eOutput"`
-	ECharge    float64 `json:"eCharge"`
-	EDischarge float64 `json:"eDischarge"`
+	Date                 string   `json:"date"`
+	Epv                  float64  `json:"epv"`
+	EInput               float64  `json:"eInput"`
+	EOutput              float64  `json:"eOutput"`
+	ECharge              float64  `json:"eCharge"`
+	EDischarge           float64  `json:"eDischarge"`
+	OffpeakGridImportKwh *float64 `json:"offpeakGridImportKwh,omitempty"`
+	OffpeakGridExportKwh *float64 `json:"offpeakGridExportKwh,omitempty"`
 }
 
 // PeakPeriod represents a contiguous period of high household load.

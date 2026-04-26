@@ -313,6 +313,59 @@ func TestDynamoReader_QueryDailyEnergy(t *testing.T) {
 	}
 }
 
+func TestDynamoReader_QueryOffpeak(t *testing.T) {
+	tests := map[string]struct {
+		queryFn func(ctx context.Context, params *dynamodb.QueryInput) (*dynamodb.QueryOutput, error)
+		want    []OffpeakItem
+		wantErr string
+	}{
+		"returns offpeak items for date range": {
+			queryFn: func(_ context.Context, params *dynamodb.QueryInput) (*dynamodb.QueryOutput, error) {
+				assert.Equal(t, "test-offpeak", *params.TableName)
+				assert.True(t, *params.ScanIndexForward)
+				assert.Contains(t, *params.KeyConditionExpression, "BETWEEN")
+				return &dynamodb.QueryOutput{
+					Items: []map[string]types.AttributeValue{
+						marshalItem(t, OffpeakItem{SysSn: "SN", Date: "2026-04-14", Status: OffpeakStatusComplete, GridUsageKwh: 2.5}),
+						marshalItem(t, OffpeakItem{SysSn: "SN", Date: "2026-04-15", Status: OffpeakStatusPending, StartEInput: 1.2}),
+					},
+				}, nil
+			},
+			want: []OffpeakItem{
+				{SysSn: "SN", Date: "2026-04-14", Status: OffpeakStatusComplete, GridUsageKwh: 2.5},
+				{SysSn: "SN", Date: "2026-04-15", Status: OffpeakStatusPending, StartEInput: 1.2},
+			},
+		},
+		"empty result returns empty slice": {
+			queryFn: func(_ context.Context, _ *dynamodb.QueryInput) (*dynamodb.QueryOutput, error) {
+				return &dynamodb.QueryOutput{}, nil
+			},
+			want: []OffpeakItem{},
+		},
+		"dynamo error wraps context": {
+			queryFn: func(_ context.Context, _ *dynamodb.QueryInput) (*dynamodb.QueryOutput, error) {
+				return nil, errors.New("throttled")
+			},
+			wantErr: "query offpeak (table=test-offpeak)",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			reader := newTestReader(&mockReadAPI{queryFn: tc.queryFn})
+
+			got, err := reader.QueryOffpeak(context.Background(), "SN", "2026-04-14", "2026-04-15")
+			if tc.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
 func TestDynamoReader_QueryDailyPower(t *testing.T) {
 	tests := map[string]struct {
 		queryFn func(ctx context.Context, params *dynamodb.QueryInput) (*dynamodb.QueryOutput, error)
