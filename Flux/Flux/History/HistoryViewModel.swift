@@ -113,29 +113,19 @@ final class HistoryViewModel {
 }
 
 extension HistoryViewModel {
-    /// All three series and the period summary are derived from `days`. With
-    /// at most 30 entries the recomputation is cheap; storing the result
-    /// would just add cache-invalidation work without reducing user-visible
-    /// latency.
-    var solarSeries: [SolarEntry] {
-        derived.solar
-    }
-
-    var gridSeries: [GridEntry] {
-        derived.grid
-    }
-
-    var batterySeries: [BatteryEntry] {
-        derived.battery
-    }
-
-    var summary: PeriodSummary {
-        derived.summary
-    }
-
-    private var derived: DerivedState {
+    /// Series and period summary derived from `days`. With at most 30
+    /// entries the recomputation is cheap; storing the result would just
+    /// add cache-invalidation work. Callers (notably the View) should
+    /// capture this once per render rather than reading the convenience
+    /// accessors below repeatedly.
+    var derived: DerivedState {
         DerivedState(days: days, now: nowProvider())
     }
+
+    var solarSeries: [SolarEntry] { derived.solar }
+    var gridSeries: [GridEntry] { derived.grid }
+    var batterySeries: [BatteryEntry] { derived.battery }
+    var summary: PeriodSummary { derived.summary }
 }
 
 extension HistoryViewModel {
@@ -201,7 +191,7 @@ extension HistoryViewModel {
         }
     }
 
-    private struct DerivedState {
+    struct DerivedState {
         let solar: [SolarEntry]
         let grid: [GridEntry]
         let battery: [BatteryEntry]

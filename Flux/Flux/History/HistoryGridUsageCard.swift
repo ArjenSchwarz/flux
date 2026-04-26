@@ -10,7 +10,7 @@ struct HistoryGridUsageCard: View {
     var body: some View {
         HistoryCardChrome(
             title: "Grid usage",
-            kpi: HistoryFormatters.kwh(summary.peakImportTotalKwh) + " peak",
+            kpi: kpi,
             subtitle: subtitle
         ) {
             if entries.isEmpty {
@@ -21,7 +21,13 @@ struct HistoryGridUsageCard: View {
         }
     }
 
+    private var kpi: String {
+        guard !entries.isEmpty else { return "—" }
+        return HistoryFormatters.kwh(summary.peakImportTotalKwh) + " peak"
+    }
+
     private var subtitle: String {
+        guard !entries.isEmpty else { return "Off-peak split unavailable" }
         let offpeak = HistoryFormatters.kwh(summary.offpeakImportTotalKwh)
         let exported = HistoryFormatters.kwh(summary.exportTotalKwh)
         return "\(offpeak) off-peak · \(exported) exported"

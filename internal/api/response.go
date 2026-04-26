@@ -44,9 +44,10 @@ type RollingAvg struct {
 
 // OffpeakData contains off-peak window times and energy deltas.
 //
-// Status is "complete" once the window has closed and final deltas are written,
-// or "in-progress" while the window is open and deltas are derived from the
-// current daily-energy snapshot. Empty when no record exists for today.
+// Status is "complete" once the window has closed and final deltas are
+// written, or "pending" while the window is open and deltas are derived
+// from the current daily-energy snapshot. Empty when no record exists or
+// when deltas cannot be computed.
 type OffpeakData struct {
 	WindowStart         string   `json:"windowStart"`
 	WindowEnd           string   `json:"windowEnd"`

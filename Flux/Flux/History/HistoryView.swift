@@ -40,26 +40,27 @@ struct HistoryView: View {
                 } else if viewModel.days.isEmpty, !viewModel.isLoading {
                     emptyState
                 } else {
+                    let derived = viewModel.derived
                     let selectedDate = viewModel.selectedDay
                         .flatMap { DateFormatting.parseDayDate($0.date) }
 
                     HistorySolarCard(
-                        entries: viewModel.solarSeries,
-                        summary: viewModel.summary,
+                        entries: derived.solar,
+                        summary: derived.summary,
                         selectedDate: selectedDate,
                         onSelect: selectDay
                     )
 
                     HistoryGridUsageCard(
-                        entries: viewModel.gridSeries,
-                        summary: viewModel.summary,
+                        entries: derived.grid,
+                        summary: derived.summary,
                         selectedDate: selectedDate,
                         onSelect: selectDay
                     )
 
                     HistoryBatteryCard(
-                        entries: viewModel.batterySeries,
-                        summary: viewModel.summary,
+                        entries: derived.battery,
+                        summary: derived.summary,
                         selectedDate: selectedDate,
                         onSelect: selectDay
                     )
