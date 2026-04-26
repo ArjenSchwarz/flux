@@ -523,6 +523,10 @@ func melbourneSunriseSunset(date string, isSunrise bool) time.Time {
 //     >60s skip used in computeTodayEnergy. Return watt-seconds / 3,600,000.
 //
 // The function does no rounding — callers round at serialization time.
+//
+// Precondition: readings must be sorted by Timestamp ascending. The bracket
+// searches use first-match early-break and produce silently-wrong results on
+// unsorted input. DynamoDB queries on the sort key satisfy this in production.
 func integratePload(readings []dynamo.ReadingItem, startUnix, endUnix int64) float64 {
 	if startUnix >= endUnix || len(readings) == 0 {
 		return 0
