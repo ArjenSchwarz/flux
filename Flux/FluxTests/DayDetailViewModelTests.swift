@@ -17,7 +17,7 @@ struct DayDetailViewModelTests {
             socLow: 21, socLowTime: "2026-04-15T20:00:00Z"
         )
         apiClient.dayResult = .success(DayDetailResponse(
-            date: "2026-04-15", readings: readings, summary: summary, peakPeriods: nil
+            date: "2026-04-15", readings: readings, summary: summary, peakPeriods: nil, eveningNight: nil
         ))
 
         let viewModel = DayDetailViewModel(date: "2026-04-15", apiClient: apiClient)
@@ -63,7 +63,7 @@ struct DayDetailViewModelTests {
             TimeSeriesPoint(timestamp: "2026-04-15T00:05:00Z", ppv: 0, pload: 0, pbat: 0, pgrid: 0, soc: 44)
         ]
         apiClient.dayResult = .success(DayDetailResponse(
-            date: "2026-04-15", readings: fallbackReadings, summary: nil, peakPeriods: nil
+            date: "2026-04-15", readings: fallbackReadings, summary: nil, peakPeriods: nil, eveningNight: nil
         ))
 
         let viewModel = DayDetailViewModel(date: "2026-04-15", apiClient: apiClient)
@@ -77,7 +77,7 @@ struct DayDetailViewModelTests {
         let apiClient = MockDayDetailAPIClient()
         let peaks = [PeakPeriod(start: "17:00", end: "18:00", avgLoadW: 3200, energyWh: 3200)]
         apiClient.dayResult = .success(DayDetailResponse(
-            date: "2026-04-15", readings: [], summary: nil, peakPeriods: peaks
+            date: "2026-04-15", readings: [], summary: nil, peakPeriods: peaks, eveningNight: nil
         ))
 
         let viewModel = DayDetailViewModel(date: "2026-04-15", apiClient: apiClient)
@@ -91,7 +91,7 @@ struct DayDetailViewModelTests {
     func loadDayWithNilPeakPeriodsLeavesArrayEmpty() async {
         let apiClient = MockDayDetailAPIClient()
         apiClient.dayResult = .success(DayDetailResponse(
-            date: "2026-04-15", readings: [], summary: nil, peakPeriods: nil
+            date: "2026-04-15", readings: [], summary: nil, peakPeriods: nil, eveningNight: nil
         ))
 
         let viewModel = DayDetailViewModel(date: "2026-04-15", apiClient: apiClient)
@@ -105,7 +105,7 @@ struct DayDetailViewModelTests {
         let apiClient = MockDayDetailAPIClient()
         let peaks = [PeakPeriod(start: "17:00", end: "18:00", avgLoadW: 3200, energyWh: 3200)]
         apiClient.dayResult = .success(DayDetailResponse(
-            date: "2026-04-15", readings: [], summary: nil, peakPeriods: peaks
+            date: "2026-04-15", readings: [], summary: nil, peakPeriods: peaks, eveningNight: nil
         ))
 
         let viewModel = DayDetailViewModel(date: "2026-04-15", apiClient: apiClient)
@@ -116,6 +116,126 @@ struct DayDetailViewModelTests {
         await viewModel.loadDay()
 
         #expect(viewModel.peakPeriods.isEmpty)
+    }
+
+    @Test
+    func loadDayPopulatesEveningNightFromResponse() async {
+        let apiClient = MockDayDetailAPIClient()
+        let eveningNight = EveningNight(
+            evening: EveningNightBlock(
+                start: "2026-04-15T08:30:00Z",
+                end: "2026-04-15T14:00:00Z",
+                totalKwh: 4.2,
+                averageKwhPerHour: 0.85,
+                status: .complete,
+                boundarySource: .readings
+            ),
+            night: EveningNightBlock(
+                start: "2026-04-14T14:00:00Z",
+                end: "2026-04-14T20:30:00Z",
+                totalKwh: 3.1,
+                averageKwhPerHour: 0.48,
+                status: .complete,
+                boundarySource: .readings
+            )
+        )
+        apiClient.dayResult = .success(DayDetailResponse(
+            date: "2026-04-15", readings: [], summary: nil, peakPeriods: nil, eveningNight: eveningNight
+        ))
+
+        let viewModel = DayDetailViewModel(date: "2026-04-15", apiClient: apiClient)
+        await viewModel.loadDay()
+
+        let loaded = viewModel.eveningNight
+        #expect(loaded?.evening?.totalKwh == 4.2)
+        #expect(loaded?.night?.totalKwh == 3.1)
+        #expect(loaded?.hasAnyBlock == true)
+    }
+
+    @Test
+    func loadDayPropagatesEveningNightWithOnlyOneBlock() async {
+        let apiClient = MockDayDetailAPIClient()
+        let eveningNight = EveningNight(
+            evening: nil,
+            night: EveningNightBlock(
+                start: "2026-04-14T14:00:00Z",
+                end: "2026-04-14T20:30:00Z",
+                totalKwh: 3.1,
+                averageKwhPerHour: 0.48,
+                status: .complete,
+                boundarySource: .estimated
+            )
+        )
+        apiClient.dayResult = .success(DayDetailResponse(
+            date: "2026-04-15", readings: [], summary: nil, peakPeriods: nil, eveningNight: eveningNight
+        ))
+
+        let viewModel = DayDetailViewModel(date: "2026-04-15", apiClient: apiClient)
+        await viewModel.loadDay()
+
+        #expect(viewModel.eveningNight?.evening == nil)
+        #expect(viewModel.eveningNight?.night?.boundarySource == .estimated)
+    }
+
+    @Test
+    func loadDayWithNilEveningNightLeavesPropertyNil() async {
+        let apiClient = MockDayDetailAPIClient()
+        apiClient.dayResult = .success(DayDetailResponse(
+            date: "2026-04-15", readings: [], summary: nil, peakPeriods: nil, eveningNight: nil
+        ))
+
+        let viewModel = DayDetailViewModel(date: "2026-04-15", apiClient: apiClient)
+        await viewModel.loadDay()
+
+        #expect(viewModel.eveningNight == nil)
+    }
+
+    @Test
+    func loadDayFallbackDataPathLeavesEveningNightAsBackendSent() async {
+        // Backend invariant (req 1.11): on fallback path, response omits eveningNight.
+        // Fixture mirrors that contract — viewModel must propagate the nil through.
+        let apiClient = MockDayDetailAPIClient()
+        let fallbackReadings = [
+            TimeSeriesPoint(timestamp: "2026-04-15T00:00:00Z", ppv: 0, pload: 0, pbat: 0, pgrid: 0, soc: 45),
+            TimeSeriesPoint(timestamp: "2026-04-15T00:05:00Z", ppv: 0, pload: 0, pbat: 0, pgrid: 0, soc: 44)
+        ]
+        apiClient.dayResult = .success(DayDetailResponse(
+            date: "2026-04-15", readings: fallbackReadings, summary: nil, peakPeriods: nil, eveningNight: nil
+        ))
+
+        let viewModel = DayDetailViewModel(date: "2026-04-15", apiClient: apiClient)
+        await viewModel.loadDay()
+
+        #expect(viewModel.hasPowerData == false)
+        #expect(viewModel.eveningNight == nil)
+    }
+
+    @Test
+    func loadDayErrorResetsEveningNightToNil() async {
+        let apiClient = MockDayDetailAPIClient()
+        let eveningNight = EveningNight(
+            evening: EveningNightBlock(
+                start: "2026-04-15T08:30:00Z",
+                end: "2026-04-15T14:00:00Z",
+                totalKwh: 4.2,
+                averageKwhPerHour: 0.85,
+                status: .complete,
+                boundarySource: .readings
+            ),
+            night: nil
+        )
+        apiClient.dayResult = .success(DayDetailResponse(
+            date: "2026-04-15", readings: [], summary: nil, peakPeriods: nil, eveningNight: eveningNight
+        ))
+
+        let viewModel = DayDetailViewModel(date: "2026-04-15", apiClient: apiClient)
+        await viewModel.loadDay()
+        #expect(viewModel.eveningNight != nil)
+
+        apiClient.dayResult = .failure(FluxAPIError.notConfigured)
+        await viewModel.loadDay()
+
+        #expect(viewModel.eveningNight == nil)
     }
 
     @Test

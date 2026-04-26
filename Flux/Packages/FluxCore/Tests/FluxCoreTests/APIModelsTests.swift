@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import FluxCore
 
-// swiftlint:disable type_body_length
+// swiftlint:disable type_body_length file_length
 @Suite
 struct APIModelsTests {
     private let decoder = JSONDecoder()
@@ -305,6 +305,129 @@ struct APIModelsTests {
     }
 
     @Test
+    func decodeDayDetailResponseWithEveningNightBothBlocks() throws {
+        let json = """
+        {
+          "date": "2026-04-14",
+          "readings": [],
+          "summary": null,
+          "eveningNight": {
+            "evening": {
+              "start": "2026-04-14T08:30:00Z",
+              "end": "2026-04-14T14:00:00Z",
+              "totalKwh": 4.2,
+              "averageKwhPerHour": 0.85,
+              "status": "complete",
+              "boundarySource": "readings"
+            },
+            "night": {
+              "start": "2026-04-13T14:00:00Z",
+              "end": "2026-04-13T20:30:00Z",
+              "totalKwh": 3.1,
+              "averageKwhPerHour": 0.48,
+              "status": "complete",
+              "boundarySource": "readings"
+            }
+          }
+        }
+        """
+
+        let detail = try decoder.decode(DayDetailResponse.self, from: Data(json.utf8))
+
+        let eveningNight = try #require(detail.eveningNight)
+        #expect(eveningNight.hasAnyBlock)
+        #expect(eveningNight.evening?.totalKwh == 4.2)
+        #expect(eveningNight.evening?.averageKwhPerHour == 0.85)
+        #expect(eveningNight.evening?.status == .complete)
+        #expect(eveningNight.evening?.boundarySource == .readings)
+        #expect(eveningNight.night?.totalKwh == 3.1)
+        #expect(eveningNight.night?.status == .complete)
+    }
+
+    @Test
+    func decodeDayDetailResponseWithoutEveningNightKey() throws {
+        let json = """
+        {
+          "date": "2026-04-14",
+          "readings": [],
+          "summary": null
+        }
+        """
+
+        let detail = try decoder.decode(DayDetailResponse.self, from: Data(json.utf8))
+
+        #expect(detail.eveningNight == nil)
+    }
+
+    @Test
+    func decodeEveningNightWithOnlyOneBlock() throws {
+        let json = """
+        {
+          "date": "2026-04-14",
+          "readings": [],
+          "summary": null,
+          "eveningNight": {
+            "night": {
+              "start": "2026-04-13T14:00:00Z",
+              "end": "2026-04-13T20:30:00Z",
+              "totalKwh": 3.1,
+              "averageKwhPerHour": 0.48,
+              "status": "complete",
+              "boundarySource": "estimated"
+            }
+          }
+        }
+        """
+
+        let detail = try decoder.decode(DayDetailResponse.self, from: Data(json.utf8))
+
+        let eveningNight = try #require(detail.eveningNight)
+        #expect(eveningNight.evening == nil)
+        #expect(eveningNight.night != nil)
+        #expect(eveningNight.hasAnyBlock)
+        #expect(eveningNight.night?.boundarySource == .estimated)
+    }
+
+    @Test
+    func decodeEveningNightBlockWithNullAverage() throws {
+        let json = """
+        {
+          "start": "2026-04-14T08:30:00Z",
+          "end": "2026-04-14T08:30:30Z",
+          "totalKwh": 0.0,
+          "averageKwhPerHour": null,
+          "status": "in-progress",
+          "boundarySource": "readings"
+        }
+        """
+
+        let block = try decoder.decode(EveningNightBlock.self, from: Data(json.utf8))
+
+        #expect(block.averageKwhPerHour == nil)
+        #expect(block.status == .inProgress)
+        #expect(block.totalKwh == 0.0)
+    }
+
+    @Test
+    func decodeEveningNightBlockWithEstimatedBoundary() throws {
+        let json = """
+        {
+          "start": "2026-04-14T08:30:00Z",
+          "end": "2026-04-14T14:00:00Z",
+          "totalKwh": 4.2,
+          "averageKwhPerHour": 0.85,
+          "status": "complete",
+          "boundarySource": "estimated"
+        }
+        """
+
+        let block = try decoder.decode(EveningNightBlock.self, from: Data(json.utf8))
+
+        #expect(block.boundarySource == .estimated)
+        #expect(block.id == "2026-04-14T08:30:00Z")
+    }
+
+    @Test
     func timeSeriesPointIdentifiable() throws {
         let json = """
         {
@@ -333,4 +456,4 @@ struct APIModelsTests {
         #expect(errorResponse.error == "Unauthorized")
     }
 }
-// swiftlint:enable type_body_length
+// swiftlint:enable type_body_length file_length

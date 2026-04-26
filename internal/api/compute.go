@@ -466,6 +466,296 @@ func isOffpeak(ts int64, offpeakStartMin, offpeakEndMin int) bool {
 	return minuteOfDay >= offpeakStartMin && minuteOfDay < offpeakEndMin
 }
 
+// melbourneSunriseSunset returns the UTC instant of Melbourne sunrise (when
+// isSunrise=true) or sunset (false) for the given calendar date in
+// "YYYY-MM-DD" format. The result is truncated to whole seconds and is
+// always in UTC.
+//
+// The implementation looks up the date's MM-DD in melbourneSunLocal (an
+// embedded static table; see melbourne_sun_table.go). The table value is a
+// wall-clock "HH:MM" string in Sydney-local time. Combining it with the
+// requested calendar date via time.ParseInLocation in sydneyTZ yields the
+// correct UTC instant for any year — Go's IANA database resolves AEDT vs
+// AEST automatically.
+//
+// Feb 29 is intentionally absent from the table; the lookup falls back to
+// Feb 28's values (well within the ±2 minute tolerance of req 1.12).
+func melbourneSunriseSunset(date string, isSunrise bool) time.Time {
+	dayStart, err := time.ParseInLocation("2006-01-02", date, sydneyTZ)
+	if err != nil {
+		// Defensive fallback. Caller validates date format before getting
+		// here; if we somehow get a malformed date, returning the zero
+		// time lets the buildEveningNightBlock final guard catch the
+		// degenerate case.
+		return time.Time{}
+	}
+	key := date[5:10] // MM-DD; ParseInLocation guarantees len(date) == 10
+	entry, ok := melbourneSunLocal[key]
+	if !ok {
+		// Feb 29 is the only intentional miss; reuse Feb 28's values.
+		entry = melbourneSunLocal["02-28"]
+	}
+	hhmm := entry.setLocal
+	if isSunrise {
+		hhmm = entry.riseLocal
+	}
+	if len(hhmm) != 5 || hhmm[2] != ':' {
+		// Corrupt static table entry: return the zero time so the
+		// buildEveningNightBlock final guard drops the block, matching
+		// the parse-error path above.
+		return time.Time{}
+	}
+	h := int(hhmm[0]-'0')*10 + int(hhmm[1]-'0')
+	m := int(hhmm[3]-'0')*10 + int(hhmm[4]-'0')
+	return dayStart.Add(time.Duration(h)*time.Hour + time.Duration(m)*time.Minute).UTC().Truncate(time.Second)
+}
+
+// integratePload returns the trapezoidal integral of max(pload, 0) over the
+// half-open interval [startUnix, endUnix), expressed in kWh.
+//
+// Algorithm (full specification in specs/evening-night-stats/design.md):
+//  1. Build a working point sequence pts. Synthesize a left/right edge by
+//     linearly interpolating pload between the readings that bracket the
+//     period boundary, with negative pload values clamped to zero before
+//     interpolation. Skip edge synthesis when the bracketing pair has a gap
+//     greater than 60 seconds.
+//  2. Append every reading in [startUnix, endUnix) as an interior point
+//     (clamped pload). A reading exactly at startUnix is interior; a reading
+//     exactly at endUnix is excluded (half-open).
+//  3. Sum trapezoidal areas across adjacent pairs in pts, applying the same
+//     >60s skip used in computeTodayEnergy. Return watt-seconds / 3,600,000.
+//
+// The function does no rounding — callers round at serialization time.
+//
+// Precondition: readings must be sorted by Timestamp ascending. The bracket
+// searches use first-match early-break and produce silently-wrong results on
+// unsorted input. DynamoDB queries on the sort key satisfy this in production.
+func integratePload(readings []dynamo.ReadingItem, startUnix, endUnix int64) float64 {
+	if startUnix >= endUnix || len(readings) == 0 {
+		return 0
+	}
+
+	// Find left bracket index: largest i with readings[i].Timestamp < startUnix.
+	iL := -1
+	for i, r := range readings {
+		if r.Timestamp < startUnix {
+			iL = i
+		} else {
+			break
+		}
+	}
+	// Find right bracket index: smallest i > iL with readings[i].Timestamp >= endUnix.
+	// Starting from iL+1 skips the prefix we already know is below startUnix.
+	iR := len(readings)
+	for i := iL + 1; i < len(readings); i++ {
+		if readings[i].Timestamp >= endUnix {
+			iR = i
+			break
+		}
+	}
+
+	type pt struct {
+		ts    int64
+		pload float64
+	}
+	pts := make([]pt, 0, (iR-iL-1)+2)
+
+	// Left edge synthesis.
+	if iL >= 0 && iL+1 < len(readings) {
+		next := readings[iL+1]
+		if next.Timestamp > startUnix {
+			gap := next.Timestamp - readings[iL].Timestamp
+			if gap <= maxPairGapSeconds {
+				prev := readings[iL]
+				p0 := max(prev.Pload, 0)
+				p1 := max(next.Pload, 0)
+				frac := float64(startUnix-prev.Timestamp) / float64(next.Timestamp-prev.Timestamp)
+				pts = append(pts, pt{
+					ts:    startUnix,
+					pload: p0 + (p1-p0)*frac,
+				})
+			}
+		}
+		// next.Timestamp == startUnix → skip; the interior loop will pick up that reading.
+	}
+
+	// Interior readings.
+	for i := iL + 1; i < iR; i++ {
+		r := readings[i]
+		if r.Timestamp < startUnix || r.Timestamp >= endUnix {
+			continue
+		}
+		pts = append(pts, pt{ts: r.Timestamp, pload: max(r.Pload, 0)})
+	}
+
+	// Right edge synthesis. iR is the first index with Timestamp >= endUnix,
+	// so readings[iR-1].Timestamp < endUnix is guaranteed.
+	//
+	// When iR-1 == iL (no interior readings), prev is the left-bracket reading
+	// and gap spans the entire pre-period region. The 60s gap check then
+	// conservatively skips synthesis even if the bracket pair around endUnix
+	// is itself tight. Safe — energy is underestimated rather than fabricated —
+	// and the all-readings-outside-period case is already covered upstream by
+	// the len(pts) < 2 guard.
+	if iR > 0 && iR < len(readings) {
+		prev := readings[iR-1]
+		next := readings[iR]
+		gap := next.Timestamp - prev.Timestamp
+		if gap <= maxPairGapSeconds {
+			p0 := max(prev.Pload, 0)
+			p1 := max(next.Pload, 0)
+			frac := float64(endUnix-prev.Timestamp) / float64(next.Timestamp-prev.Timestamp)
+			pts = append(pts, pt{
+				ts:    endUnix,
+				pload: p0 + (p1-p0)*frac,
+			})
+		}
+	}
+
+	if len(pts) < 2 {
+		return 0
+	}
+
+	var wattSeconds float64
+	for i := 1; i < len(pts); i++ {
+		a := pts[i-1]
+		b := pts[i]
+		dt := b.ts - a.ts
+		if dt <= 0 || dt > maxPairGapSeconds {
+			continue
+		}
+		wattSeconds += (a.pload + b.pload) / 2 * float64(dt)
+	}
+	return wattSeconds / 3_600_000
+}
+
+// findEveningNight identifies the evening (last solar → midnight) and night
+// (midnight → first solar) no-solar usage blocks for the requested calendar
+// date and returns their totals.
+//
+// today is the caller's "today" string in sydneyTZ (date == today switches on
+// in-progress clamping and the today gate that omits the evening block while
+// the sun is still up). now is the request-scoped clock (sydneyTZ-typed for
+// readability; comparisons use absolute instants and do not depend on
+// location). Returns nil when both blocks are omitted.
+func findEveningNight(readings []dynamo.ReadingItem, date, today string, now time.Time) *EveningNight {
+	dayStart, err := time.ParseInLocation("2006-01-02", date, sydneyTZ)
+	if err != nil {
+		return nil
+	}
+	dayEnd := dayStart.AddDate(0, 0, 1)
+	isToday := date == today
+
+	// Single pass over readings to find the first/last reading with Ppv > 0.
+	var firstPpv, lastPpv *dynamo.ReadingItem
+	for i := range readings {
+		if readings[i].Ppv > 0 {
+			r := readings[i]
+			if firstPpv == nil {
+				firstPpv = &r
+			}
+			lastPpv = &r
+		}
+	}
+
+	// Resolve sunset once — it may be needed by both the evening today-gate
+	// and the evening fallback. Sunrise is only consumed by the night
+	// fallback so it stays inline.
+	sunsetResolved := false
+	var sunset time.Time
+	resolveSunset := func() time.Time {
+		if !sunsetResolved {
+			sunset = melbourneSunriseSunset(date, false)
+			sunsetResolved = true
+		}
+		return sunset
+	}
+
+	var nightBlock *EveningNightBlock
+	{
+		// Step 4: build night block.
+		var nominalEnd time.Time
+		boundarySource := EveningNightBoundaryReadings
+		if firstPpv != nil {
+			nominalEnd = time.Unix(firstPpv.Timestamp, 0)
+		} else {
+			nominalEnd = melbourneSunriseSunset(date, true)
+			boundarySource = EveningNightBoundaryEstimated
+		}
+		end := nominalEnd
+		status := EveningNightStatusComplete
+		if isToday && nominalEnd.After(now) {
+			end = now
+			status = EveningNightStatusInProgress
+		}
+		if dayStart.Before(end) {
+			nightBlock = buildEveningNightBlock(readings, dayStart, end, boundarySource, status)
+		}
+	}
+
+	var eveningBlock *EveningNightBlock
+	{
+		// Step 5: build evening block.
+		emit := true
+		if isToday {
+			// Today gate: omit when the sun has not astronomically set yet.
+			if !now.After(resolveSunset()) {
+				emit = false
+			}
+		}
+		if emit {
+			var nominalStart time.Time
+			boundarySource := EveningNightBoundaryReadings
+			if lastPpv != nil {
+				nominalStart = time.Unix(lastPpv.Timestamp, 0)
+			} else {
+				nominalStart = resolveSunset()
+				boundarySource = EveningNightBoundaryEstimated
+			}
+			end := dayEnd
+			status := EveningNightStatusComplete
+			if isToday && dayEnd.After(now) {
+				end = now
+				status = EveningNightStatusInProgress
+			}
+			if nominalStart.Before(end) {
+				eveningBlock = buildEveningNightBlock(readings, nominalStart, end, boundarySource, status)
+			}
+		}
+	}
+
+	if nightBlock == nil && eveningBlock == nil {
+		return nil
+	}
+	return &EveningNight{Evening: eveningBlock, Night: nightBlock}
+}
+
+// buildEveningNightBlock constructs a single EveningNightBlock from the
+// supplied period bounds, integrating pload over [start, end) and computing
+// the elapsed-hours average. AverageKwhPerHour is nil when the elapsed
+// duration is shorter than 60 seconds (req 1.7).
+func buildEveningNightBlock(readings []dynamo.ReadingItem, start, end time.Time, boundarySource, status string) *EveningNightBlock {
+	startUnix := start.Unix()
+	endUnix := end.Unix()
+	elapsed := endUnix - startUnix
+	if elapsed <= 0 {
+		return nil
+	}
+	totalKwh := integratePload(readings, startUnix, endUnix)
+	block := &EveningNightBlock{
+		Start:          start.UTC().Format(time.RFC3339),
+		End:            end.UTC().Format(time.RFC3339),
+		TotalKwh:       roundEnergy(totalKwh),
+		Status:         status,
+		BoundarySource: boundarySource,
+	}
+	if elapsed >= 60 {
+		avg := roundEnergy(totalKwh / (float64(elapsed) / 3600.0))
+		block.AverageKwhPerHour = &avg
+	}
+	return block
+}
+
 // roundEnergy rounds a kWh value to 2 decimal places.
 func roundEnergy(v float64) float64 {
 	return math.Round(v*100) / 100
