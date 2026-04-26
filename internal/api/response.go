@@ -107,6 +107,16 @@ type DayDetailResponse struct {
 	EveningNight *EveningNight     `json:"eveningNight,omitempty"`
 }
 
+// Status and boundary-source values for an EveningNightBlock. Defined as
+// constants so producers, consumers, and tests share a single source of
+// truth, mirroring the `OffpeakStatus*` convention in internal/dynamo.
+const (
+	EveningNightStatusComplete    = "complete"
+	EveningNightStatusInProgress  = "in-progress"
+	EveningNightBoundaryReadings  = "readings"
+	EveningNightBoundaryEstimated = "estimated"
+)
+
 // EveningNight groups the evening (last solar → midnight) and night
 // (midnight → first solar) no-solar usage blocks for a single calendar date.
 // Either field may be nil when only one block applies.

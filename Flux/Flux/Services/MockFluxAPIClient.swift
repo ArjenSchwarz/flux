@@ -83,6 +83,28 @@ final actor MockFluxAPIClient: FluxAPIClient {
     static let historyResponse = HistoryResponse(days: historyDays)
 
     static func dayDetailResponse(for date: String = previewDate) -> DayDetailResponse {
+        DayDetailResponse(
+            date: date,
+            readings: dayReadings(for: date),
+            summary: DaySummary(
+                epv: 13.4,
+                eInput: 2.2,
+                eOutput: 4.9,
+                eCharge: 5.1,
+                eDischarge: 6.2,
+                socLow: 18.3,
+                socLowTime: "\(date)T19:00:00Z"
+            ),
+            peakPeriods: [
+                PeakPeriod(start: "\(date)T17:30:00Z", end: "\(date)T18:15:00Z", avgLoadW: 3800.1, energyWh: 2850),
+                PeakPeriod(start: "\(date)T07:15:00Z", end: "\(date)T07:45:00Z", avgLoadW: 4200.3, energyWh: 2100),
+                PeakPeriod(start: "\(date)T12:00:00Z", end: "\(date)T12:20:00Z", avgLoadW: 2900.5, energyWh: 967)
+            ],
+            eveningNight: dayEveningNight(for: date)
+        )
+    }
+
+    private static func dayReadings(for date: String) -> [TimeSeriesPoint] {
         var readings: [TimeSeriesPoint] = []
         readings.reserveCapacity(24 * 12)
 
@@ -108,51 +130,29 @@ final actor MockFluxAPIClient: FluxAPIClient {
                 )
             )
         }
+        return readings
+    }
 
-        let summary = DaySummary(
-            epv: 13.4,
-            eInput: 2.2,
-            eOutput: 4.9,
-            eCharge: 5.1,
-            eDischarge: 6.2,
-            socLow: 18.3,
-            socLowTime: "\(date)T19:00:00Z"
-        )
-
-        let peakPeriods: [PeakPeriod] = [
-            PeakPeriod(start: "\(date)T17:30:00Z", end: "\(date)T18:15:00Z", avgLoadW: 3800.1, energyWh: 2850),
-            PeakPeriod(start: "\(date)T07:15:00Z", end: "\(date)T07:45:00Z", avgLoadW: 4200.3, energyWh: 2100),
-            PeakPeriod(start: "\(date)T12:00:00Z", end: "\(date)T12:20:00Z", avgLoadW: 2900.5, energyWh: 967)
-        ]
-
-        // Sample eveningNight payload exercises both card states the design highlights:
-        // a complete night block with a readings-derived boundary and an in-progress
-        // evening block that should render the "(so far)" caption.
-        let eveningNight = EveningNight(
+    // Exercises both card states: an in-progress evening (renders "(so far)")
+    // and a complete readings-derived night block.
+    private static func dayEveningNight(for date: String) -> EveningNight {
+        EveningNight(
             evening: EveningNightBlock(
-                start: "\(date)T08:30:00Z",      // 18:30 Sydney (sunset-ish)
-                end: "\(date)T11:00:00Z",        // 21:00 Sydney (now, while in-progress)
+                start: "\(date)T08:30:00Z",
+                end: "\(date)T11:00:00Z",
                 totalKwh: 2.7,
                 averageKwhPerHour: 1.08,
                 status: .inProgress,
                 boundarySource: .readings
             ),
             night: EveningNightBlock(
-                start: "\(date)T14:00:00Z",      // 00:00 Sydney midnight
-                end: "\(date)T20:30:00Z",        // 06:30 Sydney sunrise
+                start: "\(date)T14:00:00Z",
+                end: "\(date)T20:30:00Z",
                 totalKwh: 4.2,
                 averageKwhPerHour: 0.65,
                 status: .complete,
                 boundarySource: .readings
             )
-        )
-
-        return DayDetailResponse(
-            date: date,
-            readings: readings,
-            summary: summary,
-            peakPeriods: peakPeriods,
-            eveningNight: eveningNight
         )
     }
 

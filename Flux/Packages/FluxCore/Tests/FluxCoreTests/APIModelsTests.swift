@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import FluxCore
 
-// swiftlint:disable type_body_length
+// swiftlint:disable type_body_length file_length
 @Suite
 struct APIModelsTests {
     private let decoder = JSONDecoder()
@@ -456,4 +456,4 @@ struct APIModelsTests {
         #expect(errorResponse.error == "Unauthorized")
     }
 }
-// swiftlint:enable type_body_length
+// swiftlint:enable type_body_length file_length

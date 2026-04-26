@@ -1688,10 +1688,10 @@ func TestFindEveningNight(t *testing.T) {
 				require.NotNil(t, got)
 				require.NotNil(t, got.Night)
 				require.NotNil(t, got.Evening)
-				assert.Equal(t, "complete", got.Night.Status)
-				assert.Equal(t, "complete", got.Evening.Status)
-				assert.Equal(t, "readings", got.Night.BoundarySource)
-				assert.Equal(t, "readings", got.Evening.BoundarySource)
+				assert.Equal(t, EveningNightStatusComplete, got.Night.Status)
+				assert.Equal(t, EveningNightStatusComplete, got.Evening.Status)
+				assert.Equal(t, EveningNightBoundaryReadings, got.Night.BoundarySource)
+				assert.Equal(t, EveningNightBoundaryReadings, got.Evening.BoundarySource)
 			},
 		},
 		"today before sunrise: only night, in-progress, end clamped to now": {
@@ -1709,8 +1709,8 @@ func TestFindEveningNight(t *testing.T) {
 				require.NotNil(t, got)
 				require.NotNil(t, got.Night)
 				assert.Nil(t, got.Evening, "evening must be omitted when sun has not set")
-				assert.Equal(t, "in-progress", got.Night.Status)
-				assert.Equal(t, "estimated", got.Night.BoundarySource)
+				assert.Equal(t, EveningNightStatusInProgress, got.Night.Status)
+				assert.Equal(t, EveningNightBoundaryEstimated, got.Night.BoundarySource)
 				// End == now (clamped).
 				wantEnd := time.Date(2026, 4, 15, 4, 30, 0, 0, sydneyTZ).UTC().Format(time.RFC3339)
 				assert.Equal(t, wantEnd, got.Night.End)
@@ -1740,10 +1740,10 @@ func TestFindEveningNight(t *testing.T) {
 				require.NotNil(t, got)
 				require.NotNil(t, got.Night)
 				require.NotNil(t, got.Evening)
-				assert.Equal(t, "complete", got.Night.Status)
-				assert.Equal(t, "in-progress", got.Evening.Status)
-				assert.Equal(t, "readings", got.Night.BoundarySource)
-				assert.Equal(t, "readings", got.Evening.BoundarySource)
+				assert.Equal(t, EveningNightStatusComplete, got.Night.Status)
+				assert.Equal(t, EveningNightStatusInProgress, got.Evening.Status)
+				assert.Equal(t, EveningNightBoundaryReadings, got.Night.BoundarySource)
+				assert.Equal(t, EveningNightBoundaryReadings, got.Evening.BoundarySource)
 				// Evening end clamped to now.
 				wantEnd := time.Date(2026, 4, 15, 22, 0, 0, 0, sydneyTZ).UTC().Format(time.RFC3339)
 				assert.Equal(t, wantEnd, got.Evening.End)
@@ -1765,8 +1765,8 @@ func TestFindEveningNight(t *testing.T) {
 				require.NotNil(t, got)
 				require.NotNil(t, got.Night)
 				assert.Nil(t, got.Evening, "evening must be omitted by today gate (sun still up)")
-				assert.Equal(t, "complete", got.Night.Status)
-				assert.Equal(t, "readings", got.Night.BoundarySource)
+				assert.Equal(t, EveningNightStatusComplete, got.Night.Status)
+				assert.Equal(t, EveningNightBoundaryReadings, got.Night.BoundarySource)
 			},
 		},
 		"fully overcast past day: both blocks estimated, complete": {
@@ -1784,10 +1784,10 @@ func TestFindEveningNight(t *testing.T) {
 				require.NotNil(t, got)
 				require.NotNil(t, got.Night)
 				require.NotNil(t, got.Evening)
-				assert.Equal(t, "complete", got.Night.Status)
-				assert.Equal(t, "complete", got.Evening.Status)
-				assert.Equal(t, "estimated", got.Night.BoundarySource)
-				assert.Equal(t, "estimated", got.Evening.BoundarySource)
+				assert.Equal(t, EveningNightStatusComplete, got.Night.Status)
+				assert.Equal(t, EveningNightStatusComplete, got.Evening.Status)
+				assert.Equal(t, EveningNightBoundaryEstimated, got.Night.BoundarySource)
+				assert.Equal(t, EveningNightBoundaryEstimated, got.Evening.BoundarySource)
 			},
 		},
 		"morning solar but no afternoon (recorder dies at noon): both readings-derived (per spec)": {
@@ -1804,10 +1804,10 @@ func TestFindEveningNight(t *testing.T) {
 				require.NotNil(t, got)
 				require.NotNil(t, got.Night)
 				require.NotNil(t, got.Evening)
-				assert.Equal(t, "readings", got.Night.BoundarySource)
+				assert.Equal(t, EveningNightBoundaryReadings, got.Night.BoundarySource)
 				// Per spec (Decision 2 / design.md): for past days, lastPpvPositive
 				// is used directly even if it's mid-day. Evening start = 12:55.
-				assert.Equal(t, "readings", got.Evening.BoundarySource)
+				assert.Equal(t, EveningNightBoundaryReadings, got.Evening.BoundarySource)
 				wantStart := time.Date(2026, 3, 10, 12, 55, 0, 0, sydneyTZ).UTC().Format(time.RFC3339)
 				assert.Equal(t, wantStart, got.Evening.Start)
 			},
@@ -1850,7 +1850,7 @@ func TestFindEveningNight(t *testing.T) {
 			check: func(t *testing.T, got *EveningNight) {
 				require.NotNil(t, got)
 				require.NotNil(t, got.Evening)
-				assert.Equal(t, "in-progress", got.Evening.Status)
+				assert.Equal(t, EveningNightStatusInProgress, got.Evening.Status)
 				assert.Nil(t, got.Evening.AverageKwhPerHour, "elapsed<60s must omit average")
 			},
 		},
@@ -1870,8 +1870,8 @@ func TestFindEveningNight(t *testing.T) {
 				if got != nil {
 					// On a hypothetical future date treated as past, both blocks
 					// would estimate from the sun table.
-					assert.Equal(t, "estimated", got.Night.BoundarySource)
-					assert.Equal(t, "estimated", got.Evening.BoundarySource)
+					assert.Equal(t, EveningNightBoundaryEstimated, got.Night.BoundarySource)
+					assert.Equal(t, EveningNightBoundaryEstimated, got.Evening.BoundarySource)
 				}
 			},
 		},

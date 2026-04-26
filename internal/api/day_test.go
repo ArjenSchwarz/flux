@@ -83,10 +83,10 @@ func TestHandleDayNormalCase(t *testing.T) {
 	require.NotNil(t, dr.EveningNight, "eveningNight should be present when readings exist")
 	require.NotNil(t, dr.EveningNight.Night, "night block expected")
 	require.NotNil(t, dr.EveningNight.Evening, "evening block expected")
-	assert.Equal(t, "complete", dr.EveningNight.Night.Status)
-	assert.Equal(t, "complete", dr.EveningNight.Evening.Status)
-	assert.Equal(t, "readings", dr.EveningNight.Night.BoundarySource)
-	assert.Equal(t, "readings", dr.EveningNight.Evening.BoundarySource)
+	assert.Equal(t, EveningNightStatusComplete, dr.EveningNight.Night.Status)
+	assert.Equal(t, EveningNightStatusComplete, dr.EveningNight.Evening.Status)
+	assert.Equal(t, EveningNightBoundaryReadings, dr.EveningNight.Night.BoundarySource)
+	assert.Equal(t, EveningNightBoundaryReadings, dr.EveningNight.Evening.BoundarySource)
 }
 
 func TestHandleDayEveningNightPerBlockFallback(t *testing.T) {
@@ -122,10 +122,10 @@ func TestHandleDayEveningNightPerBlockFallback(t *testing.T) {
 	require.NotNil(t, dr.EveningNight, "eveningNight should be present even on overcast days")
 	require.NotNil(t, dr.EveningNight.Night)
 	require.NotNil(t, dr.EveningNight.Evening)
-	assert.Equal(t, "estimated", dr.EveningNight.Night.BoundarySource, "no Ppv>0 → estimated")
-	assert.Equal(t, "estimated", dr.EveningNight.Evening.BoundarySource, "no Ppv>0 → estimated")
-	assert.Equal(t, "complete", dr.EveningNight.Night.Status)
-	assert.Equal(t, "complete", dr.EveningNight.Evening.Status)
+	assert.Equal(t, EveningNightBoundaryEstimated, dr.EveningNight.Night.BoundarySource, "no Ppv>0 → estimated")
+	assert.Equal(t, EveningNightBoundaryEstimated, dr.EveningNight.Evening.BoundarySource, "no Ppv>0 → estimated")
+	assert.Equal(t, EveningNightStatusComplete, dr.EveningNight.Night.Status)
+	assert.Equal(t, EveningNightStatusComplete, dr.EveningNight.Evening.Status)
 }
 
 func TestHandleDayFallbackToDailyPower(t *testing.T) {

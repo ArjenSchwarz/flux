@@ -647,22 +647,35 @@ func findEveningNight(readings []dynamo.ReadingItem, date, today string, now tim
 		}
 	}
 
+	// Resolve sunset once — it may be needed by both the evening today-gate
+	// and the evening fallback. Sunrise is only consumed by the night
+	// fallback so it stays inline.
+	sunsetResolved := false
+	var sunset time.Time
+	resolveSunset := func() time.Time {
+		if !sunsetResolved {
+			sunset = melbourneSunriseSunset(date, false)
+			sunsetResolved = true
+		}
+		return sunset
+	}
+
 	var nightBlock *EveningNightBlock
 	{
 		// Step 4: build night block.
 		var nominalEnd time.Time
-		boundarySource := "readings"
+		boundarySource := EveningNightBoundaryReadings
 		if firstPpv != nil {
 			nominalEnd = time.Unix(firstPpv.Timestamp, 0)
 		} else {
 			nominalEnd = melbourneSunriseSunset(date, true)
-			boundarySource = "estimated"
+			boundarySource = EveningNightBoundaryEstimated
 		}
 		end := nominalEnd
-		status := "complete"
+		status := EveningNightStatusComplete
 		if isToday && nominalEnd.After(now) {
 			end = now
-			status = "in-progress"
+			status = EveningNightStatusInProgress
 		}
 		if dayStart.Before(end) {
 			nightBlock = buildEveningNightBlock(readings, dayStart, end, boundarySource, status)
@@ -674,26 +687,25 @@ func findEveningNight(readings []dynamo.ReadingItem, date, today string, now tim
 		// Step 5: build evening block.
 		emit := true
 		if isToday {
-			sunset := melbourneSunriseSunset(date, false)
 			// Today gate: omit when the sun has not astronomically set yet.
-			if !now.After(sunset) {
+			if !now.After(resolveSunset()) {
 				emit = false
 			}
 		}
 		if emit {
 			var nominalStart time.Time
-			boundarySource := "readings"
+			boundarySource := EveningNightBoundaryReadings
 			if lastPpv != nil {
 				nominalStart = time.Unix(lastPpv.Timestamp, 0)
 			} else {
-				nominalStart = melbourneSunriseSunset(date, false)
-				boundarySource = "estimated"
+				nominalStart = resolveSunset()
+				boundarySource = EveningNightBoundaryEstimated
 			}
 			end := dayEnd
-			status := "complete"
+			status := EveningNightStatusComplete
 			if isToday && dayEnd.After(now) {
 				end = now
-				status = "in-progress"
+				status = EveningNightStatusInProgress
 			}
 			if nominalStart.Before(end) {
 				eveningBlock = buildEveningNightBlock(readings, nominalStart, end, boundarySource, status)
