@@ -22,10 +22,10 @@ var sydneyTZ = func() *time.Location {
 // offpeakDeltas resolves the energy deltas for an off-peak record.
 //
 // A complete record carries final deltas from the poller. A pending record
-// requires a current snapshot (today's running totals) to project against
-// the start snapshot; without one the deltas are unknown. Returns ok=false
-// when the data is not usable.
-func offpeakDeltas(op dynamo.OffpeakItem, today *TodayEnergy) (deltas offpeakDeltaValues, ok bool) {
+// requires a current snapshot (the running totals for the same day as op)
+// to project against the start snapshot; without one the deltas are
+// unknown. Returns ok=false when the data is not usable.
+func offpeakDeltas(op dynamo.OffpeakItem, current *TodayEnergy) (deltas offpeakDeltaValues, ok bool) {
 	switch op.Status {
 	case dynamo.OffpeakStatusComplete:
 		return offpeakDeltaValues{
@@ -36,21 +36,21 @@ func offpeakDeltas(op dynamo.OffpeakItem, today *TodayEnergy) (deltas offpeakDel
 			GridExport:       op.GridExportKwh,
 		}, true
 	case dynamo.OffpeakStatusPending:
-		if today == nil {
+		if current == nil {
 			return offpeakDeltaValues{}, false
 		}
 		// Energy counters are monotonically non-decreasing, so deltas
 		// should never be negative. They can briefly appear negative if
-		// today's running snapshot lags the start snapshot (poller writes
-		// the start record, then a later reconciliation reduces the
-		// running total). Clamp to zero so the dashboard never shows
-		// nonsense like "-0.1 kWh imported".
+		// the running snapshot lags the start snapshot (poller writes the
+		// start record, then a later reconciliation reduces the running
+		// total). Clamp to zero so the dashboard never shows nonsense
+		// like "-0.1 kWh imported".
 		return offpeakDeltaValues{
-			GridImport:       max(0, today.EInput-op.StartEInput),
-			Solar:            max(0, today.Epv-op.StartEpv),
-			BatteryCharge:    max(0, today.ECharge-op.StartECharge),
-			BatteryDischarge: max(0, today.EDischarge-op.StartEDischarge),
-			GridExport:       max(0, today.EOutput-op.StartEOutput),
+			GridImport:       max(0, current.EInput-op.StartEInput),
+			Solar:            max(0, current.Epv-op.StartEpv),
+			BatteryCharge:    max(0, current.ECharge-op.StartECharge),
+			BatteryDischarge: max(0, current.EDischarge-op.StartEDischarge),
+			GridExport:       max(0, current.EOutput-op.StartEOutput),
 		}, true
 	}
 	return offpeakDeltaValues{}, false

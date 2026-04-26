@@ -30,7 +30,10 @@ struct HistoryGridUsageCard: View {
         guard !entries.isEmpty else { return "Off-peak split unavailable" }
         let offpeak = HistoryFormatters.kwh(summary.offpeakImportTotalKwh)
         let exported = HistoryFormatters.kwh(summary.exportTotalKwh)
-        return "\(offpeak) off-peak · \(exported) exported"
+        // "Exported" totals are full-day, not the off-peak slice — the
+        // off-peak export portion is banked on the model but not yet
+        // consumed (see DayEnergy.offpeakGridExportKwh).
+        return "\(offpeak) off-peak · \(exported) exported (all day)"
     }
 
     private var placeholder: some View {

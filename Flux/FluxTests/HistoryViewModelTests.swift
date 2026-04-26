@@ -108,7 +108,8 @@ struct HistoryViewModelTests {
     func summaryExcludesTodayFromAveragesButCountsOffpeakAlways() async throws {
         let modelContext = try makeModelContext()
         let apiClient = MockHistoryAPIClient()
-        // nowProvider below resolves to 2026-04-16 in Sydney; that day is "today".
+        // nowProvider below is 14:30 UTC on 2026-04-15 = 00:30 AEST on
+        // 2026-04-16, so 2026-04-16 is the Sydney "today" used by the VM.
         apiClient.historyResult = .success(HistoryResponse(days: [
             DayEnergy(
                 date: "2026-04-15", epv: 10.0, eInput: 4.0, eOutput: 1.0, eCharge: 5.0, eDischarge: 4.0,

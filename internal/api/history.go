@@ -56,9 +56,17 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 		return err
 	})
 	g.Go(func() error {
+		// Off-peak data is supplementary — the iOS grid card already
+		// renders a placeholder when the split is missing. A throttle on
+		// the off-peak table shouldn't take down the entire history
+		// response, so log and continue without the split.
 		result, err := h.reader.QueryOffpeak(gctx, h.serial, startDate, today)
+		if err != nil {
+			slog.Warn("history offpeak query failed; proceeding without split", "error", err)
+			return nil
+		}
 		offpeakItems = result
-		return err
+		return nil
 	})
 
 	if err := g.Wait(); err != nil {

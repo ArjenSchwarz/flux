@@ -329,13 +329,6 @@ func TestHandleHistoryDynamoDBError(t *testing.T) {
 				},
 			},
 		},
-		"offpeak error": {
-			mock: &mockReader{
-				queryOffpeakFn: func(_ context.Context, _, _, _ string) ([]dynamo.OffpeakItem, error) {
-					return nil, errors.New("throttled")
-				},
-			},
-		},
 	}
 
 	for name, tc := range tests {
@@ -353,4 +346,36 @@ func TestHandleHistoryDynamoDBError(t *testing.T) {
 			assert.Equal(t, "internal error", body["error"])
 		})
 	}
+}
+
+// TestHandleHistoryOffpeakSoftFailure verifies that an off-peak query
+// failure does not take down the entire history response. The iOS grid
+// card already degrades gracefully when the split is missing, so a
+// throttle on the off-peak table should yield a 200 with the daily
+// energy rows intact and no off-peak split fields populated.
+func TestHandleHistoryOffpeakSoftFailure(t *testing.T) {
+	now := fixedNow()
+	mr := &mockReader{
+		queryDailyEnergyFn: func(_ context.Context, _, _, _ string) ([]dynamo.DailyEnergyItem, error) {
+			return []dynamo.DailyEnergyItem{
+				{Date: "2026-04-14", Epv: 18, EInput: 4.5, EOutput: 1.2, ECharge: 9, EDischarge: 8},
+			}, nil
+		},
+		queryOffpeakFn: func(_ context.Context, _, _, _ string) ([]dynamo.OffpeakItem, error) {
+			return nil, errors.New("throttled")
+		},
+	}
+
+	h := NewHandler(mr, testSerial, testToken, "11:00", "14:00")
+	h.nowFunc = func() time.Time { return now }
+
+	resp, err := h.Handle(context.Background(), historyRequest(nil))
+	require.NoError(t, err)
+	assert.Equal(t, 200, resp.StatusCode)
+
+	hr := parseHistoryResponse(t, resp)
+	require.Len(t, hr.Days, 1)
+	assert.Equal(t, "2026-04-14", hr.Days[0].Date)
+	assert.Nil(t, hr.Days[0].OffpeakGridImportKwh)
+	assert.Nil(t, hr.Days[0].OffpeakGridExportKwh)
 }
