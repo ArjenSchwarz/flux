@@ -24,19 +24,30 @@ enum EnergySummaryFormatter {
         gridImport: Double?,
         gridExport: Double?,
         batteryCharge: Double?,
-        batteryDischarge: Double?
+        batteryDischarge: Double?,
+        offpeakGridImport: Double? = nil
     ) -> [EnergySummaryRow] {
-        [
-            EnergySummaryRow(title: "Solar", value: formatKwh(solar)),
-            EnergySummaryRow(
+        var rows: [EnergySummaryRow] = [
+            EnergySummaryRow(title: "Solar", value: formatKwh(solar))
+        ]
+
+        if let offpeak = offpeakGridImport, let total = gridImport {
+            let peak = max(0, total - offpeak)
+            rows.append(EnergySummaryRow(title: "Grid in (peak)", value: formatKwh(peak)))
+            rows.append(EnergySummaryRow(title: "Grid in (off-peak)", value: formatKwh(offpeak)))
+            rows.append(EnergySummaryRow(title: "Grid out", value: formatKwh(gridExport)))
+        } else {
+            rows.append(EnergySummaryRow(
                 title: "Grid (import/export)",
                 value: "\(formatKwh(gridImport)) / \(formatKwh(gridExport))"
-            ),
-            EnergySummaryRow(
-                title: "Battery (+/-)",
-                value: "\(formatKwh(batteryCharge)) / \(formatKwh(batteryDischarge))"
-            )
-        ]
+            ))
+        }
+
+        rows.append(EnergySummaryRow(
+            title: "Battery (+/-)",
+            value: "\(formatKwh(batteryCharge)) / \(formatKwh(batteryDischarge))"
+        ))
+        return rows
     }
 
     static func rows(for day: DayEnergy) -> [EnergySummaryRow] {
@@ -45,7 +56,8 @@ enum EnergySummaryFormatter {
             gridImport: day.eInput,
             gridExport: day.eOutput,
             batteryCharge: day.eCharge,
-            batteryDischarge: day.eDischarge
+            batteryDischarge: day.eDischarge,
+            offpeakGridImport: day.offpeakGridImportKwh
         )
     }
 

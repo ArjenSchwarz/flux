@@ -241,6 +241,76 @@ func TestHandleHistoryReconcilesTodaysRow(t *testing.T) {
 	assert.InDelta(t, 0.1, hr.Days[1].EDischarge, 0.001, "today's eDischarge should be reconciled")
 }
 
+// TestHandleHistoryOffpeakSplit verifies the per-day off-peak grid split:
+// complete records pass through final deltas, today's pending record is
+// projected forward against live totals, and days without an off-peak record
+// (or with a stale pending record from a poller failure) report no split.
+func TestHandleHistoryOffpeakSplit(t *testing.T) {
+	loc, _ := time.LoadLocation("Australia/Sydney")
+	now := fixedNow()
+	today := now.In(loc).Format("2006-01-02")
+	yesterday := now.AddDate(0, 0, -1).In(loc).Format("2006-01-02")
+	twoDaysAgo := now.AddDate(0, 0, -2).In(loc).Format("2006-01-02")
+
+	mr := &mockReader{
+		queryDailyEnergyFn: func(_ context.Context, _, _, _ string) ([]dynamo.DailyEnergyItem, error) {
+			return []dynamo.DailyEnergyItem{
+				{Date: twoDaysAgo, Epv: 15, EInput: 4, EOutput: 1, ECharge: 8, EDischarge: 7},
+				{Date: yesterday, Epv: 16, EInput: 5, EOutput: 2, ECharge: 9, EDischarge: 8},
+				{Date: today, Epv: 12, EInput: 3.2, EOutput: 0.7, ECharge: 4, EDischarge: 3},
+			}, nil
+		},
+		queryOffpeakFn: func(_ context.Context, _, _, _ string) ([]dynamo.OffpeakItem, error) {
+			return []dynamo.OffpeakItem{
+				// Complete record for yesterday — final deltas.
+				{
+					Date: yesterday, Status: dynamo.OffpeakStatusComplete,
+					GridUsageKwh: 2.4, GridExportKwh: 0.6,
+				},
+				// Stale pending record from two days ago — poller failed mid-window.
+				{
+					Date: twoDaysAgo, Status: dynamo.OffpeakStatusPending,
+					StartEInput: 1.0, StartEOutput: 0.5,
+				},
+				// Pending record for today — project against live totals.
+				{
+					Date: today, Status: dynamo.OffpeakStatusPending,
+					StartEInput: 1.7, StartEOutput: 0.4,
+				},
+			}, nil
+		},
+	}
+
+	h := NewHandler(mr, testSerial, testToken, "11:00", "14:00")
+	h.nowFunc = func() time.Time { return now }
+
+	resp, err := h.Handle(context.Background(), historyRequest(nil))
+	require.NoError(t, err)
+	assert.Equal(t, 200, resp.StatusCode)
+
+	hr := parseHistoryResponse(t, resp)
+	require.Len(t, hr.Days, 3)
+
+	// twoDaysAgo: stale pending record — split should be missing.
+	assert.Equal(t, twoDaysAgo, hr.Days[0].Date)
+	assert.Nil(t, hr.Days[0].OffpeakGridImportKwh)
+	assert.Nil(t, hr.Days[0].OffpeakGridExportKwh)
+
+	// yesterday: complete record — final deltas surface.
+	assert.Equal(t, yesterday, hr.Days[1].Date)
+	require.NotNil(t, hr.Days[1].OffpeakGridImportKwh)
+	assert.InDelta(t, 2.4, *hr.Days[1].OffpeakGridImportKwh, 0.001)
+	require.NotNil(t, hr.Days[1].OffpeakGridExportKwh)
+	assert.InDelta(t, 0.6, *hr.Days[1].OffpeakGridExportKwh, 0.001)
+
+	// today: pending record projected against running totals.
+	assert.Equal(t, today, hr.Days[2].Date)
+	require.NotNil(t, hr.Days[2].OffpeakGridImportKwh)
+	assert.InDelta(t, 1.5, *hr.Days[2].OffpeakGridImportKwh, 0.001)
+	require.NotNil(t, hr.Days[2].OffpeakGridExportKwh)
+	assert.InDelta(t, 0.3, *hr.Days[2].OffpeakGridExportKwh, 0.001)
+}
+
 func TestHandleHistoryDynamoDBError(t *testing.T) {
 	tests := map[string]struct {
 		mock *mockReader
@@ -255,6 +325,13 @@ func TestHandleHistoryDynamoDBError(t *testing.T) {
 		"readings error": {
 			mock: &mockReader{
 				queryReadingsFn: func(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
+					return nil, errors.New("throttled")
+				},
+			},
+		},
+		"offpeak error": {
+			mock: &mockReader{
+				queryOffpeakFn: func(_ context.Context, _, _, _ string) ([]dynamo.OffpeakItem, error) {
 					return nil, errors.New("throttled")
 				},
 			},

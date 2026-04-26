@@ -30,22 +30,42 @@ struct HistoryView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                HistoryChartView(
-                    selectedRange: $selectedRange,
-                    chartDays: viewModel.chartDays,
-                    chartEntries: viewModel.chartEntries,
-                    selectedDay: viewModel.selectedDay,
-                    onSelectDay: viewModel.selectDay
-                )
-                .padding()
-                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                Picker("Range", selection: $selectedRange) {
+                    Text("7d").tag(7)
+                    Text("14d").tag(14)
+                    Text("30d").tag(30)
+                }
+                .pickerStyle(.segmented)
 
-                if let selectedDay = viewModel.selectedDay {
-                    summaryCard(for: selectedDay)
-                } else if let error = viewModel.error, viewModel.days.isEmpty, !viewModel.isLoading {
+                if viewModel.days.isEmpty, let error = viewModel.error, !viewModel.isLoading {
                     errorState(error)
-                } else if !viewModel.isLoading {
+                } else if viewModel.days.isEmpty, !viewModel.isLoading {
                     emptyState
+                } else {
+                    HistorySolarCard(
+                        entries: viewModel.solarSeries,
+                        summary: viewModel.summary,
+                        selectedDayID: viewModel.selectedDay?.date,
+                        onSelect: selectDay
+                    )
+
+                    HistoryGridUsageCard(
+                        entries: viewModel.gridSeries,
+                        summary: viewModel.summary,
+                        selectedDayID: viewModel.selectedDay?.date,
+                        onSelect: selectDay
+                    )
+
+                    HistoryBatteryCard(
+                        entries: viewModel.batterySeries,
+                        summary: viewModel.summary,
+                        selectedDayID: viewModel.selectedDay?.date,
+                        onSelect: selectDay
+                    )
+
+                    if let selectedDay = viewModel.selectedDay {
+                        summaryCard(for: selectedDay)
+                    }
                 }
             }
             .padding()
@@ -71,6 +91,12 @@ struct HistoryView: View {
                         }
                     }
             }
+        }
+    }
+
+    private func selectDay(_ dayID: String) {
+        if let day = viewModel.days.first(where: { $0.date == dayID }) {
+            viewModel.selectDay(day)
         }
     }
 

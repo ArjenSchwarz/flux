@@ -10,8 +10,13 @@
 
 ## History Views (History/)
 
-- **HistoryChartView** — Grouped BarMark with metrics, day range picker (7/14/30). Chart data comes pre-computed from HistoryViewModel.
-- **HistoryView** — Chart + summary card, `ContentUnavailableView` when empty. Error card with retry/settings for empty-cache failures.
+- **HistoryView** — Multi-card layout. Range picker (7/14/30), three chart cards (solar, grid usage, battery), then a per-day summary card and `View day detail` link. Empty/error states replace the cards when there is no data.
+- **HistorySolarCard** — Green daily bars with a dashed average rule. Today's bar dimmed.
+- **HistoryGridUsageCard** — Diverging stacked bars: peak import (red) on top of off-peak import (teal), exports (blue) below the zero line. Header KPI leads with peak imports because that's the actionable number for an off-peak charging strategy. Days without an off-peak record are hidden from this card; if no day has a split the card shows a placeholder.
+- **HistoryBatteryCard** — Charge (orange, above zero) and discharge (purple, below zero) per day.
+- **HistoryCardChrome** — Shared rounded-rectangle container, header (title + KPI) and optional subtitle.
+- **ChartHighlightOverlay** — `historySelectionOverlay` view extension. Shared drag-to-select gesture that maps the touch x-position to the nearest entry's date and reports the day ID; a single `selectedDay` on the view model drives the highlight rectangle in every chart.
+- **HistoryFormatters** — `kwh` helper picks 1 decimal under 100 kWh, 0 above.
 
 ## Day Detail Views (DayDetail/)
 

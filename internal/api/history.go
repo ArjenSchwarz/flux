@@ -30,15 +30,15 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 
 	startDate := now.AddDate(0, 0, -(days - 1)).Format("2006-01-02")
 
-	// Fetch daily energy rows and today's readings concurrently. Today's row is
-	// reconciled against a live integration so it matches the dashboard's
-	// /status view; past rows are already finalized and pass through unchanged.
-	// Readings are always fetched — the concurrent cost is negligible and the
-	// alternative (only fetching when today is in range) duplicates the gating
-	// logic below.
+	// Fetch daily energy rows, today's readings, and per-day off-peak rows
+	// concurrently. Today's row is reconciled against a live integration so
+	// it matches the dashboard's /status view; past rows are already
+	// finalized and pass through unchanged. Off-peak rows are joined by date
+	// to expose the peak vs. off-peak grid split.
 	var (
-		items       []dynamo.DailyEnergyItem
-		allReadings []dynamo.ReadingItem
+		items        []dynamo.DailyEnergyItem
+		allReadings  []dynamo.ReadingItem
+		offpeakItems []dynamo.OffpeakItem
 	)
 
 	g, gctx := errgroup.WithContext(ctx)
@@ -55,6 +55,11 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 		allReadings = result
 		return err
 	})
+	g.Go(func() error {
+		result, err := h.reader.QueryOffpeak(gctx, h.serial, startDate, today)
+		offpeakItems = result
+		return err
+	})
 
 	if err := g.Wait(); err != nil {
 		slog.Error("history query failed", "error", err)
@@ -65,6 +70,11 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 	if len(allReadings) > 0 {
 		midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, sydneyTZ).Unix()
 		todayComputed = computeTodayEnergy(allReadings, midnight)
+	}
+
+	offpeakByDate := make(map[string]dynamo.OffpeakItem, len(offpeakItems))
+	for _, op := range offpeakItems {
+		offpeakByDate[op.Date] = op
 	}
 
 	result := make([]DayEnergy, len(items))
@@ -80,7 +90,7 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 		if item.Date == today {
 			energy = reconcileEnergy(todayComputed, stored)
 		}
-		result[i] = DayEnergy{
+		day := DayEnergy{
 			Date:       item.Date,
 			Epv:        energy.Epv,
 			EInput:     energy.EInput,
@@ -88,7 +98,37 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 			ECharge:    energy.ECharge,
 			EDischarge: energy.EDischarge,
 		}
+		if op, ok := offpeakByDate[item.Date]; ok {
+			imp, exp, hasSplit := offpeakSplit(op, energy, item.Date == today)
+			if hasSplit {
+				day.OffpeakGridImportKwh = floatPtr(imp)
+				day.OffpeakGridExportKwh = floatPtr(exp)
+			}
+		}
+		result[i] = day
 	}
 
 	return jsonResponse(&HistoryResponse{Days: result})
+}
+
+// offpeakSplit returns the off-peak grid import and export for a single day.
+//
+// Complete records carry final deltas computed at window close. A pending
+// record on today's date can be projected forward against the running daily
+// energy totals; pending records on past dates indicate a poller failure and
+// are reported as missing rather than zero. Returns hasSplit=false when the
+// data is not usable.
+func offpeakSplit(op dynamo.OffpeakItem, energy *TodayEnergy, isToday bool) (imp, exp float64, hasSplit bool) {
+	switch op.Status {
+	case dynamo.OffpeakStatusComplete:
+		return roundEnergy(op.GridUsageKwh), roundEnergy(op.GridExportKwh), true
+	case dynamo.OffpeakStatusPending:
+		if !isToday {
+			return 0, 0, false
+		}
+		return roundEnergy(energy.EInput - op.StartEInput),
+			roundEnergy(energy.EOutput - op.StartEOutput),
+			true
+	}
+	return 0, 0, false
 }

@@ -133,8 +133,9 @@ func (h *Handler) handleStatus(ctx context.Context, _ events.LambdaFunctionURLRe
 		resp.Rolling15m = rolling
 	}
 
-	// Off-peak data — always includes window times, deltas only when complete.
-	resp.Offpeak = buildOffpeak(opItem, h.offpeakStart, h.offpeakEnd)
+	// Off-peak data — always includes window times, plus deltas when complete
+	// or computable from the current daily-energy snapshot during the window.
+	resp.Offpeak = buildOffpeak(opItem, deItem, h.offpeakStart, h.offpeakEnd)
 
 	// Today's energy: compute from readings, reconcile with DailyEnergyItem.
 	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, sydneyTZ).Unix()
@@ -167,19 +168,43 @@ func filterReadings(readings []dynamo.ReadingItem, from, to int64) []dynamo.Read
 }
 
 // buildOffpeak constructs the OffpeakData response.
-// Always includes window times; delta fields only populated when status is "complete".
-func buildOffpeak(item *dynamo.OffpeakItem, windowStart, windowEnd string) *OffpeakData {
+//
+// Window times are always included. Deltas come from one of two sources:
+//   - Complete record: the poller has captured both start and end snapshots
+//     and computed final deltas.
+//   - In-progress: a pending record exists (start snapshot only) and a
+//     daily-energy item is available, so deltas can be computed against the
+//     current running totals. Battery delta percent is unknown mid-window
+//     because we lack a current SOC-as-of-now in this slice.
+//
+// Returns deltas as nil when neither source is usable.
+func buildOffpeak(item *dynamo.OffpeakItem, today *dynamo.DailyEnergyItem, windowStart, windowEnd string) *OffpeakData {
 	od := &OffpeakData{
 		WindowStart: windowStart,
 		WindowEnd:   windowEnd,
 	}
-	if item != nil && item.Status == dynamo.OffpeakStatusComplete {
+	if item == nil {
+		return od
+	}
+	switch item.Status {
+	case dynamo.OffpeakStatusComplete:
+		od.Status = item.Status
 		od.GridUsageKwh = floatPtr(roundEnergy(item.GridUsageKwh))
 		od.SolarKwh = floatPtr(roundEnergy(item.SolarKwh))
 		od.BatteryChargeKwh = floatPtr(roundEnergy(item.BatteryChargeKwh))
 		od.BatteryDischargeKwh = floatPtr(roundEnergy(item.BatteryDischargeKwh))
 		od.GridExportKwh = floatPtr(roundEnergy(item.GridExportKwh))
 		od.BatteryDeltaPercent = floatPtr(roundPower(item.BatteryDeltaPercent))
+	case dynamo.OffpeakStatusPending:
+		if today == nil {
+			return od
+		}
+		od.Status = item.Status
+		od.GridUsageKwh = floatPtr(roundEnergy(today.EInput - item.StartEInput))
+		od.SolarKwh = floatPtr(roundEnergy(today.Epv - item.StartEpv))
+		od.BatteryChargeKwh = floatPtr(roundEnergy(today.ECharge - item.StartECharge))
+		od.BatteryDischargeKwh = floatPtr(roundEnergy(today.EDischarge - item.StartEDischarge))
+		od.GridExportKwh = floatPtr(roundEnergy(today.EOutput - item.StartEOutput))
 	}
 	return od
 }

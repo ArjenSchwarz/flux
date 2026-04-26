@@ -34,7 +34,7 @@
 - Phase 1: errgroup with 4 concurrent DynamoDB queries (readings 24h, system, offpeak, daily energy). Any failure → 500.
 - Phase 2: in-memory computation — extract latest reading, filter to 60s/15min subsets, compute pgridSustained, rolling averages, cutoff estimates, findMinSOC for low24h.
 - `filterReadings(readings, from, to)` — returns subset by timestamp range.
-- `buildOffpeak(item, windowStart, windowEnd)` — always includes window times, delta fields only when status is "complete".
+- `buildOffpeak(item, today, windowStart, windowEnd)` — always includes window times. Deltas come from a complete record's final values, or are projected from today's running `DailyEnergyItem` against the pending record's start snapshot. Pending without a daily-energy item leaves deltas null. The response carries a `status` field (`"pending"` or `"complete"`) so clients can mark in-progress data; `batteryDeltaPercent` is unavailable mid-window because no current SOC is computed in this slice.
 - `floatPtr(v)` — helper for nullable float64 fields.
 - Battery capacity: fallback 13.34 when system missing or cobat == 0.
 - Rolling 15min: requires >= 2 readings in window, otherwise null.
@@ -45,8 +45,9 @@
 - Date range: `today.AddDate(0, 0, -(days-1))` to today.
 - Results come pre-sorted from DynamoDB (ScanIndexForward: true).
 - All energy values rounded via `roundEnergy`.
-- Concurrent queries via errgroup: daily energy rows + last 24h of readings. The readings are used to compute today's integrated energy via `computeTodayEnergy`; only the row whose `Date == today` is then reconciled with `reconcileEnergy`. Past rows pass through untouched (the midnight finalizer has already written their authoritative totals).
+- Concurrent queries via errgroup: daily energy rows + last 24h of readings + per-day off-peak rows (`QueryOffpeak`). The readings are used to compute today's integrated energy via `computeTodayEnergy`; only the row whose `Date == today` is then reconciled with `reconcileEnergy`. Past rows pass through untouched (the midnight finalizer has already written their authoritative totals).
 - This keeps today's row consistent with `/status` and `/day` for today — see T-828.
+- Each `DayEnergy` carries optional `OffpeakGridImportKwh` / `OffpeakGridExportKwh`. `offpeakSplit` resolves them: complete records pass through, today's pending record is projected against the running totals, stale pending records on past dates report no split (the iOS grid card hides days without a split rather than rendering zeros).
 
 ## Day Endpoint
 
@@ -80,7 +81,7 @@
 
 ## Mock Reader
 
-`handler_test.go` defines `mockReader` with function fields for all 6 Reader methods. Default behavior returns empty results (no error). Shared test helpers: `newTestHandler()`, `makeRequest(method, path, authHeader)`.
+`handler_test.go` defines `mockReader` with function fields for all 7 Reader methods. Default behavior returns empty results (no error). Shared test helpers: `newTestHandler()`, `makeRequest(method, path, authHeader)`.
 
 ## Testing Notes
 

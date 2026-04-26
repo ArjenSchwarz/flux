@@ -97,8 +97,12 @@ public struct OffpeakData: Codable, Sendable {
     public static let defaultWindowStart = "11:00"
     public static let defaultWindowEnd = "14:00"
 
+    public static let statusComplete = "complete"
+    public static let statusPending = "pending"
+
     public let windowStart: String
     public let windowEnd: String
+    public let status: String?
     public let gridUsageKwh: Double?
     public let solarKwh: Double?
     public let batteryChargeKwh: Double?
@@ -106,9 +110,12 @@ public struct OffpeakData: Codable, Sendable {
     public let gridExportKwh: Double?
     public let batteryDeltaPercent: Double?
 
+    public var isInProgress: Bool { status == Self.statusPending }
+
     public init(
         windowStart: String,
         windowEnd: String,
+        status: String? = nil,
         gridUsageKwh: Double?,
         solarKwh: Double?,
         batteryChargeKwh: Double?,
@@ -118,6 +125,7 @@ public struct OffpeakData: Codable, Sendable {
     ) {
         self.windowStart = windowStart
         self.windowEnd = windowEnd
+        self.status = status
         self.gridUsageKwh = gridUsageKwh
         self.solarKwh = solarKwh
         self.batteryChargeKwh = batteryChargeKwh
@@ -160,8 +168,19 @@ public struct DayEnergy: Codable, Sendable, Identifiable {
     public let eOutput: Double
     public let eCharge: Double
     public let eDischarge: Double
+    public let offpeakGridImportKwh: Double?
+    public let offpeakGridExportKwh: Double?
 
     public var id: String { date }
+
+    /// Grid imports outside the off-peak window, derived by subtracting the
+    /// off-peak portion from the day's total. Returns `nil` when no off-peak
+    /// data is available for the day, so callers can distinguish "unknown"
+    /// from a true zero.
+    public var peakGridImportKwh: Double? {
+        guard let offpeak = offpeakGridImportKwh else { return nil }
+        return max(0, eInput - offpeak)
+    }
 
     public init(
         date: String,
@@ -169,7 +188,9 @@ public struct DayEnergy: Codable, Sendable, Identifiable {
         eInput: Double,
         eOutput: Double,
         eCharge: Double,
-        eDischarge: Double
+        eDischarge: Double,
+        offpeakGridImportKwh: Double? = nil,
+        offpeakGridExportKwh: Double? = nil
     ) {
         self.date = date
         self.epv = epv
@@ -177,6 +198,8 @@ public struct DayEnergy: Codable, Sendable, Identifiable {
         self.eOutput = eOutput
         self.eCharge = eCharge
         self.eDischarge = eDischarge
+        self.offpeakGridImportKwh = offpeakGridImportKwh
+        self.offpeakGridExportKwh = offpeakGridExportKwh
     }
 }
 
