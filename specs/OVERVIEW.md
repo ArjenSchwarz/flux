@@ -10,6 +10,7 @@
 | [Peak Usage Periods](#peak-usage-periods) | 2026-04-17 | Done | Day detail card highlighting top high-consumption periods outside the off-peak window. |
 | [Add Widgets](#add-widgets) | 2026-04-21 | Done | WidgetKit home and lock-screen widgets surfacing battery state and live power data. |
 | [History Multi Card](#history-multi-card) | 2026-04-26 | Done | History screen rewrite: solar / grid (peak vs off-peak) / battery cards with shared selection. |
+| [Evening / Night Stats](#evening--night-stats) | 2026-04-26 | Planned | Day detail card showing usage during the no-solar evening (sunset → midnight) and night (midnight → sunrise) periods. |
 
 ---
 
@@ -92,3 +93,12 @@ WidgetKit home and lock-screen widgets surfacing battery state and live power da
 History screen rewrite: solar / grid (peak vs off-peak) / battery cards with shared selection.
 
 - [pre-push-review.md](history-multi-card/pre-push-review.md)
+
+## Evening / Night Stats
+
+Day detail card showing usage during the no-solar evening (sunset → midnight) and night (midnight → sunrise) periods, computed by `/day` from existing readings with a static Melbourne sunrise/sunset table as fallback.
+
+- [decision_log.md](evening-night-stats/decision_log.md)
+- [design.md](evening-night-stats/design.md)
+- [requirements.md](evening-night-stats/requirements.md)
+- [tasks.md](evening-night-stats/tasks.md)
