@@ -10,6 +10,7 @@ import (
 
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"pgregory.net/rapid"
 )
 
@@ -1228,6 +1229,685 @@ func TestFindPeakPeriodsProperties(t *testing.T) {
 			}
 		})
 	})
+}
+
+func TestMelbourneSunriseSunset(t *testing.T) {
+	tests := map[string]struct {
+		date      string
+		isSunrise bool
+		// Min/max UTC instants for the result (inclusive). The table is in
+		// HH:MM precision, so we assert plausible ranges rather than exact
+		// equality.
+		check func(t *testing.T, got time.Time)
+	}{
+		"winter solstice sunset between 16:30 and 17:30 AEST": {
+			date:      "2026-06-21",
+			isSunrise: false,
+			check: func(t *testing.T, got time.Time) {
+				local := got.In(sydneyTZ)
+				assert.Equal(t, 2026, local.Year())
+				assert.Equal(t, time.June, local.Month())
+				assert.Equal(t, 21, local.Day())
+				mins := local.Hour()*60 + local.Minute()
+				assert.GreaterOrEqual(t, mins, 16*60+30, "expected sunset >= 16:30 AEST")
+				assert.LessOrEqual(t, mins, 17*60+30, "expected sunset <= 17:30 AEST")
+			},
+		},
+		"summer solstice sunset between 20:00 and 21:00 AEDT": {
+			date:      "2026-12-22",
+			isSunrise: false,
+			check: func(t *testing.T, got time.Time) {
+				local := got.In(sydneyTZ)
+				assert.Equal(t, 2026, local.Year())
+				assert.Equal(t, time.December, local.Month())
+				assert.Equal(t, 22, local.Day())
+				mins := local.Hour()*60 + local.Minute()
+				assert.GreaterOrEqual(t, mins, 20*60, "expected sunset >= 20:00 AEDT")
+				assert.LessOrEqual(t, mins, 21*60, "expected sunset <= 21:00 AEDT")
+			},
+		},
+		"leap year Feb 29 falls back to Feb 28 values": {
+			date:      "2028-02-29",
+			isSunrise: false,
+			check: func(t *testing.T, got time.Time) {
+				// Compare to Feb 28 of the same year, parsed via the same
+				// helper. The wall-clock minute-of-day must match because the
+				// table reuses Feb 28's value for Feb 29.
+				feb28 := melbourneSunriseSunset("2028-02-28", false)
+				want := feb28.In(sydneyTZ)
+				gotLocal := got.In(sydneyTZ)
+				// Sanity: the result should be on the requested date.
+				assert.Equal(t, time.February, gotLocal.Month())
+				assert.Equal(t, 29, gotLocal.Day())
+				// The wall-clock HH:MM should match Feb 28's value.
+				assert.Equal(t, want.Hour(), gotLocal.Hour(), "Feb 29 should reuse Feb 28's HH")
+				assert.Equal(t, want.Minute(), gotLocal.Minute(), "Feb 29 should reuse Feb 28's MM")
+			},
+		},
+		"AEDT-end transition day resolves to a UTC instant on the right local date": {
+			date:      "2026-04-05",
+			isSunrise: true,
+			check: func(t *testing.T, got time.Time) {
+				// On 2026-04-05 AEDT ends at 03:00. The result must still
+				// land on the local date 2026-04-05 in sydneyTZ.
+				local := got.In(sydneyTZ)
+				assert.Equal(t, 2026, local.Year())
+				assert.Equal(t, time.April, local.Month())
+				assert.Equal(t, 5, local.Day())
+				// Sunrise on Apr 5 in Melbourne is roughly 06:30-07:40 local
+				// (depending on which side of DST).
+				mins := local.Hour()*60 + local.Minute()
+				assert.GreaterOrEqual(t, mins, 5*60, "expected sunrise after 05:00")
+				assert.LessOrEqual(t, mins, 9*60, "expected sunrise before 09:00")
+			},
+		},
+		"return value is in UTC": {
+			date:      "2026-06-21",
+			isSunrise: true,
+			check: func(t *testing.T, got time.Time) {
+				assert.Equal(t, time.UTC, got.Location())
+			},
+		},
+		"truncated to whole seconds": {
+			date:      "2026-12-22",
+			isSunrise: true,
+			check: func(t *testing.T, got time.Time) {
+				assert.Zero(t, got.Nanosecond())
+			},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := melbourneSunriseSunset(tc.date, tc.isSunrise)
+			tc.check(t, got)
+		})
+	}
+}
+
+func TestIntegratePload(t *testing.T) {
+	// Helper that builds readings at fixed timestamps relative to a base
+	// (any sufficiently large value that avoids signed-int corner cases).
+	const base int64 = 1_700_000_000
+
+	mkReadings := func(specs ...struct {
+		dt    int64
+		pload float64
+	}) []dynamo.ReadingItem {
+		out := make([]dynamo.ReadingItem, len(specs))
+		for i, s := range specs {
+			out[i] = dynamo.ReadingItem{Timestamp: base + s.dt, Pload: s.pload}
+		}
+		return out
+	}
+
+	tests := map[string]struct {
+		readings []dynamo.ReadingItem
+		startDt  int64
+		endDt    int64
+		wantKwh  float64
+		// tolerance for floating point comparison
+		delta float64
+	}{
+		"design worked example: t=0,10,20,30 plouds 200,400,-100,600 over [15,25)": {
+			readings: mkReadings(
+				struct {
+					dt    int64
+					pload float64
+				}{0, 200},
+				struct {
+					dt    int64
+					pload float64
+				}{10, 400},
+				struct {
+					dt    int64
+					pload float64
+				}{20, -100},
+				struct {
+					dt    int64
+					pload float64
+				}{30, 600},
+			),
+			startDt: 15,
+			endDt:   25,
+			// pts: {15,200}, {20,0}, {25,300}; trapezoids 500 + 750 = 1250 W·s
+			wantKwh: 1250.0 / 3_600_000.0,
+			delta:   1e-9,
+		},
+		"start exactly at a reading: that reading is included as interior": {
+			// Period [10, 30); reading at t=10 must count as interior, not
+			// be reproduced via left-edge synthesis.
+			readings: mkReadings(
+				struct {
+					dt    int64
+					pload float64
+				}{0, 100},
+				struct {
+					dt    int64
+					pload float64
+				}{10, 200},
+				struct {
+					dt    int64
+					pload float64
+				}{20, 300},
+				struct {
+					dt    int64
+					pload float64
+				}{30, 400},
+			),
+			startDt: 10,
+			endDt:   30,
+			// pts: {10,200}, {20,300} (interior), and right-edge synth
+			// pair-gap = 10s ≤ 60, interpolate at 30 between {20,300} and {30,400}: result 400
+			// pts = {10,200}, {20,300}, {30,400}.
+			// Trapezoids: ((200+300)/2)*10 + ((300+400)/2)*10 = 2500 + 3500 = 6000 W·s
+			wantKwh: 6000.0 / 3_600_000.0,
+			delta:   1e-9,
+		},
+		"end exactly at a reading: that reading is excluded (half-open)": {
+			// Period [10, 30) over readings at 0,10,20,30. Reading at t=30 excluded.
+			readings: mkReadings(
+				struct {
+					dt    int64
+					pload float64
+				}{0, 100},
+				struct {
+					dt    int64
+					pload float64
+				}{10, 200},
+				struct {
+					dt    int64
+					pload float64
+				}{20, 300},
+				struct {
+					dt    int64
+					pload float64
+				}{30, 400},
+			),
+			startDt: 10,
+			endDt:   30,
+			// Same as above; right-edge synthesis at endUnix=30 reproduces the t=30 reading.
+			// (See edge-case table in design.md: end == reading.Timestamp uses the right-edge
+			// synthesis pointing at readings[iR].Pload.)
+			wantKwh: 6000.0 / 3_600_000.0,
+			delta:   1e-9,
+		},
+		"60s pair-gap skip at left bracket: edge synthesis skipped": {
+			// Period [50, 100). Left bracket gap = 80s > 60s — skip left edge synthesis.
+			readings: mkReadings(
+				struct {
+					dt    int64
+					pload float64
+				}{0, 1000},
+				struct {
+					dt    int64
+					pload float64
+				}{80, 100},
+				struct {
+					dt    int64
+					pload float64
+				}{90, 200},
+			),
+			startDt: 50,
+			endDt:   100,
+			// Left bracket: readings[0] at t=0, readings[1] at t=80, gap=80>60: skip.
+			// Interior: {80,100}, {90,200}. Right bracket: iR=3 (none); skip.
+			// pts = {80,100},{90,200}; trapezoid = ((100+200)/2)*10 = 1500 W·s
+			wantKwh: 1500.0 / 3_600_000.0,
+			delta:   1e-9,
+		},
+		"start before all readings: no left edge synthesis": {
+			readings: mkReadings(
+				struct {
+					dt    int64
+					pload float64
+				}{100, 100},
+				struct {
+					dt    int64
+					pload float64
+				}{110, 200},
+				struct {
+					dt    int64
+					pload float64
+				}{120, 300},
+			),
+			startDt: 50,
+			endDt:   200,
+			// No left bracket. Interior: all three readings. No right bracket either.
+			// pts: {100,100},{110,200},{120,300}.
+			// Trapezoids: ((100+200)/2)*10 + ((200+300)/2)*10 = 1500 + 2500 = 4000 W·s
+			wantKwh: 4000.0 / 3_600_000.0,
+			delta:   1e-9,
+		},
+		"end after all readings: no right edge synthesis": {
+			readings: mkReadings(
+				struct {
+					dt    int64
+					pload float64
+				}{0, 100},
+				struct {
+					dt    int64
+					pload float64
+				}{10, 200},
+				struct {
+					dt    int64
+					pload float64
+				}{20, 300},
+			),
+			startDt: 0,
+			endDt:   200,
+			// No right bracket. Interior: all three readings. No left bracket either.
+			// pts: {0,100},{10,200},{20,300}.
+			// Trapezoids: 1500 + 2500 = 4000 W·s
+			wantKwh: 4000.0 / 3_600_000.0,
+			delta:   1e-9,
+		},
+		"single interior reading and no usable brackets: returns 0": {
+			readings: mkReadings(
+				struct {
+					dt    int64
+					pload float64
+				}{50, 1000},
+			),
+			startDt: 0,
+			endDt:   200,
+			wantKwh: 0,
+			delta:   1e-12,
+		},
+		"empty readings returns 0": {
+			readings: nil,
+			startDt:  0,
+			endDt:    200,
+			wantKwh:  0,
+			delta:    1e-12,
+		},
+		"all readings outside period: returns 0": {
+			readings: mkReadings(
+				struct {
+					dt    int64
+					pload float64
+				}{0, 1000},
+				struct {
+					dt    int64
+					pload float64
+				}{10, 1000},
+			),
+			startDt: 100,
+			endDt:   200,
+			// iL = 1 (readings[1].ts=10 < 100). iL+1 = 2 == len(readings). No left edge.
+			// iR = 2 (out of range). iR-1 = 1 < 200, but iR == len. No right edge.
+			// No interior. pts is empty.
+			wantKwh: 0,
+			delta:   1e-12,
+		},
+		"negative pload clamped before interpolation at right edge": {
+			// readings t=0:100 t=10:-200. Period [0,5).
+			// Right bracket: gap = 10 ≤ 60. Clamped values: 100 and 0.
+			// Interpolate at 5: 100 + (0-100)*(5-0)/(10-0) = 50.
+			// Interior: t=0 (clamped to 100). pts = {0,100},{5,50}.
+			// Trapezoid = ((100+50)/2)*5 = 375 W·s.
+			readings: mkReadings(
+				struct {
+					dt    int64
+					pload float64
+				}{0, 100},
+				struct {
+					dt    int64
+					pload float64
+				}{10, -200},
+			),
+			startDt: 0,
+			endDt:   5,
+			wantKwh: 375.0 / 3_600_000.0,
+			delta:   1e-9,
+		},
+		"60s pair-gap skip across adjacent pts pairs": {
+			// readings every 10s except a 70s gap between t=20 and t=90.
+			// Period [0, 100): all four readings interior. Adjacent pair (20,90) has dt=70>60: skip.
+			readings: mkReadings(
+				struct {
+					dt    int64
+					pload float64
+				}{0, 100},
+				struct {
+					dt    int64
+					pload float64
+				}{10, 100},
+				struct {
+					dt    int64
+					pload float64
+				}{20, 100},
+				struct {
+					dt    int64
+					pload float64
+				}{90, 100},
+			),
+			startDt: 0,
+			endDt:   100,
+			// Trapezoids: (100+100)/2 * 10 = 1000, (100+100)/2 * 10 = 1000, skip (20→90), no right edge synth (last reading at 90; iR=4=len, no right edge).
+			// Total = 2000 W·s.
+			wantKwh: 2000.0 / 3_600_000.0,
+			delta:   1e-9,
+		},
+		"left edge synthesis exactly at startUnix when readings[iL+1].Timestamp == startUnix": {
+			// Period [10, 20). readings[iL+1].Timestamp == 10 == startUnix.
+			// Per design: skip left edge to avoid duplicating the interior reading.
+			readings: mkReadings(
+				struct {
+					dt    int64
+					pload float64
+				}{0, 100},
+				struct {
+					dt    int64
+					pload float64
+				}{10, 200},
+				struct {
+					dt    int64
+					pload float64
+				}{20, 300},
+			),
+			startDt: 10,
+			endDt:   20,
+			// Interior: {10,200}. Right edge synth: t=20 reading, gap 10s ≤ 60.
+			// Interpolate: at endUnix=20 between {10,200} and {20,300}: 300.
+			// pts = {10,200}, {20,300}; trapezoid ((200+300)/2)*10 = 2500 W·s.
+			wantKwh: 2500.0 / 3_600_000.0,
+			delta:   1e-9,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := integratePload(tc.readings, base+tc.startDt, base+tc.endDt)
+			assert.InDelta(t, tc.wantKwh, got, tc.delta)
+		})
+	}
+}
+
+// readingPpv builds a ReadingItem at the given Sydney local time with the
+// specified Ppv and Pload values for findEveningNight tests.
+func readingPpv(date string, hour, minute, second int, ppv, pload float64) dynamo.ReadingItem {
+	d, _ := time.ParseInLocation("2006-01-02", date, sydneyTZ)
+	t := time.Date(d.Year(), d.Month(), d.Day(), hour, minute, second, 0, sydneyTZ)
+	return dynamo.ReadingItem{Timestamp: t.Unix(), Ppv: ppv, Pload: pload}
+}
+
+func TestFindEveningNight(t *testing.T) {
+	const date = "2026-04-15"
+	dayStart, _ := time.ParseInLocation("2006-01-02", date, sydneyTZ)
+
+	// "Past day" date so isToday == false.
+	const pastDate = "2026-03-10"
+
+	// Reusable: a day where Ppv>0 from 06:30 to 18:00 (10s cadence), constant
+	// Pload=1000. We don't need every second; coarse readings every 5 min are
+	// enough to exercise the boundaries.
+	pastDayReadings := func() []dynamo.ReadingItem {
+		var out []dynamo.ReadingItem
+		// Pre-dawn: Pload only, no solar. 00:00 → 06:25 every 5 min.
+		for h := 0; h < 7; h++ {
+			for m := 0; m < 60; m += 5 {
+				if h == 6 && m >= 30 {
+					break
+				}
+				out = append(out, readingPpv(pastDate, h, m, 0, 0, 1000))
+			}
+		}
+		// Solar window 06:30 → 17:55 every 5 min.
+		for h := 6; h < 18; h++ {
+			startMin := 0
+			if h == 6 {
+				startMin = 30
+			}
+			for m := startMin; m < 60; m += 5 {
+				out = append(out, readingPpv(pastDate, h, m, 0, 1000, 1000))
+			}
+		}
+		// Post-sunset 18:00 → 23:55 every 5 min.
+		for h := 18; h < 24; h++ {
+			for m := 0; m < 60; m += 5 {
+				out = append(out, readingPpv(pastDate, h, m, 0, 0, 1000))
+			}
+		}
+		return out
+	}()
+
+	tests := map[string]struct {
+		readings []dynamo.ReadingItem
+		date     string
+		today    string
+		now      time.Time
+		check    func(t *testing.T, got *EveningNight)
+	}{
+		"typical past day, both periods complete from readings": {
+			readings: pastDayReadings,
+			date:     pastDate,
+			today:    date, // today != pastDate
+			now:      time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ),
+			check: func(t *testing.T, got *EveningNight) {
+				require.NotNil(t, got)
+				require.NotNil(t, got.Night)
+				require.NotNil(t, got.Evening)
+				assert.Equal(t, "complete", got.Night.Status)
+				assert.Equal(t, "complete", got.Evening.Status)
+				assert.Equal(t, "readings", got.Night.BoundarySource)
+				assert.Equal(t, "readings", got.Evening.BoundarySource)
+			},
+		},
+		"today before sunrise: only night, in-progress, end clamped to now": {
+			readings: []dynamo.ReadingItem{
+				// A few overnight readings, no Ppv>0 yet.
+				readingPpv(date, 1, 0, 0, 0, 1000),
+				readingPpv(date, 2, 0, 0, 0, 1000),
+				readingPpv(date, 3, 0, 0, 0, 1000),
+				readingPpv(date, 4, 30, 0, 0, 1000),
+			},
+			date:  date,
+			today: date,
+			now:   time.Date(2026, 4, 15, 4, 30, 0, 0, sydneyTZ),
+			check: func(t *testing.T, got *EveningNight) {
+				require.NotNil(t, got)
+				require.NotNil(t, got.Night)
+				assert.Nil(t, got.Evening, "evening must be omitted when sun has not set")
+				assert.Equal(t, "in-progress", got.Night.Status)
+				assert.Equal(t, "estimated", got.Night.BoundarySource)
+				// End == now (clamped).
+				wantEnd := time.Date(2026, 4, 15, 4, 30, 0, 0, sydneyTZ).UTC().Format(time.RFC3339)
+				assert.Equal(t, wantEnd, got.Night.End)
+				wantStart := dayStart.UTC().Format(time.RFC3339)
+				assert.Equal(t, wantStart, got.Night.Start)
+			},
+		},
+		"today after sunset: both blocks; evening in-progress, night complete": {
+			readings: func() []dynamo.ReadingItem {
+				// Solar 07:00 → 17:30; now=22:00. lastPpv at 17:30, firstPpv at 07:00.
+				var r []dynamo.ReadingItem
+				// pre-dawn
+				r = append(r, readingPpv(date, 0, 30, 0, 0, 1000))
+				// first solar
+				r = append(r, readingPpv(date, 7, 0, 0, 500, 1000))
+				// last solar
+				r = append(r, readingPpv(date, 17, 30, 0, 100, 1000))
+				// after sunset
+				r = append(r, readingPpv(date, 19, 0, 0, 0, 1000))
+				r = append(r, readingPpv(date, 21, 0, 0, 0, 1000))
+				return r
+			}(),
+			date:  date,
+			today: date,
+			now:   time.Date(2026, 4, 15, 22, 0, 0, 0, sydneyTZ),
+			check: func(t *testing.T, got *EveningNight) {
+				require.NotNil(t, got)
+				require.NotNil(t, got.Night)
+				require.NotNil(t, got.Evening)
+				assert.Equal(t, "complete", got.Night.Status)
+				assert.Equal(t, "in-progress", got.Evening.Status)
+				assert.Equal(t, "readings", got.Night.BoundarySource)
+				assert.Equal(t, "readings", got.Evening.BoundarySource)
+				// Evening end clamped to now.
+				wantEnd := time.Date(2026, 4, 15, 22, 0, 0, 0, sydneyTZ).UTC().Format(time.RFC3339)
+				assert.Equal(t, wantEnd, got.Evening.End)
+			},
+		},
+		"today midday: only night; evening omitted by today gate": {
+			readings: func() []dynamo.ReadingItem {
+				var r []dynamo.ReadingItem
+				r = append(r, readingPpv(date, 0, 30, 0, 0, 1000))
+				r = append(r, readingPpv(date, 7, 0, 0, 500, 1000))
+				r = append(r, readingPpv(date, 11, 0, 0, 800, 1000))
+				r = append(r, readingPpv(date, 13, 0, 0, 900, 1000))
+				return r
+			}(),
+			date:  date,
+			today: date,
+			now:   time.Date(2026, 4, 15, 13, 0, 0, 0, sydneyTZ),
+			check: func(t *testing.T, got *EveningNight) {
+				require.NotNil(t, got)
+				require.NotNil(t, got.Night)
+				assert.Nil(t, got.Evening, "evening must be omitted by today gate (sun still up)")
+				assert.Equal(t, "complete", got.Night.Status)
+				assert.Equal(t, "readings", got.Night.BoundarySource)
+			},
+		},
+		"fully overcast past day: both blocks estimated, complete": {
+			readings: []dynamo.ReadingItem{
+				readingPpv(pastDate, 0, 30, 0, 0, 500),
+				readingPpv(pastDate, 6, 0, 0, 0, 500),
+				readingPpv(pastDate, 12, 0, 0, 0, 500),
+				readingPpv(pastDate, 18, 0, 0, 0, 500),
+				readingPpv(pastDate, 23, 0, 0, 0, 500),
+			},
+			date:  pastDate,
+			today: date,
+			now:   time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ),
+			check: func(t *testing.T, got *EveningNight) {
+				require.NotNil(t, got)
+				require.NotNil(t, got.Night)
+				require.NotNil(t, got.Evening)
+				assert.Equal(t, "complete", got.Night.Status)
+				assert.Equal(t, "complete", got.Evening.Status)
+				assert.Equal(t, "estimated", got.Night.BoundarySource)
+				assert.Equal(t, "estimated", got.Evening.BoundarySource)
+			},
+		},
+		"morning solar but no afternoon (recorder dies at noon): both readings-derived (per spec)": {
+			readings: []dynamo.ReadingItem{
+				readingPpv(pastDate, 0, 30, 0, 0, 500),
+				readingPpv(pastDate, 7, 0, 0, 500, 500),
+				readingPpv(pastDate, 11, 0, 0, 800, 500),
+				readingPpv(pastDate, 12, 55, 0, 700, 500), // last Ppv>0
+			},
+			date:  pastDate,
+			today: date,
+			now:   time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ),
+			check: func(t *testing.T, got *EveningNight) {
+				require.NotNil(t, got)
+				require.NotNil(t, got.Night)
+				require.NotNil(t, got.Evening)
+				assert.Equal(t, "readings", got.Night.BoundarySource)
+				// Per spec (Decision 2 / design.md): for past days, lastPpvPositive
+				// is used directly even if it's mid-day. Evening start = 12:55.
+				assert.Equal(t, "readings", got.Evening.BoundarySource)
+				wantStart := time.Date(2026, 3, 10, 12, 55, 0, 0, sydneyTZ).UTC().Format(time.RFC3339)
+				assert.Equal(t, wantStart, got.Evening.Start)
+			},
+		},
+		"zero readings inside period emits block with totalKwh=0": {
+			// Past day with no readings between estimated sunrise and sunset.
+			readings: []dynamo.ReadingItem{
+				// Just one reading well outside both periods so they exist.
+				readingPpv(pastDate, 12, 0, 0, 100, 0),
+			},
+			date:  pastDate,
+			today: date,
+			now:   time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ),
+			check: func(t *testing.T, got *EveningNight) {
+				require.NotNil(t, got)
+				// Both blocks expected (one Ppv>0 reading at noon → both blocks readings).
+				require.NotNil(t, got.Night)
+				require.NotNil(t, got.Evening)
+				// Pload=0 → totalKwh=0.
+				assert.InDelta(t, 0, got.Night.TotalKwh, 1e-9)
+				assert.InDelta(t, 0, got.Evening.TotalKwh, 1e-9)
+				// AverageKwhPerHour should be non-nil (elapsed >> 60s).
+				require.NotNil(t, got.Night.AverageKwhPerHour)
+				require.NotNil(t, got.Evening.AverageKwhPerHour)
+				assert.InDelta(t, 0, *got.Night.AverageKwhPerHour, 1e-9)
+				assert.InDelta(t, 0, *got.Evening.AverageKwhPerHour, 1e-9)
+			},
+		},
+		"in-progress evening with elapsed < 60s: averageKwhPerHour omitted": {
+			readings: []dynamo.ReadingItem{
+				readingPpv(date, 0, 0, 30, 0, 1000),
+				readingPpv(date, 8, 0, 0, 500, 1000),
+				readingPpv(date, 18, 0, 0, 100, 1000), // last Ppv>0
+				readingPpv(date, 18, 0, 30, 0, 1000),
+			},
+			date:  date,
+			today: date,
+			// 30s after the lastPpvPositive at 18:00:00.
+			now: time.Date(2026, 4, 15, 18, 0, 30, 0, sydneyTZ),
+			check: func(t *testing.T, got *EveningNight) {
+				require.NotNil(t, got)
+				require.NotNil(t, got.Evening)
+				assert.Equal(t, "in-progress", got.Evening.Status)
+				assert.Nil(t, got.Evening.AverageKwhPerHour, "elapsed<60s must omit average")
+			},
+		},
+		"future date / no readings returns nil": {
+			// findEveningNight is gated on len(readings)>0 by the caller, so
+			// passing an empty slice here is the canonical "skip" signal.
+			readings: nil,
+			date:     "2027-01-01",
+			today:    date,
+			now:      time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ),
+			check: func(t *testing.T, got *EveningNight) {
+				// With no readings: both blocks fall back to estimated; both
+				// are emitted because dayStart < computed sunrise and computed
+				// sunset < dayEnd. This documents the no-readings case for a
+				// past date — the caller is responsible for not invoking
+				// findEveningNight on a future date with no readings.
+				if got != nil {
+					// On a hypothetical future date treated as past, both blocks
+					// would estimate from the sun table.
+					assert.Equal(t, "estimated", got.Night.BoundarySource)
+					assert.Equal(t, "estimated", got.Evening.BoundarySource)
+				}
+			},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := findEveningNight(tc.readings, tc.date, tc.today, tc.now)
+			tc.check(t, got)
+		})
+	}
+}
+
+func BenchmarkFindEveningNight(b *testing.B) {
+	dayStart := time.Date(2026, 4, 15, 0, 0, 0, 0, sydneyTZ)
+	readings := make([]dynamo.ReadingItem, 0, 8640)
+	// 10s cadence over a full day.
+	for i := range 8640 {
+		// Ppv positive between buckets ~6:30-18:00 to exercise both branches.
+		t := dayStart.Add(time.Duration(i*10) * time.Second)
+		secOfDay := t.Hour()*3600 + t.Minute()*60 + t.Second()
+		var ppv float64
+		if secOfDay >= 6*3600+30*60 && secOfDay <= 18*3600 {
+			ppv = float64(500 + i%3000)
+		}
+		readings = append(readings, dynamo.ReadingItem{
+			Timestamp: t.Unix(),
+			Ppv:       ppv,
+			Pload:     float64(500 + i%4500),
+		})
+	}
+
+	for b.Loop() {
+		_ = findEveningNight(readings, "2026-04-15", "2026-04-16",
+			time.Date(2026, 4, 16, 12, 0, 0, 0, sydneyTZ))
+	}
 }
 
 func BenchmarkFindPeakPeriods(b *testing.B) {

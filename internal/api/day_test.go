@@ -55,6 +55,9 @@ func TestHandleDayNormalCase(t *testing.T) {
 	}
 
 	h := NewHandler(mr, testSerial, testToken, "11:00", "14:00")
+	// Pin "now" to a date later than the requested one so the request is for a
+	// past day (deterministic across test machines).
+	h.nowFunc = func() time.Time { return fixedNow() }
 
 	resp, err := h.Handle(context.Background(), dayRequest(map[string]string{"date": date}))
 	require.NoError(t, err)
@@ -74,6 +77,55 @@ func TestHandleDayNormalCase(t *testing.T) {
 
 	// peakPeriods should be present and non-null (at least empty slice).
 	assert.NotNil(t, dr.PeakPeriods, "peakPeriods should never be null")
+
+	// EveningNight: past day with first/last Ppv>0 readings present, so both
+	// blocks should be readings-derived and complete.
+	require.NotNil(t, dr.EveningNight, "eveningNight should be present when readings exist")
+	require.NotNil(t, dr.EveningNight.Night, "night block expected")
+	require.NotNil(t, dr.EveningNight.Evening, "evening block expected")
+	assert.Equal(t, "complete", dr.EveningNight.Night.Status)
+	assert.Equal(t, "complete", dr.EveningNight.Evening.Status)
+	assert.Equal(t, "readings", dr.EveningNight.Night.BoundarySource)
+	assert.Equal(t, "readings", dr.EveningNight.Evening.BoundarySource)
+}
+
+func TestHandleDayEveningNightPerBlockFallback(t *testing.T) {
+	// A past day with overcast readings (no Ppv>0 anywhere) exercises the
+	// per-block fallback to the Melbourne sunrise/sunset table.
+	loc, _ := time.LoadLocation("Australia/Sydney")
+	date := "2026-04-14"
+
+	readings := []dynamo.ReadingItem{
+		{Timestamp: time.Date(2026, 4, 14, 1, 0, 0, 0, loc).Unix(), Ppv: 0, Pload: 600, Soc: 80},
+		{Timestamp: time.Date(2026, 4, 14, 8, 0, 0, 0, loc).Unix(), Ppv: 0, Pload: 600, Soc: 70},
+		{Timestamp: time.Date(2026, 4, 14, 14, 0, 0, 0, loc).Unix(), Ppv: 0, Pload: 600, Soc: 60},
+		{Timestamp: time.Date(2026, 4, 14, 20, 0, 0, 0, loc).Unix(), Ppv: 0, Pload: 600, Soc: 50},
+	}
+
+	mr := &mockReader{
+		queryReadingsFn: func(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
+			return readings, nil
+		},
+		getDailyEnergyFn: func(_ context.Context, _, _ string) (*dynamo.DailyEnergyItem, error) {
+			return nil, nil
+		},
+	}
+
+	h := NewHandler(mr, testSerial, testToken, "11:00", "14:00")
+	h.nowFunc = func() time.Time { return fixedNow() }
+
+	resp, err := h.Handle(context.Background(), dayRequest(map[string]string{"date": date}))
+	require.NoError(t, err)
+	assert.Equal(t, 200, resp.StatusCode)
+
+	dr := parseDayResponse(t, resp)
+	require.NotNil(t, dr.EveningNight, "eveningNight should be present even on overcast days")
+	require.NotNil(t, dr.EveningNight.Night)
+	require.NotNil(t, dr.EveningNight.Evening)
+	assert.Equal(t, "estimated", dr.EveningNight.Night.BoundarySource, "no Ppv>0 → estimated")
+	assert.Equal(t, "estimated", dr.EveningNight.Evening.BoundarySource, "no Ppv>0 → estimated")
+	assert.Equal(t, "complete", dr.EveningNight.Night.Status)
+	assert.Equal(t, "complete", dr.EveningNight.Evening.Status)
 }
 
 func TestHandleDayFallbackToDailyPower(t *testing.T) {
@@ -127,6 +179,10 @@ func TestHandleDayFallbackToDailyPower(t *testing.T) {
 	// peakPeriods should be empty array (no flux-readings to compute from).
 	assert.NotNil(t, dr.PeakPeriods, "peakPeriods should never be null")
 	assert.Empty(t, dr.PeakPeriods, "peakPeriods should be empty when using fallback data")
+
+	// EveningNight must be omitted entirely — the daily-power fallback lacks
+	// the pload resolution required for accurate integration (req 1.11).
+	assert.Nil(t, dr.EveningNight, "eveningNight must be omitted on the daily-power fallback path")
 }
 
 func TestHandleDayOnlyDailyEnergySocLowIsNull(t *testing.T) {

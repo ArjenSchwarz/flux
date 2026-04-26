@@ -125,7 +125,35 @@ final actor MockFluxAPIClient: FluxAPIClient {
             PeakPeriod(start: "\(date)T12:00:00Z", end: "\(date)T12:20:00Z", avgLoadW: 2900.5, energyWh: 967)
         ]
 
-        return DayDetailResponse(date: date, readings: readings, summary: summary, peakPeriods: peakPeriods)
+        // Sample eveningNight payload exercises both card states the design highlights:
+        // a complete night block with a readings-derived boundary and an in-progress
+        // evening block that should render the "(so far)" caption.
+        let eveningNight = EveningNight(
+            evening: EveningNightBlock(
+                start: "\(date)T08:30:00Z",      // 18:30 Sydney (sunset-ish)
+                end: "\(date)T11:00:00Z",        // 21:00 Sydney (now, while in-progress)
+                totalKwh: 2.7,
+                averageKwhPerHour: 1.08,
+                status: .inProgress,
+                boundarySource: .readings
+            ),
+            night: EveningNightBlock(
+                start: "\(date)T14:00:00Z",      // 00:00 Sydney midnight
+                end: "\(date)T20:30:00Z",        // 06:30 Sydney sunrise
+                totalKwh: 4.2,
+                averageKwhPerHour: 0.65,
+                status: .complete,
+                boundarySource: .readings
+            )
+        )
+
+        return DayDetailResponse(
+            date: date,
+            readings: readings,
+            summary: summary,
+            peakPeriods: peakPeriods,
+            eveningNight: eveningNight
+        )
     }
 
     func fetchStatus() async throws -> StatusResponse {

@@ -61,12 +61,14 @@ func (h *Handler) handleDay(ctx context.Context, req events.LambdaFunctionURLReq
 	var socLowTime int64
 	var hasReadings bool
 	var peakPeriods []PeakPeriod
+	var eveningNight *EveningNight
 
 	if len(readings) > 0 {
 		// Compute socLow from raw data before downsampling.
 		socLow, socLowTime, hasReadings = findMinSOC(readings)
 		points = downsample(readings, date)
 		peakPeriods = findPeakPeriods(readings, h.offpeakStart, h.offpeakEnd)
+		eveningNight = findEveningNight(readings, date, today, now)
 	} else {
 		// Fallback to flux-daily-power.
 		powerItems, err := h.reader.QueryDailyPower(ctx, h.serial, date)
@@ -82,9 +84,10 @@ func (h *Handler) handleDay(ctx context.Context, req events.LambdaFunctionURLReq
 	}
 
 	resp := &DayDetailResponse{
-		Date:        date,
-		Readings:    points,
-		PeakPeriods: peakPeriods,
+		Date:         date,
+		Readings:     points,
+		PeakPeriods:  peakPeriods,
+		EveningNight: eveningNight,
 	}
 	if resp.Readings == nil {
 		resp.Readings = []TimeSeriesPoint{}

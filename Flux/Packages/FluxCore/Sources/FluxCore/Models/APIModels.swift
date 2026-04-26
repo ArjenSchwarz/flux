@@ -235,17 +235,71 @@ public struct DayDetailResponse: Codable, Sendable {
     public let readings: [TimeSeriesPoint]
     public let summary: DaySummary?
     public let peakPeriods: [PeakPeriod]?
+    public let eveningNight: EveningNight?
 
     public init(
         date: String,
         readings: [TimeSeriesPoint],
         summary: DaySummary?,
-        peakPeriods: [PeakPeriod]?
+        peakPeriods: [PeakPeriod]?,
+        eveningNight: EveningNight?
     ) {
         self.date = date
         self.readings = readings
         self.summary = summary
         self.peakPeriods = peakPeriods
+        self.eveningNight = eveningNight
+    }
+}
+
+public struct EveningNight: Codable, Sendable {
+    public let evening: EveningNightBlock?
+    public let night: EveningNightBlock?
+
+    public var hasAnyBlock: Bool { evening != nil || night != nil }
+
+    public init(evening: EveningNightBlock?, night: EveningNightBlock?) {
+        self.evening = evening
+        self.night = night
+    }
+}
+
+public struct EveningNightBlock: Codable, Sendable, Identifiable {
+    public enum Status: String, Codable, Sendable {
+        case complete
+        case inProgress = "in-progress"
+    }
+
+    public enum BoundarySource: String, Codable, Sendable {
+        case readings
+        case estimated
+    }
+
+    public let start: String
+    public let end: String
+    public let totalKwh: Double
+    public let averageKwhPerHour: Double?
+    public let status: Status
+    public let boundarySource: BoundarySource
+
+    // The block's RFC 3339 start timestamp is unique within a single response
+    // (one evening, one night), so it's a stable identifier for SwiftUI diffing.
+    public var id: String { start }
+
+    public init(
+        start: String,
+        end: String,
+        totalKwh: Double,
+        averageKwhPerHour: Double?,
+        status: Status,
+        boundarySource: BoundarySource
+    ) {
+        self.start = start
+        self.end = end
+        self.totalKwh = totalKwh
+        self.averageKwhPerHour = averageKwhPerHour
+        self.status = status
+        self.boundarySource = boundarySource
     }
 }
 

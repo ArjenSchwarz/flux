@@ -31,6 +31,12 @@ struct DayDetailView: View {
                     if viewModel.hasPowerData && !viewModel.peakPeriods.isEmpty {
                         PeakUsageCard(periods: viewModel.peakPeriods)
                     }
+
+                    if viewModel.hasPowerData,
+                       let eveningNight = viewModel.eveningNight,
+                       eveningNight.hasAnyBlock {
+                        EveningNightCard(eveningNight: eveningNight)
+                    }
                 } else if let error = viewModel.error {
                     errorCard(error: error)
                 } else if viewModel.isLoading {

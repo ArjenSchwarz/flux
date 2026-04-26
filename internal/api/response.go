@@ -100,10 +100,35 @@ type PeakPeriod struct {
 
 // DayDetailResponse is the JSON response for GET /day.
 type DayDetailResponse struct {
-	Date        string            `json:"date"`
-	Readings    []TimeSeriesPoint `json:"readings"`
-	Summary     *DaySummary       `json:"summary"`
-	PeakPeriods []PeakPeriod      `json:"peakPeriods"`
+	Date         string            `json:"date"`
+	Readings     []TimeSeriesPoint `json:"readings"`
+	Summary      *DaySummary       `json:"summary"`
+	PeakPeriods  []PeakPeriod      `json:"peakPeriods"`
+	EveningNight *EveningNight     `json:"eveningNight,omitempty"`
+}
+
+// EveningNight groups the evening (last solar → midnight) and night
+// (midnight → first solar) no-solar usage blocks for a single calendar date.
+// Either field may be nil when only one block applies.
+type EveningNight struct {
+	Evening *EveningNightBlock `json:"evening,omitempty"`
+	Night   *EveningNightBlock `json:"night,omitempty"`
+}
+
+// EveningNightBlock describes a no-solar usage period.
+//
+// Start and End are RFC 3339 timestamps in UTC. AverageKwhPerHour is omitted
+// when the elapsed duration is shorter than 60 seconds. Status is one of
+// "complete" or "in-progress"; BoundarySource is "readings" when the boundary
+// came from a Ppv>0 reading or "estimated" when it was filled from the
+// Melbourne sunrise/sunset table.
+type EveningNightBlock struct {
+	Start             string   `json:"start"`
+	End               string   `json:"end"`
+	TotalKwh          float64  `json:"totalKwh"`
+	AverageKwhPerHour *float64 `json:"averageKwhPerHour"`
+	Status            string   `json:"status"`
+	BoundarySource    string   `json:"boundarySource"`
 }
 
 // TimeSeriesPoint is a single downsampled reading in the day detail response.
