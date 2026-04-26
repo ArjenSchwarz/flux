@@ -122,6 +122,9 @@ extension HistoryViewModel {
         DerivedState(days: days, now: nowProvider())
     }
 
+    /// Convenience accessors for tests and previews. Each rebuilds
+    /// `DerivedState` independently — production callers should read
+    /// `derived` once and destructure instead.
     var solarSeries: [SolarEntry] { derived.solar }
     var gridSeries: [GridEntry] { derived.grid }
     var batterySeries: [BatteryEntry] { derived.battery }
@@ -161,10 +164,15 @@ extension HistoryViewModel {
 
     struct PeriodSummary: Equatable {
         let solarTotalKwh: Double
+        /// Excludes today (today is partial; including it would skew daily
+        /// averages). `batteryDayCount` follows the same rule.
         let solarDayCount: Int
         let peakImportTotalKwh: Double
         let offpeakImportTotalKwh: Double
         let exportTotalKwh: Double
+        /// Includes today when an off-peak record exists. Off-peak imports
+        /// are the actionable headline so showing today's in-progress
+        /// number matters more than a clean daily average.
         let gridDayCount: Int
         let chargeTotalKwh: Double
         let dischargeTotalKwh: Double

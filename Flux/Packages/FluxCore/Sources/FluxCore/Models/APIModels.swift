@@ -174,6 +174,10 @@ public struct DayEnergy: Codable, Sendable, Identifiable {
     public let eCharge: Double
     public let eDischarge: Double
     public let offpeakGridImportKwh: Double?
+    /// Banked from the API for parity but currently unread by the UI: the
+    /// History grid card uses `eOutput` (full-day exports) rather than the
+    /// off-peak portion. Kept on the model so the field is available for a
+    /// future "off-peak vs peak export" view without another schema change.
     public let offpeakGridExportKwh: Double?
 
     public var id: String { date }
