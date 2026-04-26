@@ -34,7 +34,7 @@ struct HistoryGridUsageCard: View {
     }
 
     private var placeholder: some View {
-        Text("No off-peak data yet for this range.")
+        Text("No off-peak split available for this range.")
             .font(.subheadline)
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)

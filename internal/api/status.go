@@ -133,21 +133,9 @@ func (h *Handler) handleStatus(ctx context.Context, _ events.LambdaFunctionURLRe
 		resp.Rolling15m = rolling
 	}
 
-	// Off-peak data — always includes window times, plus deltas when complete
-	// or computable from the current daily-energy snapshot during the window.
-	var offpeakCurrent *TodayEnergy
-	if deItem != nil {
-		offpeakCurrent = &TodayEnergy{
-			Epv:        deItem.Epv,
-			EInput:     deItem.EInput,
-			EOutput:    deItem.EOutput,
-			ECharge:    deItem.ECharge,
-			EDischarge: deItem.EDischarge,
-		}
-	}
-	resp.Offpeak = buildOffpeak(opItem, offpeakCurrent, h.offpeakStart, h.offpeakEnd)
-
 	// Today's energy: compute from readings, reconcile with DailyEnergyItem.
+	// Computed first so off-peak deltas can use the freshest available
+	// totals rather than the up-to-6-hour-stale DailyEnergyItem snapshot.
 	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, sydneyTZ).Unix()
 	computedEnergy := computeTodayEnergy(allReadings, midnight)
 
@@ -162,6 +150,14 @@ func (h *Handler) handleStatus(ctx context.Context, _ events.LambdaFunctionURLRe
 		}
 	}
 	resp.TodayEnergy = reconcileEnergy(computedEnergy, storedEnergy)
+
+	// Off-peak data — always includes window times, plus deltas when
+	// complete or projectable from today's reconciled totals (live-
+	// integrated, with the AlphaESS counter as ground truth via
+	// reconcileEnergy). Diffing reconciled-vs-window-start ensures the
+	// dashboard never lags the underlying counter and never reports a
+	// number lower than the snapshot baseline.
+	resp.Offpeak = buildOffpeak(opItem, resp.TodayEnergy, h.offpeakStart, h.offpeakEnd)
 
 	return jsonResponse(resp)
 }
