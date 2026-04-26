@@ -1426,9 +1426,11 @@ func TestIntegratePload(t *testing.T) {
 			),
 			startDt: 10,
 			endDt:   30,
-			// Same as above; right-edge synthesis at endUnix=30 reproduces the t=30 reading.
-			// (See edge-case table in design.md: end == reading.Timestamp uses the right-edge
-			// synthesis pointing at readings[iR].Pload.)
+			// The t=30 reading is excluded from the interior set (half-open), but
+			// the right-edge synthesis still places a point at endUnix=30 by
+			// interpolating between readings[iR-1] (t=20) and readings[iR] (t=30).
+			// Because the bracket is exact, the synthesised value equals the
+			// t=30 Pload. See the edge-case table in design.md.
 			wantKwh: 6000.0 / 3_600_000.0,
 			delta:   1e-9,
 		},

@@ -500,7 +500,10 @@ func melbourneSunriseSunset(date string, isSunrise bool) time.Time {
 		hhmm = entry.riseLocal
 	}
 	if len(hhmm) != 5 || hhmm[2] != ':' {
-		return dayStart.UTC().Truncate(time.Second)
+		// Corrupt static table entry: return the zero time so the
+		// buildEveningNightBlock final guard drops the block, matching
+		// the parse-error path above.
+		return time.Time{}
 	}
 	h := int(hhmm[0]-'0')*10 + int(hhmm[1]-'0')
 	m := int(hhmm[3]-'0')*10 + int(hhmm[4]-'0')
