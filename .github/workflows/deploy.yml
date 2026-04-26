@@ -1,0 +1,135 @@
+# Deploys the Lambda API and forces an ECS redeploy of the poller on push to main.
+#
+# Preconditions:
+#   - The CloudFormation stack must already exist. Initial creation is a manual
+#     one-shot (see CLAUDE.md) because parameters like AlphaESSAppId have no
+#     defaults; on subsequent updates this workflow only passes ContainerImageUri
+#     and inherits the rest from the existing stack.
+#   - When a push touches both poller and API code, deploy-api runs immediately
+#     while Poller CI is still building the new image. ECS keeps the old image
+#     until update-containers fires from the workflow_run trigger a few minutes
+#     later. That ordering is intentional, not a race.
+#
+# Required secrets:
+#   AWS_DEPLOY_ROLE_ARN  IAM role ARN to assume via OIDC. Trust policy must allow
+#                        this repository on the main branch (token.actions.githubusercontent.com).
+#                        Permissions needed: cloudformation:*, lambda:UpdateFunctionCode,
+#                        s3:PutObject/GetObject on CFN_PACKAGE_BUCKET, ecs:UpdateService,
+#                        iam:PassRole for the task/exec/lambda roles, plus whatever the
+#                        CFN template touches (DynamoDB/EC2/Logs/SSM/IAM).
+#   CFN_PACKAGE_BUCKET   S3 bucket used by `aws cloudformation package` for the Lambda zip.
+#
+# Optional repo variables:
+#   AWS_REGION           Defaults to ap-southeast-2 (matches the Australia/Sydney TZ).
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - cmd/api/**
+      - internal/**
+      - infrastructure/**
+      - go.mod
+      - go.sum
+  workflow_run:
+    workflows: ["Poller CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+# Serialise stack updates: two pushes in quick succession would otherwise race
+# on the same CloudFormation stack and risk leaving it in UPDATE_ROLLBACK_FAILED.
+# cancel-in-progress is false so we don't kill an in-flight deploy mid-update.
+concurrency:
+  group: deploy-${{ github.workflow }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'ap-southeast-2' }}
+  STACK_NAME: flux
+  ECS_CLUSTER: flux
+  ECS_SERVICE: flux-poller
+
+jobs:
+  deploy-api:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Build Lambda binary
+        run: |
+          mkdir -p lambda
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build \
+            -trimpath -ldflags="-s -w" \
+            -o lambda/bootstrap ./cmd/api
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Package CloudFormation template
+        run: |
+          aws cloudformation package \
+            --template-file infrastructure/template.yaml \
+            --s3-bucket "${{ secrets.CFN_PACKAGE_BUCKET }}" \
+            --output-template-file infrastructure/packaged.yaml
+
+      - name: Deploy CloudFormation stack
+        # Parameters not listed here are inherited from the existing stack, so
+        # AlphaESSAppId/SystemSerialNumber/OffPeak* keep their initial values.
+        run: |
+          aws cloudformation deploy \
+            --template-file infrastructure/packaged.yaml \
+            --stack-name "$STACK_NAME" \
+            --capabilities CAPABILITY_IAM \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides \
+              "ContainerImageUri=ghcr.io/${{ github.repository_owner }}/flux-poller:latest"
+
+  update-containers:
+    # Runs after Poller CI finishes pushing the new :latest image to GHCR, or
+    # on demand via workflow_dispatch. The CFN deploy above does not change the
+    # task definition (image tag is unchanged), so a forced redeployment is
+    # what makes ECS pull the freshly-pushed :latest.
+    if: |
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Force ECS redeploy
+        run: |
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE" \
+            --force-new-deployment \
+            --no-cli-pager
+
+      - name: Wait for service to stabilise
+        run: |
+          aws ecs wait services-stable \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE"
