@@ -13,15 +13,16 @@ struct SystemMediumView: View {
                 VStack(spacing: 14) {
                     SOCRing(entry: entry, diameter: 100, lineWidth: 9)
                     if let timeLabel {
-                        Text(timeLabel)
+                        Text(timeLabel + emptySuffix)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
+                            .monospacedDigit()
                             .redacted(reason: entry.isPlaceholder ? .placeholder : [])
                     }
                 }
 
                 statsGrid
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: useSymbols ? .center : .leading)
             }
             .padding(.top, 14)
             .padding(.leading, 16)
@@ -43,6 +44,10 @@ struct SystemMediumView: View {
         }
     }
 
+    private var useSymbols: Bool {
+        UserDefaults.fluxAppGroup.widgetUsesSymbols
+    }
+
     private var timeLabel: String? {
         if let timestamp = entry.live?.timestamp,
            let date = DateFormatting.parseTimestamp(timestamp) {
@@ -54,9 +59,13 @@ struct SystemMediumView: View {
         return nil
     }
 
+    private var emptySuffix: String {
+        guard let emptyDate = emptyAt else { return "" }
+        return " (~\(DateFormatting.clockTime(from: emptyDate)))"
+    }
+
     private var statsGrid: some View {
-        let useSymbols = UserDefaults.fluxAppGroup.widgetUsesSymbols
-        return Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 10) {
+        Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 10) {
             row(
                 label: "Solar",
                 symbol: "sun.max.fill",
@@ -85,27 +94,10 @@ struct SystemMediumView: View {
                 color: entry.batteryStateColor,
                 useSymbols: useSymbols
             )
-            if let empty = emptyAt {
-                GridRow {
-                    rowLabel(
-                        text: "Empty",
-                        symbol: "clock",
-                        font: .caption,
-                        symbolColor: empty.color,
-                        useSymbols: useSymbols
-                    )
-                    Text("~\(DateFormatting.clockTime(from: empty.date))")
-                        .font(.footnote)
-                        .monospacedDigit()
-                        .foregroundStyle(empty.color)
-                        .lineLimit(1)
-                        .redacted(reason: entry.isPlaceholder ? .placeholder : [])
-                }
-            }
         }
     }
 
-    private var emptyAt: (date: Date, color: Color)? {
+    private var emptyAt: Date? {
         guard entry.staleness != .offline,
               let live = entry.live,
               live.pbat > 0,
@@ -113,9 +105,7 @@ struct SystemMediumView: View {
               let cutoffDate = DateFormatting.parseTimestamp(cutoffString) else {
             return nil
         }
-        let windowStart = entry.offpeak?.windowStart ?? OffpeakData.defaultWindowStart
-        let tier = CutoffTimeColor.forCutoff(cutoffDate, offpeakWindowStart: windowStart, now: entry.date)
-        return (cutoffDate, tier.color)
+        return cutoffDate
     }
 
     @ViewBuilder

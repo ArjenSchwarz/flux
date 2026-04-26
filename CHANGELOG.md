@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Medium widget layout tweaks: the stats grid now centres in its column when "Widget icons instead of labels" is on (balances the narrower icon column against the SOC ring), and the predicted-empty time has been moved out of the grid into a parenthesised suffix next to the timestamp under the ring (e.g. `14:32 (~16:30)`), shown only when discharging with a cutoff prediction. The empty time uses the same `.caption2`/`.secondary` styling as the timestamp; cutoff-risk urgency continues to surface via the SOC ring colour
 - Battery SOC colouring stays green at any healthy level: `BatteryColor.forSOC` now returns `.green` for SOC ≥ 30 % (was 30–60 % `.normal`/primary, > 60 % `.green`). The medium-widget SOC ring and percentage no longer flip black/white in light/dark mode
 - Cutoff-risk escalation on the SOC ring (`StatusEntry.effectiveBatteryColor` / `batteryStateColor`) now only applies when the cutoff tier is actually red, orange, or amber — the `.normal` tier no longer overrides the green level color, so a distant predicted cutoff doesn't wash the ring to primary
 - "Full" status removed from dashboard hero, medium-widget battery row, status-line label, status word, and VoiceOver verb; at 100 % SOC the views now reflect the raw `pbat` reading (charging / discharging / idle). Updated `WidgetAccessibilityTests` accordingly
