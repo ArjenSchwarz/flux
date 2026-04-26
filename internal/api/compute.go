@@ -39,12 +39,18 @@ func offpeakDeltas(op dynamo.OffpeakItem, today *TodayEnergy) (deltas offpeakDel
 		if today == nil {
 			return offpeakDeltaValues{}, false
 		}
+		// Energy counters are monotonically non-decreasing, so deltas
+		// should never be negative. They can briefly appear negative if
+		// today's running snapshot lags the start snapshot (poller writes
+		// the start record, then a later reconciliation reduces the
+		// running total). Clamp to zero so the dashboard never shows
+		// nonsense like "-0.1 kWh imported".
 		return offpeakDeltaValues{
-			GridImport:       today.EInput - op.StartEInput,
-			Solar:            today.Epv - op.StartEpv,
-			BatteryCharge:    today.ECharge - op.StartECharge,
-			BatteryDischarge: today.EDischarge - op.StartEDischarge,
-			GridExport:       today.EOutput - op.StartEOutput,
+			GridImport:       max(0, today.EInput-op.StartEInput),
+			Solar:            max(0, today.Epv-op.StartEpv),
+			BatteryCharge:    max(0, today.ECharge-op.StartECharge),
+			BatteryDischarge: max(0, today.EDischarge-op.StartEDischarge),
+			GridExport:       max(0, today.EOutput-op.StartEOutput),
 		}, true
 	}
 	return offpeakDeltaValues{}, false

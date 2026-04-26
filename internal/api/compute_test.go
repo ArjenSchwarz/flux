@@ -13,6 +13,102 @@ import (
 	"pgregory.net/rapid"
 )
 
+func TestOffpeakDeltas(t *testing.T) {
+	tests := map[string]struct {
+		op       dynamo.OffpeakItem
+		today    *TodayEnergy
+		wantOK   bool
+		wantVals offpeakDeltaValues
+	}{
+		"complete: pass through final deltas regardless of today": {
+			op: dynamo.OffpeakItem{
+				Status:              dynamo.OffpeakStatusComplete,
+				GridUsageKwh:        2.5,
+				SolarKwh:            5.0,
+				BatteryChargeKwh:    1.0,
+				BatteryDischargeKwh: 0.5,
+				GridExportKwh:       0.3,
+			},
+			today:  nil,
+			wantOK: true,
+			wantVals: offpeakDeltaValues{
+				GridImport: 2.5, Solar: 5.0, BatteryCharge: 1.0,
+				BatteryDischarge: 0.5, GridExport: 0.3,
+			},
+		},
+		"pending: project deltas from running totals": {
+			op: dynamo.OffpeakItem{
+				Status:          dynamo.OffpeakStatusPending,
+				StartEpv:        10.0,
+				StartEInput:     2.0,
+				StartEOutput:    0.5,
+				StartECharge:    1.0,
+				StartEDischarge: 3.0,
+			},
+			today: &TodayEnergy{
+				Epv: 12.5, EInput: 3.5, EOutput: 0.6,
+				ECharge: 1.8, EDischarge: 3.4,
+			},
+			wantOK: true,
+			wantVals: offpeakDeltaValues{
+				GridImport: 1.5, Solar: 2.5, BatteryCharge: 0.8,
+				BatteryDischarge: 0.4, GridExport: 0.1,
+			},
+		},
+		"pending without today: not computable": {
+			op: dynamo.OffpeakItem{
+				Status: dynamo.OffpeakStatusPending, StartEInput: 2.0,
+			},
+			today:  nil,
+			wantOK: false,
+		},
+		"pending with snapshot lag: clamp negatives to zero": {
+			// A poller reconciliation can briefly reduce running totals
+			// below the start snapshot. The clamp keeps "-0.1 kWh
+			// imported" off the dashboard.
+			op: dynamo.OffpeakItem{
+				Status:          dynamo.OffpeakStatusPending,
+				StartEpv:        10.0,
+				StartEInput:     5.0,
+				StartEOutput:    1.0,
+				StartECharge:    2.0,
+				StartEDischarge: 3.0,
+			},
+			today: &TodayEnergy{
+				Epv: 9.5, EInput: 4.8, EOutput: 0.9,
+				ECharge: 1.7, EDischarge: 2.9,
+			},
+			wantOK:   true,
+			wantVals: offpeakDeltaValues{},
+		},
+		"unknown status: not computable": {
+			op:     dynamo.OffpeakItem{Status: "future-status"},
+			today:  &TodayEnergy{Epv: 10},
+			wantOK: false,
+		},
+		"empty status: not computable": {
+			op:     dynamo.OffpeakItem{},
+			today:  nil,
+			wantOK: false,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			got, ok := offpeakDeltas(tc.op, tc.today)
+			assert.Equal(t, tc.wantOK, ok)
+			if !ok {
+				return
+			}
+			assert.InDelta(t, tc.wantVals.GridImport, got.GridImport, 0.001)
+			assert.InDelta(t, tc.wantVals.Solar, got.Solar, 0.001)
+			assert.InDelta(t, tc.wantVals.BatteryCharge, got.BatteryCharge, 0.001)
+			assert.InDelta(t, tc.wantVals.BatteryDischarge, got.BatteryDischarge, 0.001)
+			assert.InDelta(t, tc.wantVals.GridExport, got.GridExport, 0.001)
+		})
+	}
+}
+
 func TestComputeCutoffTime(t *testing.T) {
 	now := time.Date(2026, 4, 15, 10, 0, 0, 0, time.UTC)
 

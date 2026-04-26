@@ -44,30 +44,34 @@ struct HistoryView: View {
                     let selectedDate = viewModel.selectedDay
                         .flatMap { DateFormatting.parseDayDate($0.date) }
 
-                    HistorySolarCard(
-                        entries: derived.solar,
-                        summary: derived.summary,
-                        selectedDate: selectedDate,
-                        onSelect: selectDay
-                    )
+                    VStack(alignment: .leading, spacing: 16) {
+                        HistorySolarCard(
+                            entries: derived.solar,
+                            summary: derived.summary,
+                            selectedDate: selectedDate,
+                            onSelect: selectDay
+                        )
 
-                    HistoryGridUsageCard(
-                        entries: derived.grid,
-                        summary: derived.summary,
-                        selectedDate: selectedDate,
-                        onSelect: selectDay
-                    )
+                        HistoryGridUsageCard(
+                            entries: derived.grid,
+                            summary: derived.summary,
+                            selectedDate: selectedDate,
+                            onSelect: selectDay
+                        )
 
-                    HistoryBatteryCard(
-                        entries: derived.battery,
-                        summary: derived.summary,
-                        selectedDate: selectedDate,
-                        onSelect: selectDay
-                    )
+                        HistoryBatteryCard(
+                            entries: derived.battery,
+                            summary: derived.summary,
+                            selectedDate: selectedDate,
+                            onSelect: selectDay
+                        )
 
-                    if let selectedDay = viewModel.selectedDay {
-                        summaryCard(for: selectedDay)
+                        if let selectedDay = viewModel.selectedDay {
+                            summaryCard(for: selectedDay)
+                        }
                     }
+                    .opacity(viewModel.isLoading ? 0.5 : 1.0)
+                    .animation(.easeInOut(duration: 0.15), value: viewModel.isLoading)
                 }
             }
             .padding()

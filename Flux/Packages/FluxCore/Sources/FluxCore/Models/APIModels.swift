@@ -115,8 +115,6 @@ public struct OffpeakData: Codable, Sendable {
     public let gridExportKwh: Double?
     public let batteryDeltaPercent: Double?
 
-    public var isInProgress: Bool { status == .pending }
-
     public init(
         windowStart: String,
         windowEnd: String,
