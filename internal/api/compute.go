@@ -544,10 +544,11 @@ func integratePload(readings []dynamo.ReadingItem, startUnix, endUnix int64) flo
 			break
 		}
 	}
-	// Find right bracket index: smallest i with readings[i].Timestamp >= endUnix.
+	// Find right bracket index: smallest i > iL with readings[i].Timestamp >= endUnix.
+	// Starting from iL+1 skips the prefix we already know is below startUnix.
 	iR := len(readings)
-	for i, r := range readings {
-		if r.Timestamp >= endUnix {
+	for i := iL + 1; i < len(readings); i++ {
+		if readings[i].Timestamp >= endUnix {
 			iR = i
 			break
 		}
@@ -589,6 +590,13 @@ func integratePload(readings []dynamo.ReadingItem, startUnix, endUnix int64) flo
 
 	// Right edge synthesis. iR is the first index with Timestamp >= endUnix,
 	// so readings[iR-1].Timestamp < endUnix is guaranteed.
+	//
+	// When iR-1 == iL (no interior readings), prev is the left-bracket reading
+	// and gap spans the entire pre-period region. The 60s gap check then
+	// conservatively skips synthesis even if the bracket pair around endUnix
+	// is itself tight. Safe — energy is underestimated rather than fabricated —
+	// and the all-readings-outside-period case is already covered upstream by
+	// the len(pts) < 2 guard.
 	if iR > 0 && iR < len(readings) {
 		prev := readings[iR-1]
 		next := readings[iR]
