@@ -471,7 +471,7 @@ func isOffpeak(ts int64, offpeakStartMin, offpeakEndMin int) bool {
 // "YYYY-MM-DD" format. The result is truncated to whole seconds and is
 // always in UTC.
 //
-// The implementation looks up the date's MM-DD in melbourneSunUTC (an
+// The implementation looks up the date's MM-DD in melbourneSunLocal (an
 // embedded static table; see melbourne_sun_table.go). The table value is a
 // wall-clock "HH:MM" string in Sydney-local time. Combining it with the
 // requested calendar date via time.ParseInLocation in sydneyTZ yields the
@@ -484,23 +484,20 @@ func melbourneSunriseSunset(date string, isSunrise bool) time.Time {
 	dayStart, err := time.ParseInLocation("2006-01-02", date, sydneyTZ)
 	if err != nil {
 		// Defensive fallback. Caller validates date format before getting
-		// here; if we somehow get a malformed date, returning dayStart
-		// itself (zero time) lets the buildEveningNightBlock final guard
-		// catch the degenerate case.
+		// here; if we somehow get a malformed date, returning the zero
+		// time lets the buildEveningNightBlock final guard catch the
+		// degenerate case.
 		return time.Time{}
 	}
-	if len(date) < 10 {
-		return dayStart.UTC().Truncate(time.Second)
-	}
-	key := date[5:10] // MM-DD
-	entry, ok := melbourneSunUTC[key]
+	key := date[5:10] // MM-DD; ParseInLocation guarantees len(date) == 10
+	entry, ok := melbourneSunLocal[key]
 	if !ok {
 		// Feb 29 is the only intentional miss; reuse Feb 28's values.
-		entry = melbourneSunUTC["02-28"]
+		entry = melbourneSunLocal["02-28"]
 	}
-	hhmm := entry.setUTC
+	hhmm := entry.setLocal
 	if isSunrise {
-		hhmm = entry.riseUTC
+		hhmm = entry.riseLocal
 	}
 	if len(hhmm) != 5 || hhmm[2] != ':' {
 		return dayStart.UTC().Truncate(time.Second)
@@ -583,21 +580,20 @@ func integratePload(readings []dynamo.ReadingItem, startUnix, endUnix int64) flo
 		pts = append(pts, pt{ts: r.Timestamp, pload: max(r.Pload, 0)})
 	}
 
-	// Right edge synthesis.
+	// Right edge synthesis. iR is the first index with Timestamp >= endUnix,
+	// so readings[iR-1].Timestamp < endUnix is guaranteed.
 	if iR > 0 && iR < len(readings) {
 		prev := readings[iR-1]
-		if prev.Timestamp < endUnix {
-			next := readings[iR]
-			gap := next.Timestamp - prev.Timestamp
-			if gap <= maxPairGapSeconds {
-				p0 := max(prev.Pload, 0)
-				p1 := max(next.Pload, 0)
-				frac := float64(endUnix-prev.Timestamp) / float64(next.Timestamp-prev.Timestamp)
-				pts = append(pts, pt{
-					ts:    endUnix,
-					pload: p0 + (p1-p0)*frac,
-				})
-			}
+		next := readings[iR]
+		gap := next.Timestamp - prev.Timestamp
+		if gap <= maxPairGapSeconds {
+			p0 := max(prev.Pload, 0)
+			p1 := max(next.Pload, 0)
+			frac := float64(endUnix-prev.Timestamp) / float64(next.Timestamp-prev.Timestamp)
+			pts = append(pts, pt{
+				ts:    endUnix,
+				pload: p0 + (p1-p0)*frac,
+			})
 		}
 	}
 

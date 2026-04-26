@@ -16,9 +16,9 @@
 
 package api
 
-var melbourneSunUTC = map[string]struct {
-	riseUTC string // "HH:MM" wall-clock in sydneyTZ
-	setUTC  string // "HH:MM" wall-clock in sydneyTZ
+var melbourneSunLocal = map[string]struct {
+	riseLocal string // "HH:MM" wall-clock in sydneyTZ
+	setLocal  string // "HH:MM" wall-clock in sydneyTZ
 }{
 	"01-01": {"06:01", "20:45"},
 	"01-02": {"06:02", "20:45"},

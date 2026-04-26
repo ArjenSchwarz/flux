@@ -1854,25 +1854,22 @@ func TestFindEveningNight(t *testing.T) {
 				assert.Nil(t, got.Evening.AverageKwhPerHour, "elapsed<60s must omit average")
 			},
 		},
-		"future date / no readings returns nil": {
-			// findEveningNight is gated on len(readings)>0 by the caller, so
-			// passing an empty slice here is the canonical "skip" signal.
+		"empty readings on past date emits both blocks as estimated": {
+			// Caller gates findEveningNight on len(readings)>0, so an empty
+			// slice is the canonical "skip" signal in production. This test
+			// pins the documented behaviour when the gate is bypassed: with
+			// no readings on a past date, both blocks fall back to the sun
+			// table because dayStart < sunrise and sunset < dayEnd.
 			readings: nil,
-			date:     "2027-01-01",
+			date:     "2026-04-14",
 			today:    date,
 			now:      time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ),
 			check: func(t *testing.T, got *EveningNight) {
-				// With no readings: both blocks fall back to estimated; both
-				// are emitted because dayStart < computed sunrise and computed
-				// sunset < dayEnd. This documents the no-readings case for a
-				// past date — the caller is responsible for not invoking
-				// findEveningNight on a future date with no readings.
-				if got != nil {
-					// On a hypothetical future date treated as past, both blocks
-					// would estimate from the sun table.
-					assert.Equal(t, EveningNightBoundaryEstimated, got.Night.BoundarySource)
-					assert.Equal(t, EveningNightBoundaryEstimated, got.Evening.BoundarySource)
-				}
+				require.NotNil(t, got)
+				require.NotNil(t, got.Night)
+				require.NotNil(t, got.Evening)
+				assert.Equal(t, EveningNightBoundaryEstimated, got.Night.BoundarySource)
+				assert.Equal(t, EveningNightBoundaryEstimated, got.Evening.BoundarySource)
 			},
 		},
 	}
