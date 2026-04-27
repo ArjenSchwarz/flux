@@ -677,16 +677,18 @@ func findEveningNight(readings []dynamo.ReadingItem, date, today string, now tim
 	}
 
 	// Single pass over readings to find the first/last reading with Ppv > 0.
-	// firstPpv ignores readings before sunrise - preSunriseBlipBuffer so that a
-	// stray sensor blip at e.g. 01:30 does not become the night-end boundary.
-	// lastPpv is unfiltered: solar drops to zero well before sunset, so the
-	// symmetric noise problem has not been observed in practice.
-	firstPpvCutoff := resolveSunrise().Add(-preSunriseBlipBuffer).Unix()
+	// Both candidates ignore readings before sunrise - preSunriseBlipBuffer:
+	// a single stray reading at e.g. 01:30 would otherwise pollute both the
+	// night-end (firstPpv) and evening-start (lastPpv) boundaries on a day
+	// with no real production. No upper bound is applied — solar drops to
+	// zero well before sunset, so a post-sunset blip is not a credible last-
+	// of-day reading and hasn't been observed in practice.
+	ppvLowerCutoff := resolveSunrise().Add(-preSunriseBlipBuffer).Unix()
 	var firstPpv, lastPpv *dynamo.ReadingItem
 	for i := range readings {
-		if readings[i].Ppv > 0 {
+		if readings[i].Ppv > 0 && readings[i].Timestamp >= ppvLowerCutoff {
 			r := readings[i]
-			if firstPpv == nil && r.Timestamp >= firstPpvCutoff {
+			if firstPpv == nil {
 				firstPpv = &r
 			}
 			lastPpv = &r

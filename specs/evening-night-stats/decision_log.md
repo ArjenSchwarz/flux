@@ -318,9 +318,9 @@ The symmetric problem on the evening side has not been observed: solar productio
 
 ### Decision
 
-When scanning for the first `Ppv > 0` reading, ignore any reading whose timestamp is before `sunrise - 30 minutes`, where sunrise is the existing Melbourne sun-table value for the requested date (resolved via `time.ParseInLocation` in `sydneyTZ`, so DST-correct). If no qualifying reading exists, the night-end falls back to the table sunrise via the existing `boundarySource = estimated` path.
+When scanning for `Ppv > 0` readings, ignore any reading whose timestamp is before `sunrise - 30 minutes`, where sunrise is the existing Melbourne sun-table value for the requested date (resolved via `time.ParseInLocation` in `sydneyTZ`, so DST-correct). The same lower-bound filter applies to both `firstPpv` (night-end) and `lastPpv` (evening-start) so a single stray reading cannot pollute either boundary on a day with no real production. If neither candidate qualifies, the corresponding block falls back to the table sunrise/sunset via the existing `boundarySource = estimated` path.
 
-The `lastPpv` search (evening start) is intentionally unfiltered.
+No upper bound is applied — solar drops to zero well before sunset, so a post-sunset blip is not a credible last-of-day reading and has not been observed in practice.
 
 ### Rationale
 
@@ -333,7 +333,7 @@ The `lastPpv` search (evening start) is intentionally unfiltered.
 - **Strict "after sunrise" cutoff (no buffer)**: Rejects all pre-sunrise readings — simpler, but pessimises legitimate early-morning production where panels can produce measurable power 10–20 minutes before civil sunrise. Rejected for being too aggressive on a continuous edge case.
 - **Require N consecutive `Ppv > 0` readings**: More robust against any-time noise, including hypothetical near-sunrise blips. Rejected as over-engineering for the observed failure mode and adds complexity (window size, gap handling) without a clear win.
 - **Apply a minimum-power threshold (e.g. `Ppv > 50 W`)**: Filters by magnitude rather than time. Rejected because real twilight production can be very low (single-digit watts on a partly-cloudy morning) and is still informative for the boundary; time-based filtering is a cleaner signal.
-- **Apply the same filter symmetrically on the evening side**: Cleaner conceptually, but the failure mode hasn't been observed on the evening side and adds risk of false negatives during legitimately late-clearing afternoons. Deferred until evidence justifies it.
+- **Apply an upper-bound filter at `sunset + buffer` on `lastPpv`**: Would also reject late-evening blips. Deferred — solar production drops to zero well before sunset, and adding the upper bound risks false negatives on legitimately late-clearing afternoons. The lower-bound-only filter on `lastPpv` is enough to handle the observed failure mode (a single 01:30 blip that, without filtering, would have made the evening block start at 01:30 and span 22+ hours).
 
 ### Consequences
 
@@ -347,7 +347,7 @@ The `lastPpv` search (evening start) is intentionally unfiltered.
 
 ### Impact
 
-- `internal/api/compute.go`: `findEveningNight` adds a `preSunriseBlipBuffer` constant and a `resolveSunrise` closure mirroring `resolveSunset`; the inline scan now skips `Ppv > 0` candidates before the cutoff.
-- `internal/api/compute_test.go`: three new `TestFindEveningNight` cases pin the blip-only / blip-plus-real / within-buffer behaviour.
+- `internal/api/compute.go`: `findEveningNight` adds a `preSunriseBlipBuffer` constant and a `resolveSunrise` closure mirroring `resolveSunset`; the inline scan now skips `Ppv > 0` candidates before `sunrise - 30 min` for both the `firstPpv` and `lastPpv` slots.
+- `internal/api/compute_test.go`: three new `TestFindEveningNight` cases pin the blip-only / blip-plus-real / within-buffer behaviour. The blip-only case asserts on both Night and Evening to lock in the symmetric fallback.
 
 ---

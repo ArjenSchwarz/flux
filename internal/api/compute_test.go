@@ -1874,12 +1874,12 @@ func TestFindEveningNight(t *testing.T) {
 				assert.Equal(t, EveningNightBoundaryEstimated, got.Evening.BoundarySource)
 			},
 		},
-		"01:30 sensor blip alone falls back to sunrise (estimated)": {
+		"01:30 sensor blip alone falls back to sunrise/sunset (both estimated)": {
 			// Sunrise on 2026-03-10 is 07:13 local (AEDT). Buffer is 30 min,
 			// so the cutoff is 06:43; a Ppv>0 reading at 01:30 is hours
-			// before that and must be ignored. With no qualifying real
-			// production reading, the night block falls back to the table
-			// sunrise.
+			// before that and must be ignored. The same lower-bound filter
+			// applies to lastPpv so the blip cannot pollute the evening-start
+			// boundary either — both blocks fall back to the sun table.
 			readings: []dynamo.ReadingItem{
 				readingPpv(pastDate, 1, 30, 0, 50, 800),
 				readingPpv(pastDate, 12, 0, 0, 0, 1000),
@@ -1890,11 +1890,17 @@ func TestFindEveningNight(t *testing.T) {
 			check: func(t *testing.T, got *EveningNight) {
 				require.NotNil(t, got)
 				require.NotNil(t, got.Night)
+				require.NotNil(t, got.Evening)
 				assert.Equal(t, EveningNightBoundaryEstimated, got.Night.BoundarySource)
-				expected := time.Date(2026, 3, 10, 7, 13, 0, 0, sydneyTZ).UTC().Truncate(time.Second)
-				gotEnd, err := time.Parse(time.RFC3339, got.Night.End)
+				assert.Equal(t, EveningNightBoundaryEstimated, got.Evening.BoundarySource)
+				expectedSunrise := time.Date(2026, 3, 10, 7, 13, 0, 0, sydneyTZ).UTC().Truncate(time.Second)
+				gotNightEnd, err := time.Parse(time.RFC3339, got.Night.End)
 				require.NoError(t, err)
-				assert.Equal(t, expected, gotEnd)
+				assert.Equal(t, expectedSunrise, gotNightEnd)
+				expectedSunset := time.Date(2026, 3, 10, 19, 49, 0, 0, sydneyTZ).UTC().Truncate(time.Second)
+				gotEveningStart, err := time.Parse(time.RFC3339, got.Evening.Start)
+				require.NoError(t, err)
+				assert.Equal(t, expectedSunset, gotEveningStart)
 			},
 		},
 		"01:30 blip is ignored when real production starts after the cutoff": {
