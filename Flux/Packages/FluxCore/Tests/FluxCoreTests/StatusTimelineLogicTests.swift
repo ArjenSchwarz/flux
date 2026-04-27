@@ -371,7 +371,7 @@ final class StubFluxAPIClient: FluxAPIClient, @unchecked Sendable {
     }
 
     func fetchDay(date: String) async throws -> DayDetailResponse {
-        DayDetailResponse(date: date, readings: [], summary: nil, peakPeriods: nil, eveningNight: nil)
+        DayDetailResponse(date: date, readings: [], summary: nil, peakPeriods: nil, dailyUsage: nil)
     }
 }
 
@@ -394,6 +394,6 @@ final class DelayedFluxAPIClient: FluxAPIClient, @unchecked Sendable {
     }
 
     func fetchDay(date: String) async throws -> DayDetailResponse {
-        DayDetailResponse(date: date, readings: [], summary: nil, peakPeriods: nil, eveningNight: nil)
+        DayDetailResponse(date: date, readings: [], summary: nil, peakPeriods: nil, dailyUsage: nil)
     }
 }

@@ -305,47 +305,90 @@ struct APIModelsTests {
     }
 
     @Test
-    func decodeDayDetailResponseWithEveningNightBothBlocks() throws {
+    // swiftlint:disable:next function_body_length
+    func decodeDayDetailResponseWithDailyUsageAllFiveBlocks() throws {
         let json = """
         {
           "date": "2026-04-14",
           "readings": [],
           "summary": null,
-          "eveningNight": {
-            "evening": {
-              "start": "2026-04-14T08:30:00Z",
-              "end": "2026-04-14T14:00:00Z",
-              "totalKwh": 4.2,
-              "averageKwhPerHour": 0.85,
-              "status": "complete",
-              "boundarySource": "readings"
-            },
-            "night": {
-              "start": "2026-04-13T14:00:00Z",
-              "end": "2026-04-13T20:30:00Z",
-              "totalKwh": 3.1,
-              "averageKwhPerHour": 0.48,
-              "status": "complete",
-              "boundarySource": "readings"
-            }
+          "dailyUsage": {
+            "blocks": [
+              {
+                "kind": "night",
+                "start": "2026-04-13T14:00:00Z",
+                "end": "2026-04-13T20:30:00Z",
+                "totalKwh": 3.1,
+                "averageKwhPerHour": 0.48,
+                "percentOfDay": 18,
+                "status": "complete",
+                "boundarySource": "readings"
+              },
+              {
+                "kind": "morningPeak",
+                "start": "2026-04-13T20:30:00Z",
+                "end": "2026-04-14T01:00:00Z",
+                "totalKwh": 2.1,
+                "averageKwhPerHour": 0.47,
+                "percentOfDay": 12,
+                "status": "complete",
+                "boundarySource": "readings"
+              },
+              {
+                "kind": "offPeak",
+                "start": "2026-04-14T01:00:00Z",
+                "end": "2026-04-14T04:00:00Z",
+                "totalKwh": 5.0,
+                "averageKwhPerHour": 1.67,
+                "percentOfDay": 30,
+                "status": "complete",
+                "boundarySource": "readings"
+              },
+              {
+                "kind": "afternoonPeak",
+                "start": "2026-04-14T04:00:00Z",
+                "end": "2026-04-14T08:42:00Z",
+                "totalKwh": 4.5,
+                "averageKwhPerHour": 0.96,
+                "percentOfDay": 27,
+                "status": "complete",
+                "boundarySource": "readings"
+              },
+              {
+                "kind": "evening",
+                "start": "2026-04-14T08:42:00Z",
+                "end": "2026-04-14T14:00:00Z",
+                "totalKwh": 2.2,
+                "averageKwhPerHour": 0.41,
+                "percentOfDay": 13,
+                "status": "complete",
+                "boundarySource": "readings"
+              }
+            ]
           }
         }
         """
 
         let detail = try decoder.decode(DayDetailResponse.self, from: Data(json.utf8))
 
-        let eveningNight = try #require(detail.eveningNight)
-        #expect(eveningNight.hasAnyBlock)
-        #expect(eveningNight.evening?.totalKwh == 4.2)
-        #expect(eveningNight.evening?.averageKwhPerHour == 0.85)
-        #expect(eveningNight.evening?.status == .complete)
-        #expect(eveningNight.evening?.boundarySource == .readings)
-        #expect(eveningNight.night?.totalKwh == 3.1)
-        #expect(eveningNight.night?.status == .complete)
+        let dailyUsage = try #require(detail.dailyUsage)
+        #expect(dailyUsage.blocks.count == 5)
+        #expect(dailyUsage.blocks[0].kind == .night)
+        #expect(dailyUsage.blocks[0].percentOfDay == 18)
+        #expect(dailyUsage.blocks[0].boundarySource == .readings)
+        #expect(dailyUsage.blocks[0].status == .complete)
+        #expect(dailyUsage.blocks[1].kind == .morningPeak)
+        #expect(dailyUsage.blocks[1].totalKwh == 2.1)
+        #expect(dailyUsage.blocks[2].kind == .offPeak)
+        #expect(dailyUsage.blocks[2].averageKwhPerHour == 1.67)
+        #expect(dailyUsage.blocks[3].kind == .afternoonPeak)
+        #expect(dailyUsage.blocks[3].percentOfDay == 27)
+        #expect(dailyUsage.blocks[4].kind == .evening)
+        #expect(dailyUsage.blocks[4].id == "evening")
     }
 
     @Test
-    func decodeDayDetailResponseWithoutEveningNightKey() throws {
+    func decodeDayDetailResponseWithoutDailyUsageKey() throws {
         let json = """
         {
           "date": "2026-04-14",
@@ -356,75 +399,75 @@ struct APIModelsTests {
 
         let detail = try decoder.decode(DayDetailResponse.self, from: Data(json.utf8))
 
-        #expect(detail.eveningNight == nil)
+        #expect(detail.dailyUsage == nil)
     }
 
     @Test
-    func decodeEveningNightWithOnlyOneBlock() throws {
+    func decodeDailyUsageWithTwoBlocksOffPeakMisconfigured() throws {
         let json = """
         {
           "date": "2026-04-14",
           "readings": [],
           "summary": null,
-          "eveningNight": {
-            "night": {
-              "start": "2026-04-13T14:00:00Z",
-              "end": "2026-04-13T20:30:00Z",
-              "totalKwh": 3.1,
-              "averageKwhPerHour": 0.48,
-              "status": "complete",
-              "boundarySource": "estimated"
-            }
+          "dailyUsage": {
+            "blocks": [
+              {
+                "kind": "night",
+                "start": "2026-04-13T14:00:00Z",
+                "end": "2026-04-13T20:30:00Z",
+                "totalKwh": 3.1,
+                "averageKwhPerHour": 0.48,
+                "percentOfDay": 42,
+                "status": "complete",
+                "boundarySource": "estimated"
+              },
+              {
+                "kind": "evening",
+                "start": "2026-04-14T08:42:00Z",
+                "end": "2026-04-14T14:00:00Z",
+                "totalKwh": 4.3,
+                "averageKwhPerHour": 0.81,
+                "percentOfDay": 58,
+                "status": "complete",
+                "boundarySource": "estimated"
+              }
+            ]
           }
         }
         """
 
         let detail = try decoder.decode(DayDetailResponse.self, from: Data(json.utf8))
 
-        let eveningNight = try #require(detail.eveningNight)
-        #expect(eveningNight.evening == nil)
-        #expect(eveningNight.night != nil)
-        #expect(eveningNight.hasAnyBlock)
-        #expect(eveningNight.night?.boundarySource == .estimated)
+        let dailyUsage = try #require(detail.dailyUsage)
+        #expect(dailyUsage.blocks.count == 2)
+        #expect(dailyUsage.blocks[0].kind == .night)
+        #expect(dailyUsage.blocks[0].boundarySource == .estimated)
+        #expect(dailyUsage.blocks[1].kind == .evening)
+        #expect(dailyUsage.blocks[1].boundarySource == .estimated)
     }
 
     @Test
-    func decodeEveningNightBlockWithNullAverage() throws {
+    func decodeDailyUsageBlockWithNullAverage() throws {
         let json = """
         {
+          "kind": "night",
           "start": "2026-04-14T08:30:00Z",
           "end": "2026-04-14T08:30:30Z",
           "totalKwh": 0.0,
           "averageKwhPerHour": null,
+          "percentOfDay": 0,
           "status": "in-progress",
           "boundarySource": "readings"
         }
         """
 
-        let block = try decoder.decode(EveningNightBlock.self, from: Data(json.utf8))
+        let block = try decoder.decode(DailyUsageBlock.self, from: Data(json.utf8))
 
         #expect(block.averageKwhPerHour == nil)
         #expect(block.status == .inProgress)
         #expect(block.totalKwh == 0.0)
-    }
-
-    @Test
-    func decodeEveningNightBlockWithEstimatedBoundary() throws {
-        let json = """
-        {
-          "start": "2026-04-14T08:30:00Z",
-          "end": "2026-04-14T14:00:00Z",
-          "totalKwh": 4.2,
-          "averageKwhPerHour": 0.85,
-          "status": "complete",
-          "boundarySource": "estimated"
-        }
-        """
-
-        let block = try decoder.decode(EveningNightBlock.self, from: Data(json.utf8))
-
-        #expect(block.boundarySource == .estimated)
-        #expect(block.id == "2026-04-14T08:30:00Z")
+        #expect(block.percentOfDay == 0)
+        #expect(block.kind == .night)
     }
 
     @Test

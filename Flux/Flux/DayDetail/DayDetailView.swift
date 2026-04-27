@@ -33,9 +33,9 @@ struct DayDetailView: View {
                     }
 
                     if viewModel.hasPowerData,
-                       let eveningNight = viewModel.eveningNight,
-                       eveningNight.hasAnyBlock {
-                        EveningNightCard(eveningNight: eveningNight)
+                       let dailyUsage = viewModel.dailyUsage,
+                       !dailyUsage.blocks.isEmpty {
+                        DailyUsageCard(dailyUsage: dailyUsage)
                     }
                 } else if let error = viewModel.error {
                     errorCard(error: error)

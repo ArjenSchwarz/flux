@@ -100,7 +100,7 @@ final actor MockFluxAPIClient: FluxAPIClient {
                 PeakPeriod(start: "\(date)T07:15:00Z", end: "\(date)T07:45:00Z", avgLoadW: 4200.3, energyWh: 2100),
                 PeakPeriod(start: "\(date)T12:00:00Z", end: "\(date)T12:20:00Z", avgLoadW: 2900.5, energyWh: 967)
             ],
-            eveningNight: dayEveningNight(for: date)
+            dailyUsage: dayDailyUsage(for: date)
         )
     }
 
@@ -133,27 +133,62 @@ final actor MockFluxAPIClient: FluxAPIClient {
         return readings
     }
 
-    // Exercises both card states: an in-progress evening (renders "(so far)")
-    // and a complete readings-derived night block.
-    private static func dayEveningNight(for date: String) -> EveningNight {
-        EveningNight(
-            evening: EveningNightBlock(
-                start: "\(date)T08:30:00Z",
+    // Exercises all five blocks for the preview, including a mix of readings-
+    // and estimated-derived boundaries to render the caption variants.
+    // swiftlint:disable:next function_body_length
+    private static func dayDailyUsage(for date: String) -> DailyUsage {
+        DailyUsage(blocks: [
+            DailyUsageBlock(
+                kind: .night,
+                start: "\(date)T14:00:00Z",
+                end: "\(date)T20:30:00Z",
+                totalKwh: 3.1,
+                averageKwhPerHour: 0.48,
+                percentOfDay: 18,
+                status: .complete,
+                boundarySource: .readings
+            ),
+            DailyUsageBlock(
+                kind: .morningPeak,
+                start: "\(date)T20:30:00Z",
+                end: "\(date)T01:00:00Z",
+                totalKwh: 2.1,
+                averageKwhPerHour: 0.47,
+                percentOfDay: 12,
+                status: .complete,
+                boundarySource: .estimated
+            ),
+            DailyUsageBlock(
+                kind: .offPeak,
+                start: "\(date)T01:00:00Z",
+                end: "\(date)T04:00:00Z",
+                totalKwh: 5.0,
+                averageKwhPerHour: 1.67,
+                percentOfDay: 30,
+                status: .complete,
+                boundarySource: .readings
+            ),
+            DailyUsageBlock(
+                kind: .afternoonPeak,
+                start: "\(date)T04:00:00Z",
+                end: "\(date)T08:42:00Z",
+                totalKwh: 4.5,
+                averageKwhPerHour: 0.96,
+                percentOfDay: 27,
+                status: .complete,
+                boundarySource: .estimated
+            ),
+            DailyUsageBlock(
+                kind: .evening,
+                start: "\(date)T08:42:00Z",
                 end: "\(date)T11:00:00Z",
                 totalKwh: 2.7,
                 averageKwhPerHour: 1.08,
+                percentOfDay: 13,
                 status: .inProgress,
-                boundarySource: .readings
-            ),
-            night: EveningNightBlock(
-                start: "\(date)T14:00:00Z",
-                end: "\(date)T20:30:00Z",
-                totalKwh: 4.2,
-                averageKwhPerHour: 0.65,
-                status: .complete,
-                boundarySource: .readings
+                boundarySource: .estimated
             )
-        )
+        ])
     }
 
     func fetchStatus() async throws -> StatusResponse {

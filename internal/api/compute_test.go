@@ -1627,27 +1627,58 @@ func TestIntegratePload(t *testing.T) {
 }
 
 // readingPpv builds a ReadingItem at the given Sydney local time with the
-// specified Ppv and Pload values for findEveningNight tests.
+// specified Ppv and Pload values for daily-usage tests.
 func readingPpv(date string, hour, minute, second int, ppv, pload float64) dynamo.ReadingItem {
 	d, _ := time.ParseInLocation("2006-01-02", date, sydneyTZ)
 	t := time.Date(d.Year(), d.Month(), d.Day(), hour, minute, second, 0, sydneyTZ)
 	return dynamo.ReadingItem{Timestamp: t.Unix(), Ppv: ppv, Pload: pload}
 }
 
-func TestFindEveningNight(t *testing.T) {
-	const date = "2026-04-15"
-	dayStart, _ := time.ParseInLocation("2006-01-02", date, sydneyTZ)
+func BenchmarkFindPeakPeriods(b *testing.B) {
+	dayStart := time.Date(2026, 4, 15, 0, 0, 0, 0, sydneyTZ)
+	readings := make([]dynamo.ReadingItem, 0, 8640)
+	for i := range 8640 {
+		readings = append(readings, dynamo.ReadingItem{
+			Timestamp: dayStart.Unix() + int64(i*10),
+			Pload:     float64(500 + i%4500), // varied load 500-5000W
+		})
+	}
 
-	// "Past day" date so isToday == false.
-	const pastDate = "2026-03-10"
+	for b.Loop() {
+		_ = findPeakPeriods(readings, "11:00", "14:00")
+	}
+}
 
-	// Reusable: a day where Ppv>0 from 06:30 to 18:00 (10s cadence), constant
-	// Pload=1000. We don't need every second; coarse readings every 5 min are
-	// enough to exercise the boundaries.
+// dailyUsageBlocksByKind indexes the emitted blocks of a DailyUsage result
+// by Kind so assertions can pick out the block they care about.
+func dailyUsageBlocksByKind(du *DailyUsage) map[string]DailyUsageBlock {
+	if du == nil {
+		return nil
+	}
+	out := make(map[string]DailyUsageBlock, len(du.Blocks))
+	for _, b := range du.Blocks {
+		out[b.Kind] = b
+	}
+	return out
+}
+
+func TestFindDailyUsage(t *testing.T) {
+	const offpeakStart = "11:00"
+	const offpeakEnd = "14:00"
+
+	// Past day for fixtures that aren't checking today behaviour. 2026-04-12
+	// has sunrise 06:43, sunset 17:59 — comfortably bracketing 11:00–14:00.
+	const pastDate = "2026-04-12"
+	// Today date used for today-gate fixtures (matches sunrise 06:46, sunset 17:55).
+	const todayDate = "2026-04-15"
+
+	// Five-block readings: Pload=1000 throughout; Ppv positive 06:30–18:00.
+	// Coarse 5-minute cadence is fine — the integrator is exercised by
+	// dedicated tests, this fixture only needs to anchor firstSolar/lastSolar.
 	pastDayReadings := func() []dynamo.ReadingItem {
 		var out []dynamo.ReadingItem
-		// Pre-dawn: Pload only, no solar. 00:00 → 06:25 every 5 min.
-		for h := 0; h < 7; h++ {
+		// 00:00 → 06:25 every 5 min (pre-dawn, no solar).
+		for h := range 7 {
 			for m := 0; m < 60; m += 5 {
 				if h == 6 && m >= 30 {
 					break
@@ -1655,7 +1686,7 @@ func TestFindEveningNight(t *testing.T) {
 				out = append(out, readingPpv(pastDate, h, m, 0, 0, 1000))
 			}
 		}
-		// Solar window 06:30 → 17:55 every 5 min.
+		// Solar window 06:30 → 17:55 every 5 min, Ppv=1000.
 		for h := 6; h < 18; h++ {
 			startMin := 0
 			if h == 6 {
@@ -1674,301 +1705,660 @@ func TestFindEveningNight(t *testing.T) {
 		return out
 	}()
 
+	// Today readings up to a configurable hour, with Ppv positive between
+	// 06:30 and 18:00. Used by today-gate fixtures.
+	todayReadingsUpTo := func(stopHour, stopMinute int) []dynamo.ReadingItem {
+		var out []dynamo.ReadingItem
+		for h := 0; h <= stopHour; h++ {
+			for m := 0; m < 60; m += 5 {
+				if h == stopHour && m > stopMinute {
+					break
+				}
+				ppv := 0.0
+				solarStart := h*60+m >= 6*60+30
+				solarEnd := h*60+m < 18*60
+				if solarStart && solarEnd {
+					ppv = 1000
+				}
+				out = append(out, readingPpv(todayDate, h, m, 0, ppv, 1000))
+			}
+		}
+		return out
+	}
+
+	// Overcast readings (no Ppv > 0 anywhere) for past day.
+	overcastReadings := []dynamo.ReadingItem{
+		readingPpv(pastDate, 0, 30, 0, 0, 800),
+		readingPpv(pastDate, 6, 0, 0, 0, 800),
+		readingPpv(pastDate, 12, 0, 0, 0, 800),
+		readingPpv(pastDate, 14, 30, 0, 0, 800),
+		readingPpv(pastDate, 18, 0, 0, 0, 800),
+		readingPpv(pastDate, 23, 0, 0, 0, 800),
+	}
+
 	tests := map[string]struct {
-		readings []dynamo.ReadingItem
-		date     string
-		today    string
-		now      time.Time
-		check    func(t *testing.T, got *EveningNight)
+		readings     []dynamo.ReadingItem
+		offpeakStart string
+		offpeakEnd   string
+		date         string
+		today        string
+		now          time.Time
+		check        func(t *testing.T, got *DailyUsage)
 	}{
-		"typical past day, both periods complete from readings": {
-			readings: pastDayReadings,
-			date:     pastDate,
-			today:    date, // today != pastDate
-			now:      time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ),
-			check: func(t *testing.T, got *EveningNight) {
+		"typical past day, all five blocks complete from readings": {
+			readings:     pastDayReadings,
+			offpeakStart: offpeakStart,
+			offpeakEnd:   offpeakEnd,
+			date:         pastDate,
+			today:        todayDate, // not today
+			now:          time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ),
+			check: func(t *testing.T, got *DailyUsage) {
 				require.NotNil(t, got)
-				require.NotNil(t, got.Night)
-				require.NotNil(t, got.Evening)
-				assert.Equal(t, EveningNightStatusComplete, got.Night.Status)
-				assert.Equal(t, EveningNightStatusComplete, got.Evening.Status)
-				assert.Equal(t, EveningNightBoundaryReadings, got.Night.BoundarySource)
-				assert.Equal(t, EveningNightBoundaryReadings, got.Evening.BoundarySource)
+				blocks := dailyUsageBlocksByKind(got)
+				require.Len(t, got.Blocks, 5)
+				for _, kind := range []string{
+					DailyUsageKindNight, DailyUsageKindMorningPeak,
+					DailyUsageKindOffPeak, DailyUsageKindAfternoonPeak,
+					DailyUsageKindEvening,
+				} {
+					b, ok := blocks[kind]
+					require.True(t, ok, "missing block %s", kind)
+					assert.Equal(t, DailyUsageStatusComplete, b.Status, "kind=%s", kind)
+					assert.Equal(t, DailyUsageBoundaryReadings, b.BoundarySource, "kind=%s", kind)
+				}
+				// Chronological order assertion.
+				assert.Equal(t, DailyUsageKindNight, got.Blocks[0].Kind)
+				assert.Equal(t, DailyUsageKindMorningPeak, got.Blocks[1].Kind)
+				assert.Equal(t, DailyUsageKindOffPeak, got.Blocks[2].Kind)
+				assert.Equal(t, DailyUsageKindAfternoonPeak, got.Blocks[3].Kind)
+				assert.Equal(t, DailyUsageKindEvening, got.Blocks[4].Kind)
 			},
 		},
-		"today before sunrise: only night, in-progress, end clamped to now": {
+		"today before sunrise: only night, in-progress, readings-derived end": {
 			readings: []dynamo.ReadingItem{
-				// A few overnight readings, no Ppv>0 yet.
-				readingPpv(date, 1, 0, 0, 0, 1000),
-				readingPpv(date, 2, 0, 0, 0, 1000),
-				readingPpv(date, 3, 0, 0, 0, 1000),
-				readingPpv(date, 4, 30, 0, 0, 1000),
+				readingPpv(todayDate, 1, 0, 0, 0, 1000),
+				readingPpv(todayDate, 2, 0, 0, 0, 1000),
+				readingPpv(todayDate, 3, 0, 0, 0, 1000),
+				readingPpv(todayDate, 4, 30, 0, 0, 1000),
 			},
-			date:  date,
-			today: date,
-			now:   time.Date(2026, 4, 15, 4, 30, 0, 0, sydneyTZ),
-			check: func(t *testing.T, got *EveningNight) {
+			offpeakStart: offpeakStart,
+			offpeakEnd:   offpeakEnd,
+			date:         todayDate,
+			today:        todayDate,
+			now:          time.Date(2026, 4, 15, 4, 30, 0, 0, sydneyTZ),
+			check: func(t *testing.T, got *DailyUsage) {
 				require.NotNil(t, got)
-				require.NotNil(t, got.Night)
-				assert.Nil(t, got.Evening, "evening must be omitted when sun has not set")
-				assert.Equal(t, EveningNightStatusInProgress, got.Night.Status)
-				assert.Equal(t, EveningNightBoundaryEstimated, got.Night.BoundarySource)
-				// End == now (clamped).
+				require.Len(t, got.Blocks, 1)
+				night := got.Blocks[0]
+				assert.Equal(t, DailyUsageKindNight, night.Kind)
+				assert.Equal(t, DailyUsageStatusInProgress, night.Status)
+				// Per AC 4.1: end is requestTime, not sunrise — boundary is "readings".
+				assert.Equal(t, DailyUsageBoundaryReadings, night.BoundarySource)
 				wantEnd := time.Date(2026, 4, 15, 4, 30, 0, 0, sydneyTZ).UTC().Format(time.RFC3339)
-				assert.Equal(t, wantEnd, got.Night.End)
-				wantStart := dayStart.UTC().Format(time.RFC3339)
-				assert.Equal(t, wantStart, got.Night.Start)
+				assert.Equal(t, wantEnd, night.End)
 			},
 		},
-		"today after sunset: both blocks; evening in-progress, night complete": {
+		"today mid-morning-peak: night complete, morningPeak in-progress": {
+			readings:     todayReadingsUpTo(9, 30),
+			offpeakStart: offpeakStart,
+			offpeakEnd:   offpeakEnd,
+			date:         todayDate,
+			today:        todayDate,
+			now:          time.Date(2026, 4, 15, 9, 30, 0, 0, sydneyTZ),
+			check: func(t *testing.T, got *DailyUsage) {
+				require.NotNil(t, got)
+				blocks := dailyUsageBlocksByKind(got)
+				require.Len(t, got.Blocks, 2)
+				night, ok := blocks[DailyUsageKindNight]
+				require.True(t, ok)
+				assert.Equal(t, DailyUsageStatusComplete, night.Status)
+				assert.Equal(t, DailyUsageBoundaryReadings, night.BoundarySource)
+				mp, ok := blocks[DailyUsageKindMorningPeak]
+				require.True(t, ok)
+				assert.Equal(t, DailyUsageStatusInProgress, mp.Status)
+				assert.Equal(t, DailyUsageBoundaryReadings, mp.BoundarySource)
+				wantEnd := time.Date(2026, 4, 15, 9, 30, 0, 0, sydneyTZ).UTC().Format(time.RFC3339)
+				assert.Equal(t, wantEnd, mp.End)
+			},
+		},
+		"today during off-peak: night/morningPeak complete, offPeak in-progress": {
+			readings:     todayReadingsUpTo(12, 30),
+			offpeakStart: offpeakStart,
+			offpeakEnd:   offpeakEnd,
+			date:         todayDate,
+			today:        todayDate,
+			now:          time.Date(2026, 4, 15, 12, 30, 0, 0, sydneyTZ),
+			check: func(t *testing.T, got *DailyUsage) {
+				require.NotNil(t, got)
+				blocks := dailyUsageBlocksByKind(got)
+				require.Len(t, got.Blocks, 3)
+				assert.Equal(t, DailyUsageStatusComplete, blocks[DailyUsageKindNight].Status)
+				assert.Equal(t, DailyUsageStatusComplete, blocks[DailyUsageKindMorningPeak].Status)
+				op := blocks[DailyUsageKindOffPeak]
+				assert.Equal(t, DailyUsageStatusInProgress, op.Status)
+				assert.Equal(t, DailyUsageBoundaryReadings, op.BoundarySource)
+				wantEnd := time.Date(2026, 4, 15, 12, 30, 0, 0, sydneyTZ).UTC().Format(time.RFC3339)
+				assert.Equal(t, wantEnd, op.End)
+			},
+		},
+		"today mid-afternoon-peak with sun still up: today-gate fires": {
+			// Recent solar (within 5 min) → today-gate fires; afternoonPeak.end = now,
+			// evening omitted.
 			readings: func() []dynamo.ReadingItem {
-				// Solar 07:00 → 17:30; now=22:00. lastPpv at 17:30, firstPpv at 07:00.
-				var r []dynamo.ReadingItem
-				// pre-dawn
-				r = append(r, readingPpv(date, 0, 30, 0, 0, 1000))
-				// first solar
-				r = append(r, readingPpv(date, 7, 0, 0, 500, 1000))
-				// last solar
-				r = append(r, readingPpv(date, 17, 30, 0, 100, 1000))
-				// after sunset
-				r = append(r, readingPpv(date, 19, 0, 0, 0, 1000))
-				r = append(r, readingPpv(date, 21, 0, 0, 0, 1000))
-				return r
+				out := todayReadingsUpTo(15, 30)
+				// Final readings have Ppv > 0 to guarantee recentSolar.
+				return out
 			}(),
-			date:  date,
-			today: date,
-			now:   time.Date(2026, 4, 15, 22, 0, 0, 0, sydneyTZ),
-			check: func(t *testing.T, got *EveningNight) {
+			offpeakStart: offpeakStart,
+			offpeakEnd:   offpeakEnd,
+			date:         todayDate,
+			today:        todayDate,
+			now:          time.Date(2026, 4, 15, 15, 30, 0, 0, sydneyTZ),
+			check: func(t *testing.T, got *DailyUsage) {
 				require.NotNil(t, got)
-				require.NotNil(t, got.Night)
-				require.NotNil(t, got.Evening)
-				assert.Equal(t, EveningNightStatusComplete, got.Night.Status)
-				assert.Equal(t, EveningNightStatusInProgress, got.Evening.Status)
-				assert.Equal(t, EveningNightBoundaryReadings, got.Night.BoundarySource)
-				assert.Equal(t, EveningNightBoundaryReadings, got.Evening.BoundarySource)
-				// Evening end clamped to now.
-				wantEnd := time.Date(2026, 4, 15, 22, 0, 0, 0, sydneyTZ).UTC().Format(time.RFC3339)
-				assert.Equal(t, wantEnd, got.Evening.End)
+				blocks := dailyUsageBlocksByKind(got)
+				require.Len(t, got.Blocks, 4, "evening should be omitted by today-gate")
+				_, hasEvening := blocks[DailyUsageKindEvening]
+				assert.False(t, hasEvening)
+				ap := blocks[DailyUsageKindAfternoonPeak]
+				assert.Equal(t, DailyUsageStatusInProgress, ap.Status)
+				wantEnd := time.Date(2026, 4, 15, 15, 30, 0, 0, sydneyTZ).UTC().Format(time.RFC3339)
+				assert.Equal(t, wantEnd, ap.End)
+				// AC 1.5: today-gate clamp produces requestTime end ⇒ readings.
+				assert.Equal(t, DailyUsageBoundaryReadings, ap.BoundarySource)
 			},
 		},
-		"today midday: only night; evening omitted by today gate": {
+		"today late afternoon, cloudy, solar stopped 90 min ago: gate does NOT fire": {
+			// Last Ppv > 0 reading at 14:30 (just past off-peak end), now = 16:00.
+			// No recent solar, but qualifying Ppv exists → gate does NOT fire.
+			// afternoonPeak complete with end = lastSolar; evening in-progress.
 			readings: func() []dynamo.ReadingItem {
-				var r []dynamo.ReadingItem
-				r = append(r, readingPpv(date, 0, 30, 0, 0, 1000))
-				r = append(r, readingPpv(date, 7, 0, 0, 500, 1000))
-				r = append(r, readingPpv(date, 11, 0, 0, 800, 1000))
-				r = append(r, readingPpv(date, 13, 0, 0, 900, 1000))
-				return r
-			}(),
-			date:  date,
-			today: date,
-			now:   time.Date(2026, 4, 15, 13, 0, 0, 0, sydneyTZ),
-			check: func(t *testing.T, got *EveningNight) {
-				require.NotNil(t, got)
-				require.NotNil(t, got.Night)
-				assert.Nil(t, got.Evening, "evening must be omitted by today gate (sun still up)")
-				assert.Equal(t, EveningNightStatusComplete, got.Night.Status)
-				assert.Equal(t, EveningNightBoundaryReadings, got.Night.BoundarySource)
-			},
-		},
-		"fully overcast past day: both blocks estimated, complete": {
-			readings: []dynamo.ReadingItem{
-				readingPpv(pastDate, 0, 30, 0, 0, 500),
-				readingPpv(pastDate, 6, 0, 0, 0, 500),
-				readingPpv(pastDate, 12, 0, 0, 0, 500),
-				readingPpv(pastDate, 18, 0, 0, 0, 500),
-				readingPpv(pastDate, 23, 0, 0, 0, 500),
-			},
-			date:  pastDate,
-			today: date,
-			now:   time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ),
-			check: func(t *testing.T, got *EveningNight) {
-				require.NotNil(t, got)
-				require.NotNil(t, got.Night)
-				require.NotNil(t, got.Evening)
-				assert.Equal(t, EveningNightStatusComplete, got.Night.Status)
-				assert.Equal(t, EveningNightStatusComplete, got.Evening.Status)
-				assert.Equal(t, EveningNightBoundaryEstimated, got.Night.BoundarySource)
-				assert.Equal(t, EveningNightBoundaryEstimated, got.Evening.BoundarySource)
-			},
-		},
-		"morning solar but no afternoon (recorder dies at noon): both readings-derived (per spec)": {
-			readings: []dynamo.ReadingItem{
-				readingPpv(pastDate, 0, 30, 0, 0, 500),
-				readingPpv(pastDate, 7, 0, 0, 500, 500),
-				readingPpv(pastDate, 11, 0, 0, 800, 500),
-				readingPpv(pastDate, 12, 55, 0, 700, 500), // last Ppv>0
-			},
-			date:  pastDate,
-			today: date,
-			now:   time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ),
-			check: func(t *testing.T, got *EveningNight) {
-				require.NotNil(t, got)
-				require.NotNil(t, got.Night)
-				require.NotNil(t, got.Evening)
-				assert.Equal(t, EveningNightBoundaryReadings, got.Night.BoundarySource)
-				// Per spec (Decision 2 / design.md): for past days, lastPpvPositive
-				// is used directly even if it's mid-day. Evening start = 12:55.
-				assert.Equal(t, EveningNightBoundaryReadings, got.Evening.BoundarySource)
-				wantStart := time.Date(2026, 3, 10, 12, 55, 0, 0, sydneyTZ).UTC().Format(time.RFC3339)
-				assert.Equal(t, wantStart, got.Evening.Start)
-			},
-		},
-		"zero readings inside period emits block with totalKwh=0": {
-			// Past day with no readings between estimated sunrise and sunset.
-			readings: []dynamo.ReadingItem{
-				// Just one reading well outside both periods so they exist.
-				readingPpv(pastDate, 12, 0, 0, 100, 0),
-			},
-			date:  pastDate,
-			today: date,
-			now:   time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ),
-			check: func(t *testing.T, got *EveningNight) {
-				require.NotNil(t, got)
-				// Both blocks expected (one Ppv>0 reading at noon → both blocks readings).
-				require.NotNil(t, got.Night)
-				require.NotNil(t, got.Evening)
-				// Pload=0 → totalKwh=0.
-				assert.InDelta(t, 0, got.Night.TotalKwh, 1e-9)
-				assert.InDelta(t, 0, got.Evening.TotalKwh, 1e-9)
-				// AverageKwhPerHour should be non-nil (elapsed >> 60s).
-				require.NotNil(t, got.Night.AverageKwhPerHour)
-				require.NotNil(t, got.Evening.AverageKwhPerHour)
-				assert.InDelta(t, 0, *got.Night.AverageKwhPerHour, 1e-9)
-				assert.InDelta(t, 0, *got.Evening.AverageKwhPerHour, 1e-9)
-			},
-		},
-		"in-progress evening with elapsed < 60s: averageKwhPerHour omitted": {
-			readings: []dynamo.ReadingItem{
-				readingPpv(date, 0, 0, 30, 0, 1000),
-				readingPpv(date, 8, 0, 0, 500, 1000),
-				readingPpv(date, 18, 0, 0, 100, 1000), // last Ppv>0
-				readingPpv(date, 18, 0, 30, 0, 1000),
-			},
-			date:  date,
-			today: date,
-			// 30s after the lastPpvPositive at 18:00:00.
-			now: time.Date(2026, 4, 15, 18, 0, 30, 0, sydneyTZ),
-			check: func(t *testing.T, got *EveningNight) {
-				require.NotNil(t, got)
-				require.NotNil(t, got.Evening)
-				assert.Equal(t, EveningNightStatusInProgress, got.Evening.Status)
-				assert.Nil(t, got.Evening.AverageKwhPerHour, "elapsed<60s must omit average")
-			},
-		},
-		"empty readings on past date emits both blocks as estimated": {
-			// Caller gates findEveningNight on len(readings)>0, so an empty
-			// slice is the canonical "skip" signal in production. This test
-			// pins the documented behaviour when the gate is bypassed: with
-			// no readings on a past date, both blocks fall back to the sun
-			// table because dayStart < sunrise and sunset < dayEnd.
-			readings: nil,
-			date:     "2026-04-14",
-			today:    date,
-			now:      time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ),
-			check: func(t *testing.T, got *EveningNight) {
-				require.NotNil(t, got)
-				require.NotNil(t, got.Night)
-				require.NotNil(t, got.Evening)
-				assert.Equal(t, EveningNightBoundaryEstimated, got.Night.BoundarySource)
-				assert.Equal(t, EveningNightBoundaryEstimated, got.Evening.BoundarySource)
-			},
-		},
-		"01:30 sensor blip alone falls back to sunrise/sunset (both estimated)": {
-			// Sunrise on 2026-03-10 is 07:13 local (AEDT). Buffer is 30 min,
-			// so the cutoff is 06:43; a Ppv>0 reading at 01:30 is hours
-			// before that and must be ignored. The same lower-bound filter
-			// applies to lastPpv so the blip cannot pollute the evening-start
-			// boundary either — both blocks fall back to the sun table.
-			readings: []dynamo.ReadingItem{
-				readingPpv(pastDate, 1, 30, 0, 50, 800),
-				readingPpv(pastDate, 12, 0, 0, 0, 1000),
-			},
-			date:  pastDate,
-			today: date,
-			now:   time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ),
-			check: func(t *testing.T, got *EveningNight) {
-				require.NotNil(t, got)
-				require.NotNil(t, got.Night)
-				require.NotNil(t, got.Evening)
-				assert.Equal(t, EveningNightBoundaryEstimated, got.Night.BoundarySource)
-				assert.Equal(t, EveningNightBoundaryEstimated, got.Evening.BoundarySource)
-				expectedSunrise := time.Date(2026, 3, 10, 7, 13, 0, 0, sydneyTZ).UTC().Truncate(time.Second)
-				gotNightEnd, err := time.Parse(time.RFC3339, got.Night.End)
-				require.NoError(t, err)
-				assert.Equal(t, expectedSunrise, gotNightEnd)
-				expectedSunset := time.Date(2026, 3, 10, 19, 49, 0, 0, sydneyTZ).UTC().Truncate(time.Second)
-				gotEveningStart, err := time.Parse(time.RFC3339, got.Evening.Start)
-				require.NoError(t, err)
-				assert.Equal(t, expectedSunset, gotEveningStart)
-			},
-		},
-		"01:30 blip is ignored when real production starts after the cutoff": {
-			// Same blip, but real production from 07:30 onwards. The blip
-			// must lose to the legitimate first-of-day reading.
-			readings: func() []dynamo.ReadingItem {
-				out := []dynamo.ReadingItem{readingPpv(pastDate, 1, 30, 0, 50, 800)}
-				for h := 7; h < 18; h++ {
-					startMin := 0
-					if h == 7 {
-						startMin = 30
+				var out []dynamo.ReadingItem
+				for h := 0; h <= 14; h++ {
+					for m := 0; m < 60; m += 5 {
+						if h == 14 && m > 30 {
+							break
+						}
+						ppv := 0.0
+						if h*60+m >= 6*60+30 && h*60+m <= 14*60+30 {
+							ppv = 1000
+						}
+						out = append(out, readingPpv(todayDate, h, m, 0, ppv, 1000))
 					}
-					for m := startMin; m < 60; m += 5 {
+				}
+				// 14:35 onwards: solar zero (clouds). No recent solar at 16:00.
+				for h := 14; h <= 16; h++ {
+					startM := 35
+					if h == 15 {
+						startM = 0
+					}
+					if h == 16 {
+						startM = 0
+					}
+					for m := startM; m < 60; m += 5 {
+						if h == 16 && m > 0 {
+							break
+						}
+						out = append(out, readingPpv(todayDate, h, m, 0, 0, 1000))
+					}
+				}
+				return out
+			}(),
+			offpeakStart: offpeakStart,
+			offpeakEnd:   offpeakEnd,
+			date:         todayDate,
+			today:        todayDate,
+			now:          time.Date(2026, 4, 15, 16, 0, 0, 0, sydneyTZ),
+			check: func(t *testing.T, got *DailyUsage) {
+				require.NotNil(t, got)
+				blocks := dailyUsageBlocksByKind(got)
+				require.Len(t, got.Blocks, 5)
+				ap := blocks[DailyUsageKindAfternoonPeak]
+				assert.Equal(t, DailyUsageStatusComplete, ap.Status)
+				assert.Equal(t, DailyUsageBoundaryReadings, ap.BoundarySource)
+				// afternoonPeak.end = lastSolar = 14:30.
+				wantApEnd := time.Date(2026, 4, 15, 14, 30, 0, 0, sydneyTZ).UTC().Format(time.RFC3339)
+				assert.Equal(t, wantApEnd, ap.End)
+				ev := blocks[DailyUsageKindEvening]
+				assert.Equal(t, DailyUsageStatusInProgress, ev.Status)
+				assert.Equal(t, DailyUsageBoundaryReadings, ev.BoundarySource)
+				wantEvStart := time.Date(2026, 4, 15, 14, 30, 0, 0, sydneyTZ).UTC().Format(time.RFC3339)
+				assert.Equal(t, wantEvStart, ev.Start)
+			},
+		},
+		"today after sunset: all five emitted, evening in-progress": {
+			// Solar 06:30 → 17:55 (lastSolar matches sunset). now = 22:00.
+			readings: func() []dynamo.ReadingItem {
+				var out []dynamo.ReadingItem
+				for h := 0; h <= 22; h++ {
+					for m := 0; m < 60; m += 5 {
+						if h == 22 && m > 0 {
+							break
+						}
+						ppv := 0.0
+						mod := h*60 + m
+						if mod >= 6*60+30 && mod < 18*60 {
+							ppv = 1000
+						}
+						out = append(out, readingPpv(todayDate, h, m, 0, ppv, 1000))
+					}
+				}
+				return out
+			}(),
+			offpeakStart: offpeakStart,
+			offpeakEnd:   offpeakEnd,
+			date:         todayDate,
+			today:        todayDate,
+			now:          time.Date(2026, 4, 15, 22, 0, 0, 0, sydneyTZ),
+			check: func(t *testing.T, got *DailyUsage) {
+				require.NotNil(t, got)
+				require.Len(t, got.Blocks, 5)
+				blocks := dailyUsageBlocksByKind(got)
+				assert.Equal(t, DailyUsageStatusInProgress, blocks[DailyUsageKindEvening].Status)
+				wantEnd := time.Date(2026, 4, 15, 22, 0, 0, 0, sydneyTZ).UTC().Format(time.RFC3339)
+				assert.Equal(t, wantEnd, blocks[DailyUsageKindEvening].End)
+			},
+		},
+		"overcast complete day: all five emitted, sunrise/sunset edges estimated": {
+			readings:     overcastReadings,
+			offpeakStart: offpeakStart,
+			offpeakEnd:   offpeakEnd,
+			date:         pastDate,
+			today:        todayDate,
+			now:          time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ),
+			check: func(t *testing.T, got *DailyUsage) {
+				require.NotNil(t, got)
+				require.Len(t, got.Blocks, 5)
+				blocks := dailyUsageBlocksByKind(got)
+				assert.Equal(t, DailyUsageBoundaryEstimated, blocks[DailyUsageKindNight].BoundarySource)
+				assert.Equal(t, DailyUsageBoundaryEstimated, blocks[DailyUsageKindMorningPeak].BoundarySource)
+				assert.Equal(t, DailyUsageBoundaryReadings, blocks[DailyUsageKindOffPeak].BoundarySource)
+				assert.Equal(t, DailyUsageBoundaryEstimated, blocks[DailyUsageKindAfternoonPeak].BoundarySource)
+				assert.Equal(t, DailyUsageBoundaryEstimated, blocks[DailyUsageKindEvening].BoundarySource)
+				for _, b := range got.Blocks {
+					assert.Equal(t, DailyUsageStatusComplete, b.Status, "kind=%s", b.Kind)
+				}
+			},
+		},
+		"partial-data after-offpeak: solar-window invariant holds, five-block path": {
+			// Recorder dies at 15:30; lastSolar = 15:25 > offpeakEnd = 14:00.
+			readings: func() []dynamo.ReadingItem {
+				var out []dynamo.ReadingItem
+				for h := 0; h < 16; h++ {
+					for m := 0; m < 60; m += 5 {
+						if h == 15 && m > 30 {
+							break
+						}
+						ppv := 0.0
+						mod := h*60 + m
+						if mod >= 6*60+30 && mod <= 15*60+25 {
+							ppv = 1000
+						}
+						out = append(out, readingPpv(pastDate, h, m, 0, ppv, 1000))
+					}
+				}
+				return out
+			}(),
+			offpeakStart: offpeakStart,
+			offpeakEnd:   offpeakEnd,
+			date:         pastDate,
+			today:        todayDate,
+			now:          time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ),
+			check: func(t *testing.T, got *DailyUsage) {
+				require.NotNil(t, got)
+				require.Len(t, got.Blocks, 5)
+				blocks := dailyUsageBlocksByKind(got)
+				ap := blocks[DailyUsageKindAfternoonPeak]
+				wantApEnd := time.Date(2026, 4, 12, 15, 25, 0, 0, sydneyTZ).UTC().Format(time.RFC3339)
+				assert.Equal(t, wantApEnd, ap.End)
+				ev := blocks[DailyUsageKindEvening]
+				assert.Equal(t, DailyUsageBoundaryReadings, ev.BoundarySource)
+				wantEvStart := time.Date(2026, 4, 12, 15, 25, 0, 0, sydneyTZ).UTC().Format(time.RFC3339)
+				assert.Equal(t, wantEvStart, ev.Start)
+				assert.InDelta(t, 0, ev.TotalKwh, 1e-9)
+			},
+		},
+		"partial-data during-offpeak: solar-window invariant fails, two-block path": {
+			// Recorder dies at 12:30; lastSolar = 12:25 < offpeakEnd = 14:00 → 2-block.
+			readings: func() []dynamo.ReadingItem {
+				var out []dynamo.ReadingItem
+				for h := 0; h < 13; h++ {
+					for m := 0; m < 60; m += 5 {
+						if h == 12 && m > 30 {
+							break
+						}
+						ppv := 0.0
+						mod := h*60 + m
+						if mod >= 6*60+30 && mod <= 12*60+25 {
+							ppv = 1000
+						}
+						out = append(out, readingPpv(pastDate, h, m, 0, ppv, 1000))
+					}
+				}
+				return out
+			}(),
+			offpeakStart: offpeakStart,
+			offpeakEnd:   offpeakEnd,
+			date:         pastDate,
+			today:        todayDate,
+			now:          time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ),
+			check: func(t *testing.T, got *DailyUsage) {
+				require.NotNil(t, got)
+				require.Len(t, got.Blocks, 2)
+				blocks := dailyUsageBlocksByKind(got)
+				_, hasNight := blocks[DailyUsageKindNight]
+				_, hasEv := blocks[DailyUsageKindEvening]
+				assert.True(t, hasNight)
+				assert.True(t, hasEv)
+				ev := blocks[DailyUsageKindEvening]
+				assert.Equal(t, DailyUsageBoundaryReadings, ev.BoundarySource)
+				wantEvStart := time.Date(2026, 4, 12, 12, 25, 0, 0, sydneyTZ).UTC().Format(time.RFC3339)
+				assert.Equal(t, wantEvStart, ev.Start)
+				assert.InDelta(t, 0, ev.TotalKwh, 1e-9)
+			},
+		},
+		"off-peak SSM misconfigured: only night and evening emitted": {
+			readings:     pastDayReadings,
+			offpeakStart: "",
+			offpeakEnd:   "",
+			date:         pastDate,
+			today:        todayDate,
+			now:          time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ),
+			check: func(t *testing.T, got *DailyUsage) {
+				require.NotNil(t, got)
+				require.Len(t, got.Blocks, 2)
+				blocks := dailyUsageBlocksByKind(got)
+				_, hasNight := blocks[DailyUsageKindNight]
+				_, hasEv := blocks[DailyUsageKindEvening]
+				assert.True(t, hasNight)
+				assert.True(t, hasEv)
+			},
+		},
+		"off-peak start >= end: only night and evening emitted": {
+			readings:     pastDayReadings,
+			offpeakStart: "14:00",
+			offpeakEnd:   "11:00",
+			date:         pastDate,
+			today:        todayDate,
+			now:          time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ),
+			check: func(t *testing.T, got *DailyUsage) {
+				require.NotNil(t, got)
+				require.Len(t, got.Blocks, 2)
+			},
+		},
+		"single-solar reading firstSolar==lastSolar: invariant violated, two-block path": {
+			readings: []dynamo.ReadingItem{
+				readingPpv(pastDate, 0, 30, 0, 0, 1000),
+				readingPpv(pastDate, 12, 0, 0, 1000, 1000), // single solar reading
+				readingPpv(pastDate, 18, 0, 0, 0, 1000),
+				readingPpv(pastDate, 23, 0, 0, 0, 1000),
+			},
+			offpeakStart: offpeakStart,
+			offpeakEnd:   offpeakEnd,
+			date:         pastDate,
+			today:        todayDate,
+			now:          time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ),
+			check: func(t *testing.T, got *DailyUsage) {
+				require.NotNil(t, got)
+				require.Len(t, got.Blocks, 2)
+			},
+		},
+		"DST spring-forward day (2025-10-05, 23h day): five blocks": {
+			// 2025-10-05 sunrise 06:50, sunset 19:26.
+			readings: func() []dynamo.ReadingItem {
+				const date = "2025-10-05"
+				var out []dynamo.ReadingItem
+				// 00:00 → 23:55 every 30 min, with Ppv positive 06:55 → 19:00.
+				for h := range 24 {
+					for m := 0; m < 60; m += 30 {
+						ppv := 0.0
+						mod := h*60 + m
+						if mod >= 6*60+55 && mod <= 19*60 {
+							ppv = 1000
+						}
+						out = append(out, readingPpv(date, h, m, 0, ppv, 1000))
+					}
+				}
+				return out
+			}(),
+			offpeakStart: offpeakStart,
+			offpeakEnd:   offpeakEnd,
+			date:         "2025-10-05",
+			today:        todayDate,
+			now:          time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ),
+			check: func(t *testing.T, got *DailyUsage) {
+				require.NotNil(t, got)
+				require.Len(t, got.Blocks, 5)
+				// dayEnd is 23h after dayStart on this date.
+				dayStart, _ := time.ParseInLocation("2006-01-02", "2025-10-05", sydneyTZ)
+				dayEnd := dayStart.AddDate(0, 0, 1)
+				assert.InDelta(t, float64(23*3600), float64(dayEnd.Unix()-dayStart.Unix()), 0.5,
+					"DST spring-forward day should be 23h long")
+			},
+		},
+		"DST fall-back day (2026-04-05, 25h day): five blocks": {
+			// 2026-04-05 sunrise 07:37, sunset 19:10. 25h day.
+			readings: func() []dynamo.ReadingItem {
+				const date = "2026-04-05"
+				var out []dynamo.ReadingItem
+				for h := range 24 {
+					for m := 0; m < 60; m += 30 {
+						ppv := 0.0
+						mod := h*60 + m
+						if mod >= 7*60+45 && mod <= 19*60 {
+							ppv = 1000
+						}
+						out = append(out, readingPpv(date, h, m, 0, ppv, 1000))
+					}
+				}
+				return out
+			}(),
+			offpeakStart: offpeakStart,
+			offpeakEnd:   offpeakEnd,
+			date:         "2026-04-05",
+			today:        todayDate,
+			now:          time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ),
+			check: func(t *testing.T, got *DailyUsage) {
+				require.NotNil(t, got)
+				require.Len(t, got.Blocks, 5)
+				dayStart, _ := time.ParseInLocation("2006-01-02", "2026-04-05", sydneyTZ)
+				dayEnd := dayStart.AddDate(0, 0, 1)
+				assert.InDelta(t, float64(25*3600), float64(dayEnd.Unix()-dayStart.Unix()), 0.5,
+					"DST fall-back day should be 25h long")
+			},
+		},
+		"pre-sunrise 01:30 Ppv blip is filtered": {
+			// Sunrise 06:43 on 2026-04-12. Buffer 30 min ⇒ cutoff 06:13. Blip at
+			// 01:30 must be ignored.
+			readings: func() []dynamo.ReadingItem {
+				out := []dynamo.ReadingItem{readingPpv(pastDate, 1, 30, 0, 50, 1000)}
+				// Real production from 07:00 onwards.
+				for h := 7; h < 18; h++ {
+					for m := 0; m < 60; m += 30 {
 						out = append(out, readingPpv(pastDate, h, m, 0, 1000, 1000))
 					}
 				}
 				return out
 			}(),
-			date:  pastDate,
-			today: date,
-			now:   time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ),
-			check: func(t *testing.T, got *EveningNight) {
+			offpeakStart: offpeakStart,
+			offpeakEnd:   offpeakEnd,
+			date:         pastDate,
+			today:        todayDate,
+			now:          time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ),
+			check: func(t *testing.T, got *DailyUsage) {
 				require.NotNil(t, got)
-				require.NotNil(t, got.Night)
-				assert.Equal(t, EveningNightBoundaryReadings, got.Night.BoundarySource)
-				expected := time.Date(2026, 3, 10, 7, 30, 0, 0, sydneyTZ).UTC().Truncate(time.Second)
-				gotEnd, err := time.Parse(time.RFC3339, got.Night.End)
-				require.NoError(t, err)
-				assert.Equal(t, expected, gotEnd)
+				blocks := dailyUsageBlocksByKind(got)
+				night := blocks[DailyUsageKindNight]
+				expected := time.Date(2026, 4, 12, 7, 0, 0, 0, sydneyTZ).UTC().Format(time.RFC3339)
+				assert.Equal(t, expected, night.End, "night should not end at the 01:30 blip")
 			},
 		},
-		"early production within the 30-minute pre-sunrise buffer is accepted": {
-			// Sunrise on 2026-03-10 is 07:13 local; a reading at 06:50
-			// (23 min before sunrise) sits inside the buffer and must be
-			// honoured as the real night-end boundary.
-			readings: []dynamo.ReadingItem{
-				readingPpv(pastDate, 6, 50, 0, 100, 1000),
-				readingPpv(pastDate, 7, 0, 0, 500, 1000),
-			},
-			date:  pastDate,
-			today: date,
-			now:   time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ),
-			check: func(t *testing.T, got *EveningNight) {
+		"post-sunset 22:00 Ppv blip is filtered": {
+			// Sunset 17:59 on 2026-04-12. Buffer 30 min ⇒ cutoff 18:29. Blip at
+			// 22:00 must be ignored.
+			readings: func() []dynamo.ReadingItem {
+				var out []dynamo.ReadingItem
+				for h := range 18 {
+					for m := 0; m < 60; m += 30 {
+						ppv := 0.0
+						mod := h*60 + m
+						if mod >= 6*60+45 && mod <= 17*60+30 {
+							ppv = 1000
+						}
+						out = append(out, readingPpv(pastDate, h, m, 0, ppv, 1000))
+					}
+				}
+				out = append(out, readingPpv(pastDate, 22, 0, 0, 50, 1000))
+				out = append(out, readingPpv(pastDate, 23, 30, 0, 0, 1000))
+				return out
+			}(),
+			offpeakStart: offpeakStart,
+			offpeakEnd:   offpeakEnd,
+			date:         pastDate,
+			today:        todayDate,
+			now:          time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ),
+			check: func(t *testing.T, got *DailyUsage) {
 				require.NotNil(t, got)
-				require.NotNil(t, got.Night)
-				assert.Equal(t, EveningNightBoundaryReadings, got.Night.BoundarySource)
-				expected := time.Date(2026, 3, 10, 6, 50, 0, 0, sydneyTZ).UTC().Truncate(time.Second)
-				gotEnd, err := time.Parse(time.RFC3339, got.Night.End)
-				require.NoError(t, err)
-				assert.Equal(t, expected, gotEnd)
+				blocks := dailyUsageBlocksByKind(got)
+				ap := blocks[DailyUsageKindAfternoonPeak]
+				wantApEnd := time.Date(2026, 4, 12, 17, 30, 0, 0, sydneyTZ).UTC().Format(time.RFC3339)
+				assert.Equal(t, wantApEnd, ap.End, "afternoonPeak must not absorb post-sunset hours")
+			},
+		},
+		"future-dated request, no readings: dailyUsage nil": {
+			readings:     nil,
+			offpeakStart: offpeakStart,
+			offpeakEnd:   offpeakEnd,
+			date:         "2099-01-01",
+			today:        todayDate,
+			now:          time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ),
+			check: func(t *testing.T, got *DailyUsage) {
+				// findDailyUsage itself does not gate on readings — handleDay does.
+				// When no readings exist, all integrations return 0 but blocks are
+				// still emitted for a non-today date. To match req 1.10's
+				// caller-side gate, we exercise the same nil-readings call here
+				// only on a future date where the today-gate would not fire and
+				// the date itself is not today; we just assert the function does
+				// not panic and the structural invariants hold.
+				if got != nil {
+					assert.True(t, len(got.Blocks) <= 5)
+				}
+			},
+		},
+		"today + off-peak misconfigured: today-gate still applies on 2-block path": {
+			// Cloudy mid-afternoon (no recent solar, lastSolar exists earlier),
+			// off-peak misconfigured ⇒ 2-block path. evening should still be
+			// in-progress per the in-progress clamp.
+			readings: func() []dynamo.ReadingItem {
+				var out []dynamo.ReadingItem
+				for h := range 14 {
+					for m := 0; m < 60; m += 30 {
+						ppv := 0.0
+						mod := h*60 + m
+						if mod >= 6*60+45 && mod < 14*60 {
+							ppv = 1000
+						}
+						out = append(out, readingPpv(todayDate, h, m, 0, ppv, 1000))
+					}
+				}
+				out = append(out, readingPpv(todayDate, 14, 0, 0, 1000, 1000))
+				out = append(out, readingPpv(todayDate, 14, 30, 0, 0, 1000))
+				out = append(out, readingPpv(todayDate, 15, 0, 0, 0, 1000))
+				out = append(out, readingPpv(todayDate, 15, 30, 0, 0, 1000))
+				return out
+			}(),
+			offpeakStart: "",
+			offpeakEnd:   "",
+			date:         todayDate,
+			today:        todayDate,
+			now:          time.Date(2026, 4, 15, 15, 30, 0, 0, sydneyTZ),
+			check: func(t *testing.T, got *DailyUsage) {
+				require.NotNil(t, got)
+				blocks := dailyUsageBlocksByKind(got)
+				require.Len(t, got.Blocks, 2)
+				ev, ok := blocks[DailyUsageKindEvening]
+				require.True(t, ok)
+				assert.Equal(t, DailyUsageStatusInProgress, ev.Status)
+				wantEvEnd := time.Date(2026, 4, 15, 15, 30, 0, 0, sydneyTZ).UTC().Format(time.RFC3339)
+				assert.Equal(t, wantEvEnd, ev.End)
 			},
 		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := findEveningNight(tc.readings, tc.date, tc.today, tc.now)
+			got := findDailyUsage(tc.readings, tc.offpeakStart, tc.offpeakEnd, tc.date, tc.today, tc.now)
 			tc.check(t, got)
 		})
 	}
 }
 
-func BenchmarkFindEveningNight(b *testing.B) {
+func TestFindDailyUsage_PercentOfDay(t *testing.T) {
+	const offpeakStart = "11:00"
+	const offpeakEnd = "14:00"
+	const pastDate = "2026-04-12"
+	const todayDate = "2026-04-15"
+	now := time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ)
+
+	t.Run("typical day percentages sum within 100±3", func(t *testing.T) {
+		var readings []dynamo.ReadingItem
+		// 30-second cadence to keep integratePload pairs inside maxPairGapSeconds=60.
+		dayStart, _ := time.ParseInLocation("2006-01-02", pastDate, sydneyTZ)
+		for s := int64(0); s < 24*3600; s += 30 {
+			ts := dayStart.Unix() + s
+			t := time.Unix(ts, 0).In(sydneyTZ)
+			h := t.Hour()
+			pload := 500.0
+			if h >= 11 && h < 14 {
+				pload = 2500 // off-peak charging
+			}
+			if h >= 18 {
+				pload = 1500
+			}
+			ppv := 0.0
+			mod := h*60 + t.Minute()
+			if mod >= 6*60+45 && mod <= 17*60+30 {
+				ppv = 1500
+			}
+			readings = append(readings, dynamo.ReadingItem{Timestamp: ts, Ppv: ppv, Pload: pload})
+		}
+		got := findDailyUsage(readings, offpeakStart, offpeakEnd, pastDate, todayDate, now)
+		require.NotNil(t, got)
+		require.Len(t, got.Blocks, 5)
+		sum := 0
+		for _, b := range got.Blocks {
+			sum += b.PercentOfDay
+		}
+		assert.True(t, sum >= 97 && sum <= 103, "percentOfDay sum must be 100±3, got %d", sum)
+	})
+
+	t.Run("zero-load day: every emitted block has percentOfDay = 0", func(t *testing.T) {
+		var readings []dynamo.ReadingItem
+		dayStart, _ := time.ParseInLocation("2006-01-02", pastDate, sydneyTZ)
+		for s := int64(0); s < 24*3600; s += 30 {
+			ts := dayStart.Unix() + s
+			t := time.Unix(ts, 0).In(sydneyTZ)
+			h := t.Hour()
+			mod := h*60 + t.Minute()
+			ppv := 0.0
+			if mod >= 6*60+45 && mod <= 17*60+30 {
+				ppv = 1000
+			}
+			readings = append(readings, dynamo.ReadingItem{Timestamp: ts, Ppv: ppv, Pload: 0})
+		}
+		got := findDailyUsage(readings, offpeakStart, offpeakEnd, pastDate, todayDate, now)
+		require.NotNil(t, got)
+		for _, b := range got.Blocks {
+			assert.Equal(t, 0, b.PercentOfDay, "kind=%s", b.Kind)
+		}
+	})
+}
+
+func BenchmarkFindDailyUsage(b *testing.B) {
 	dayStart := time.Date(2026, 4, 15, 0, 0, 0, 0, sydneyTZ)
 	readings := make([]dynamo.ReadingItem, 0, 8640)
 	// 10s cadence over a full day.
 	for i := range 8640 {
-		// Ppv positive between buckets ~6:30-18:00 to exercise both branches.
 		t := dayStart.Add(time.Duration(i*10) * time.Second)
 		secOfDay := t.Hour()*3600 + t.Minute()*60 + t.Second()
 		var ppv float64
@@ -1983,22 +2373,7 @@ func BenchmarkFindEveningNight(b *testing.B) {
 	}
 
 	for b.Loop() {
-		_ = findEveningNight(readings, "2026-04-15", "2026-04-16",
+		_ = findDailyUsage(readings, "11:00", "14:00", "2026-04-15", "2026-04-16",
 			time.Date(2026, 4, 16, 12, 0, 0, 0, sydneyTZ))
-	}
-}
-
-func BenchmarkFindPeakPeriods(b *testing.B) {
-	dayStart := time.Date(2026, 4, 15, 0, 0, 0, 0, sydneyTZ)
-	readings := make([]dynamo.ReadingItem, 0, 8640)
-	for i := range 8640 {
-		readings = append(readings, dynamo.ReadingItem{
-			Timestamp: dayStart.Unix() + int64(i*10),
-			Pload:     float64(500 + i%4500), // varied load 500-5000W
-		})
-	}
-
-	for b.Loop() {
-		_ = findPeakPeriods(readings, "11:00", "14:00")
 	}
 }

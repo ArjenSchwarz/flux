@@ -78,20 +78,18 @@ func TestHandleDayNormalCase(t *testing.T) {
 	// peakPeriods should be present and non-null (at least empty slice).
 	assert.NotNil(t, dr.PeakPeriods, "peakPeriods should never be null")
 
-	// EveningNight: past day with first/last Ppv>0 readings present, so both
-	// blocks should be readings-derived and complete.
-	require.NotNil(t, dr.EveningNight, "eveningNight should be present when readings exist")
-	require.NotNil(t, dr.EveningNight.Night, "night block expected")
-	require.NotNil(t, dr.EveningNight.Evening, "evening block expected")
-	assert.Equal(t, EveningNightStatusComplete, dr.EveningNight.Night.Status)
-	assert.Equal(t, EveningNightStatusComplete, dr.EveningNight.Evening.Status)
-	assert.Equal(t, EveningNightBoundaryReadings, dr.EveningNight.Night.BoundarySource)
-	assert.Equal(t, EveningNightBoundaryReadings, dr.EveningNight.Evening.BoundarySource)
+	// DailyUsage: past day with readings present should produce at least one
+	// emitted block. Detailed kind/status/boundary coverage is in
+	// TestFindDailyUsage; this assertion just pins the wiring.
+	require.NotNil(t, dr.DailyUsage, "dailyUsage should be present when readings exist")
+	assert.NotEmpty(t, dr.DailyUsage.Blocks, "dailyUsage should have at least one block")
 }
 
-func TestHandleDayEveningNightPerBlockFallback(t *testing.T) {
-	// A past day with overcast readings (no Ppv>0 anywhere) exercises the
-	// per-block fallback to the Melbourne sunrise/sunset table.
+func TestHandleDayDailyUsageOvercast(t *testing.T) {
+	// AC 4.1 "Overcast day, no qualifying Ppv": all five blocks emitted; sunrise/
+	// sunset edges fall back to the Melbourne table, so night, morningPeak,
+	// afternoonPeak, and evening have boundarySource = "estimated"; offPeak is
+	// "readings".
 	loc, _ := time.LoadLocation("Australia/Sydney")
 	date := "2026-04-14"
 
@@ -119,13 +117,21 @@ func TestHandleDayEveningNightPerBlockFallback(t *testing.T) {
 	assert.Equal(t, 200, resp.StatusCode)
 
 	dr := parseDayResponse(t, resp)
-	require.NotNil(t, dr.EveningNight, "eveningNight should be present even on overcast days")
-	require.NotNil(t, dr.EveningNight.Night)
-	require.NotNil(t, dr.EveningNight.Evening)
-	assert.Equal(t, EveningNightBoundaryEstimated, dr.EveningNight.Night.BoundarySource, "no Ppv>0 → estimated")
-	assert.Equal(t, EveningNightBoundaryEstimated, dr.EveningNight.Evening.BoundarySource, "no Ppv>0 → estimated")
-	assert.Equal(t, EveningNightStatusComplete, dr.EveningNight.Night.Status)
-	assert.Equal(t, EveningNightStatusComplete, dr.EveningNight.Evening.Status)
+	require.NotNil(t, dr.DailyUsage, "dailyUsage should be present even on overcast days")
+	require.Len(t, dr.DailyUsage.Blocks, 5, "all five blocks should emit on a complete overcast past day")
+
+	byKind := make(map[string]DailyUsageBlock, 5)
+	for _, b := range dr.DailyUsage.Blocks {
+		byKind[b.Kind] = b
+	}
+	assert.Equal(t, DailyUsageBoundaryEstimated, byKind[DailyUsageKindNight].BoundarySource, "night: end = sunrise fallback")
+	assert.Equal(t, DailyUsageBoundaryEstimated, byKind[DailyUsageKindMorningPeak].BoundarySource, "morningPeak: start = sunrise fallback")
+	assert.Equal(t, DailyUsageBoundaryReadings, byKind[DailyUsageKindOffPeak].BoundarySource, "offPeak edges are SSM-derived")
+	assert.Equal(t, DailyUsageBoundaryEstimated, byKind[DailyUsageKindAfternoonPeak].BoundarySource, "afternoonPeak: end = sunset fallback")
+	assert.Equal(t, DailyUsageBoundaryEstimated, byKind[DailyUsageKindEvening].BoundarySource, "evening: start = sunset fallback")
+	for _, b := range dr.DailyUsage.Blocks {
+		assert.Equal(t, DailyUsageStatusComplete, b.Status, "kind=%s", b.Kind)
+	}
 }
 
 func TestHandleDayFallbackToDailyPower(t *testing.T) {
@@ -180,9 +186,9 @@ func TestHandleDayFallbackToDailyPower(t *testing.T) {
 	assert.NotNil(t, dr.PeakPeriods, "peakPeriods should never be null")
 	assert.Empty(t, dr.PeakPeriods, "peakPeriods should be empty when using fallback data")
 
-	// EveningNight must be omitted entirely — the daily-power fallback lacks
-	// the pload resolution required for accurate integration (req 1.11).
-	assert.Nil(t, dr.EveningNight, "eveningNight must be omitted on the daily-power fallback path")
+	// DailyUsage must be omitted entirely — the daily-power fallback lacks
+	// the pload resolution required for accurate integration (req 1.10).
+	assert.Nil(t, dr.DailyUsage, "dailyUsage must be omitted on the daily-power fallback path")
 }
 
 func TestHandleDayOnlyDailyEnergySocLowIsNull(t *testing.T) {

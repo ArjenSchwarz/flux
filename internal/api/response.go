@@ -100,43 +100,53 @@ type PeakPeriod struct {
 
 // DayDetailResponse is the JSON response for GET /day.
 type DayDetailResponse struct {
-	Date         string            `json:"date"`
-	Readings     []TimeSeriesPoint `json:"readings"`
-	Summary      *DaySummary       `json:"summary"`
-	PeakPeriods  []PeakPeriod      `json:"peakPeriods"`
-	EveningNight *EveningNight     `json:"eveningNight,omitempty"`
+	Date        string            `json:"date"`
+	Readings    []TimeSeriesPoint `json:"readings"`
+	Summary     *DaySummary       `json:"summary"`
+	PeakPeriods []PeakPeriod      `json:"peakPeriods"`
+	DailyUsage  *DailyUsage       `json:"dailyUsage,omitempty"`
 }
 
-// Status and boundary-source values for an EveningNightBlock. Defined as
+// Status, boundary-source, and kind values for a DailyUsageBlock. Defined as
 // constants so producers, consumers, and tests share a single source of
 // truth, mirroring the `OffpeakStatus*` convention in internal/dynamo.
 const (
-	EveningNightStatusComplete    = "complete"
-	EveningNightStatusInProgress  = "in-progress"
-	EveningNightBoundaryReadings  = "readings"
-	EveningNightBoundaryEstimated = "estimated"
+	DailyUsageStatusComplete    = "complete"
+	DailyUsageStatusInProgress  = "in-progress"
+	DailyUsageBoundaryReadings  = "readings"
+	DailyUsageBoundaryEstimated = "estimated"
+
+	DailyUsageKindNight         = "night"
+	DailyUsageKindMorningPeak   = "morningPeak"
+	DailyUsageKindOffPeak       = "offPeak"
+	DailyUsageKindAfternoonPeak = "afternoonPeak"
+	DailyUsageKindEvening       = "evening"
 )
 
-// EveningNight groups the evening (last solar → midnight) and night
-// (midnight → first solar) no-solar usage blocks for a single calendar date.
-// Either field may be nil when only one block applies.
-type EveningNight struct {
-	Evening *EveningNightBlock `json:"evening,omitempty"`
-	Night   *EveningNightBlock `json:"night,omitempty"`
+// DailyUsage groups the chronological no-overlap usage blocks (night,
+// morningPeak, offPeak, afternoonPeak, evening) for a single calendar date.
+// Blocks is ordered chronologically by Start and contains at most five
+// entries; consumers identify each block by its Kind.
+type DailyUsage struct {
+	Blocks []DailyUsageBlock `json:"blocks"`
 }
 
-// EveningNightBlock describes a no-solar usage period.
+// DailyUsageBlock describes one chronological slice of a calendar day.
 //
 // Start and End are RFC 3339 timestamps in UTC. AverageKwhPerHour is omitted
 // when the elapsed duration is shorter than 60 seconds. Status is one of
-// "complete" or "in-progress"; BoundarySource is "readings" when the boundary
-// came from a Ppv>0 reading or "estimated" when it was filled from the
+// "complete" or "in-progress"; BoundarySource is "readings" when the
+// emitted boundaries came from real data (readings, SSM-configured off-peak
+// times, calendar midnight, or in-progress request-time clamping) or
+// "estimated" when at least one emitted boundary was filled from the
 // Melbourne sunrise/sunset table.
-type EveningNightBlock struct {
+type DailyUsageBlock struct {
+	Kind              string   `json:"kind"`
 	Start             string   `json:"start"`
 	End               string   `json:"end"`
 	TotalKwh          float64  `json:"totalKwh"`
-	AverageKwhPerHour *float64 `json:"averageKwhPerHour"`
+	AverageKwhPerHour *float64 `json:"averageKwhPerHour,omitempty"`
+	PercentOfDay      int      `json:"percentOfDay"`
 	Status            string   `json:"status"`
 	BoundarySource    string   `json:"boundarySource"`
 }
