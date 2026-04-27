@@ -47,6 +47,15 @@ enum EnergySummaryFormatter {
             title: "Battery (+/-)",
             value: "\(formatKwh(batteryCharge)) / \(formatKwh(batteryDischarge))"
         ))
+
+        let load = HouseholdLoad.kwh(
+            solar: solar,
+            gridImport: gridImport,
+            gridExport: gridExport,
+            batteryCharge: batteryCharge,
+            batteryDischarge: batteryDischarge
+        )
+        rows.append(EnergySummaryRow(title: "Load", value: formatKwh(load)))
         return rows
     }
 
@@ -69,5 +78,24 @@ enum EnergySummaryFormatter {
             batteryCharge: summary?.eCharge,
             batteryDischarge: summary?.eDischarge
         )
+    }
+}
+
+/// Household consumption derived from the energy balance:
+/// `solar + grid_import + battery_discharge - grid_export - battery_charge`.
+/// All inputs must be present for a meaningful result; any missing value
+/// returns `nil` so callers render an em-dash instead of a misleading total.
+enum HouseholdLoad {
+    static func kwh(
+        solar: Double?,
+        gridImport: Double?,
+        gridExport: Double?,
+        batteryCharge: Double?,
+        batteryDischarge: Double?
+    ) -> Double? {
+        guard let solar, let gridImport, let gridExport,
+              let batteryCharge, let batteryDischarge
+        else { return nil }
+        return max(0, solar + gridImport + batteryDischarge - gridExport - batteryCharge)
     }
 }

@@ -19,10 +19,12 @@ struct EnergySummaryFormatterTests {
             batteryDischarge: 3.6
         )
 
+        // Load = 8.2 + 1.3 + 3.6 - 0.7 - 2.4 = 10.0
         #expect(rows == [
             EnergySummaryRow(title: "Solar", value: "8.20 kWh"),
             EnergySummaryRow(title: "Grid (import/export)", value: "1.30 kWh / 0.70 kWh"),
-            EnergySummaryRow(title: "Battery (+/-)", value: "2.40 kWh / 3.60 kWh")
+            EnergySummaryRow(title: "Battery (+/-)", value: "2.40 kWh / 3.60 kWh"),
+            EnergySummaryRow(title: "Load", value: "10.00 kWh")
         ])
     }
 
@@ -39,6 +41,7 @@ struct EnergySummaryFormatterTests {
         #expect(rows[0] == EnergySummaryRow(title: "Solar", value: "—"))
         #expect(rows[1].value == "— / 0.40 kWh")
         #expect(rows[2].value == "— / —")
+        #expect(rows[3] == EnergySummaryRow(title: "Load", value: "—"))
     }
 
     @Test
@@ -77,7 +80,23 @@ struct EnergySummaryFormatterTests {
         #expect(rows == [
             EnergySummaryRow(title: "Solar", value: "—"),
             EnergySummaryRow(title: "Grid (import/export)", value: "— / —"),
-            EnergySummaryRow(title: "Battery (+/-)", value: "— / —")
+            EnergySummaryRow(title: "Battery (+/-)", value: "— / —"),
+            EnergySummaryRow(title: "Load", value: "—")
         ])
+    }
+
+    @Test
+    func loadIsDerivedFromEnergyBalance() {
+        // Energy balance: load = solar + import + discharge - export - charge
+        let rows = EnergySummaryFormatter.rows(
+            solar: 5.0,
+            gridImport: 4.0,
+            gridExport: 1.0,
+            batteryCharge: 2.0,
+            batteryDischarge: 3.0
+        )
+
+        // 5 + 4 + 3 - 1 - 2 = 9
+        #expect(rows.last == EnergySummaryRow(title: "Load", value: "9.00 kWh"))
     }
 }

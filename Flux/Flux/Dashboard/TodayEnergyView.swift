@@ -24,6 +24,7 @@ struct TodayEnergyView: View {
                 negative: todayEnergy?.eDischarge,
                 negativeLabel: "-"
             )
+            energyRow(title: "Load", value: loadKwh)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
@@ -61,6 +62,16 @@ struct TodayEnergyView: View {
     private func formatKwh(_ value: Double?) -> String {
         guard let value else { return "—" }
         return String(format: "%.2f kWh", value)
+    }
+
+    private var loadKwh: Double? {
+        HouseholdLoad.kwh(
+            solar: todayEnergy?.epv,
+            gridImport: todayEnergy?.eInput,
+            gridExport: todayEnergy?.eOutput,
+            batteryCharge: todayEnergy?.eCharge,
+            batteryDischarge: todayEnergy?.eDischarge
+        )
     }
 }
 
