@@ -11,6 +11,7 @@
 | [Add Widgets](#add-widgets) | 2026-04-21 | Done | WidgetKit home and lock-screen widgets surfacing battery state and live power data. |
 | [History Multi Card](#history-multi-card) | 2026-04-26 | Done | History screen rewrite: solar / grid (peak vs off-peak) / battery cards with shared selection. |
 | [Evening / Night Stats](#evening--night-stats) | 2026-04-26 | Done | Day detail card showing usage during the no-solar evening (sunset → midnight) and night (midnight → sunrise) periods. |
+| [Peak Usage Stats](#peak-usage-stats) | 2026-04-27 | Planned | Day detail card replacing Evening/Night with five chronological load blocks (Night, Morning Peak, Off-Peak, Afternoon Peak, Evening). |
 
 ---
 
@@ -102,3 +103,12 @@ Day detail card showing usage during the no-solar evening (sunset → midnight) 
 - [design.md](evening-night-stats/design.md)
 - [requirements.md](evening-night-stats/requirements.md)
 - [tasks.md](evening-night-stats/tasks.md)
+
+## Peak Usage Stats
+
+Day detail card replacing Evening/Night with five chronological load blocks (Night, Morning Peak, Off-Peak, Afternoon Peak, Evening), each carrying total kWh, average kWh/h, and percent of day. Replaces the `eveningNight` API field with `dailyUsage`.
+
+- [decision_log.md](peak-usage-stats/decision_log.md)
+- [design.md](peak-usage-stats/design.md)
+- [requirements.md](peak-usage-stats/requirements.md)
+- [tasks.md](peak-usage-stats/tasks.md)
