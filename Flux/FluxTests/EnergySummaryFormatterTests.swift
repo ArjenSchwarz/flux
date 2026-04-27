@@ -99,4 +99,45 @@ struct EnergySummaryFormatterTests {
         // 5 + 4 + 3 - 1 - 2 = 9
         #expect(rows.last == EnergySummaryRow(title: "Load", value: "9.00 kWh"))
     }
+
+    @Test
+    func householdLoadClampsToZeroWhenBalanceIsNegative() {
+        // Reporting/rounding quirks can transiently push the balance
+        // negative; clamp to 0 rather than render a misleading negative load.
+        let result = HouseholdLoad.kwh(
+            solar: 1.0,
+            gridImport: 0.0,
+            gridExport: 2.0,
+            batteryCharge: 0.0,
+            batteryDischarge: 0.0
+        )
+
+        #expect(result == 0.0)
+    }
+
+    @Test
+    func householdLoadReturnsNilWhenAnyInputMissing() {
+        // Direct contract test for nil propagation — survives any future
+        // refactor of EnergySummaryFormatter that bypasses or replaces it.
+        #expect(HouseholdLoad.kwh(
+            solar: nil, gridImport: 1, gridExport: 0,
+            batteryCharge: 0, batteryDischarge: 0
+        ) == nil)
+        #expect(HouseholdLoad.kwh(
+            solar: 1, gridImport: nil, gridExport: 0,
+            batteryCharge: 0, batteryDischarge: 0
+        ) == nil)
+        #expect(HouseholdLoad.kwh(
+            solar: 1, gridImport: 0, gridExport: nil,
+            batteryCharge: 0, batteryDischarge: 0
+        ) == nil)
+        #expect(HouseholdLoad.kwh(
+            solar: 1, gridImport: 0, gridExport: 0,
+            batteryCharge: nil, batteryDischarge: 0
+        ) == nil)
+        #expect(HouseholdLoad.kwh(
+            solar: 1, gridImport: 0, gridExport: 0,
+            batteryCharge: 0, batteryDischarge: nil
+        ) == nil)
+    }
 }
