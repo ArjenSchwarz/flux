@@ -2225,7 +2225,7 @@ func TestFindDailyUsage(t *testing.T) {
 				assert.Equal(t, wantApEnd, ap.End, "afternoonPeak must not absorb post-sunset hours")
 			},
 		},
-		"future-dated request, no readings: dailyUsage nil": {
+		"future-dated request, no readings: five complete zero-energy blocks": {
 			readings:     nil,
 			offpeakStart: offpeakStart,
 			offpeakEnd:   offpeakEnd,
@@ -2233,15 +2233,25 @@ func TestFindDailyUsage(t *testing.T) {
 			today:        todayDate,
 			now:          time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ),
 			check: func(t *testing.T, got *DailyUsage) {
-				// findDailyUsage itself does not gate on readings — handleDay does.
-				// When no readings exist, all integrations return 0 but blocks are
-				// still emitted for a non-today date. To match req 1.10's
-				// caller-side gate, we exercise the same nil-readings call here
-				// only on a future date where the today-gate would not fire and
-				// the date itself is not today; we just assert the function does
-				// not panic and the structural invariants hold.
-				if got != nil {
-					assert.True(t, len(got.Blocks) <= 5)
+				// findDailyUsage itself does not gate on readings — handleDay does
+				// (req 1.10). On a non-today date with no readings, the invariant
+				// holds (sun-table fallback) and the today-gate does not fire, so
+				// the function emits the full five-block structure with zero
+				// energy in each. The handleDay nil-readings gate is exercised
+				// separately in day_test.go.
+				require.NotNil(t, got)
+				require.Len(t, got.Blocks, 5)
+				wantKinds := []string{
+					DailyUsageKindNight,
+					DailyUsageKindMorningPeak,
+					DailyUsageKindOffPeak,
+					DailyUsageKindAfternoonPeak,
+					DailyUsageKindEvening,
+				}
+				for i, b := range got.Blocks {
+					assert.Equal(t, wantKinds[i], b.Kind, "block %d kind", i)
+					assert.Equal(t, DailyUsageStatusComplete, b.Status, "block %d status", i)
+					assert.InDelta(t, 0.0, b.TotalKwh, 0.0001, "block %d totalKwh", i)
 				}
 			},
 		},

@@ -828,6 +828,10 @@ func findDailyUsage(
 		if isToday && p.start.After(now) {
 			continue
 		}
+		// Two paths set status because the today-gate (above) already clamped
+		// afternoonPeak.end to now, so the generic p.end.After(now) branch
+		// would not fire for that block — statusOverride carries the
+		// in-progress signal across the gate.
 		if isToday && p.end.After(now) && p.statusOverride == "" {
 			p.end = now
 			p.status = DailyUsageStatusInProgress
