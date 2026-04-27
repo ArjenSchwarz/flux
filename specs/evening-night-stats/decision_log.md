@@ -304,3 +304,50 @@ This is what users intuitively expect when they read "average kWh/h". It also st
 - Periods with reading gaps will under-report `totalKwh` and therefore the average; this is true of any integration approach and matches the existing `computeTodayEnergy` behaviour.
 
 ---
+
+## Decision 10: Filter middle-of-the-night Ppv blips when picking the night-end boundary
+
+**Date**: 2026-04-27
+**Status**: accepted
+
+### Context
+
+Post-merge of T-1018, a sensor produced a tiny `Ppv > 0` reading at ~01:30 in production. The original `findEveningNight` used the first `Ppv > 0` reading on the date as the night-end boundary, so the Night block ended at 01:30 — clearly nonsense (the sun is hours below the horizon at 01:30 in Melbourne).
+
+The symmetric problem on the evening side has not been observed: solar production drops to zero well before sunset, so a stray late-night `Ppv > 0` is not a credible last-of-day reading the same way an early-morning blip is a credible first-of-day reading.
+
+### Decision
+
+When scanning for the first `Ppv > 0` reading, ignore any reading whose timestamp is before `sunrise - 30 minutes`, where sunrise is the existing Melbourne sun-table value for the requested date (resolved via `time.ParseInLocation` in `sydneyTZ`, so DST-correct). If no qualifying reading exists, the night-end falls back to the table sunrise via the existing `boundarySource = estimated` path.
+
+The `lastPpv` search (evening start) is intentionally unfiltered.
+
+### Rationale
+
+- 30 minutes is generous enough to admit early-morning twilight production from east-facing panels on clear days without admitting middle-of-night blips, which are typically hours before the threshold.
+- Reusing the existing sun table avoids any new astronomical calculation; the same lookup that powers the no-readings fallback now also feeds the filter, so behaviour is consistent across the two paths.
+- Keeping the evening side unchanged minimises blast radius and matches the actual observed failure mode.
+
+### Alternatives Considered
+
+- **Strict "after sunrise" cutoff (no buffer)**: Rejects all pre-sunrise readings — simpler, but pessimises legitimate early-morning production where panels can produce measurable power 10–20 minutes before civil sunrise. Rejected for being too aggressive on a continuous edge case.
+- **Require N consecutive `Ppv > 0` readings**: More robust against any-time noise, including hypothetical near-sunrise blips. Rejected as over-engineering for the observed failure mode and adds complexity (window size, gap handling) without a clear win.
+- **Apply a minimum-power threshold (e.g. `Ppv > 50 W`)**: Filters by magnitude rather than time. Rejected because real twilight production can be very low (single-digit watts on a partly-cloudy morning) and is still informative for the boundary; time-based filtering is a cleaner signal.
+- **Apply the same filter symmetrically on the evening side**: Cleaner conceptually, but the failure mode hasn't been observed on the evening side and adds risk of false negatives during legitimately late-clearing afternoons. Deferred until evidence justifies it.
+
+### Consequences
+
+**Positive:**
+- Sensor blips before `sunrise - 30 min` no longer corrupt the Night block boundary.
+- The fallback to estimated sunrise is the same code path that already handles fully overcast days, so no new states are added.
+
+**Negative:**
+- Production starting more than 30 min before the table sunrise will be ignored by the filter; in practice this would require either a major astronomical shift or a panel installation that captures pre-civil-twilight scattered light, neither of which is plausible for Melbourne. Acceptable trade-off.
+- `findEveningNight` now resolves Melbourne sunrise eagerly (not just on the no-readings fallback path). One extra `time.ParseInLocation` call per `/day` request — negligible.
+
+### Impact
+
+- `internal/api/compute.go`: `findEveningNight` adds a `preSunriseBlipBuffer` constant and a `resolveSunrise` closure mirroring `resolveSunset`; the inline scan now skips `Ppv > 0` candidates before the cutoff.
+- `internal/api/compute_test.go`: three new `TestFindEveningNight` cases pin the blip-only / blip-plus-real / within-buffer behaviour.
+
+---

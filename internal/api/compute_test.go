@@ -1874,6 +1874,79 @@ func TestFindEveningNight(t *testing.T) {
 				assert.Equal(t, EveningNightBoundaryEstimated, got.Evening.BoundarySource)
 			},
 		},
+		"01:30 sensor blip alone falls back to sunrise (estimated)": {
+			// Sunrise on 2026-03-10 is 07:13 local (AEDT). Buffer is 30 min,
+			// so the cutoff is 06:43; a Ppv>0 reading at 01:30 is hours
+			// before that and must be ignored. With no qualifying real
+			// production reading, the night block falls back to the table
+			// sunrise.
+			readings: []dynamo.ReadingItem{
+				readingPpv(pastDate, 1, 30, 0, 50, 800),
+				readingPpv(pastDate, 12, 0, 0, 0, 1000),
+			},
+			date:  pastDate,
+			today: date,
+			now:   time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ),
+			check: func(t *testing.T, got *EveningNight) {
+				require.NotNil(t, got)
+				require.NotNil(t, got.Night)
+				assert.Equal(t, EveningNightBoundaryEstimated, got.Night.BoundarySource)
+				expected := time.Date(2026, 3, 10, 7, 13, 0, 0, sydneyTZ).UTC().Truncate(time.Second)
+				gotEnd, err := time.Parse(time.RFC3339, got.Night.End)
+				require.NoError(t, err)
+				assert.Equal(t, expected, gotEnd)
+			},
+		},
+		"01:30 blip is ignored when real production starts after the cutoff": {
+			// Same blip, but real production from 07:30 onwards. The blip
+			// must lose to the legitimate first-of-day reading.
+			readings: func() []dynamo.ReadingItem {
+				out := []dynamo.ReadingItem{readingPpv(pastDate, 1, 30, 0, 50, 800)}
+				for h := 7; h < 18; h++ {
+					startMin := 0
+					if h == 7 {
+						startMin = 30
+					}
+					for m := startMin; m < 60; m += 5 {
+						out = append(out, readingPpv(pastDate, h, m, 0, 1000, 1000))
+					}
+				}
+				return out
+			}(),
+			date:  pastDate,
+			today: date,
+			now:   time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ),
+			check: func(t *testing.T, got *EveningNight) {
+				require.NotNil(t, got)
+				require.NotNil(t, got.Night)
+				assert.Equal(t, EveningNightBoundaryReadings, got.Night.BoundarySource)
+				expected := time.Date(2026, 3, 10, 7, 30, 0, 0, sydneyTZ).UTC().Truncate(time.Second)
+				gotEnd, err := time.Parse(time.RFC3339, got.Night.End)
+				require.NoError(t, err)
+				assert.Equal(t, expected, gotEnd)
+			},
+		},
+		"early production within the 30-minute pre-sunrise buffer is accepted": {
+			// Sunrise on 2026-03-10 is 07:13 local; a reading at 06:50
+			// (23 min before sunrise) sits inside the buffer and must be
+			// honoured as the real night-end boundary.
+			readings: []dynamo.ReadingItem{
+				readingPpv(pastDate, 6, 50, 0, 100, 1000),
+				readingPpv(pastDate, 7, 0, 0, 500, 1000),
+			},
+			date:  pastDate,
+			today: date,
+			now:   time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ),
+			check: func(t *testing.T, got *EveningNight) {
+				require.NotNil(t, got)
+				require.NotNil(t, got.Night)
+				assert.Equal(t, EveningNightBoundaryReadings, got.Night.BoundarySource)
+				expected := time.Date(2026, 3, 10, 6, 50, 0, 0, sydneyTZ).UTC().Truncate(time.Second)
+				gotEnd, err := time.Parse(time.RFC3339, got.Night.End)
+				require.NoError(t, err)
+				assert.Equal(t, expected, gotEnd)
+			},
+		},
 	}
 
 	for name, tc := range tests {

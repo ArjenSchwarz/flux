@@ -629,6 +629,14 @@ func integratePload(readings []dynamo.ReadingItem, startUnix, endUnix int64) flo
 	return wattSeconds / 3_600_000
 }
 
+// preSunriseBlipBuffer is the slack applied when filtering Ppv > 0 readings
+// that could plausibly mark the end of the night block. Readings before
+// sunrise - preSunriseBlipBuffer are treated as sensor noise (e.g. a stray
+// Ppv > 0 reading at 01:30 ending the night block at 01:30). 30 minutes is
+// generous enough to admit early-morning production in twilight while
+// rejecting middle-of-night blips by hours.
+const preSunriseBlipBuffer = 30 * time.Minute
+
 // findEveningNight identifies the evening (last solar → midnight) and night
 // (midnight → first solar) no-solar usage blocks for the requested calendar
 // date and returns their totals.
@@ -646,21 +654,18 @@ func findEveningNight(readings []dynamo.ReadingItem, date, today string, now tim
 	dayEnd := dayStart.AddDate(0, 0, 1)
 	isToday := date == today
 
-	// Single pass over readings to find the first/last reading with Ppv > 0.
-	var firstPpv, lastPpv *dynamo.ReadingItem
-	for i := range readings {
-		if readings[i].Ppv > 0 {
-			r := readings[i]
-			if firstPpv == nil {
-				firstPpv = &r
-			}
-			lastPpv = &r
+	// Resolve sunrise/sunset lazily and at most once each. Sunrise is needed
+	// both for the pre-sunrise blip filter and the night fallback; sunset for
+	// the evening today-gate and the evening fallback.
+	sunriseResolved := false
+	var sunrise time.Time
+	resolveSunrise := func() time.Time {
+		if !sunriseResolved {
+			sunrise = melbourneSunriseSunset(date, true)
+			sunriseResolved = true
 		}
+		return sunrise
 	}
-
-	// Resolve sunset once — it may be needed by both the evening today-gate
-	// and the evening fallback. Sunrise is only consumed by the night
-	// fallback so it stays inline.
 	sunsetResolved := false
 	var sunset time.Time
 	resolveSunset := func() time.Time {
@@ -671,6 +676,23 @@ func findEveningNight(readings []dynamo.ReadingItem, date, today string, now tim
 		return sunset
 	}
 
+	// Single pass over readings to find the first/last reading with Ppv > 0.
+	// firstPpv ignores readings before sunrise - preSunriseBlipBuffer so that a
+	// stray sensor blip at e.g. 01:30 does not become the night-end boundary.
+	// lastPpv is unfiltered: solar drops to zero well before sunset, so the
+	// symmetric noise problem has not been observed in practice.
+	firstPpvCutoff := resolveSunrise().Add(-preSunriseBlipBuffer).Unix()
+	var firstPpv, lastPpv *dynamo.ReadingItem
+	for i := range readings {
+		if readings[i].Ppv > 0 {
+			r := readings[i]
+			if firstPpv == nil && r.Timestamp >= firstPpvCutoff {
+				firstPpv = &r
+			}
+			lastPpv = &r
+		}
+	}
+
 	var nightBlock *EveningNightBlock
 	{
 		// Step 4: build night block.
@@ -679,7 +701,7 @@ func findEveningNight(readings []dynamo.ReadingItem, date, today string, now tim
 		if firstPpv != nil {
 			nominalEnd = time.Unix(firstPpv.Timestamp, 0)
 		} else {
-			nominalEnd = melbourneSunriseSunset(date, true)
+			nominalEnd = resolveSunrise()
 			boundarySource = EveningNightBoundaryEstimated
 		}
 		end := nominalEnd
