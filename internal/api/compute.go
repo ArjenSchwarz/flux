@@ -485,8 +485,8 @@ func melbourneSunriseSunset(date string, isSunrise bool) time.Time {
 	if err != nil {
 		// Defensive fallback. Caller validates date format before getting
 		// here; if we somehow get a malformed date, returning the zero
-		// time lets the buildEveningNightBlock final guard catch the
-		// degenerate case.
+		// time lets the buildDailyUsageBlock degenerate-omit guard drop
+		// the block.
 		return time.Time{}
 	}
 	key := date[5:10] // MM-DD; ParseInLocation guarantees len(date) == 10
@@ -501,8 +501,8 @@ func melbourneSunriseSunset(date string, isSunrise bool) time.Time {
 	}
 	if len(hhmm) != 5 || hhmm[2] != ':' {
 		// Corrupt static table entry: return the zero time so the
-		// buildEveningNightBlock final guard drops the block, matching
-		// the parse-error path above.
+		// buildDailyUsageBlock degenerate-omit guard drops the block,
+		// matching the parse-error path above.
 		return time.Time{}
 	}
 	h := int(hhmm[0]-'0')*10 + int(hhmm[1]-'0')
@@ -630,23 +630,38 @@ func integratePload(readings []dynamo.ReadingItem, startUnix, endUnix int64) flo
 }
 
 // preSunriseBlipBuffer is the slack applied when filtering Ppv > 0 readings
-// that could plausibly mark the end of the night block. Readings before
-// sunrise - preSunriseBlipBuffer are treated as sensor noise (e.g. a stray
-// Ppv > 0 reading at 01:30 ending the night block at 01:30). 30 minutes is
-// generous enough to admit early-morning production in twilight while
-// rejecting middle-of-night blips by hours.
+// that could plausibly mark the start of solar production. Readings before
+// sunrise - preSunriseBlipBuffer (or after sunset + preSunriseBlipBuffer) are
+// treated as sensor noise — e.g. a stray Ppv > 0 reading at 01:30 should not
+// end the night block at 01:30, and a post-sunset blip should not push the
+// afternoonPeak into the evening hours. 30 minutes is generous enough to
+// admit early-morning and late-evening production in twilight while rejecting
+// middle-of-night blips by hours.
 const preSunriseBlipBuffer = 30 * time.Minute
 
-// findEveningNight identifies the evening (last solar → midnight) and night
-// (midnight → first solar) no-solar usage blocks for the requested calendar
-// date and returns their totals.
+// recentSolarThreshold is the lookback window used by the today-gate to
+// detect "solar still active". A reading inside [now - threshold, now] with
+// Ppv > 0 keeps the gate firing and prevents the lastSolar boundary from
+// flickering during the live afternoon window.
+const recentSolarThreshold = 5 * time.Minute
+
+// findDailyUsage breaks the requested calendar date into up to five
+// chronological no-overlap blocks (night, morningPeak, offPeak,
+// afternoonPeak, evening) and returns their totals. The off-peak window
+// boundaries come from SSM; firstSolar and lastSolar boundaries come from
+// readings (with Melbourne sunrise/sunset fallbacks).
 //
-// today is the caller's "today" string in sydneyTZ (date == today switches on
-// in-progress clamping and the today gate that omits the evening block while
-// the sun is still up). now is the request-scoped clock (sydneyTZ-typed for
-// readability; comparisons use absolute instants and do not depend on
-// location). Returns nil when both blocks are omitted.
-func findEveningNight(readings []dynamo.ReadingItem, date, today string, now time.Time) *EveningNight {
+// today is the caller's "today" string in sydneyTZ (date == today switches
+// on the today-gate, future-omit, and in-progress clamping). now is the
+// request-scoped clock. When the off-peak window is unparseable or the
+// solar-window invariant fails, only night and evening are emitted. Returns
+// nil when no blocks survive the pipeline.
+func findDailyUsage(
+	readings []dynamo.ReadingItem,
+	offpeakStart, offpeakEnd string,
+	date, today string,
+	now time.Time,
+) *DailyUsage {
 	dayStart, err := time.ParseInLocation("2006-01-02", date, sydneyTZ)
 	if err != nil {
 		return nil
@@ -654,128 +669,250 @@ func findEveningNight(readings []dynamo.ReadingItem, date, today string, now tim
 	dayEnd := dayStart.AddDate(0, 0, 1)
 	isToday := date == today
 
-	// Resolve sunrise/sunset lazily and at most once each. Sunrise is needed
-	// both for the pre-sunrise blip filter and the night fallback; sunset for
-	// the evening today-gate and the evening fallback.
-	sunriseResolved := false
-	var sunrise time.Time
-	resolveSunrise := func() time.Time {
-		if !sunriseResolved {
-			sunrise = melbourneSunriseSunset(date, true)
-			sunriseResolved = true
-		}
-		return sunrise
-	}
-	sunsetResolved := false
-	var sunset time.Time
-	resolveSunset := func() time.Time {
-		if !sunsetResolved {
-			sunset = melbourneSunriseSunset(date, false)
-			sunsetResolved = true
-		}
-		return sunset
-	}
+	computedSunrise := melbourneSunriseSunset(date, true)
+	computedSunset := melbourneSunriseSunset(date, false)
 
-	// Single pass over readings to find the first/last reading with Ppv > 0.
-	// Both candidates ignore readings before sunrise - preSunriseBlipBuffer:
-	// a single stray reading at e.g. 01:30 would otherwise pollute both the
-	// night-end (firstPpv) and evening-start (lastPpv) boundaries on a day
-	// with no real production. No upper bound is applied — solar drops to
-	// zero well before sunset, so a post-sunset blip is not a credible last-
-	// of-day reading and hasn't been observed in practice.
-	ppvLowerCutoff := resolveSunrise().Add(-preSunriseBlipBuffer).Unix()
-	var firstPpv, lastPpv *dynamo.ReadingItem
+	// Single pass over readings: track firstSolar/lastSolar inside the closed
+	// window [computedSunrise - 30 min, computedSunset + 30 min] (decision 8
+	// + decision 10), and (when isToday) recentSolar across [now - 5 min, now].
+	lowerCutoff := computedSunrise.Add(-preSunriseBlipBuffer).Unix()
+	upperCutoff := computedSunset.Add(preSunriseBlipBuffer).Unix()
+	recentLower := now.Add(-recentSolarThreshold).Unix()
+	recentUpper := now.Unix()
+	var firstSolar, lastSolar *dynamo.ReadingItem
+	recentSolar := false
 	for i := range readings {
-		if readings[i].Ppv > 0 && readings[i].Timestamp >= ppvLowerCutoff {
-			r := readings[i]
-			if firstPpv == nil {
-				firstPpv = &r
+		r := readings[i]
+		if r.Ppv > 0 && r.Timestamp >= lowerCutoff && r.Timestamp <= upperCutoff {
+			if firstSolar == nil {
+				rr := r
+				firstSolar = &rr
 			}
-			lastPpv = &r
+			rr := r
+			lastSolar = &rr
+		}
+		if isToday && r.Ppv > 0 && r.Timestamp >= recentLower && r.Timestamp <= recentUpper {
+			recentSolar = true
+		}
+	}
+	hasQualifyingPpv := firstSolar != nil
+
+	// solarStillUp drives both the today-gate (decision 9) and an early
+	// override of lastSolar (decision 12): when solar is still active or
+	// expected later today, the latest qualifying reading is not the day's
+	// true "last solar" — it's just where we are now. Using the sunset
+	// fallback for lastSolar in that case keeps the five-block layout
+	// viable through step 4's strict invariant so the today-gate's
+	// afternoonPeak/evening overrides have somewhere to land.
+	solarStillUp := isToday && (recentSolar || (!hasQualifyingPpv && !now.After(computedSunset)))
+
+	var firstSolarTS, lastSolarTS int64
+	firstSolarFromFallback := false
+	lastSolarFromFallback := false
+	if firstSolar != nil {
+		firstSolarTS = firstSolar.Timestamp
+	} else {
+		firstSolarTS = computedSunrise.Unix()
+		firstSolarFromFallback = true
+	}
+	if lastSolar != nil && !solarStillUp {
+		lastSolarTS = lastSolar.Timestamp
+	} else {
+		lastSolarTS = computedSunset.Unix()
+		lastSolarFromFallback = true
+	}
+
+	// Solar-window guard. Parse off-peak first; failure → two-block path.
+	offpeakStartMin, offpeakEndMin, offpeakOK := parseOffpeakWindow(offpeakStart, offpeakEnd)
+	var offpeakStartTime, offpeakEndTime time.Time
+	useFiveBlock := false
+	if offpeakOK {
+		offpeakStartTime = dayStart.Add(time.Duration(offpeakStartMin) * time.Minute)
+		offpeakEndTime = dayStart.Add(time.Duration(offpeakEndMin) * time.Minute)
+		offpeakStartTS := offpeakStartTime.Unix()
+		offpeakEndTS := offpeakEndTime.Unix()
+		// Strict invariant: firstSolarTS < offpeakStartTS < offpeakEndTS < lastSolarTS
+		// (decision 7 + decision 11). offpeakStartTS < offpeakEndTS is guaranteed
+		// by parseOffpeakWindow.
+		if firstSolarTS < offpeakStartTS && offpeakEndTS < lastSolarTS {
+			useFiveBlock = true
 		}
 	}
 
-	var nightBlock *EveningNightBlock
-	{
-		// Step 4: build night block.
-		var nominalEnd time.Time
-		boundarySource := EveningNightBoundaryReadings
-		if firstPpv != nil {
-			nominalEnd = time.Unix(firstPpv.Timestamp, 0)
+	// Build pendingBlocks per the resolved layout.
+	var pending []pendingBlock
+	if useFiveBlock {
+		pending = []pendingBlock{
+			{
+				kind:           DailyUsageKindNight,
+				start:          dayStart,
+				end:            time.Unix(firstSolarTS, 0),
+				startEstimated: false,
+				endEstimated:   firstSolarFromFallback,
+			},
+			{
+				kind:           DailyUsageKindMorningPeak,
+				start:          time.Unix(firstSolarTS, 0),
+				end:            offpeakStartTime,
+				startEstimated: firstSolarFromFallback,
+				endEstimated:   false,
+			},
+			{
+				kind:           DailyUsageKindOffPeak,
+				start:          offpeakStartTime,
+				end:            offpeakEndTime,
+				startEstimated: false,
+				endEstimated:   false,
+			},
+			{
+				kind:           DailyUsageKindAfternoonPeak,
+				start:          offpeakEndTime,
+				end:            time.Unix(lastSolarTS, 0),
+				startEstimated: false,
+				endEstimated:   lastSolarFromFallback,
+			},
+			{
+				kind:           DailyUsageKindEvening,
+				start:          time.Unix(lastSolarTS, 0),
+				end:            dayEnd,
+				startEstimated: lastSolarFromFallback,
+				endEstimated:   false,
+			},
+		}
+	} else {
+		pending = []pendingBlock{
+			{
+				kind:           DailyUsageKindNight,
+				start:          dayStart,
+				end:            time.Unix(firstSolarTS, 0),
+				startEstimated: false,
+				endEstimated:   firstSolarFromFallback,
+			},
+			{
+				kind:           DailyUsageKindEvening,
+				start:          time.Unix(lastSolarTS, 0),
+				end:            dayEnd,
+				startEstimated: lastSolarFromFallback,
+				endEstimated:   false,
+			},
+		}
+	}
+
+	// Today-gate (decision 9). solarStillUp computed above with the lastSolar
+	// override. When fired: omit evening; afternoonPeak.end = now,
+	// statusOverride = in-progress. On the two-block path the gate's
+	// afternoonPeak override is a no-op (no such block exists); evening
+	// omission still applies.
+	if isToday {
+		if solarStillUp {
+			filtered := pending[:0]
+			for _, p := range pending {
+				if p.kind == DailyUsageKindEvening {
+					continue
+				}
+				if p.kind == DailyUsageKindAfternoonPeak {
+					p.end = now
+					p.statusOverride = DailyUsageStatusInProgress
+					// Today-gate clamp produces a requestTime end ⇒ readings.
+					p.endEstimated = false
+				}
+				filtered = append(filtered, p)
+			}
+			pending = filtered
+		}
+	}
+
+	// Future-omit + in-progress clamp.
+	survivors := make([]pendingBlock, 0, len(pending))
+	for _, p := range pending {
+		if isToday && p.start.After(now) {
+			continue
+		}
+		// Two paths set status because the today-gate (above) already clamped
+		// afternoonPeak.end to now, so the generic p.end.After(now) branch
+		// would not fire for that block — statusOverride carries the
+		// in-progress signal across the gate.
+		if isToday && p.end.After(now) && p.statusOverride == "" {
+			p.end = now
+			p.status = DailyUsageStatusInProgress
+			// In-progress clamp produces a requestTime end ⇒ readings.
+			p.endEstimated = false
+		} else if p.statusOverride != "" {
+			p.status = p.statusOverride
 		} else {
-			nominalEnd = resolveSunrise()
-			boundarySource = EveningNightBoundaryEstimated
+			p.status = DailyUsageStatusComplete
 		}
-		end := nominalEnd
-		status := EveningNightStatusComplete
-		if isToday && nominalEnd.After(now) {
-			end = now
-			status = EveningNightStatusInProgress
-		}
-		if dayStart.Before(end) {
-			nightBlock = buildEveningNightBlock(readings, dayStart, end, boundarySource, status)
+		survivors = append(survivors, p)
+	}
+
+	// Degenerate-omit.
+	withDuration := make([]pendingBlock, 0, len(survivors))
+	for _, p := range survivors {
+		if p.start.Before(p.end) {
+			withDuration = append(withDuration, p)
 		}
 	}
 
-	var eveningBlock *EveningNightBlock
-	{
-		// Step 5: build evening block.
-		emit := true
-		if isToday {
-			// Today gate: omit when the sun has not astronomically set yet.
-			if !now.After(resolveSunset()) {
-				emit = false
-			}
-		}
-		if emit {
-			var nominalStart time.Time
-			boundarySource := EveningNightBoundaryReadings
-			if lastPpv != nil {
-				nominalStart = time.Unix(lastPpv.Timestamp, 0)
-			} else {
-				nominalStart = resolveSunset()
-				boundarySource = EveningNightBoundaryEstimated
-			}
-			end := dayEnd
-			status := EveningNightStatusComplete
-			if isToday && dayEnd.After(now) {
-				end = now
-				status = EveningNightStatusInProgress
-			}
-			if nominalStart.Before(end) {
-				eveningBlock = buildEveningNightBlock(readings, nominalStart, end, boundarySource, status)
-			}
-		}
-	}
-
-	if nightBlock == nil && eveningBlock == nil {
+	if len(withDuration) == 0 {
 		return nil
 	}
-	return &EveningNight{Evening: eveningBlock, Night: nightBlock}
+
+	// Two-pass integration: per-block integratePload, then sum, then per-block
+	// percentOfDay.
+	var unroundedSum float64
+	for i := range withDuration {
+		withDuration[i].unroundedKwh = integratePload(readings, withDuration[i].start.Unix(), withDuration[i].end.Unix())
+		unroundedSum += withDuration[i].unroundedKwh
+	}
+
+	blocks := make([]DailyUsageBlock, 0, len(withDuration))
+	for _, p := range withDuration {
+		blocks = append(blocks, buildDailyUsageBlock(p, unroundedSum))
+	}
+	return &DailyUsage{Blocks: blocks}
 }
 
-// buildEveningNightBlock constructs a single EveningNightBlock from the
-// supplied period bounds, integrating pload over [start, end) and computing
-// the elapsed-hours average. AverageKwhPerHour is nil when the elapsed
-// duration is shorter than 60 seconds (req 1.7).
-func buildEveningNightBlock(readings []dynamo.ReadingItem, start, end time.Time, boundarySource, status string) *EveningNightBlock {
-	startUnix := start.Unix()
-	endUnix := end.Unix()
+// pendingBlock carries the cross-pass state of one block between the
+// pipeline steps and the two-pass integration. It is a local sentinel struct
+// for findDailyUsage and never escapes the function.
+type pendingBlock struct {
+	kind           string
+	start, end     time.Time
+	startEstimated bool
+	endEstimated   bool
+	statusOverride string
+	status         string
+	unroundedKwh   float64
+}
+
+// buildDailyUsageBlock is a pure formatter: it computes boundarySource,
+// formats start/end as RFC 3339 UTC, and computes averageKwhPerHour and
+// percentOfDay from p.unroundedKwh and unroundedSum. It does not access the
+// readings slice.
+func buildDailyUsageBlock(p pendingBlock, unroundedSum float64) DailyUsageBlock {
+	startUnix := p.start.Unix()
+	endUnix := p.end.Unix()
 	elapsed := endUnix - startUnix
-	if elapsed <= 0 {
-		return nil
+
+	boundarySource := DailyUsageBoundaryReadings
+	if p.startEstimated || p.endEstimated {
+		boundarySource = DailyUsageBoundaryEstimated
 	}
-	totalKwh := integratePload(readings, startUnix, endUnix)
-	block := &EveningNightBlock{
-		Start:          start.UTC().Format(time.RFC3339),
-		End:            end.UTC().Format(time.RFC3339),
-		TotalKwh:       roundEnergy(totalKwh),
-		Status:         status,
+
+	block := DailyUsageBlock{
+		Kind:           p.kind,
+		Start:          p.start.UTC().Format(time.RFC3339),
+		End:            p.end.UTC().Format(time.RFC3339),
+		TotalKwh:       roundEnergy(p.unroundedKwh),
+		Status:         p.status,
 		BoundarySource: boundarySource,
 	}
 	if elapsed >= 60 {
-		avg := roundEnergy(totalKwh / (float64(elapsed) / 3600.0))
+		avg := roundEnergy(p.unroundedKwh / (float64(elapsed) / 3600.0))
 		block.AverageKwhPerHour = &avg
+	}
+	if unroundedSum > 0 {
+		block.PercentOfDay = int(math.Round(p.unroundedKwh / unroundedSum * 100))
 	}
 	return block
 }

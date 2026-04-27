@@ -235,36 +235,40 @@ public struct DayDetailResponse: Codable, Sendable {
     public let readings: [TimeSeriesPoint]
     public let summary: DaySummary?
     public let peakPeriods: [PeakPeriod]?
-    public let eveningNight: EveningNight?
+    public let dailyUsage: DailyUsage?
 
     public init(
         date: String,
         readings: [TimeSeriesPoint],
         summary: DaySummary?,
         peakPeriods: [PeakPeriod]?,
-        eveningNight: EveningNight?
+        dailyUsage: DailyUsage?
     ) {
         self.date = date
         self.readings = readings
         self.summary = summary
         self.peakPeriods = peakPeriods
-        self.eveningNight = eveningNight
+        self.dailyUsage = dailyUsage
     }
 }
 
-public struct EveningNight: Codable, Sendable {
-    public let evening: EveningNightBlock?
-    public let night: EveningNightBlock?
+public struct DailyUsage: Codable, Sendable {
+    public let blocks: [DailyUsageBlock]
 
-    public var hasAnyBlock: Bool { evening != nil || night != nil }
-
-    public init(evening: EveningNightBlock?, night: EveningNightBlock?) {
-        self.evening = evening
-        self.night = night
+    public init(blocks: [DailyUsageBlock]) {
+        self.blocks = blocks
     }
 }
 
-public struct EveningNightBlock: Codable, Sendable, Identifiable {
+public struct DailyUsageBlock: Codable, Sendable, Identifiable {
+    public enum Kind: String, Codable, Sendable {
+        case night
+        case morningPeak
+        case offPeak
+        case afternoonPeak
+        case evening
+    }
+
     public enum Status: String, Codable, Sendable {
         case complete
         case inProgress = "in-progress"
@@ -275,29 +279,35 @@ public struct EveningNightBlock: Codable, Sendable, Identifiable {
         case estimated
     }
 
+    public let kind: Kind
     public let start: String
     public let end: String
     public let totalKwh: Double
     public let averageKwhPerHour: Double?
+    public let percentOfDay: Int
     public let status: Status
     public let boundarySource: BoundarySource
 
-    // The block's RFC 3339 start timestamp is unique within a single response
-    // (one evening, one night), so it's a stable identifier for SwiftUI diffing.
-    public var id: String { start }
+    // Each kind appears at most once per response, so the kind's raw value is a
+    // stable, unique identifier for SwiftUI diffing.
+    public var id: String { kind.rawValue }
 
     public init(
+        kind: Kind,
         start: String,
         end: String,
         totalKwh: Double,
         averageKwhPerHour: Double?,
+        percentOfDay: Int,
         status: Status,
         boundarySource: BoundarySource
     ) {
+        self.kind = kind
         self.start = start
         self.end = end
         self.totalKwh = totalKwh
         self.averageKwhPerHour = averageKwhPerHour
+        self.percentOfDay = percentOfDay
         self.status = status
         self.boundarySource = boundarySource
     }

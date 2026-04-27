@@ -100,7 +100,7 @@ final actor MockFluxAPIClient: FluxAPIClient {
                 PeakPeriod(start: "\(date)T07:15:00Z", end: "\(date)T07:45:00Z", avgLoadW: 4200.3, energyWh: 2100),
                 PeakPeriod(start: "\(date)T12:00:00Z", end: "\(date)T12:20:00Z", avgLoadW: 2900.5, energyWh: 967)
             ],
-            eveningNight: dayEveningNight(for: date)
+            dailyUsage: dayDailyUsage(for: date)
         )
     }
 
@@ -133,27 +133,81 @@ final actor MockFluxAPIClient: FluxAPIClient {
         return readings
     }
 
-    // Exercises both card states: an in-progress evening (renders "(so far)")
-    // and a complete readings-derived night block.
-    private static func dayEveningNight(for date: String) -> EveningNight {
-        EveningNight(
-            evening: EveningNightBlock(
-                start: "\(date)T08:30:00Z",
-                end: "\(date)T11:00:00Z",
-                totalKwh: 2.7,
-                averageKwhPerHour: 1.08,
-                status: .inProgress,
-                boundarySource: .readings
-            ),
-            night: EveningNightBlock(
-                start: "\(date)T14:00:00Z",
-                end: "\(date)T20:30:00Z",
-                totalKwh: 4.2,
-                averageKwhPerHour: 0.65,
+    // Exercises all five blocks for the preview, including a mix of readings-
+    // and estimated-derived boundaries to render the caption variants.
+    // swiftlint:disable:next function_body_length
+    private static func dayDailyUsage(for date: String) -> DailyUsage {
+        let utc = sydneyClockToUTC(date: date)
+        return DailyUsage(blocks: [
+            DailyUsageBlock(
+                kind: .night,
+                start: utc(0, 0),
+                end: utc(6, 30),
+                totalKwh: 3.1,
+                averageKwhPerHour: 0.48,
+                percentOfDay: 18,
                 status: .complete,
                 boundarySource: .readings
+            ),
+            DailyUsageBlock(
+                kind: .morningPeak,
+                start: utc(6, 30),
+                end: utc(11, 0),
+                totalKwh: 2.1,
+                averageKwhPerHour: 0.47,
+                percentOfDay: 12,
+                status: .complete,
+                boundarySource: .estimated
+            ),
+            DailyUsageBlock(
+                kind: .offPeak,
+                start: utc(11, 0),
+                end: utc(14, 0),
+                totalKwh: 5.0,
+                averageKwhPerHour: 1.67,
+                percentOfDay: 30,
+                status: .complete,
+                boundarySource: .readings
+            ),
+            DailyUsageBlock(
+                kind: .afternoonPeak,
+                start: utc(14, 0),
+                end: utc(18, 42),
+                totalKwh: 4.5,
+                averageKwhPerHour: 0.96,
+                percentOfDay: 27,
+                status: .complete,
+                boundarySource: .estimated
+            ),
+            DailyUsageBlock(
+                kind: .evening,
+                start: utc(18, 42),
+                end: utc(24, 0),
+                totalKwh: 2.7,
+                averageKwhPerHour: 1.08,
+                percentOfDay: 13,
+                status: .inProgress,
+                boundarySource: .estimated
             )
-        )
+        ])
+    }
+
+    private static let isoUTCFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        return formatter
+    }()
+
+    // Returns a closure that converts a Sydney-local (hour, minute) on the
+    // given date to its UTC ISO8601 timestamp, so preview block boundaries
+    // remain chronologically valid regardless of date or DST offset.
+    private static func sydneyClockToUTC(date: String) -> (Int, Int) -> String {
+        let baseDay = DateFormatting.parseDayDate(date) ?? Date()
+        return { hour, minute in
+            let target = calendar.date(byAdding: .minute, value: hour * 60 + minute, to: baseDay) ?? baseDay
+            return isoUTCFormatter.string(from: target)
+        }
     }
 
     func fetchStatus() async throws -> StatusResponse {
