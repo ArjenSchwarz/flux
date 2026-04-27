@@ -698,11 +698,12 @@ func findDailyUsage(
 	hasQualifyingPpv := firstSolar != nil
 
 	// solarStillUp drives both the today-gate (decision 9) and an early
-	// override of lastSolar: when solar is still active or expected later
-	// today, the latest qualifying reading is not the day's true "last
-	// solar" — it's just where we are now. Using the sunset fallback for
-	// lastSolar in that case keeps the five-block layout viable so the
-	// today-gate's afternoonPeak/evening overrides have somewhere to land.
+	// override of lastSolar (decision 12): when solar is still active or
+	// expected later today, the latest qualifying reading is not the day's
+	// true "last solar" — it's just where we are now. Using the sunset
+	// fallback for lastSolar in that case keeps the five-block layout
+	// viable through step 4's strict invariant so the today-gate's
+	// afternoonPeak/evening overrides have somewhere to land.
 	solarStillUp := isToday && (recentSolar || (!hasQualifyingPpv && !now.After(computedSunset)))
 
 	var firstSolarTS, lastSolarTS int64

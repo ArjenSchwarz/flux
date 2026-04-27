@@ -371,3 +371,43 @@ Allowing block overlap (e.g. `offPeak [11:00, 14:00)` and `evening [12:25, midni
 - Days where the recorder dies during off-peak lose the off-peak detail and morning split. Considered acceptable for the rare broken-recorder case.
 
 ---
+
+## Decision 12: lastSolar Override on solarStillUp
+
+**Date**: 2026-04-27
+**Status**: accepted
+
+### Context
+
+The design's algorithm step 3 ("Resolve `firstSolarTS` and `lastSolarTS`") only describes a fallback path when the corresponding tracker is nil — it does not mention overriding `lastSolarTS` when a non-nil tracker exists. Implementing the algorithm strictly that way produces a regression on today + recent-solar requests that fall during the off-peak window (e.g. now = 11:30, recent Ppv at 11:25, lastSolar = 11:25): the strict invariant `offpeakEnd < lastSolarTS` (14:00 < 11:25) fails, and the function falls through to the two-block path, losing the morningPeak/offPeak detail the user can still legitimately see.
+
+Today-gate logic at design step 6 is supposed to cover this case (clamp `afternoonPeak.end = now`, omit `evening`), but it never runs because step 4's invariant check rejects the five-block path first.
+
+### Decision
+
+When `solarStillUp` fires (today AND (recent solar exists OR (no qualifying Ppv yet AND request before sunset))), `findDailyUsage` overrides `lastSolarTS` to the computed sunset and sets `lastSolarFromFallback = true` — even when a non-nil `lastSolar` tracker exists. The override happens at the same point step 3 resolves the timestamp, before the solar-window guard at step 4 runs.
+
+### Rationale
+
+`solarStillUp` semantically means "the day's true `lastSolar` has not happened yet." Using the latest qualifying reading as `lastSolarTS` would treat a transient mid-day reading as the day's last solar, breaking the strict invariant for the rest of the request and forcing the two-block fallback. The sunset fallback is the correct stand-in: it makes the invariant pass, the five-block path runs, and step 6's today-gate clamps `afternoonPeak.end = now` (resetting `endEstimated = false` per the design table). The override is a no-op for any block that survives to render — `afternoonPeak`'s endEstimated is overwritten by the clamp, and `evening` is omitted by the today-gate — so it has no visible effect on `boundarySource` outputs but preserves the morningPeak/offPeak detail.
+
+### Alternatives Considered
+
+- **Defer the override into step 6**: cleaner mapping to the design's pipeline — Rejected because step 4's invariant uses `lastSolarTS` and would fail before step 6 runs, defeating the override's purpose.
+- **Skip the override entirely**: matches the design literally — Rejected because round-2 testing showed it produces the two-block regression on today + recent-solar mid-day requests, which is exactly the scenario the today-gate exists to handle.
+- **Loosen the strict invariant for today**: e.g. `firstSolarTS < offpeakStartTS && offpeakEndTS < (solarStillUp ? sunset : lastSolarTS)` — Rejected because it scatters the override into the invariant predicate rather than localising it to the tracker resolution; harder to reason about.
+
+### Consequences
+
+**Positive:**
+- The five-block path remains viable on today + recent-solar requests during or before off-peak end, preserving morningPeak/offPeak detail.
+- The override is localised to step 3 and has no visible effect on emitted `boundarySource` values once today-gate and clamps run.
+
+**Negative:**
+- The implementation diverges slightly from a literal reading of the design's step 3 — captured here so future readers don't think it's a bug.
+
+### Impact
+
+`internal/api/compute.go:700-722` — the `solarStillUp`-driven branch in the `lastSolarTS` resolution.
+
+---

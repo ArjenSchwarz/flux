@@ -2245,6 +2245,47 @@ func TestFindDailyUsage(t *testing.T) {
 				}
 			},
 		},
+		"today overcast mid-morning, no qualifying Ppv yet: morningPeak in-progress estimated": {
+			// now = 09:30, no Ppv > 0 readings today (overcast). solarStillUp
+			// fires via the !hasQualifyingPpv branch ⇒ Decision 12 override
+			// pushes lastSolarTS to sunset, five-block path runs, today-gate
+			// omits evening, future-omit drops afternoonPeak. morningPeak
+			// remains in-progress with boundarySource=estimated (firstSolar
+			// fell back to sunrise).
+			readings: func() []dynamo.ReadingItem {
+				var out []dynamo.ReadingItem
+				for h := 0; h < 9; h++ {
+					for m := 0; m < 60; m += 30 {
+						out = append(out, readingPpv(todayDate, h, m, 0, 0, 1000))
+					}
+				}
+				out = append(out, readingPpv(todayDate, 9, 0, 0, 0, 1000))
+				out = append(out, readingPpv(todayDate, 9, 30, 0, 0, 1000))
+				return out
+			}(),
+			offpeakStart: offpeakStart,
+			offpeakEnd:   offpeakEnd,
+			date:         todayDate,
+			today:        todayDate,
+			now:          time.Date(2026, 4, 15, 9, 30, 0, 0, sydneyTZ),
+			check: func(t *testing.T, got *DailyUsage) {
+				require.NotNil(t, got)
+				blocks := dailyUsageBlocksByKind(got)
+				require.Len(t, got.Blocks, 2, "expected night + morningPeak only")
+				night, ok := blocks[DailyUsageKindNight]
+				require.True(t, ok)
+				assert.Equal(t, DailyUsageStatusComplete, night.Status)
+				// Night ended at sunrise (estimated, since no qualifying Ppv).
+				assert.Equal(t, DailyUsageBoundaryEstimated, night.BoundarySource)
+				mp, ok := blocks[DailyUsageKindMorningPeak]
+				require.True(t, ok)
+				assert.Equal(t, DailyUsageStatusInProgress, mp.Status)
+				// morningPeak.start = sunrise fallback ⇒ boundarySource=estimated.
+				assert.Equal(t, DailyUsageBoundaryEstimated, mp.BoundarySource)
+				wantEnd := time.Date(2026, 4, 15, 9, 30, 0, 0, sydneyTZ).UTC().Format(time.RFC3339)
+				assert.Equal(t, wantEnd, mp.End)
+			},
+		},
 		"today + off-peak misconfigured: today-gate still applies on 2-block path": {
 			// Cloudy mid-afternoon (no recent solar, lastSolar exists earlier),
 			// off-peak misconfigured ⇒ 2-block path. evening should still be
@@ -2353,6 +2394,120 @@ func TestFindDailyUsage_PercentOfDay(t *testing.T) {
 		}
 	})
 }
+
+func TestBuildDailyUsageBlock(t *testing.T) {
+	const date = "2026-04-12"
+	dayStart, _ := time.ParseInLocation("2006-01-02", date, sydneyTZ)
+
+	// boundarySource matrix: every (startEstimated, endEstimated) combination
+	// should resolve correctly, and elapsed < 60s should drop AverageKwhPerHour.
+	tests := map[string]struct {
+		p                pendingBlock
+		unroundedSum     float64
+		wantBoundary     string
+		wantAverage      *float64
+		wantPercentOfDay int
+	}{
+		"both readings": {
+			p: pendingBlock{
+				kind:         DailyUsageKindOffPeak,
+				start:        dayStart.Add(11 * time.Hour),
+				end:          dayStart.Add(14 * time.Hour),
+				status:       DailyUsageStatusComplete,
+				unroundedKwh: 6.0,
+			},
+			unroundedSum:     30.0,
+			wantBoundary:     DailyUsageBoundaryReadings,
+			wantAverage:      floatPtrTest(2.0),
+			wantPercentOfDay: 20,
+		},
+		"start estimated only": {
+			p: pendingBlock{
+				kind:           DailyUsageKindMorningPeak,
+				start:          dayStart.Add(6 * time.Hour),
+				end:            dayStart.Add(11 * time.Hour),
+				startEstimated: true,
+				status:         DailyUsageStatusComplete,
+				unroundedKwh:   2.5,
+			},
+			unroundedSum:     10.0,
+			wantBoundary:     DailyUsageBoundaryEstimated,
+			wantAverage:      floatPtrTest(0.5),
+			wantPercentOfDay: 25,
+		},
+		"end estimated only": {
+			p: pendingBlock{
+				kind:         DailyUsageKindNight,
+				start:        dayStart,
+				end:          dayStart.Add(6 * time.Hour),
+				endEstimated: true,
+				status:       DailyUsageStatusComplete,
+				unroundedKwh: 1.5,
+			},
+			unroundedSum:     10.0,
+			wantBoundary:     DailyUsageBoundaryEstimated,
+			wantAverage:      floatPtrTest(0.25),
+			wantPercentOfDay: 15,
+		},
+		"both estimated": {
+			p: pendingBlock{
+				kind:           DailyUsageKindEvening,
+				start:          dayStart.Add(18 * time.Hour),
+				end:            dayStart.Add(24 * time.Hour),
+				startEstimated: true,
+				endEstimated:   true,
+				status:         DailyUsageStatusComplete,
+				unroundedKwh:   3.0,
+			},
+			unroundedSum:     10.0,
+			wantBoundary:     DailyUsageBoundaryEstimated,
+			wantAverage:      floatPtrTest(0.5),
+			wantPercentOfDay: 30,
+		},
+		"elapsed below 60s drops average": {
+			p: pendingBlock{
+				kind:         DailyUsageKindEvening,
+				start:        dayStart.Add(23*time.Hour + 59*time.Minute + 30*time.Second),
+				end:          dayStart.Add(24 * time.Hour),
+				status:       DailyUsageStatusInProgress,
+				unroundedKwh: 0.001,
+			},
+			unroundedSum:     1.0,
+			wantBoundary:     DailyUsageBoundaryReadings,
+			wantAverage:      nil,
+			wantPercentOfDay: 0,
+		},
+		"zero unroundedSum yields percentOfDay 0": {
+			p: pendingBlock{
+				kind:         DailyUsageKindOffPeak,
+				start:        dayStart.Add(11 * time.Hour),
+				end:          dayStart.Add(14 * time.Hour),
+				status:       DailyUsageStatusComplete,
+				unroundedKwh: 0,
+			},
+			unroundedSum:     0,
+			wantBoundary:     DailyUsageBoundaryReadings,
+			wantAverage:      floatPtrTest(0),
+			wantPercentOfDay: 0,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := buildDailyUsageBlock(tc.p, tc.unroundedSum)
+			assert.Equal(t, tc.wantBoundary, got.BoundarySource)
+			assert.Equal(t, tc.wantPercentOfDay, got.PercentOfDay)
+			if tc.wantAverage == nil {
+				assert.Nil(t, got.AverageKwhPerHour, "AverageKwhPerHour should be omitted")
+			} else {
+				require.NotNil(t, got.AverageKwhPerHour)
+				assert.InDelta(t, *tc.wantAverage, *got.AverageKwhPerHour, 1e-9)
+			}
+		})
+	}
+}
+
+func floatPtrTest(v float64) *float64 { return &v }
 
 func BenchmarkFindDailyUsage(b *testing.B) {
 	dayStart := time.Date(2026, 4, 15, 0, 0, 0, 0, sydneyTZ)
