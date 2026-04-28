@@ -19,5 +19,11 @@ func normalise(text string) string {
 // Mirrors NoteText.graphemeCount on the Swift side so the fixture stays in
 // sync across stacks.
 func graphemeCount(s string) int {
-	return uniseg.GraphemeClusterCount(normalise(s))
+	return graphemeCountNormalised(normalise(s))
+}
+
+// graphemeCountNormalised counts grapheme clusters without re-normalising.
+// Use when the caller has already invoked normalise on the same string.
+func graphemeCountNormalised(s string) int {
+	return uniseg.GraphemeClusterCount(s)
 }

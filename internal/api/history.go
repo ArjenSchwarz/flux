@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
@@ -70,34 +69,17 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 		return nil
 	})
 
-	// Notes read runs outside the errgroup so a failure logs and leaves the
-	// per-day note field nil instead of cancelling the core queries.
-	var (
-		noteItems []dynamo.NoteItem
-		nwg       sync.WaitGroup
-	)
-	nwg.Add(1)
-	go func() {
-		defer nwg.Done()
-		result, err := h.reader.QueryNotes(ctx, h.serial, startDate, today)
-		if err != nil {
-			slog.Warn("history notes query failed; continuing without notes", "error", err)
-			return
-		}
-		noteItems = result
-	}()
+	// Notes read runs alongside the errgroup so a failure logs and leaves
+	// the per-day note field nil instead of cancelling the core queries.
+	// Uses gctx so a 500 on the core path cancels the in-flight notes read.
+	waitNotes := fetchNotesAsync(gctx, h.reader, "history", h.serial, startDate, today)
 
 	if err := g.Wait(); err != nil {
-		nwg.Wait()
+		waitNotes()
 		slog.Error("history query failed", "error", err)
 		return errorResponse(500, "internal error")
 	}
-	nwg.Wait()
-
-	notesByDate := make(map[string]string, len(noteItems))
-	for _, n := range noteItems {
-		notesByDate[n.Date] = n.Text
-	}
+	notesByDate := waitNotes()
 
 	var todayComputed *TodayEnergy
 	if len(allReadings) > 0 {

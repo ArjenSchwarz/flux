@@ -5,7 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"log/slog"
-	"strings"
+	"mime"
 	"time"
 
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
@@ -51,9 +51,14 @@ func (h *Handler) handleNote(ctx context.Context, req events.LambdaFunctionURLRe
 	}
 
 	// 2. Decode body. Function URLs sometimes flag JSON as base64 depending
-	// on the calling client, so handle both.
+	// on the calling client, so handle both. Reject base64 inputs that
+	// could not possibly fit under noteMaxBodyBytes once decoded, before
+	// allocating the decode buffer.
 	body := []byte(req.Body)
 	if req.IsBase64Encoded {
+		if len(req.Body) > base64.StdEncoding.EncodedLen(noteMaxBodyBytes) {
+			return errorResponse(413, "request too large")
+		}
 		decoded, err := base64.StdEncoding.DecodeString(req.Body)
 		if err != nil {
 			return errorResponse(400, "malformed request body")
@@ -87,7 +92,7 @@ func (h *Handler) handleNote(ctx context.Context, req events.LambdaFunctionURLRe
 
 	// 7. NFC + leading/trailing trim, then grapheme count.
 	text := normalise(payload.Text)
-	if graphemeCount(text) > noteMaxGraphemes {
+	if graphemeCountNormalised(text) > noteMaxGraphemes {
 		return errorResponse(400, "note must be 200 characters or fewer")
 	}
 
@@ -120,7 +125,6 @@ func isJSONContentType(value string) bool {
 	if value == "" {
 		return false
 	}
-	// Strip optional parameters: take the part before ';'.
-	mediaType, _, _ := strings.Cut(value, ";")
-	return strings.EqualFold(strings.TrimSpace(mediaType), "application/json")
+	mediaType, _, err := mime.ParseMediaType(value)
+	return err == nil && mediaType == "application/json"
 }

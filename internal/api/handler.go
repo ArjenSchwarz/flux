@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"log/slog"
+	"net/http"
 	"strings"
 	"time"
 
@@ -76,7 +77,7 @@ func (h *Handler) handle(ctx context.Context, req events.LambdaFunctionURLReques
 
 	method := req.RequestContext.HTTP.Method
 	switch method {
-	case "GET":
+	case http.MethodGet:
 		switch req.RawPath {
 		case "/status":
 			return h.handleStatus(ctx, req)
@@ -85,16 +86,16 @@ func (h *Handler) handle(ctx context.Context, req events.LambdaFunctionURLReques
 		case "/day":
 			return h.handleDay(ctx, req)
 		}
-	case "PUT":
+	case http.MethodPut:
 		if req.RawPath == "/note" {
 			return h.handleNote(ctx, req)
 		}
 	}
 
 	// Unknown method on a known path → 405 with the path's allowed methods.
-	allow := "GET"
+	allow := http.MethodGet
 	if req.RawPath == "/note" {
-		allow = "PUT"
+		allow = http.MethodPut
 	}
 	switch req.RawPath {
 	case "/status", "/history", "/day", "/note":

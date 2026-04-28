@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
@@ -55,33 +54,18 @@ func (h *Handler) handleStatus(ctx context.Context, _ events.LambdaFunctionURLRe
 		return err
 	})
 
-	// Note read runs outside the errgroup so a note-read failure logs and
+	// Note read runs alongside the errgroup so a note-read failure logs and
 	// leaves the field nil instead of cancelling the core queries (design
-	// §Read-side failure isolation).
-	var (
-		noteText *string
-		nwg      sync.WaitGroup
-	)
-	nwg.Add(1)
-	go func() {
-		defer nwg.Done()
-		item, err := h.reader.GetNote(ctx, h.serial, today)
-		if err != nil {
-			slog.Warn("status note fetch failed; continuing without note", "date", today, "error", err)
-			return
-		}
-		if item != nil {
-			s := item.Text
-			noteText = &s
-		}
-	}()
+	// §Read-side failure isolation). Uses gctx so a 500 on the core path
+	// cancels the in-flight note read instead of waiting for it.
+	waitNote := fetchNoteAsync(gctx, h.reader, "status", h.serial, today)
 
 	if err := g.Wait(); err != nil {
-		nwg.Wait()
+		waitNote()
 		slog.Error("status query failed", "error", err)
 		return errorResponse(500, "internal error")
 	}
-	nwg.Wait()
+	noteText := waitNote()
 
 	// Phase 2: in-memory computation — no I/O.
 	resp := &StatusResponse{}
