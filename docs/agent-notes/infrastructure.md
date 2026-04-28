@@ -22,7 +22,7 @@ The template is a skeleton with:
 - **IAM**: TaskExecutionRole, TaskRole, LambdaExecutionRole
 - **CloudWatch**: PollerLogGroup, ApiLogGroup
 - **SSM Parameters**: AppIdParameter, SerialParameter, OffpeakStartParameter, OffpeakEndParameter
-- **DynamoDB**: ReadingsTable, DailyEnergyTable, DailyPowerTable, SystemTable, OffpeakTable
+- **DynamoDB**: ReadingsTable, DailyEnergyTable, DailyPowerTable, SystemTable, OffpeakTable, NotesTable
 - **Lambda**: ApiFunction, ApiFunctionUrl, ApiFunctionUrlPermission
 - **ECS**: EcsCluster, TaskDefinition, PollerService
 
@@ -33,6 +33,9 @@ The template is a skeleton with:
 - SecureString SSM params (`/flux/app-secret`, `/flux/api-token`) must be created manually before deploy (Decision 7)
 - Lambda code deployed via `aws cloudformation package` (Decision 8)
 - Lambda uses `LoggingConfig.LogGroup` to point to the dedicated ApiLogGroup
+- `NotesTable` (`flux-notes`): partition `sysSn` HASH + sort `date` RANGE, PAY_PER_REQUEST, PointInTimeRecoveryEnabled, `DeletionPolicy: Retain` + `UpdateReplacePolicy: Retain`. PITR is enabled because notes are the only user-authored, non-reconstructable data in Flux. No TTL.
+- `LambdaExecutionRole` has a separate IAM Allow block scoped to `!GetAtt NotesTable.Arn` covering `GetItem` / `Query` / `PutItem` / `DeleteItem`. The existing read-only block over the other tables is intentionally NOT widened with notes — write rights stay scoped to the notes table only (spec AC §6.4).
+- `ApiFunction` carries `TABLE_NOTES: !Ref NotesTable` in its environment. `cmd/api/main.go` lists `TABLE_NOTES` as a required env var, so a deployment that forgets the env binding fails fast.
 
 ## Deployment README
 

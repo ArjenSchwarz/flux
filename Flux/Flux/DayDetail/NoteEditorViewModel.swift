@@ -4,7 +4,10 @@ import Observation
 
 @MainActor @Observable
 final class NoteEditorViewModel {
-    var draft: String
+    var draft: String {
+        didSet { characterCount = NoteText.graphemeCount(draft) }
+    }
+    private(set) var characterCount: Int
     private(set) var isSaving = false
     private(set) var error: FluxAPIError?
 
@@ -12,10 +15,9 @@ final class NoteEditorViewModel {
 
     init(initial: String, parent: DayDetailViewModel) {
         draft = initial
+        characterCount = NoteText.graphemeCount(initial)
         self.parent = parent
     }
-
-    var characterCount: Int { NoteText.graphemeCount(draft) }
 
     var canSave: Bool { !isSaving && characterCount <= NoteText.maxGraphemes }
 

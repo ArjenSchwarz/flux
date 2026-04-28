@@ -75,7 +75,7 @@ final class DayDetailViewModel {
 
     func saveNote(_ rawText: String) async throws {
         let normalised = NoteText.normalised(rawText)
-        guard NoteText.graphemeCount(normalised) <= NoteText.maxGraphemes else {
+        guard normalised.count <= NoteText.maxGraphemes else {
             throw FluxAPIError.badRequest("Note must be 200 characters or fewer")
         }
         let response = try await apiClient.saveNote(date: date, text: normalised)

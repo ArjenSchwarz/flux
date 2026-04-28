@@ -71,8 +71,11 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 
 	// Notes read runs alongside the errgroup so a failure logs and leaves
 	// the per-day note field nil instead of cancelling the core queries.
-	// Uses gctx so a 500 on the core path cancels the in-flight notes read.
-	waitNotes := fetchNotesAsync(gctx, h.reader, "history", h.serial, startDate, today)
+	// Uses the parent ctx (not gctx) so the notes read isn't aborted when
+	// g.Wait returns successfully — gctx is cancelled on Wait completion,
+	// which would race a still-in-flight QueryNotes and yield a spurious
+	// empty map.
+	waitNotes := fetchNotesAsync(ctx, h.reader, "history", h.serial, startDate, today)
 
 	if err := g.Wait(); err != nil {
 		waitNotes()

@@ -5,6 +5,7 @@ public final class URLSessionAPIClient: FluxAPIClient, Sendable {
     private let baseURL: URL
     private let tokenProvider: @Sendable () -> String?
     private let decoder: JSONDecoder
+    private let encoder: JSONEncoder
 
     private static let noCacheSession: URLSession = {
         let config = URLSessionConfiguration.default
@@ -18,6 +19,7 @@ public final class URLSessionAPIClient: FluxAPIClient, Sendable {
         self.baseURL = baseURL
         self.tokenProvider = { keychainService.loadToken() }
         self.decoder = JSONDecoder()
+        self.encoder = JSONEncoder()
     }
 
     public init(baseURL: URL, token: String, session: URLSession? = nil) {
@@ -25,6 +27,7 @@ public final class URLSessionAPIClient: FluxAPIClient, Sendable {
         self.baseURL = baseURL
         self.tokenProvider = { token }
         self.decoder = JSONDecoder()
+        self.encoder = JSONEncoder()
     }
 
     public func fetchStatus() async throws -> StatusResponse {
@@ -46,7 +49,7 @@ public final class URLSessionAPIClient: FluxAPIClient, Sendable {
     }
 
     public func saveNote(date: String, text: String) async throws -> NoteResponse {
-        let body = try JSONEncoder().encode(NotePayload(date: date, text: text))
+        let body = try encoder.encode(NotePayload(date: date, text: text))
         return try await performRequest(
             path: "note",
             queryItems: [],

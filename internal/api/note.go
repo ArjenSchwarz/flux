@@ -79,7 +79,7 @@ func (h *Handler) handleNote(ctx context.Context, req events.LambdaFunctionURLRe
 
 	// 5. Date present, syntactically valid, and a real Gregorian date.
 	parsed, err := time.ParseInLocation("2006-01-02", payload.Date, sydneyTZ)
-	if err != nil || payload.Date == "" {
+	if err != nil {
 		return errorResponse(400, "invalid date")
 	}
 

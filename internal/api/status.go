@@ -56,9 +56,11 @@ func (h *Handler) handleStatus(ctx context.Context, _ events.LambdaFunctionURLRe
 
 	// Note read runs alongside the errgroup so a note-read failure logs and
 	// leaves the field nil instead of cancelling the core queries (design
-	// §Read-side failure isolation). Uses gctx so a 500 on the core path
-	// cancels the in-flight note read instead of waiting for it.
-	waitNote := fetchNoteAsync(gctx, h.reader, "status", h.serial, today)
+	// §Read-side failure isolation). Uses the parent ctx (not gctx) so the
+	// note read isn't aborted when g.Wait returns successfully — gctx is
+	// cancelled on Wait completion, which would race a still-in-flight
+	// GetNote and yield a spurious nil.
+	waitNote := fetchNoteAsync(ctx, h.reader, "status", h.serial, today)
 
 	if err := g.Wait(); err != nil {
 		waitNote()

@@ -52,9 +52,11 @@ func (h *Handler) handleDay(ctx context.Context, req events.LambdaFunctionURLReq
 	})
 
 	// Note read runs alongside the errgroup so a failure logs and leaves the
-	// field nil instead of cancelling the core queries. Uses gctx so a 500
-	// on the core path cancels the in-flight note read.
-	waitNote := fetchNoteAsync(gctx, h.reader, "day", h.serial, date)
+	// field nil instead of cancelling the core queries. Uses the parent ctx
+	// (not gctx) so the note read isn't aborted when g.Wait returns
+	// successfully — gctx is cancelled on Wait completion, which would race
+	// a still-in-flight GetNote and yield a spurious nil.
+	waitNote := fetchNoteAsync(ctx, h.reader, "day", h.serial, date)
 
 	if err := g.Wait(); err != nil {
 		waitNote()

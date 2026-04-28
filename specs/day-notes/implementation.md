@@ -1,8 +1,8 @@
-# Implementation: Day Notes (Backend)
+# Implementation: Day Notes
 
-This document explains the Go backend portion of the Day Notes feature, covering Tasks 1–12 of `tasks.md`. Tasks 13 (Lambda env wiring in `cmd/api/main.go`) and 14 (CloudFormation infra: `flux-notes` table, IAM grant, `TABLE_NOTES` env) are explicitly out of scope and tracked as follow-ups.
+This document explains the Day Notes feature end-to-end, covering Tasks 1–27 of `tasks.md` — the Go backend, the deployment wiring (`cmd/api/main.go` + CloudFormation), and the iOS client. Pre-push review fixes are folded in.
 
-Branch: `feature/day-notes` — three commits ahead of `origin/main`.
+Branch: `feature/day-notes` — six commits ahead of `origin/main`.
 
 ---
 
@@ -72,13 +72,13 @@ Eight new or modified Go files in two packages:
 
 ### Technical Deep Dive
 
-**Validation order edge cases.** `time.ParseInLocation("2006-01-02", "", sydneyTZ)` returns an error, so the `payload.Date == ""` guard at `note.go:79` is technically redundant. Kept for explicitness; reads as "empty is not valid" rather than "the parser happens to reject empty." The future-date check uses Sydney midnight (`time.Date(y,m,d,0,0,0,0,sydneyTZ)`) so a today-dated write submitted at 23:59 Sydney is accepted, while a tomorrow-dated write submitted at 00:01 is rejected. The `nowFunc` injection lets tests pin the clock.
+**Validation order edge cases.** The pre-push refactor removed the redundant `payload.Date == ""` guard — `time.ParseInLocation("2006-01-02", "", sydneyTZ)` already returns an error so the explicit empty check was unreachable. The future-date check uses Sydney midnight (`time.Date(y,m,d,0,0,0,0,sydneyTZ)`) so a today-dated write submitted at 23:59 Sydney is accepted, while a tomorrow-dated write submitted at 00:01 is rejected. The `nowFunc` injection lets tests pin the clock.
 
 **Base64 decode size guard.** Function URLs may flag JSON as base64 depending on client framing, so `IsBase64Encoded` is honoured. The decoded length is checked against `noteMaxBodyBytes`, but a multi-MiB encoded blob would allocate before that check fires. The guard `len(req.Body) > base64.StdEncoding.EncodedLen(noteMaxBodyBytes)` rejects oversize encoded input before allocating the decode buffer. Lambda's runtime caps payload at ~6 MB, so this is bounded either way; the guard removes a wasteful allocation on adversarial input.
 
 **Grapheme count semantics.** `rivo/uniseg.GraphemeClusterCount` implements UAX #29. The cross-stack fixture pins parity against `Swift.String.count` (which is grapheme-cluster-typed since Swift 4). The known divergence risk is future Unicode-version skew between `rivo/uniseg`'s tables and Foundation's ICU; the fixture catches today's mismatches but not tomorrow's. Mitigation documented in design.md §Cross-stack grapheme parity: server count wins; client cap may be conservative until libraries align.
 
-**Soft-fail isolation correctness.** Each handler calls `fetchNoteAsync(gctx, ...)` then runs `g.Wait()`. On 500 path: `g.Wait()` returns the first core error; the handler calls `waitNote()` to drain the goroutine before responding 500 (otherwise the goroutine leaks past the request boundary). Because the helper takes `gctx`, the in-flight notes Dynamo call observes the cancellation and returns promptly — the 500 path no longer blocks on the slow notes read. On the happy path: `waitNote()` blocks until the notes read finishes, which is a no-op if it already did. The buffered channel (`make(chan *string, 1)`) means the goroutine never blocks even if the caller races on the close.
+**Soft-fail isolation correctness.** Each handler calls `fetchNoteAsync(ctx, ...)` (parent context — *not* `gctx`) then runs `g.Wait()`. The pre-push refactor moved away from `gctx` because `errgroup.WithContext` cancels the derived context on `Wait()` completion regardless of success/error, which would race a still-in-flight notes `GetItem` and yield a spurious nil even on a clean response. With the parent `ctx` the notes read isn't aborted prematurely. On the 500 path: `g.Wait()` returns the first core error; the handler calls `waitNote()` to drain the goroutine before responding 500 (otherwise the goroutine leaks past the request boundary). The drain may now wait for the in-flight Dynamo call to complete naturally, but the parent context still bounds it via Lambda timeout. On the happy path: `waitNote()` blocks until the notes read finishes, which is a no-op if it already did. The buffered channel (`make(chan *string, 1)`) means the goroutine never blocks even if the caller races on the close.
 
 **`updatedAt` timestamp.** Generated server-side via `h.nowFunc().UTC().Format(time.RFC3339)` and returned to the client. Stored as a string for consistency with other Flux tables (the `dynamodbav` package marshals time.Time to S anyway). The iOS client doesn't use `updatedAt` in v1 (per requirement 1.7) — kept on the wire for future cache-invalidation and ordering work.
 
@@ -92,15 +92,14 @@ Eight new or modified Go files in two packages:
 - **`Reader` interface widened.** Two new methods (`GetNote`, `QueryNotes`) — every implementer needed updating, but only `DynamoReader` and the test mocks exist. Test mocks gained `queryNotesFn`/`getNoteFn` function fields per the consumer-defined-interface convention.
 - **Helper extraction (`notes_fetch.go`)** is a small abstraction layer. If a future read endpoint also wants to bundle notes, it imports the helper and one line wires the soft-fail. Lower risk than letting the pattern stay duplicated and drift across handlers.
 - **Always-serialised null `note` field.** `*string` without `omitempty` ensures every response carries the field even when nil. iOS decoders see a stable schema; missing-key vs. explicit-null isn't a decode-time distinction in Swift's `Codable`, but the wire shape is more honest.
-- **No CLAUDE.md / template.yaml change in this commit.** The architecture description in CLAUDE.md still says "three endpoints" and "read-only API" — accurate for production until Tasks 13/14 ship. The deploy-ready commit will need to update both.
+- **CloudFormation `NotesTable` and IAM.** Single stack update lands the `flux-notes` table (PAY_PER_REQUEST, PITR-enabled, `Retain` policies), a write-scoped IAM block on `LambdaExecutionRole`, and the `TABLE_NOTES` env var on `ApiFunction`. The pre-existing read-only IAM block over the other tables is intentionally unchanged — the notes table is the only one with write permissions.
+- **iOS surface.** `NoteText` (FluxCore helper) provides cross-stack-parity grapheme counting. `DayDetailViewModel` gained `note` state and `saveNote(_:)` with client-side cap pre-flight. `NoteEditorViewModel` + `NoteEditorSheet` drive editing; `NoteRowView` is the shared read-only renderer used by Dashboard, History, and Day Detail. `CachedDayEnergy` carries `note` through SwiftData lightweight migration.
 
 ### Potential Issues
 
-1. **`cfg.notes` is nil in production.** `cmd/api/main.go` adds the `notes` config field but `loadConfig` never assigns it. If this branch is deployed before Task 13, any authenticated `PUT /note` will nil-deref in `handleNote` and return 500 (Lambda recovers panics into 500). The four read handlers also pass `nil` to `fetchNoteAsync`, which then calls `reader.GetNote` — that *does* work because `reader` is wired, so the read-side bundling is safe to deploy. The blast radius is exactly the new endpoint, not the existing ones. Task 13 + Task 14 should land together.
-2. **`TABLE_NOTES` not in `requiredEnvVars`.** Same reason — Task 13. Adding it now would break the existing deploy because the CFN template doesn't set it yet.
-3. **Future Unicode skew.** Documented above. CI runs both fixture tests today; if `rivo/uniseg` diverges from Foundation's ICU on a future emoji or combining mark, both stacks need a coordinated bump.
-4. **Notes goroutine on 500 path.** The error path now uses `gctx`, so cancellation propagates and the wait drains promptly. Before the refactor, the parent `ctx` was passed instead and the request would block on the in-flight Dynamo call — fixed by the pre-push refactor.
-5. **`graphemeCountNormalised` is unexported but trusts the caller.** Nothing prevents a future caller from passing un-normalised input and getting a wrong count. Documented in the comment; no runtime guard. Could be tightened with a marker type if it becomes a foot-gun.
+1. **Future Unicode skew.** CI runs both fixture tests today; if `rivo/uniseg` diverges from Foundation's ICU on a future emoji or combining mark, both stacks need a coordinated bump.
+2. **`graphemeCountNormalised` is unexported but trusts the caller.** Nothing prevents a future caller from passing un-normalised input and getting a wrong count. Documented in the comment; no runtime guard. Could be tightened with a marker type if it becomes a foot-gun.
+3. **Notes goroutine on 500 path.** The handlers pass the parent `ctx` (not `gctx`) so the notes read isn't aborted by `g.Wait()` cancellation on success. On the 500 path the drain waits for the Dynamo call to finish naturally — bounded by the Lambda timeout. Acceptable: 500s are rare and notes `GetItem` is fast.
 
 ---
 
@@ -128,22 +127,26 @@ Eight new or modified Go files in two packages:
 - §7.3 rollback plan — code revert is sufficient; the table is `Retain` (asserted in design, not yet in template).
 - Decision 7 cross-stack parity — `internal/api/testdata/note_lengths.json` consumed by `TestGraphemeCountFixture`.
 
-### Partially implemented
+### Fully implemented (deployment + iOS)
 
-- **§6.2 (on-demand billing, `Retain` deletion policy)** — encoded only in the spec/design today; the CloudFormation template change is Task 14.
-- **§6.3 (PITR enabled)** — same. Task 14.
-- **§6.4 (IAM gains write access on notes table only)** — the Go `WriteAPI` interface enforces this at compile time, but the actual IAM policy update is Task 14.
-- **§6.5 (single CloudFormation stack update)** — the spec promises one deploy lands table + IAM + env + Lambda binary. This commit lands the Lambda binary changes only. Task 13 + Task 14 must land together to satisfy this acceptance criterion.
+- **§2.1 / §2.2 / §2.3 / §2.5 / §2.6 / §2.7** — Day Detail note row + editor sheet wired in `DayDetailView.swift`; future-date guard via `viewModel.date > DateFormatting.todayDateString()`.
+- **§2.4** — remaining-character counter and Save disabled when over cap; pre-flight in `DayDetailViewModel.saveNote` rejects over-cap input without an API call.
+- **§3.1 / §3.2 / §3.3 / §3.4 / §3.5** — Dashboard `NoteRowView(text: viewModel.status?.note)` between hero and trio; collapses when nil; refresh on return covered by the existing `onAppear → startAutoRefresh → refresh()` chain.
+- **§4.1 / §4.2 / §4.3 / §4.4** — History `NoteRowView(text: selectedDay?.note)` between picker and chart cards; updates with selection; collapses when nil.
+- **§6.2 / §6.3 / §6.4 / §6.5** — `infrastructure/template.yaml` lands `NotesTable` (PAY_PER_REQUEST, PITR enabled, `Retain` deletion+replace), a scoped IAM block on `LambdaExecutionRole`, and `TABLE_NOTES` on `ApiFunction.Environment.Variables` — single stack update.
+- **Task 13** — `cmd/api/main.go` lists `TABLE_NOTES` in `requiredEnvVars`, constructs `dynamo.NewDynamoNoteWriter` from the shared `*dynamodb.Client`, and passes it through `NewHandler` together with `nowFunc`.
 
-### Missing (out of scope for this branch by design)
+### Pre-push refactors
 
-- **Task 13: Lambda env wiring (`cmd/api/main.go`).** `cfg.notes` is declared but unassigned; `TABLE_NOTES` is not in `requiredEnvVars`; no `dynamo.NewDynamoNoteWriter` constructor call. `PUT /note` will 500 in production until this lands.
-- **Task 14: CloudFormation infra.** `flux-notes` table, IAM grant, `TABLE_NOTES` env on `ApiFunction`. None of `infrastructure/template.yaml` is touched.
-- **Section 2 (Day Detail editor), Section 3 (Dashboard rendering), Section 4 (History rendering).** All iOS — Tasks 15–27 in `tasks.md`, separate stream.
+- Removed dead `payload.Date == ""` check in `handleNote` (unreachable — `time.ParseInLocation` already rejects empty input).
+- Switched `fetchNoteAsync` / `fetchNotesAsync` callers from `gctx` to parent `ctx` — `gctx` is cancelled when `g.Wait()` returns regardless of success/error, which would race a still-in-flight notes read on the happy path.
+- iOS `DayDetailViewModel.saveNote` now uses `normalised.count` instead of `NoteText.graphemeCount(normalised)` — Swift `String.count` is grapheme-cluster count and the input is already normalised, so the second NFC pass was wasted work.
+- iOS `NoteEditorViewModel.characterCount` is now a stored property updated in `draft.didSet`. Was a computed property re-running NFC + trim + count twice per keystroke (once for `canSave`, once for the view's `remainingCharacters`).
+- iOS `URLSessionAPIClient` hoisted `JSONEncoder` to a stored property; `saveNote` no longer allocates a fresh encoder per call.
 
 ### Requirements with no clean explanation
 
-None. Every spec requirement either maps to a concrete file/function in this commit or is explicitly deferred to Task 13 / 14 / iOS work. The two notable points — the nil `cfg.notes` deployment hazard and the IAM/PITR posture being spec-only until Task 14 — are both consequences of the branch's intentional partial scope, not implementation gaps.
+None. Every spec requirement maps to a concrete file/function in the branch.
 
 ---
 
@@ -151,20 +154,16 @@ None. Every spec requirement either maps to a concrete file/function in this com
 
 ### Gaps Identified
 
-- **Deployment hazard from partial scope.** `cmd/api/main.go` declares `notes api.NoteWriter` but never assigns it. Recommend Tasks 13 and 14 land together in a single PR (or a tightly-coupled pair) so production never sees the half-wired state.
 - **`graphemeCountNormalised` precondition is unenforced.** Comment-documented; no runtime guard. Acceptable, but worth a consistency check if a future caller is added.
+- **CLAUDE.md still lists "three endpoints" and a "read-only API".** The deploy now ships `PUT /note` and the `flux-notes` table — worth updating the architecture description before merge.
+- **`NoteEditorViewModel.error` is `FluxAPIError?` but the editor only renders `.message`.** Storing the typed enum keeps room for future `error.suggestsSettings`-style behaviours (which `DayDetailView` already uses); leaving as-is to avoid premature simplification.
 
 ### Logic Issues
 
-None found. The validation order matches design §handleNote. The soft-fail goroutine pattern propagates `gctx` correctly after the pre-push refactor. The `WriteAPI` / `ReadAPI` split holds the IAM-at-compile-time invariant.
-
-### Questions Raised
-
-- Should `noteResponse.UpdatedAt` use `omitempty` rather than `*string`-as-null on delete? The current shape sends `"updatedAt": null` on delete; iOS decodes it as `nil` either way. Worth confirming the Swift decoder explicitly when Task 16+ lands the client side.
-- Decision-log entries 1, 2, 5 are the canonical "size limits" / "last-write-wins" decisions. The user prompt referenced them with slightly different numbering; the implementation matches the spec's actual numbering, not the prompt's.
+None. The validation order matches design §handleNote. The soft-fail goroutine pattern uses parent `ctx` so the success path doesn't race `gctx` cancellation. The `WriteAPI` / `ReadAPI` split holds the IAM-at-compile-time invariant. CloudFormation grants write only on the notes table.
 
 ### Recommendations
 
-1. Bundle Tasks 13 + 14 in the next PR; do not deploy this branch standalone.
-2. When Task 14 lands, update `CLAUDE.md` (currently lists three endpoints and "read-only API") to mention `PUT /note` and the `flux-notes` table.
-3. Consider a 400-path log-redaction test alongside the existing 200-path one (`TestHandleNote_TextNeverAppearsInLogs` only exercises upsert today).
+1. Update `CLAUDE.md` architecture overview to mention `PUT /note` and the `flux-notes` table.
+2. Consider a 400-path log-redaction test alongside the existing 200-path one (`TestHandleNote_TextNeverAppearsInLogs` only exercises upsert today).
+3. SwiftLint reports six pre-existing violations introduced earlier in the branch (file lengths in `DayDetailViewModelTests`, `URLSessionAPIClientTests`, `APIModels`; cyclomatic complexity 11 on `URLSessionAPIClient.performRequest`; function body length on a `URLSessionAPIClientTests` case). CI does not currently run iOS lint, but consider splitting the larger test files in a follow-up.
