@@ -55,6 +55,7 @@ func testTables() TableNames {
 		DailyPower:  "test-daily-power",
 		System:      "test-system",
 		Offpeak:     "test-offpeak",
+		Notes:       "test-notes",
 	}
 }
 

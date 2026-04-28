@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
@@ -54,10 +55,33 @@ func (h *Handler) handleStatus(ctx context.Context, _ events.LambdaFunctionURLRe
 		return err
 	})
 
+	// Note read runs outside the errgroup so a note-read failure logs and
+	// leaves the field nil instead of cancelling the core queries (design
+	// §Read-side failure isolation).
+	var (
+		noteText *string
+		nwg      sync.WaitGroup
+	)
+	nwg.Add(1)
+	go func() {
+		defer nwg.Done()
+		item, err := h.reader.GetNote(ctx, h.serial, today)
+		if err != nil {
+			slog.Warn("status note fetch failed; continuing without note", "date", today, "error", err)
+			return
+		}
+		if item != nil {
+			s := item.Text
+			noteText = &s
+		}
+	}()
+
 	if err := g.Wait(); err != nil {
+		nwg.Wait()
 		slog.Error("status query failed", "error", err)
 		return errorResponse(500, "internal error")
 	}
+	nwg.Wait()
 
 	// Phase 2: in-memory computation — no I/O.
 	resp := &StatusResponse{}
@@ -158,6 +182,7 @@ func (h *Handler) handleStatus(ctx context.Context, _ events.LambdaFunctionURLRe
 	// dashboard never lags the underlying counter and never reports a
 	// number lower than the snapshot baseline.
 	resp.Offpeak = buildOffpeak(opItem, resp.TodayEnergy, h.offpeakStart, h.offpeakEnd)
+	resp.Note = noteText
 
 	return jsonResponse(resp)
 }

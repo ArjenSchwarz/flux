@@ -366,6 +366,107 @@ func TestDynamoReader_QueryOffpeak(t *testing.T) {
 	}
 }
 
+func TestDynamoReader_GetNote(t *testing.T) {
+	tests := map[string]struct {
+		getItemFn func(ctx context.Context, params *dynamodb.GetItemInput) (*dynamodb.GetItemOutput, error)
+		want      *NoteItem
+		wantErr   string
+	}{
+		"returns nil when not found": {
+			getItemFn: func(_ context.Context, _ *dynamodb.GetItemInput) (*dynamodb.GetItemOutput, error) {
+				return &dynamodb.GetItemOutput{Item: nil}, nil
+			},
+			want: nil,
+		},
+		"returns note when present": {
+			getItemFn: func(_ context.Context, params *dynamodb.GetItemInput) (*dynamodb.GetItemOutput, error) {
+				assert.Equal(t, "test-notes", *params.TableName)
+				return &dynamodb.GetItemOutput{
+					Item: marshalItem(t, NoteItem{
+						SysSn: "SN", Date: "2026-04-15",
+						Text: "Away in Bali", UpdatedAt: "2026-04-15T01:23:45Z",
+					}),
+				}, nil
+			},
+			want: &NoteItem{SysSn: "SN", Date: "2026-04-15", Text: "Away in Bali", UpdatedAt: "2026-04-15T01:23:45Z"},
+		},
+		"dynamo error wraps context": {
+			getItemFn: func(_ context.Context, _ *dynamodb.GetItemInput) (*dynamodb.GetItemOutput, error) {
+				return nil, errors.New("timeout")
+			},
+			wantErr: "get note (table=test-notes, sysSn=SN, date=2026-04-15)",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			reader := newTestReader(&mockReadAPI{getItemFn: tc.getItemFn})
+
+			got, err := reader.GetNote(context.Background(), "SN", "2026-04-15")
+			if tc.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestDynamoReader_QueryNotes(t *testing.T) {
+	tests := map[string]struct {
+		queryFn func(ctx context.Context, params *dynamodb.QueryInput) (*dynamodb.QueryOutput, error)
+		want    []NoteItem
+		wantErr string
+	}{
+		"returns notes in date order": {
+			queryFn: func(_ context.Context, params *dynamodb.QueryInput) (*dynamodb.QueryOutput, error) {
+				assert.Equal(t, "test-notes", *params.TableName)
+				assert.True(t, *params.ScanIndexForward, "must scan ascending so callers get chronological order")
+				assert.Contains(t, *params.KeyConditionExpression, "BETWEEN")
+				return &dynamodb.QueryOutput{
+					Items: []map[string]types.AttributeValue{
+						marshalItem(t, NoteItem{SysSn: "SN", Date: "2026-04-13", Text: "first"}),
+						marshalItem(t, NoteItem{SysSn: "SN", Date: "2026-04-15", Text: "third"}),
+					},
+				}, nil
+			},
+			want: []NoteItem{
+				{SysSn: "SN", Date: "2026-04-13", Text: "first"},
+				{SysSn: "SN", Date: "2026-04-15", Text: "third"},
+			},
+		},
+		"empty range returns empty slice": {
+			queryFn: func(_ context.Context, _ *dynamodb.QueryInput) (*dynamodb.QueryOutput, error) {
+				return &dynamodb.QueryOutput{}, nil
+			},
+			want: []NoteItem{},
+		},
+		"dynamo error wraps context": {
+			queryFn: func(_ context.Context, _ *dynamodb.QueryInput) (*dynamodb.QueryOutput, error) {
+				return nil, errors.New("throttled")
+			},
+			wantErr: "query notes (table=test-notes)",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			reader := newTestReader(&mockReadAPI{queryFn: tc.queryFn})
+
+			got, err := reader.QueryNotes(context.Background(), "SN", "2026-04-13", "2026-04-15")
+			if tc.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
 func TestDynamoReader_QueryDailyPower(t *testing.T) {
 	tests := map[string]struct {
 		queryFn func(ctx context.Context, params *dynamodb.QueryInput) (*dynamodb.QueryOutput, error)

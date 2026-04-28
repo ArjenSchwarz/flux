@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"regexp"
+	"sync"
 	"time"
 
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
@@ -51,10 +52,32 @@ func (h *Handler) handleDay(ctx context.Context, req events.LambdaFunctionURLReq
 		return err
 	})
 
+	// Note read runs outside the errgroup so a failure logs and leaves the
+	// field nil instead of cancelling the core queries.
+	var (
+		noteText *string
+		nwg      sync.WaitGroup
+	)
+	nwg.Add(1)
+	go func() {
+		defer nwg.Done()
+		item, err := h.reader.GetNote(ctx, h.serial, date)
+		if err != nil {
+			slog.Warn("day note fetch failed; continuing without note", "date", date, "error", err)
+			return
+		}
+		if item != nil {
+			s := item.Text
+			noteText = &s
+		}
+	}()
+
 	if err := g.Wait(); err != nil {
+		nwg.Wait()
 		slog.Error("day query failed", "error", err)
 		return errorResponse(500, "internal error")
 	}
+	nwg.Wait()
 
 	var points []TimeSeriesPoint
 	var socLow float64
@@ -88,6 +111,7 @@ func (h *Handler) handleDay(ctx context.Context, req events.LambdaFunctionURLReq
 		Readings:    points,
 		PeakPeriods: peakPeriods,
 		DailyUsage:  dailyUsage,
+		Note:        noteText,
 	}
 	if resp.Readings == nil {
 		resp.Readings = []TimeSeriesPoint{}

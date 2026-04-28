@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
@@ -69,9 +70,33 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 		return nil
 	})
 
+	// Notes read runs outside the errgroup so a failure logs and leaves the
+	// per-day note field nil instead of cancelling the core queries.
+	var (
+		noteItems []dynamo.NoteItem
+		nwg       sync.WaitGroup
+	)
+	nwg.Add(1)
+	go func() {
+		defer nwg.Done()
+		result, err := h.reader.QueryNotes(ctx, h.serial, startDate, today)
+		if err != nil {
+			slog.Warn("history notes query failed; continuing without notes", "error", err)
+			return
+		}
+		noteItems = result
+	}()
+
 	if err := g.Wait(); err != nil {
+		nwg.Wait()
 		slog.Error("history query failed", "error", err)
 		return errorResponse(500, "internal error")
+	}
+	nwg.Wait()
+
+	notesByDate := make(map[string]string, len(noteItems))
+	for _, n := range noteItems {
+		notesByDate[n.Date] = n.Text
 	}
 
 	var todayComputed *TodayEnergy
@@ -112,6 +137,10 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 				day.OffpeakGridImportKwh = floatPtr(imp)
 				day.OffpeakGridExportKwh = floatPtr(exp)
 			}
+		}
+		if note, ok := notesByDate[item.Date]; ok {
+			n := note
+			day.Note = &n
 		}
 		result[i] = day
 	}

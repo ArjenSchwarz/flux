@@ -8,6 +8,7 @@ type StatusResponse struct {
 	Rolling15m  *RollingAvg  `json:"rolling15min"`
 	Offpeak     *OffpeakData `json:"offpeak"`
 	TodayEnergy *TodayEnergy `json:"todayEnergy"`
+	Note        *string      `json:"note"`
 }
 
 // LiveData contains the most recent power readings.
@@ -88,6 +89,7 @@ type DayEnergy struct {
 	EDischarge           float64  `json:"eDischarge"`
 	OffpeakGridImportKwh *float64 `json:"offpeakGridImportKwh,omitempty"`
 	OffpeakGridExportKwh *float64 `json:"offpeakGridExportKwh,omitempty"`
+	Note                 *string  `json:"note"`
 }
 
 // PeakPeriod represents a contiguous period of high household load.
@@ -105,6 +107,7 @@ type DayDetailResponse struct {
 	Summary     *DaySummary       `json:"summary"`
 	PeakPeriods []PeakPeriod      `json:"peakPeriods"`
 	DailyUsage  *DailyUsage       `json:"dailyUsage,omitempty"`
+	Note        *string           `json:"note"`
 }
 
 // Status, boundary-source, and kind values for a DailyUsageBlock. Defined as

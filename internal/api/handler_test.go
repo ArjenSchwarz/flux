@@ -20,6 +20,8 @@ type mockReader struct {
 	getDailyEnergyFn   func(ctx context.Context, serial, date string) (*dynamo.DailyEnergyItem, error)
 	queryDailyEnergyFn func(ctx context.Context, serial, start, end string) ([]dynamo.DailyEnergyItem, error)
 	queryDailyPowerFn  func(ctx context.Context, serial, date string) ([]dynamo.DailyPowerItem, error)
+	getNoteFn          func(ctx context.Context, serial, date string) (*dynamo.NoteItem, error)
+	queryNotesFn       func(ctx context.Context, serial, start, end string) ([]dynamo.NoteItem, error)
 }
 
 func (m *mockReader) QueryReadings(ctx context.Context, serial string, from, to int64) ([]dynamo.ReadingItem, error) {
@@ -71,12 +73,26 @@ func (m *mockReader) QueryDailyPower(ctx context.Context, serial, date string) (
 	return []dynamo.DailyPowerItem{}, nil
 }
 
+func (m *mockReader) GetNote(ctx context.Context, serial, date string) (*dynamo.NoteItem, error) {
+	if m.getNoteFn != nil {
+		return m.getNoteFn(ctx, serial, date)
+	}
+	return nil, nil
+}
+
+func (m *mockReader) QueryNotes(ctx context.Context, serial, start, end string) ([]dynamo.NoteItem, error) {
+	if m.queryNotesFn != nil {
+		return m.queryNotesFn(ctx, serial, start, end)
+	}
+	return []dynamo.NoteItem{}, nil
+}
+
 const testToken = "test-secret-token"
 const testSerial = "AB1234"
 
 // newTestHandler creates a Handler with a mock reader and test credentials.
 func newTestHandler() *Handler {
-	return NewHandler(&mockReader{}, testSerial, testToken, "11:00", "14:00")
+	return NewHandler(&mockReader{}, nil, testSerial, testToken, "11:00", "14:00")
 }
 
 // makeRequest builds a LambdaFunctionURLRequest with the given method, path, and optional auth header.

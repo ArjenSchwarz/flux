@@ -21,6 +21,7 @@ import (
 // config holds all resolved configuration for the Lambda.
 type config struct {
 	reader       dynamo.Reader
+	notes        api.NoteWriter
 	apiToken     string
 	serial       string
 	offpeakStart string
@@ -50,7 +51,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	handler := api.NewHandler(cfg.reader, cfg.serial, cfg.apiToken, cfg.offpeakStart, cfg.offpeakEnd)
+	handler := api.NewHandler(cfg.reader, cfg.notes, cfg.serial, cfg.apiToken, cfg.offpeakStart, cfg.offpeakEnd)
 	lambda.Start(handler.Handle)
 }
 
