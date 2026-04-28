@@ -8,7 +8,7 @@ references:
 
 ## Cross-stack fixture
 
-- [ ] 1. Create cross-stack grapheme fixture file <!-- id:mz8g5e4 -->
+- [x] 1. Create cross-stack grapheme fixture file <!-- id:mz8g5e4 -->
   - Path: internal/api/testdata/note_lengths.json.
   - Entries from design "Cross-stack grapheme parity": ascii (5), nfd-accent café (4), zwj-family (1), flag-pair (1), skin-tone (1), trailing-spaces hi+3 spaces (2), internal-space "a b c" (5), max-200 (200 ASCII chars).
   - Both Go and Swift tests load this exact file by repo-relative path.

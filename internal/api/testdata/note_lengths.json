@@ -1,0 +1,42 @@
+[
+  {
+    "name": "ascii",
+    "input": "hello",
+    "graphemes": 5
+  },
+  {
+    "name": "nfd-accent",
+    "input": "café",
+    "graphemes": 4
+  },
+  {
+    "name": "zwj-family",
+    "input": "👨‍👩‍👧‍👦",
+    "graphemes": 1
+  },
+  {
+    "name": "flag-pair",
+    "input": "🇦🇺",
+    "graphemes": 1
+  },
+  {
+    "name": "skin-tone",
+    "input": "👋🏽",
+    "graphemes": 1
+  },
+  {
+    "name": "trailing-spaces",
+    "input": "hi   ",
+    "graphemes": 2
+  },
+  {
+    "name": "internal-space",
+    "input": "a b c",
+    "graphemes": 5
+  },
+  {
+    "name": "max-200",
+    "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "graphemes": 200
+  }
+]
