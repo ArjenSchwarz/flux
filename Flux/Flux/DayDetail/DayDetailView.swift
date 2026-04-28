@@ -4,6 +4,7 @@ import SwiftUI
 struct DayDetailView: View {
     @State private var viewModel: DayDetailViewModel
     @State private var showingSettings = false
+    @State private var editingNote = false
 
     init(date: String, apiClient: any FluxAPIClient) {
         _viewModel = State(initialValue: DayDetailViewModel(date: date, apiClient: apiClient))
@@ -17,6 +18,8 @@ struct DayDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 dayNavigationHeader
+
+                noteSection
 
                 if !viewModel.parsedReadings.isEmpty {
                     if viewModel.hasPowerData {
@@ -67,6 +70,40 @@ struct DayDetailView: View {
                     }
             }
         }
+        .sheet(isPresented: $editingNote) {
+            NoteEditorSheet(
+                viewModel: NoteEditorViewModel(initial: viewModel.note ?? "", parent: viewModel)
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var noteSection: some View {
+        if isFutureDate {
+            EmptyView()
+        } else if let note = viewModel.note, !note.isEmpty {
+            Button {
+                editingNote = true
+            } label: {
+                NoteRowView(text: note)
+            }
+            .buttonStyle(.plain)
+        } else {
+            Button {
+                editingNote = true
+            } label: {
+                Label("Add note", systemImage: "plus")
+                    .font(.subheadline)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var isFutureDate: Bool {
+        viewModel.date > DateFormatting.todayDateString()
     }
 
     private var dayNavigationHeader: some View {

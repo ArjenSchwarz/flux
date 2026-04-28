@@ -38,6 +38,8 @@ struct DashboardView: View {
                         rolling15min: viewModel.status?.rolling15min
                     )
 
+                    NoteRowView(text: viewModel.status?.note)
+
                     PowerTrioView(
                         live: viewModel.status?.live,
                         offpeak: viewModel.status?.offpeak

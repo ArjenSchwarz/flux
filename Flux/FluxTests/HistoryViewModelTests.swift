@@ -134,6 +134,65 @@ struct HistoryViewModelTests {
     }
 
     @Test
+    func selectedDayNoteReflectsCurrentSelection() async throws {
+        let modelContext = try makeModelContext()
+        let apiClient = MockHistoryAPIClient()
+        let dayWithNote = DayEnergy(
+            date: "2026-04-14", epv: 5.0, eInput: 1.2, eOutput: 0.3, eCharge: 1.7, eDischarge: 2.3,
+            note: "Away in Bali"
+        )
+        let dayWithoutNote = DayEnergy(
+            date: "2026-04-13", epv: 4.0, eInput: 1.0, eOutput: 0.4, eCharge: 1.5, eDischarge: 2.1
+        )
+        apiClient.historyResult = .success(HistoryResponse(days: [dayWithNote, dayWithoutNote]))
+
+        let viewModel = HistoryViewModel(apiClient: apiClient, modelContext: modelContext)
+        await viewModel.loadHistory(days: 7)
+
+        viewModel.selectDay(dayWithNote)
+        #expect(viewModel.selectedDay?.note == "Away in Bali")
+
+        viewModel.selectDay(dayWithoutNote)
+        #expect(viewModel.selectedDay?.note == nil)
+    }
+
+    @Test
+    func cachedDayEnergyRoundTripPreservesNote() async throws {
+        let modelContext = try makeModelContext()
+        let original = DayEnergy(
+            date: "2026-04-14", epv: 5.0, eInput: 1.0, eOutput: 0.4, eCharge: 1.5, eDischarge: 2.1,
+            offpeakGridImportKwh: 1.0, offpeakGridExportKwh: 0.1,
+            note: "Family visiting"
+        )
+        let cached = CachedDayEnergy(from: original)
+        modelContext.insert(cached)
+        try modelContext.save()
+
+        let restored = cached.asDayEnergy
+        #expect(restored.note == "Family visiting")
+    }
+
+    @Test
+    func cacheFallbackPathRendersNotes() async throws {
+        let modelContext = try makeModelContext()
+        modelContext.insert(CachedDayEnergy(from: DayEnergy(
+            date: "2026-04-14", epv: 5.2, eInput: 0.9, eOutput: 0.3, eCharge: 1.8, eDischarge: 2.7,
+            note: "Cached note"
+        )))
+        try modelContext.save()
+
+        let apiClient = MockHistoryAPIClient()
+        apiClient.historyResult = .failure(FluxAPIError.networkError("offline"))
+
+        let viewModel = HistoryViewModel(apiClient: apiClient, modelContext: modelContext)
+        await viewModel.loadHistory(days: 7)
+
+        #expect(viewModel.days.count == 1)
+        #expect(viewModel.days.first?.note == "Cached note")
+        #expect(viewModel.selectedDay?.note == "Cached note")
+    }
+
+    @Test
     func selectDayUpdatesSelectedDay() async throws {
         let modelContext = try makeModelContext()
         let apiClient = MockHistoryAPIClient()
@@ -181,6 +240,10 @@ private final class MockHistoryAPIClient: FluxAPIClient, @unchecked Sendable {
     }
 
     func fetchDay(date _: String) async throws -> DayDetailResponse {
+        throw FluxAPIError.notConfigured
+    }
+
+    func saveNote(date _: String, text _: String) async throws -> NoteResponse {
         throw FluxAPIError.notConfigured
     }
 }

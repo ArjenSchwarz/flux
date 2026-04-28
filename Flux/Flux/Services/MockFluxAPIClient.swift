@@ -5,6 +5,9 @@ import Foundation
 final actor MockFluxAPIClient: FluxAPIClient {
     static let preview = MockFluxAPIClient()
     static let previewDate = "2026-04-15"
+    static let previewNote = "Away in Bali — minimal load expected."
+
+    private(set) var lastSaveNoteCall: (date: String, text: String)?
 
     private static let calendar: Calendar = {
         var calendar = Calendar(identifier: .gregorian)
@@ -49,7 +52,8 @@ final actor MockFluxAPIClient: FluxAPIClient {
             eOutput: 5.94,
             eCharge: 5.7,
             eDischarge: 6.8
-        )
+        ),
+        note: previewNote
     )
 
     static let historyDays: [DayEnergy] = {
@@ -72,7 +76,8 @@ final actor MockFluxAPIClient: FluxAPIClient {
                     eInput: max(0.2, 2.3 - trend * 0.03),
                     eOutput: max(0.5, 5.1 - trend * 0.09),
                     eCharge: max(0.8, 5.4 - trend * 0.08),
-                    eDischarge: max(1.0, 6.2 - trend * 0.10)
+                    eDischarge: max(1.0, 6.2 - trend * 0.10),
+                    note: dayOffset == 0 ? previewNote : nil
                 )
             )
         }
@@ -100,7 +105,8 @@ final actor MockFluxAPIClient: FluxAPIClient {
                 PeakPeriod(start: "\(date)T07:15:00Z", end: "\(date)T07:45:00Z", avgLoadW: 4200.3, energyWh: 2100),
                 PeakPeriod(start: "\(date)T12:00:00Z", end: "\(date)T12:20:00Z", avgLoadW: 2900.5, energyWh: 967)
             ],
-            dailyUsage: dayDailyUsage(for: date)
+            dailyUsage: dayDailyUsage(for: date),
+            note: date == previewDate ? previewNote : nil
         )
     }
 
@@ -222,6 +228,15 @@ final actor MockFluxAPIClient: FluxAPIClient {
 
     func fetchDay(date: String) async throws -> DayDetailResponse {
         Self.dayDetailResponse(for: date)
+    }
+
+    func saveNote(date: String, text: String) async throws -> NoteResponse {
+        lastSaveNoteCall = (date, text)
+        return NoteResponse(
+            date: date,
+            text: text,
+            updatedAt: text.isEmpty ? nil : Self.isoUTCFormatter.string(from: Date())
+        )
     }
 }
 #endif

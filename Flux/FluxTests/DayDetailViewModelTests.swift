@@ -290,6 +290,76 @@ struct DayDetailViewModelTests {
     }
 
     @Test
+    func loadDayPopulatesNoteFromResponse() async {
+        let apiClient = MockDayDetailAPIClient()
+        apiClient.dayResult = .success(DayDetailResponse(
+            date: "2026-04-15", readings: [], summary: nil, peakPeriods: nil, dailyUsage: nil,
+            note: "Away in Bali"
+        ))
+
+        let viewModel = DayDetailViewModel(date: "2026-04-15", apiClient: apiClient)
+        await viewModel.loadDay()
+
+        #expect(viewModel.note == "Away in Bali")
+    }
+
+    @Test
+    func saveNoteCallsApiWithNFCAndTrimmedTextAndUpdatesNote() async throws {
+        let apiClient = MockDayDetailAPIClient()
+        apiClient.noteResult = .success(NoteResponse(
+            date: "2026-04-15", text: "café", updatedAt: "2026-04-15T03:30:00Z"
+        ))
+
+        let viewModel = DayDetailViewModel(date: "2026-04-15", apiClient: apiClient)
+        // NFD form of "café" with surrounding whitespace.
+        try await viewModel.saveNote("  cafe\u{0301}  ")
+
+        let lastCall = try #require(apiClient.lastSaveNote)
+        #expect(lastCall.date == "2026-04-15")
+        #expect(lastCall.text == "café")
+        #expect(viewModel.note == "café")
+    }
+
+    @Test
+    func saveNoteWithWhitespaceOnlyClearsNoteWhenServerConfirmsDelete() async throws {
+        let apiClient = MockDayDetailAPIClient()
+        apiClient.noteResult = .success(NoteResponse(
+            date: "2026-04-15", text: "", updatedAt: nil
+        ))
+
+        let viewModel = DayDetailViewModel(date: "2026-04-15", apiClient: apiClient)
+        try await viewModel.saveNote("   \n\t   ")
+
+        let lastCall = try #require(apiClient.lastSaveNote)
+        #expect(lastCall.text == "")
+        #expect(viewModel.note == nil)
+    }
+
+    @Test
+    func saveNotePropagatesServerBadRequestError() async {
+        let apiClient = MockDayDetailAPIClient()
+        apiClient.noteResult = .failure(FluxAPIError.badRequest("note must be 200 characters or fewer"))
+
+        let viewModel = DayDetailViewModel(date: "2026-04-15", apiClient: apiClient)
+
+        await #expect(throws: FluxAPIError.self) {
+            try await viewModel.saveNote("anything")
+        }
+    }
+
+    @Test
+    func saveNoteRejectsClientSideOverCapWithoutCallingApi() async {
+        let apiClient = MockDayDetailAPIClient()
+        let viewModel = DayDetailViewModel(date: "2026-04-15", apiClient: apiClient)
+        let oversized = String(repeating: "a", count: NoteText.maxGraphemes + 1)
+
+        await #expect(throws: FluxAPIError.self) {
+            try await viewModel.saveNote(oversized)
+        }
+        #expect(apiClient.lastSaveNote == nil, "expected zero API calls when input over cap")
+    }
+
+    @Test
     func responseWithoutPeakPeriodsKeyDecodesToNil() throws {
         let json = """
         {"date":"2026-04-15","readings":[],"summary":null}
@@ -317,6 +387,8 @@ struct DayDetailViewModelTests {
 
 private final class MockDayDetailAPIClient: FluxAPIClient, @unchecked Sendable {
     var dayResult: Result<DayDetailResponse, Error> = .failure(FluxAPIError.notConfigured)
+    var noteResult: Result<NoteResponse, Error> = .failure(FluxAPIError.notConfigured)
+    private(set) var lastSaveNote: (date: String, text: String)?
 
     func fetchStatus() async throws -> StatusResponse {
         throw FluxAPIError.notConfigured
@@ -328,5 +400,10 @@ private final class MockDayDetailAPIClient: FluxAPIClient, @unchecked Sendable {
 
     func fetchDay(date _: String) async throws -> DayDetailResponse {
         try dayResult.get()
+    }
+
+    func saveNote(date: String, text: String) async throws -> NoteResponse {
+        lastSaveNote = (date, text)
+        return try noteResult.get()
     }
 }

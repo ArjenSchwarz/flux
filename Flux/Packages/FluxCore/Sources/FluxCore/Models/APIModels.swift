@@ -8,19 +8,22 @@ public struct StatusResponse: Codable, Sendable {
     public let rolling15min: RollingAvg?
     public let offpeak: OffpeakData?
     public let todayEnergy: TodayEnergy?
+    public let note: String?
 
     public init(
         live: LiveData?,
         battery: BatteryInfo?,
         rolling15min: RollingAvg?,
         offpeak: OffpeakData?,
-        todayEnergy: TodayEnergy?
+        todayEnergy: TodayEnergy?,
+        note: String? = nil
     ) {
         self.live = live
         self.battery = battery
         self.rolling15min = rolling15min
         self.offpeak = offpeak
         self.todayEnergy = todayEnergy
+        self.note = note
     }
 }
 
@@ -177,6 +180,7 @@ public struct DayEnergy: Codable, Sendable, Identifiable {
     /// off-peak portion. Kept on the model so the field is available for a
     /// future "off-peak vs peak export" view without another schema change.
     public let offpeakGridExportKwh: Double?
+    public let note: String?
 
     public var id: String { date }
 
@@ -197,7 +201,8 @@ public struct DayEnergy: Codable, Sendable, Identifiable {
         eCharge: Double,
         eDischarge: Double,
         offpeakGridImportKwh: Double? = nil,
-        offpeakGridExportKwh: Double? = nil
+        offpeakGridExportKwh: Double? = nil,
+        note: String? = nil
     ) {
         self.date = date
         self.epv = epv
@@ -207,6 +212,7 @@ public struct DayEnergy: Codable, Sendable, Identifiable {
         self.eDischarge = eDischarge
         self.offpeakGridImportKwh = offpeakGridImportKwh
         self.offpeakGridExportKwh = offpeakGridExportKwh
+        self.note = note
     }
 }
 
@@ -236,19 +242,22 @@ public struct DayDetailResponse: Codable, Sendable {
     public let summary: DaySummary?
     public let peakPeriods: [PeakPeriod]?
     public let dailyUsage: DailyUsage?
+    public let note: String?
 
     public init(
         date: String,
         readings: [TimeSeriesPoint],
         summary: DaySummary?,
         peakPeriods: [PeakPeriod]?,
-        dailyUsage: DailyUsage?
+        dailyUsage: DailyUsage?,
+        note: String? = nil
     ) {
         self.date = date
         self.readings = readings
         self.summary = summary
         self.peakPeriods = peakPeriods
         self.dailyUsage = dailyUsage
+        self.note = note
     }
 }
 
@@ -365,6 +374,20 @@ public struct DaySummary: Codable, Sendable {
         self.eDischarge = eDischarge
         self.socLow = socLow
         self.socLowTime = socLowTime
+    }
+}
+
+// MARK: - /note response
+
+public struct NoteResponse: Codable, Sendable {
+    public let date: String
+    public let text: String
+    public let updatedAt: String?
+
+    public init(date: String, text: String, updatedAt: String?) {
+        self.date = date
+        self.text = text
+        self.updatedAt = updatedAt
     }
 }
 

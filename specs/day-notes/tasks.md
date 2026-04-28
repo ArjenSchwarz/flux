@@ -118,7 +118,7 @@ references:
 
 ## iOS
 
-- [ ] 15. Write Swift NoteText tests <!-- id:mz8g5ei -->
+- [x] 15. Write Swift NoteText tests <!-- id:mz8g5ei -->
   - File: Flux/FluxTests/NoteTextTests.swift.
   - Load internal/api/testdata/note_lengths.json via repo-relative path; assert NoteText.graphemeCount equals fixture .graphemes for every entry.
   - Cover: NFC normalisation idempotence; leading/trailing whitespace trim; internal whitespace preserved.
@@ -126,14 +126,14 @@ references:
   - Stream: 2
   - Requirements: [1.2](requirements.md#1.2), [1.3](requirements.md#1.3), [2.4](requirements.md#2.4), [5.10](requirements.md#5.10)
 
-- [ ] 16. Implement NoteText helper <!-- id:mz8g5ej -->
+- [x] 16. Implement NoteText helper <!-- id:mz8g5ej -->
   - File: Flux/Packages/FluxCore/Sources/FluxCore/Helpers/NoteText.swift.
   - Exports maxGraphemes = 200, normalised(_:) (precomposedStringWithCanonicalMapping + trimmingCharacters(in: .whitespacesAndNewlines)), graphemeCount(_:) (normalised(text).count — Swift Character == grapheme cluster).
   - Blocked-by: mz8g5ei (Write Swift NoteText tests)
   - Stream: 2
   - Requirements: [1.2](requirements.md#1.2), [1.3](requirements.md#1.3), [2.4](requirements.md#2.4), [5.10](requirements.md#5.10)
 
-- [ ] 17. Add note fields to API model structs <!-- id:mz8g5ek -->
+- [x] 17. Add note fields to API model structs <!-- id:mz8g5ek -->
   - Edit Flux/Packages/FluxCore/Sources/FluxCore/Models/APIModels.swift in place (extensions cannot add stored properties).
   - Add note: String? to StatusResponse, DayEnergy, DayDetailResponse, and update each init.
   - Add new public struct NoteResponse: Codable, Sendable { date, text, updatedAt: String? }.
@@ -141,14 +141,14 @@ references:
   - Stream: 2
   - Requirements: [5.6](requirements.md#5.6), [5.7](requirements.md#5.7), [5.8](requirements.md#5.8)
 
-- [ ] 18. Write URLSessionAPIClient.saveNote tests <!-- id:mz8g5el -->
+- [x] 18. Write URLSessionAPIClient.saveNote tests <!-- id:mz8g5el -->
   - Extend the existing URLSession test pattern (or add new suite).
   - Cover: PUT to /note with Authorization: Bearer header and Content-Type: application/json; JSON body shape {date, text}; happy-path decodes NoteResponse; 400 maps to FluxAPIError.badRequest with server message; 401 maps to .unauthorized; 413/415 map to .unexpectedStatus(Int).
   - Blocked-by: mz8g5ek (Add note fields to API model structs)
   - Stream: 2
   - Requirements: [2.6](requirements.md#2.6), [5.1](requirements.md#5.1), [5.11](requirements.md#5.11)
 
-- [ ] 19. Implement saveNote on FluxAPIClient, URLSession, and Mock <!-- id:mz8g5em -->
+- [x] 19. Implement saveNote on FluxAPIClient, URLSession, and Mock <!-- id:mz8g5em -->
   - Add saveNote(date:text:) async throws -> NoteResponse to FluxAPIClient protocol.
   - Implement in URLSessionAPIClient (PUT, JSON body, reuse existing decode + error-map flow).
   - Add a usable implementation on MockFluxAPIClient (track last call for tests; return a NoteResponse echoing inputs); also add a sample note to MockFluxAPIClient.preview data so previews show the row.
@@ -156,21 +156,21 @@ references:
   - Stream: 2
   - Requirements: [2.6](requirements.md#2.6), [5.1](requirements.md#5.1), [5.11](requirements.md#5.11)
 
-- [ ] 20. Add note field to CachedDayEnergy <!-- id:mz8g5en -->
+- [x] 20. Add note field to CachedDayEnergy <!-- id:mz8g5en -->
   - Edit Flux/Flux/Models/CachedDayEnergy.swift: add var note: String? stored property; update init(from:) to copy dayEnergy.note; update asDayEnergy to pass note: through.
   - SwiftData lightweight migration on iOS 17+ handles the schema add for previously cached rows (default nil).
   - Blocked-by: mz8g5ek (Add note fields to API model structs)
   - Stream: 2
   - Requirements: [4.1](requirements.md#4.1)
 
-- [ ] 21. Write NoteEditorViewModel tests <!-- id:mz8g5eo -->
+- [x] 21. Write NoteEditorViewModel tests <!-- id:mz8g5eo -->
   - New test file.
   - Cover: characterCount uses NoteText.graphemeCount on draft; canSave false while isSaving; canSave false when graphemeCount > 200; save() returns true on success and parent.note updates; save() returns false on throw, error is set to FluxAPIError.from, sheet stays open with draft intact; rapid double-tap of save while isSaving must not call API twice.
   - Blocked-by: mz8g5ej (Implement NoteText helper)
   - Stream: 2
   - Requirements: [2.4](requirements.md#2.4), [2.5](requirements.md#2.5), [2.6](requirements.md#2.6)
 
-- [ ] 22. Implement NoteEditorViewModel and NoteEditorSheet <!-- id:mz8g5ep -->
+- [x] 22. Implement NoteEditorViewModel and NoteEditorSheet <!-- id:mz8g5ep -->
   - Files: Flux/Flux/DayDetail/NoteEditorViewModel.swift and NoteEditorSheet.swift.
   - View: sheet-presented NavigationStack with TextEditor pre-populated, remaining-character counter (NoteText.maxGraphemes - characterCount), Save button bound to canSave.
   - View model owns draft, isSaving, error: FluxAPIError?; calls parent.saveNote and on throw stays open with text intact and surfaces error.message.
@@ -179,14 +179,14 @@ references:
   - Stream: 2
   - Requirements: [2.3](requirements.md#2.3), [2.4](requirements.md#2.4), [2.5](requirements.md#2.5), [2.6](requirements.md#2.6)
 
-- [ ] 23. Write DayDetailViewModel.saveNote tests <!-- id:mz8g5eq -->
+- [x] 23. Write DayDetailViewModel.saveNote tests <!-- id:mz8g5eq -->
   - Extend DayDetailViewModelTests.
   - Cover: note populated from DayDetailResponse on load; saveNote(rawText) calls api.saveNote with NFC+trimmed text and replaces note with response.text; saveNote("   ") (whitespace-only) results in note == nil after server confirms delete; saveNote propagates server FluxAPIError.badRequest on rejection; client-side over-cap input throws .badRequest WITHOUT calling the API (assert mock saw zero calls).
   - Blocked-by: mz8g5em (Implement saveNote on FluxAPIClient, URLSession, and Mock)
   - Stream: 2
   - Requirements: [1.4](requirements.md#1.4), [2.5](requirements.md#2.5), [2.6](requirements.md#2.6), [3.5](requirements.md#3.5)
 
-- [ ] 24. Add note state and saveNote to DayDetailViewModel <!-- id:mz8g5er -->
+- [x] 24. Add note state and saveNote to DayDetailViewModel <!-- id:mz8g5er -->
   - Edit Flux/Flux/DayDetail/DayDetailViewModel.swift.
   - Add private(set) var note: String? populated from DayDetailResponse.note.
   - Add func saveNote(_ rawText: String) async throws: pre-flight NoteText.normalised + graphemeCount cap (throw FluxAPIError.badRequest if over); call apiClient.saveNote(date:, text:); on success set self.note = resp.text.isEmpty ? nil : resp.text.
@@ -194,7 +194,7 @@ references:
   - Stream: 2
   - Requirements: [1.4](requirements.md#1.4), [2.5](requirements.md#2.5), [2.6](requirements.md#2.6)
 
-- [ ] 25. Implement shared NoteRowView read-only component <!-- id:mz8g5es -->
+- [x] 25. Implement shared NoteRowView read-only component <!-- id:mz8g5es -->
   - File: Flux/Flux/DayDetail/NoteRowView.swift.
   - Read-only row rendering text using HistoryCardChrome-equivalent chrome.
   - Used by Dashboard, History, and Day Detail (view-only state on Day Detail).
@@ -202,14 +202,14 @@ references:
   - Stream: 2
   - Requirements: [2.1](requirements.md#2.1), [3.1](requirements.md#3.1), [3.2](requirements.md#3.2), [4.1](requirements.md#4.1), [4.4](requirements.md#4.4)
 
-- [ ] 26. Write HistoryViewModel selected-day note tests <!-- id:mz8g5et -->
+- [x] 26. Write HistoryViewModel selected-day note tests <!-- id:mz8g5et -->
   - Extend HistoryViewModelTests.
   - Cover: selectedDay.note reflects the current selection; changing selection (drag-select / summary nav) updates the surfaced note; CachedDayEnergy round-trip (init(from:) + asDayEnergy) preserves note across cache load; cached-fallback path renders notes when offline path returns from SwiftData.
   - Blocked-by: mz8g5en (Add note field to CachedDayEnergy)
   - Stream: 2
   - Requirements: [4.1](requirements.md#4.1), [4.2](requirements.md#4.2), [4.4](requirements.md#4.4)
 
-- [ ] 27. Wire NoteRowView into Day Detail, Dashboard, and History views <!-- id:mz8g5eu -->
+- [x] 27. Wire NoteRowView into Day Detail, Dashboard, and History views <!-- id:mz8g5eu -->
   - Day Detail (DayDetailView.swift): note row as first child of VStack; tap to present NoteEditorSheet pre-populated from viewModel.note; "Add note" button row when note == nil and date <= today Sydney; render nothing for future dates (AC 2.7).
   - Dashboard (DashboardView.swift): NoteRowView(text: viewModel.status?.note) between BatteryHeroView and PowerTrioView (collapses when nil; read-only).
   - History (HistoryView.swift): NoteRowView(text: selectedDay?.note) between the picker and the chart cards (collapses when nil; read-only).

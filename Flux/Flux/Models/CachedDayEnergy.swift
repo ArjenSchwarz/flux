@@ -11,6 +11,7 @@ final class CachedDayEnergy {
     var eDischarge: Double
     var offpeakGridImportKwh: Double?
     var offpeakGridExportKwh: Double?
+    var note: String?
 
     init(from dayEnergy: DayEnergy) {
         date = dayEnergy.date
@@ -21,6 +22,7 @@ final class CachedDayEnergy {
         eDischarge = dayEnergy.eDischarge
         offpeakGridImportKwh = dayEnergy.offpeakGridImportKwh
         offpeakGridExportKwh = dayEnergy.offpeakGridExportKwh
+        note = dayEnergy.note
     }
 
     var asDayEnergy: DayEnergy {
@@ -32,7 +34,8 @@ final class CachedDayEnergy {
             eCharge: eCharge,
             eDischarge: eDischarge,
             offpeakGridImportKwh: offpeakGridImportKwh,
-            offpeakGridExportKwh: offpeakGridExportKwh
+            offpeakGridExportKwh: offpeakGridExportKwh,
+            note: note
         )
     }
 }

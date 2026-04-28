@@ -35,6 +35,8 @@ struct HistoryView: View {
                 }
                 .pickerStyle(.segmented)
 
+                NoteRowView(text: viewModel.selectedDay?.note)
+
                 if viewModel.days.isEmpty, let error = viewModel.error, !viewModel.isLoading {
                     errorState(error)
                 } else if viewModel.days.isEmpty, !viewModel.isLoading {
