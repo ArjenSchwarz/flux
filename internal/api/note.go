@@ -45,6 +45,14 @@ type noteResponse struct {
 // handleNote implements the validation order documented in design.md
 // §handleNote validation order. Each step short-circuits.
 func (h *Handler) handleNote(ctx context.Context, req events.LambdaFunctionURLRequest) events.LambdaFunctionURLResponse {
+	// Guard against a misconfigured Lambda where the notes writer was not
+	// wired (e.g. TABLE_NOTES env var missing in an override). Without this
+	// the unconditional h.notes.Put/Delete below would nil-panic.
+	if h.notes == nil {
+		slog.Error("note write attempted but notes writer is nil")
+		return errorResponse(500, "internal error")
+	}
+
 	// 1. 415 if Content-Type is not application/json[;...].
 	if !isJSONContentType(req.Headers["content-type"]) {
 		return errorResponse(415, "unsupported media type")

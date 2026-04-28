@@ -351,6 +351,19 @@ func TestHandleNote_DynamoErrorReturns500(t *testing.T) {
 	}
 }
 
+func TestHandleNote_NilWriterReturns500NotPanic(t *testing.T) {
+	// A misconfigured Lambda (e.g. TABLE_NOTES env var missing) wires a nil
+	// writer. The handler must return 500 cleanly rather than nil-panic.
+	h := NewHandler(&mockReader{}, nil, testSerial, testToken, "11:00", "14:00")
+	h.nowFunc = func() time.Time { return time.Date(2026, 4, 15, 10, 0, 0, 0, sydneyTZ) }
+
+	req := noteRequest("PUT", map[string]string{"content-type": "application/json"}, `{"date":"2026-04-15","text":"hi"}`, false)
+	resp, err := h.Handle(context.Background(), req)
+	require.NoError(t, err)
+	assert.Equal(t, 500, resp.StatusCode)
+	assertErrorBody(t, resp, "internal error")
+}
+
 func TestHandleNote_TextNeverAppearsInLogs(t *testing.T) {
 	// Capture slog output produced during the request and assert the secret
 	// note text never lands in any log line, regardless of which path runs.
