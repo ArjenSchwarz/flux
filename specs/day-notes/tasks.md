@@ -16,14 +16,14 @@ references:
 
 ## Backend
 
-- [ ] 2. Write Go notetext tests <!-- id:mz8g5e5 -->
+- [x] 2. Write Go notetext tests <!-- id:mz8g5e5 -->
   - File: internal/api/notetext_test.go.
   - Cover: graphemeCount matches every fixture entry; normalise applies NFC + leading/trailing trim while preserving internal whitespace (1.2); rapid property: normalise idempotent (normalise(normalise(s)) == normalise(s)).
   - Blocked-by: mz8g5e4 (Create cross-stack grapheme fixture file)
   - Stream: 1
   - Requirements: [1.2](requirements.md#1.2), [1.3](requirements.md#1.3), [5.10](requirements.md#5.10)
 
-- [ ] 3. Implement notetext helpers <!-- id:mz8g5e6 -->
+- [x] 3. Implement notetext helpers <!-- id:mz8g5e6 -->
   - File: internal/api/notetext.go.
   - Exports normalise(string) string and graphemeCount(string) int.
   - Add deps: golang.org/x/text/unicode/norm and github.com/rivo/uniseg via go get + go mod tidy.
@@ -31,14 +31,14 @@ references:
   - Stream: 1
   - Requirements: [1.2](requirements.md#1.2), [1.3](requirements.md#1.3), [5.10](requirements.md#5.10)
 
-- [ ] 4. Write dynamo notes writer tests <!-- id:mz8g5e7 -->
+- [x] 4. Write dynamo notes writer tests <!-- id:mz8g5e7 -->
   - File: internal/dynamo/notes_test.go. Use the project's existing fake dynamo client pattern.
   - Cover: PutNote then GetNote round-trip preserves text and updatedAt; DeleteNote of existing key clears row, GetNote returns (nil, nil); DeleteNote of missing key returns nil (idempotent).
   - Include round-trip overwrite (last-write-wins per 1.5).
   - Stream: 1
   - Requirements: [1.1](requirements.md#1.1), [1.4](requirements.md#1.4), [1.5](requirements.md#1.5), [1.7](requirements.md#1.7), [6.1](requirements.md#6.1)
 
-- [ ] 5. Implement dynamo NoteItem and DynamoNoteWriter <!-- id:mz8g5e8 -->
+- [x] 5. Implement dynamo NoteItem and DynamoNoteWriter <!-- id:mz8g5e8 -->
   - File: internal/dynamo/notes.go.
   - Types: NoteItem (sysSn/date/text/updatedAt RFC3339 UTC), WriteAPI interface (PutItem, DeleteItem only — kept separate from ReadAPI per design), DynamoNoteWriter with NewDynamoNoteWriter constructor, PutNote, DeleteNote.
   - Extend internal/dynamo/store.go TableNames with Notes string field.
@@ -46,27 +46,27 @@ references:
   - Stream: 1
   - Requirements: [1.1](requirements.md#1.1), [1.4](requirements.md#1.4), [1.5](requirements.md#1.5), [1.7](requirements.md#1.7), [6.1](requirements.md#6.1)
 
-- [ ] 6. Write Reader.GetNote and QueryNotes tests <!-- id:mz8g5e9 -->
+- [x] 6. Write Reader.GetNote and QueryNotes tests <!-- id:mz8g5e9 -->
   - Extend internal/dynamo/reader_test.go.
   - Cover: GetNote returns (nil,nil) when absent; returns NoteItem when present; QueryNotes returns chronological range scoped to (startDate, endDate); empty slice when no rows in range.
   - Blocked-by: mz8g5e8 (Implement dynamo NoteItem and DynamoNoteWriter)
   - Stream: 1
   - Requirements: [5.6](requirements.md#5.6), [5.7](requirements.md#5.7), [5.8](requirements.md#5.8)
 
-- [ ] 7. Add GetNote and QueryNotes to Reader <!-- id:mz8g5ea -->
+- [x] 7. Add GetNote and QueryNotes to Reader <!-- id:mz8g5ea -->
   - Extend the Reader interface and DynamoReader implementation in internal/dynamo/reader.go using the existing ReadAPI client (GetItem + Query suffice).
   - Reads only — writes stay on DynamoNoteWriter.
   - Blocked-by: mz8g5e9 (Write Reader.GetNote and QueryNotes tests)
   - Stream: 1
   - Requirements: [5.6](requirements.md#5.6), [5.7](requirements.md#5.7), [5.8](requirements.md#5.8)
 
-- [ ] 8. Add Note field to response structs <!-- id:mz8g5eb -->
+- [x] 8. Add Note field to response structs <!-- id:mz8g5eb -->
   - Edit internal/api/response.go: add Note *string `json:"note"` to StatusResponse, DayEnergy, DayDetailResponse.
   - NO omitempty — absent must serialise as null. Type-only change; tests in subsequent tasks assert behaviour.
   - Stream: 1
   - Requirements: [5.6](requirements.md#5.6), [5.7](requirements.md#5.7), [5.8](requirements.md#5.8)
 
-- [ ] 9. Write handleNote tests (full validation matrix) <!-- id:mz8g5ec -->
+- [x] 9. Write handleNote tests (full validation matrix) <!-- id:mz8g5ec -->
   - File: internal/api/note_test.go.
   - Cover: 401 missing/invalid token; 405 GET/POST/DELETE on /note with Allow: PUT header; 415 missing or non-JSON Content-Type; 200 for application/json and application/json; charset=utf-8; 413 body >4KB applied before field validation.
   - 400 cases: malformed JSON; missing/malformed/non-Gregorian date; future date (driven by injected nowFunc returning a fixed Sydney instant); over-200 graphemes using fixture sequences (NFD accents, ZWJ family, flag, skin-tone).
@@ -76,7 +76,7 @@ references:
   - Stream: 1
   - Requirements: [1.2](requirements.md#1.2), [1.3](requirements.md#1.3), [1.4](requirements.md#1.4), [5.1](requirements.md#5.1), [5.2](requirements.md#5.2), [5.3](requirements.md#5.3), [5.4](requirements.md#5.4), [5.5](requirements.md#5.5), [5.9](requirements.md#5.9), [5.10](requirements.md#5.10), [5.11](requirements.md#5.11), [5.12](requirements.md#5.12), [7.1](requirements.md#7.1), [7.2](requirements.md#7.2)
 
-- [ ] 10. Implement handleNote and handler routing <!-- id:mz8g5ed -->
+- [x] 10. Implement handleNote and handler routing <!-- id:mz8g5ed -->
   - New file internal/api/note.go: notePayload (with LogValue redacting text), noteResponse, handleNote pipeline ordered exactly as design §handleNote validation order (415 → base64-decode → 4KB → JSON parse → date present/valid → date not future Sydney → NFC+trim → grapheme count → put-or-delete → noteResponse).
   - Modify internal/api/handler.go: extend Handler struct with notes NoteWriter and nowFunc; update method routing to add PUT /note and produce 405 with Allow: PUT for unknown methods on /note (Allow: GET for the read paths); auth check stays before routing.
   - Define api.NoteWriter interface in handler.go (or note.go) so tests mock without importing dynamo internals.
@@ -84,7 +84,7 @@ references:
   - Stream: 1
   - Requirements: [1.2](requirements.md#1.2), [1.3](requirements.md#1.3), [1.4](requirements.md#1.4), [5.1](requirements.md#5.1), [5.2](requirements.md#5.2), [5.3](requirements.md#5.3), [5.4](requirements.md#5.4), [5.5](requirements.md#5.5), [5.9](requirements.md#5.9), [5.10](requirements.md#5.10), [5.11](requirements.md#5.11), [5.12](requirements.md#5.12), [7.1](requirements.md#7.1), [7.2](requirements.md#7.2)
 
-- [ ] 11. Write tests for note bundling in /status, /day, /history <!-- id:mz8g5ee -->
+- [x] 11. Write tests for note bundling in /status, /day, /history <!-- id:mz8g5ee -->
   - Extend status_test.go, day_test.go, history_test.go.
   - For each: (a) populated note returned in correct field; (b) null returned when no note exists; (c) when the note read fails (fake reader returns error), the response still 200 and note=null (failure isolation).
   - For /history, assert per-day notes joined onto the correct DayEnergy by date.
@@ -92,7 +92,7 @@ references:
   - Stream: 1
   - Requirements: [5.6](requirements.md#5.6), [5.7](requirements.md#5.7), [5.8](requirements.md#5.8)
 
-- [ ] 12. Bundle notes into /status, /day, /history handlers <!-- id:mz8g5ef -->
+- [x] 12. Bundle notes into /status, /day, /history handlers <!-- id:mz8g5ef -->
   - Edit internal/api/status.go, day.go, history.go.
   - Run note read in a separate sync.WaitGroup goroutine outside the existing errgroup so a note-read failure logs slog.Warn and leaves the field nil without cancelling siblings.
   - /status calls reader.GetNote(today); /day calls reader.GetNote(date); /history calls reader.QueryNotes(startDate, today) and joins results onto each DayEnergy by date.
@@ -101,14 +101,14 @@ references:
   - Stream: 1
   - Requirements: [3.4](requirements.md#3.4), [5.6](requirements.md#5.6), [5.7](requirements.md#5.7), [5.8](requirements.md#5.8)
 
-- [ ] 13. Wire TABLE_NOTES env and DynamoNoteWriter in cmd/api/main.go <!-- id:mz8g5eg -->
+- [x] 13. Wire TABLE_NOTES env and DynamoNoteWriter in cmd/api/main.go <!-- id:mz8g5eg -->
   - Edit cmd/api/main.go: add TABLE_NOTES to requiredEnvVars; loadConfig reads it into TableNames.Notes; construct DynamoNoteWriter from the existing *dynamodb.Client (the single client satisfies both ReadAPI and WriteAPI at compile time); pass writer + nowFunc into NewHandler.
   - NewHandler signature update.
   - Blocked-by: mz8g5e8 (Implement dynamo NoteItem and DynamoNoteWriter), mz8g5ed (Implement handleNote and handler routing)
   - Stream: 1
   - Requirements: [6.5](requirements.md#6.5)
 
-- [ ] 14. Add NotesTable, IAM, and TABLE_NOTES env to CloudFormation <!-- id:mz8g5eh -->
+- [x] 14. Add NotesTable, IAM, and TABLE_NOTES env to CloudFormation <!-- id:mz8g5eh -->
   - Edit infrastructure/template.yaml.
   - Add NotesTable (PAY_PER_REQUEST, partition sysSn HASH + sort date RANGE, PointInTimeRecoveryEnabled: true, DeletionPolicy/UpdateReplacePolicy Retain).
   - Add an IAM Allow block to LambdaExecutionRole with GetItem/Query/PutItem/DeleteItem scoped to !GetAtt NotesTable.Arn (do NOT widen existing read-only block to other tables).

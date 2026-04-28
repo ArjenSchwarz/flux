@@ -227,6 +227,17 @@ Resources:
                   - !GetAtt DailyPowerTable.Arn
                   - !GetAtt SystemTable.Arn
                   - !GetAtt OffpeakTable.Arn
+              # Notes is the only table the Lambda may write to. Keep this
+              # block scoped to NotesTable.Arn — req 6.4 forbids widening
+              # write rights onto the read-only tables above.
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:Query
+                  - dynamodb:PutItem
+                  - dynamodb:DeleteItem
+                Resource:
+                  - !GetAtt NotesTable.Arn
               - Effect: Allow
                 Action:
                   - ssm:GetParameter
@@ -383,6 +394,28 @@ Resources:
         - AttributeName: date
           KeyType: RANGE
 
+  NotesTable:
+    Type: AWS::DynamoDB::Table
+    # PITR enabled because notes are the only user-authored, non-
+    # reconstructable data in Flux (decision 9).
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: flux-notes
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: sysSn
+          AttributeType: S
+        - AttributeName: date
+          AttributeType: S
+      KeySchema:
+        - AttributeName: sysSn
+          KeyType: HASH
+        - AttributeName: date
+          KeyType: RANGE
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
   # --- Lambda Function and Function URL ---
 
   ApiFunction:
@@ -411,6 +444,7 @@ Resources:
           TABLE_DAILY_POWER: !Ref DailyPowerTable
           TABLE_SYSTEM: !Ref SystemTable
           TABLE_OFFPEAK: !Ref OffpeakTable
+          TABLE_NOTES: !Ref NotesTable
 
   ApiFunctionUrl:
     Type: AWS::Lambda::Url
