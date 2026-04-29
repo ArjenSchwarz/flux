@@ -101,9 +101,20 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 	}
 
 	var todayComputed *TodayEnergy
+	var todayReadings []dynamo.ReadingItem
 	if len(allReadings) > 0 {
 		midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, sydneyTZ).Unix()
 		todayComputed = computeTodayEnergy(allReadings, midnight)
+		// PeakPeriods/MinSOC have no date-boundary filter, so trim the 24h
+		// sliding window to >= midnight Sydney before live-compute. Without
+		// this, yesterday's afternoon peak could leak into today's
+		// peakPeriods on /history (Blocks is safe — its integration is
+		// bounded by date).
+		for _, r := range allReadings {
+			if r.Timestamp >= midnight {
+				todayReadings = append(todayReadings, r)
+			}
+		}
 	}
 
 	offpeakByDate := make(map[string]dynamo.OffpeakItem, len(offpeakItems))
@@ -159,11 +170,11 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 				slt := item.SocLow.Timestamp
 				day.SocLowTime = &slt
 			}
-		} else if len(allReadings) > 0 {
+		} else if len(todayReadings) > 0 {
 			// AC 4.3: live-compute against the same readings slice already
-			// loaded for energy reconciliation.
+			// loaded for energy reconciliation, trimmed to today.
 			if todayDerivedReadings == nil {
-				todayDerivedReadings = toDerivedReadings(allReadings)
+				todayDerivedReadings = toDerivedReadings(todayReadings)
 			}
 			day.DailyUsage = derivedstats.Blocks(todayDerivedReadings, h.offpeakStart, h.offpeakEnd, today, today, now)
 			day.PeakPeriods = derivedstats.PeakPeriods(todayDerivedReadings, h.offpeakStart, h.offpeakEnd)
@@ -175,7 +186,8 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 			}
 		}
 		// AC 4.9: when isItemToday but allReadings is nil (readings query
-		// failed), derivedStats remain absent on the today row by design.
+		// failed) or todayReadings is empty (no post-midnight data yet),
+		// derivedStats remain absent on the today row by design.
 
 		result[i] = day
 	}

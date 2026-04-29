@@ -207,3 +207,73 @@ func TestHandleHistory_TodayReadingsQueryFailure_AC4_9(t *testing.T) {
 	assert.Nil(t, hr.Days[1].SocLowTime)
 	assert.Empty(t, hr.Days[1].PeakPeriods)
 }
+
+// Regression: the /history today readings query covers a sliding 24h window
+// (now-86400 .. now), so allReadings can contain pre-midnight data from
+// yesterday. PeakPeriods and MinSOC have no date-boundary filter — feeding
+// them the raw 24h slice would leak yesterday's afternoon peak and
+// yesterday's low SOC into today's live-computed derivedStats. The handler
+// MUST trim allReadings to >= midnight Sydney before live-compute.
+func TestHandleHistory_TodayLiveCompute_TrimsPreMidnight(t *testing.T) {
+	now := fixedNow() // 2026-04-15 10:00 Sydney
+	loc, _ := time.LoadLocation("Australia/Sydney")
+	today := now.In(loc).Format("2006-01-02")
+
+	todayRow := dynamo.DailyEnergyItem{
+		SysSn: testSerial, Date: today,
+		Epv: 0.5, EInput: 0, EOutput: 0, ECharge: 0, EDischarge: 0.1,
+	}
+
+	// Yesterday afternoon spike (16:00–16:02:30 Sydney): closely-spaced 4 kW
+	// load readings forming a peak cluster, plus a 22:00 low-SOC sample.
+	// Both must be excluded from today's live-compute.
+	yesterdaySpike := []dynamo.ReadingItem{
+		{Timestamp: time.Date(2026, 4, 14, 16, 0, 0, 0, loc).Unix(), Ppv: 0, Pload: 4000, Pbat: 0, Pgrid: 4000, Soc: 50},
+		{Timestamp: time.Date(2026, 4, 14, 16, 0, 30, 0, loc).Unix(), Ppv: 0, Pload: 4000, Pbat: 0, Pgrid: 4000, Soc: 50},
+		{Timestamp: time.Date(2026, 4, 14, 16, 1, 0, 0, loc).Unix(), Ppv: 0, Pload: 4000, Pbat: 0, Pgrid: 4000, Soc: 50},
+		{Timestamp: time.Date(2026, 4, 14, 16, 1, 30, 0, loc).Unix(), Ppv: 0, Pload: 4000, Pbat: 0, Pgrid: 4000, Soc: 50},
+		{Timestamp: time.Date(2026, 4, 14, 16, 2, 0, 0, loc).Unix(), Ppv: 0, Pload: 4000, Pbat: 0, Pgrid: 4000, Soc: 50},
+		{Timestamp: time.Date(2026, 4, 14, 16, 2, 30, 0, loc).Unix(), Ppv: 0, Pload: 4000, Pbat: 0, Pgrid: 4000, Soc: 50},
+		// Pre-midnight low SOC: must NOT show up as today's socLow.
+		{Timestamp: time.Date(2026, 4, 14, 22, 0, 0, 0, loc).Unix(), Ppv: 0, Pload: 500, Pbat: 0, Pgrid: 500, Soc: 20},
+	}
+	// Today (00:30 onward): uniform low load and SOC monotonically decreasing
+	// to 65 at 09:01:30 — that's today's true minimum.
+	todayBlock := []dynamo.ReadingItem{
+		{Timestamp: time.Date(2026, 4, 15, 9, 0, 0, 0, loc).Unix(), Ppv: 0, Pload: 500, Pbat: 0, Pgrid: 500, Soc: 70},
+		{Timestamp: time.Date(2026, 4, 15, 9, 0, 30, 0, loc).Unix(), Ppv: 0, Pload: 500, Pbat: 0, Pgrid: 500, Soc: 68},
+		{Timestamp: time.Date(2026, 4, 15, 9, 1, 0, 0, loc).Unix(), Ppv: 0, Pload: 500, Pbat: 0, Pgrid: 500, Soc: 66},
+		{Timestamp: time.Date(2026, 4, 15, 9, 1, 30, 0, loc).Unix(), Ppv: 0, Pload: 500, Pbat: 0, Pgrid: 500, Soc: 65},
+	}
+	allReadings := append(yesterdaySpike, todayBlock...)
+
+	mr := &mockReader{
+		queryDailyEnergyFn: func(_ context.Context, _, _, _ string) ([]dynamo.DailyEnergyItem, error) {
+			return []dynamo.DailyEnergyItem{todayRow}, nil
+		},
+		queryReadingsFn: func(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
+			return allReadings, nil
+		},
+	}
+	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h.nowFunc = func() time.Time { return now }
+
+	resp, err := h.Handle(context.Background(), historyRequest(map[string]string{"days": "7"}))
+	require.NoError(t, err)
+	require.Equal(t, 200, resp.StatusCode)
+
+	hr := parseHistoryResponse(t, resp)
+	require.Len(t, hr.Days, 1)
+	require.Equal(t, today, hr.Days[0].Date)
+
+	// socLow must reflect today only — not yesterday 22:00 sample at SOC 20.
+	require.NotNil(t, hr.Days[0].SocLow)
+	assert.Equal(t, 65.0, *hr.Days[0].SocLow, "socLow must be drawn from today's readings only")
+
+	// peakPeriods must NOT contain yesterday's 16:00 cluster. Today's uniform
+	// load is at-threshold so no cluster qualifies — empty is correct.
+	for _, p := range hr.Days[0].PeakPeriods {
+		assert.NotContains(t, p.Start, "2026-04-14",
+			"yesterday's spike must not leak into today's peakPeriods")
+	}
+}
