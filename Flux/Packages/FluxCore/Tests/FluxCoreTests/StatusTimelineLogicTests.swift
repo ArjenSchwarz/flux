@@ -373,6 +373,10 @@ final class StubFluxAPIClient: FluxAPIClient, @unchecked Sendable {
     func fetchDay(date: String) async throws -> DayDetailResponse {
         DayDetailResponse(date: date, readings: [], summary: nil, peakPeriods: nil, dailyUsage: nil)
     }
+
+    func saveNote(date _: String, text _: String) async throws -> NoteResponse {
+        throw FluxAPIError.notConfigured
+    }
 }
 
 final class DelayedFluxAPIClient: FluxAPIClient, @unchecked Sendable {
@@ -395,5 +399,9 @@ final class DelayedFluxAPIClient: FluxAPIClient, @unchecked Sendable {
 
     func fetchDay(date: String) async throws -> DayDetailResponse {
         DayDetailResponse(date: date, readings: [], summary: nil, peakPeriods: nil, dailyUsage: nil)
+    }
+
+    func saveNote(date _: String, text _: String) async throws -> NoteResponse {
+        throw FluxAPIError.notConfigured
     }
 }

@@ -5,6 +5,7 @@ public final class URLSessionAPIClient: FluxAPIClient, Sendable {
     private let baseURL: URL
     private let tokenProvider: @Sendable () -> String?
     private let decoder: JSONDecoder
+    private let encoder: JSONEncoder
 
     private static let noCacheSession: URLSession = {
         let config = URLSessionConfiguration.default
@@ -18,6 +19,7 @@ public final class URLSessionAPIClient: FluxAPIClient, Sendable {
         self.baseURL = baseURL
         self.tokenProvider = { keychainService.loadToken() }
         self.decoder = JSONDecoder()
+        self.encoder = JSONEncoder()
     }
 
     public init(baseURL: URL, token: String, session: URLSession? = nil) {
@@ -25,6 +27,7 @@ public final class URLSessionAPIClient: FluxAPIClient, Sendable {
         self.baseURL = baseURL
         self.tokenProvider = { token }
         self.decoder = JSONDecoder()
+        self.encoder = JSONEncoder()
     }
 
     public func fetchStatus() async throws -> StatusResponse {
@@ -45,9 +48,26 @@ public final class URLSessionAPIClient: FluxAPIClient, Sendable {
         )
     }
 
+    public func saveNote(date: String, text: String) async throws -> NoteResponse {
+        let body = try encoder.encode(NotePayload(date: date, text: text))
+        return try await performRequest(
+            path: "note",
+            queryItems: [],
+            method: "PUT",
+            body: body
+        )
+    }
+
+    private struct NotePayload: Encodable {
+        let date: String
+        let text: String
+    }
+
     private func performRequest<T: Decodable>(
         path: String,
-        queryItems: [URLQueryItem]
+        queryItems: [URLQueryItem],
+        method: String = "GET",
+        body: Data? = nil
     ) async throws -> T {
         guard let token = tokenProvider(), token.isEmpty == false else {
             throw FluxAPIError.notConfigured
@@ -63,8 +83,12 @@ public final class URLSessionAPIClient: FluxAPIClient, Sendable {
         }
 
         var request = URLRequest(url: url)
-        request.httpMethod = "GET"
+        request.httpMethod = method
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        if let body {
+            request.httpBody = body
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
 
         let data: Data
         let response: URLResponse

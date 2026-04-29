@@ -25,6 +25,10 @@ xcodebuild test -scheme Flux -destination 'platform=iOS Simulator,name=iPhone 17
 - **KeychainService.swift** — Uses `[CFString: Any]` dictionary keys (idiomatic Security framework). Service: `"me.nore.ig.flux"`, account: `"api-token"`, App Group: `"group.me.nore.ig.flux"`.
 - **MockFluxAPIClient.swift** — `#if DEBUG` guarded actor with static preview data. Used for SwiftUI previews. Test files create their own focused mocks instead.
 
+## FluxCore Helpers (Flux/Packages/FluxCore/Sources/FluxCore/Helpers/)
+
+- **NoteText.swift** — Cross-stack grapheme handling for the day-notes feature. `maxGraphemes = 200`, `normalised(_:)` (NFC + leading/trailing whitespace trim), `graphemeCount(_:)`. Backend Go counterpart in `internal/api/notetext.go` must agree on every entry in `internal/api/testdata/note_lengths.json`; both client (`Flux/FluxTests/NoteTextTests.swift`) and server tests load that fixture from repo root.
+
 ## Helpers (Flux/Flux/Helpers/)
 
 - **DateFormatting.swift** — All formatters are `static let` (created once, reused). Two ISO formatters (with/without fractional seconds) with fallback parsing. Sydney timezone throughout. Key methods: `parseTimestamp`, `clockTime`, `todayDateString`, `parseDayDate`, `parseWindowTime`, `isInOffpeakWindow`, `isToday`.

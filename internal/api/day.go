@@ -51,10 +51,19 @@ func (h *Handler) handleDay(ctx context.Context, req events.LambdaFunctionURLReq
 		return err
 	})
 
+	// Note read runs alongside the errgroup so a failure logs and leaves the
+	// field nil instead of cancelling the core queries. Uses the parent ctx
+	// (not gctx) so the note read isn't aborted when g.Wait returns
+	// successfully — gctx is cancelled on Wait completion, which would race
+	// a still-in-flight GetNote and yield a spurious nil.
+	waitNote := fetchNoteAsync(ctx, h.reader, "day", h.serial, date)
+
 	if err := g.Wait(); err != nil {
+		waitNote()
 		slog.Error("day query failed", "error", err)
 		return errorResponse(500, "internal error")
 	}
+	noteText := waitNote()
 
 	var points []TimeSeriesPoint
 	var socLow float64
@@ -88,6 +97,7 @@ func (h *Handler) handleDay(ctx context.Context, req events.LambdaFunctionURLReq
 		Readings:    points,
 		PeakPeriods: peakPeriods,
 		DailyUsage:  dailyUsage,
+		Note:        noteText,
 	}
 	if resp.Readings == nil {
 		resp.Readings = []TimeSeriesPoint{}

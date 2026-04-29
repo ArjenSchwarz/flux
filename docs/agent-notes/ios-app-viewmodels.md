@@ -23,11 +23,19 @@ All ViewModels follow `@MainActor @Observable final class` pattern with `private
 ## DayDetailViewModel (DayDetail/DayDetailViewModel.swift)
 
 - **Dependencies:** `apiClient`, `nowProvider`.
-- **State:** `date` (private(set)), `readings`, `summary`, `isLoading`, `error`, `hasPowerData`.
+- **State:** `date` (private(set)), `readings`, `summary`, `isLoading`, `error`, `hasPowerData`, `note`.
 - Uses centralised `DateFormatting.parseDayDate` and `dayDateString` (cached formatters, not created per call).
 - `navigatePrevious()`/`navigateNext()` methods with `navigateNext` blocking advancement past today.
 - Load guard prevents duplicate requests.
 - `isFallbackData()` checks if readings are synthetic (backend returns synthetic data for days without real readings).
+- `saveNote(_:)` applies client-side `NoteText.normalised + graphemeCount` cap (throws `FluxAPIError.badRequest` if over 200) before calling `apiClient.saveNote`. On success: sets `note = response.text` (or nil if empty — server confirms delete by returning empty text).
+
+## NoteEditorViewModel (DayDetail/NoteEditorViewModel.swift)
+
+- Owns `draft`, `isSaving`, `error: FluxAPIError?`.
+- `canSave` = `!isSaving && characterCount <= NoteText.maxGraphemes` — disables both during in-flight saves (no double-tap) and over the cap (no client/server disagreement).
+- `save()` returns `Bool`: true on success (caller dismisses sheet), false when call was suppressed or backend rejected; on throw it sets `error` and leaves `draft` intact for retry.
+- Calls `parent.saveNote(draft)`; saves go through `DayDetailViewModel` so the parent's `note` updates atomically with the API response.
 
 ## SettingsViewModel (Settings/SettingsViewModel.swift)
 

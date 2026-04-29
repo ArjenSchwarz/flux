@@ -26,6 +26,7 @@ final class DayDetailViewModel {
     private(set) var hasPowerData = true
     private(set) var peakPeriods: [PeakPeriod] = []
     private(set) var dailyUsage: DailyUsage?
+    private(set) var note: String?
 
     private let apiClient: any FluxAPIClient
     private let nowProvider: @Sendable () -> Date
@@ -58,6 +59,7 @@ final class DayDetailViewModel {
             hasPowerData = !isFallbackData(response.readings)
             peakPeriods = response.peakPeriods ?? []
             dailyUsage = response.dailyUsage
+            note = response.note
             error = nil
         } catch {
             readings = []
@@ -66,8 +68,18 @@ final class DayDetailViewModel {
             hasPowerData = true
             peakPeriods = []
             dailyUsage = nil
+            note = nil
             self.error = FluxAPIError.from(error)
         }
+    }
+
+    func saveNote(_ rawText: String) async throws {
+        let normalised = NoteText.normalised(rawText)
+        guard normalised.count <= NoteText.maxGraphemes else {
+            throw FluxAPIError.badRequest("Note must be 200 characters or fewer")
+        }
+        let response = try await apiClient.saveNote(date: date, text: normalised)
+        note = response.text.isEmpty ? nil : response.text
     }
 
     func navigatePrevious() {

@@ -6,11 +6,14 @@
 - `main.go` — Lambda entry point. Validates env vars, loads AWS config, fetches SSM params (api-token, serial), creates DynamoReader and Handler, calls `lambda.Start`. Uses JSON slog handler. Imports `time/tzdata` for timezone embedding. Defines `ssmAPI` interface for testability.
 
 `internal/api/` contains:
-- `handler.go` — Handler struct with routing, auth, and request logging. Routes to dedicated endpoint files.
+- `handler.go` — Handler struct with routing, auth, and request logging. Routes to dedicated endpoint files. Carries a `notes` `NoteWriter` and `nowFunc`. Method dispatch covers `GET` for the read endpoints and `PUT /note`; non-PUT requests on `/note` return 405 with `Allow: PUT`, non-GET on read paths return 405 with `Allow: GET`.
 - `status.go` — `/status` endpoint: concurrent DynamoDB queries via errgroup, in-memory computation for live data, battery info, rolling averages, off-peak, and today's energy.
 - `history.go` — `/history` endpoint: parses days param (7/14/30), queries daily energy, returns sorted array with rounding.
 - `day.go` — `/day` endpoint: queries readings, falls back to daily power, downsamples, computes socLow from raw data.
-- `response.go` — JSON response structs for all three endpoints (`StatusResponse`, `HistoryResponse`, `DayDetailResponse` and their nested types). Uses pointer types (`*float64`, `*string`) for nullable fields.
+- `note.go` — `PUT /note` endpoint: Content-Type → base64-aware 4 KB body cap → JSON parse → date validation (Gregorian, not future Sydney) → NFC + leading/trailing trim → grapheme cap (200) → put-or-delete. Empty/whitespace text → `DeleteNote` (idempotent). `notePayload` implements `slog.LogValuer` and only ever emits `{date, text_len}` so the note text never lands in logs.
+- `notetext.go` — `normalise(string) string` (NFC + leading/trailing whitespace trim) and `graphemeCountNormalised(string) int` (uses `rivo/uniseg`). Single source of truth for the grapheme-cap rule shared with the iOS client via `internal/api/testdata/note_lengths.json`.
+- `notes_fetch.go` — Helpers `fetchNoteAsync` / `fetchNotesAsync` that run a `GetNote` / `QueryNotes` in a goroutine and return a wait closure. Used by `/status`, `/day`, `/history` to bundle notes without coupling them to the core errgroup — a notes-table failure logs `slog.Warn` and yields nil instead of cancelling siblings. The handlers pass the parent `ctx` (not `gctx`) so the note read isn't aborted when `g.Wait()` returns successfully (gctx is cancelled on Wait completion). On the 500 path the handlers still call `waitNote()` to drain the goroutine before returning.
+- `response.go` — JSON response structs for all four endpoints (`StatusResponse`, `HistoryResponse`, `DayDetailResponse`, `noteResponse` plus their nested types). Uses pointer types (`*float64`, `*string`) for nullable fields. `Note *string` fields on `StatusResponse`, `DayEnergy`, and `DayDetailResponse` are NOT `omitempty` — absent must serialise as `null` so iOS Codable parsing is unambiguous.
 - `compute.go` — Pure business logic functions with no DynamoDB dependency.
 - `handler_test.go` — Tests for method validation, auth, auth-before-routing, routing, and error response format. Also defines `mockReader` and shared test helpers.
 - `status_test.go` — Tests for all /status scenarios: all data present, no readings, offpeak pending/complete, no today energy, system missing/zero cobat fallback, DynamoDB errors, single now capture.
@@ -20,7 +23,8 @@
 
 ## Handler
 
-- `Handler` struct holds: `reader` (dynamo.Reader), `serial`, `apiToken`, `offpeakStart`, `offpeakEnd`, `nowFunc`.
+- `Handler` struct holds: `reader` (dynamo.Reader), `notes` (api.NoteWriter), `serial`, `apiToken`, `offpeakStart`, `offpeakEnd`, `nowFunc`.
+- `api.NoteWriter` is a small interface defined in the api package mirroring the dynamo-side `PutNote`/`DeleteNote` methods so handler tests can mock without importing dynamo internals (the parameter type is still `dynamo.NoteItem`).
 - `nowFunc` defaults to `time.Now`, overridable in tests for deterministic time.
 - `Handle` is the Lambda entry point — logs method, path, status, duration via slog. Never logs the token.
 - Processing order: method check → auth → routing. Auth runs before routing so invalid tokens get 401 regardless of path.
@@ -75,9 +79,29 @@
 - `roundEnergy(v)` — 2 decimal places (kWh).
 - `roundPower(v)` — 1 decimal place (watts/SOC).
 
+## Note Endpoint
+
+- `PUT /note` is the only mutating endpoint; bearer auth runs centrally in `Handle` before routing.
+- Body cap (4 KB) applies to the decoded body. When `IsBase64Encoded` is true the raw base64 body is gated against `base64.StdEncoding.EncodedLen(4096)` first to avoid allocating a too-large decode buffer; the same 4 KB cap is then applied to the decoded bytes before JSON parsing.
+- Date is parsed in Sydney TZ (`time.ParseInLocation("2006-01-02", ...)`) and rejected if later than today's Sydney midnight. Server is the authoritative clock per design Decision 8.
+- Grapheme count uses `graphemeCountNormalised` over the already-normalised text — a single NFC + trim pass plus one `uniseg.GraphemeClusterCount`.
+- Empty text after normalisation maps to `DeleteNote(serial, date)` (idempotent — DynamoDB DeleteItem succeeds for missing keys with no precondition).
+- Successful upsert returns `noteResponse{date, text, updatedAt}` with a server-generated RFC3339 UTC `updatedAt`. Successful delete returns `{date, text:"", updatedAt:null}`.
+- `isJSONContentType` uses `mime.ParseMediaType` — accepts `application/json` and `application/json; charset=utf-8`; rejects everything else with 415.
+
+## Notes Bundling on Read Endpoints
+
+- `/status` bundles `today`'s note via `fetchNoteAsync(ctx, ...)`.
+- `/day` bundles the requested date's note via `fetchNoteAsync(ctx, ...)`.
+- `/history` bundles per-day notes via `fetchNotesAsync(ctx, ...)` over `[startDate, today]`. Results are joined onto each `DayEnergy` by exact date string.
+- All three pass the parent `ctx`, not `gctx`. Rationale above. The errgroup goroutines retain `gctx` so they still cancel each other on first error.
+- Failure isolation: a notes-side failure logs `slog.Warn` and yields nil/empty; the response is still 200 with `note: null` (or `null` per day for /history).
+
 ## Dependencies
 
 - `golang.org/x/sync/errgroup` — used by status endpoint for concurrent DynamoDB queries.
+- `golang.org/x/text/unicode/norm` — NFC normalisation in `notetext.go`.
+- `github.com/rivo/uniseg` — grapheme cluster counting in `notetext.go`.
 
 ## Mock Reader
 

@@ -18,6 +18,8 @@ type Reader interface {
 	GetDailyEnergy(ctx context.Context, serial, date string) (*DailyEnergyItem, error)
 	QueryDailyEnergy(ctx context.Context, serial, startDate, endDate string) ([]DailyEnergyItem, error)
 	QueryDailyPower(ctx context.Context, serial, date string) ([]DailyPowerItem, error)
+	GetNote(ctx context.Context, serial, date string) (*NoteItem, error)
+	QueryNotes(ctx context.Context, serial, startDate, endDate string) ([]NoteItem, error)
 }
 
 // ReadAPI is the subset of the DynamoDB client used by DynamoReader.
@@ -120,6 +122,28 @@ func (r *DynamoReader) QueryOffpeak(ctx context.Context, serial, startDate, endD
 
 func (r *DynamoReader) QueryDailyEnergy(ctx context.Context, serial, startDate, endDate string) ([]DailyEnergyItem, error) {
 	return queryAll[DailyEnergyItem](ctx, r.client, r.tables.DailyEnergy, "daily energy",
+		"sysSn = :serial AND #d BETWEEN :start AND :end",
+		map[string]string{"#d": "date"},
+		map[string]types.AttributeValue{
+			":serial": &types.AttributeValueMemberS{Value: serial},
+			":start":  &types.AttributeValueMemberS{Value: startDate},
+			":end":    &types.AttributeValueMemberS{Value: endDate},
+		},
+	)
+}
+
+func (r *DynamoReader) GetNote(ctx context.Context, serial, date string) (*NoteItem, error) {
+	return getItem[NoteItem](ctx, r.client, r.tables.Notes,
+		map[string]types.AttributeValue{
+			"sysSn": &types.AttributeValueMemberS{Value: serial},
+			"date":  &types.AttributeValueMemberS{Value: date},
+		},
+		fmt.Sprintf("note (table=%s, sysSn=%s, date=%s)", r.tables.Notes, serial, date),
+	)
+}
+
+func (r *DynamoReader) QueryNotes(ctx context.Context, serial, startDate, endDate string) ([]NoteItem, error) {
+	return queryAll[NoteItem](ctx, r.client, r.tables.Notes, "notes",
 		"sysSn = :serial AND #d BETWEEN :start AND :end",
 		map[string]string{"#d": "date"},
 		map[string]types.AttributeValue{

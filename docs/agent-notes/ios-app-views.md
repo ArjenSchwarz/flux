@@ -24,7 +24,9 @@
 - **PowerChartView** — AreaMark for solar (green), LineMark for load, colored areas for grid import/export.
 - **BatteryPowerChartView** — LineMark with negated pbat, RuleMark at zero line.
 - **DayChartDomain** — 14-line helper computing consistent 00:00–00:00 Sydney time domain for all charts. Prevents cross-chart domain inconsistencies.
-- **DayDetailView** — Chevron navigation (previous/next day). `.task(id: viewModel.date)` triggers reload on date change. Power charts hidden when `!hasPowerData`. Auth/config errors show settings CTA.
+- **DayDetailView** — Chevron navigation (previous/next day). `.task(id: viewModel.date)` triggers reload on date change. Power charts hidden when `!hasPowerData`. Auth/config errors show settings CTA. Note row sits at top of VStack: tappable when note exists, "Add note" button when nil and date ≤ today Sydney, EmptyView for future dates.
+- **NoteRowView** — Read-only note row shared across Dashboard, History, Day Detail. Returns `EmptyView` when `text` is nil/empty so callers place it unconditionally.
+- **NoteEditorSheet** — Sheet-presented `NavigationStack` with `TextEditor`, remaining-character counter, Cancel/Save toolbar. Save dismisses on success; failure keeps sheet open with error message.
 
 ## Settings Views (Settings/)
 

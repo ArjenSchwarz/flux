@@ -188,6 +188,10 @@ private actor MockSettingsAPIClient: FluxAPIClient {
     func fetchDay(date _: String) async throws -> DayDetailResponse {
         throw FluxAPIError.notConfigured
     }
+
+    func saveNote(date _: String, text _: String) async throws -> NoteResponse {
+        throw FluxAPIError.notConfigured
+    }
 }
 
 private final class CaptureBox: @unchecked Sendable {

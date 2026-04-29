@@ -277,6 +277,125 @@ struct URLSessionAPIClientTests {
     }
 
     @Test
+    func saveNoteSendsPutRequestWithBearerAndJSONBody() async throws {
+        let session = makeSession()
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: try #require(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            let body = """
+            {
+              "date": "2026-04-15",
+              "text": "off-grid afternoon",
+              "updatedAt": "2026-04-15T03:30:00Z"
+            }
+            """
+            return (response, Data(body.utf8))
+        }
+
+        let client = URLSessionAPIClient(
+            baseURL: URL(string: "https://example.com")!,
+            token: "abc123",
+            session: session
+        )
+        let response = try await client.saveNote(date: "2026-04-15", text: "off-grid afternoon")
+
+        let request = try #require(MockURLProtocol.lastRequest)
+        let requestURL = try #require(request.url)
+        let components = try #require(URLComponents(url: requestURL, resolvingAgainstBaseURL: false))
+        #expect(request.httpMethod == "PUT")
+        #expect(components.path == "/note")
+        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer abc123")
+        #expect(request.value(forHTTPHeaderField: "Content-Type") == "application/json")
+
+        let bodyData = try #require(MockURLProtocol.lastRequestBody)
+        let payload = try #require(try JSONSerialization.jsonObject(with: bodyData) as? [String: String])
+        #expect(payload["date"] == "2026-04-15")
+        #expect(payload["text"] == "off-grid afternoon")
+
+        #expect(response.date == "2026-04-15")
+        #expect(response.text == "off-grid afternoon")
+        #expect(response.updatedAt == "2026-04-15T03:30:00Z")
+    }
+
+    @Test
+    func saveNoteMapsServerErrorsToFluxAPIError() async throws {
+        let session = makeSession()
+        let client = URLSessionAPIClient(
+            baseURL: URL(string: "https://example.com")!,
+            token: "token",
+            session: session
+        )
+
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: try #require(request.url),
+                statusCode: 400,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (response, Data(#"{"error":"note must be 200 characters or fewer"}"#.utf8))
+        }
+        do {
+            _ = try await client.saveNote(date: "2026-04-15", text: "x")
+            Issue.record("Expected badRequest error")
+        } catch let error as FluxAPIError {
+            #expect(error == .badRequest("note must be 200 characters or fewer"))
+        }
+
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: try #require(request.url),
+                statusCode: 401,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (response, Data())
+        }
+        do {
+            _ = try await client.saveNote(date: "2026-04-15", text: "x")
+            Issue.record("Expected unauthorized error")
+        } catch let error as FluxAPIError {
+            #expect(error == .unauthorized)
+        }
+
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: try #require(request.url),
+                statusCode: 413,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (response, Data())
+        }
+        do {
+            _ = try await client.saveNote(date: "2026-04-15", text: "x")
+            Issue.record("Expected unexpectedStatus 413")
+        } catch let error as FluxAPIError {
+            #expect(error == .unexpectedStatus(413))
+        }
+
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: try #require(request.url),
+                statusCode: 415,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (response, Data())
+        }
+        do {
+            _ = try await client.saveNote(date: "2026-04-15", text: "x")
+            Issue.record("Expected unexpectedStatus 415")
+        } catch let error as FluxAPIError {
+            #expect(error == .unexpectedStatus(415))
+        }
+    }
+
+    @Test
     func validationInitializerUsesExplicitToken() async throws {
         let session = makeSession()
         let keychain = KeychainService(
@@ -329,6 +448,7 @@ private final class MockURLProtocol: URLProtocol {
     private static let lock = NSLock()
     private static var _requestHandler: (@Sendable (URLRequest) throws -> (HTTPURLResponse, Data))?
     private static var _lastRequest: URLRequest?
+    private static var _lastRequestBody: Data?
 
     static var requestHandler: (@Sendable (URLRequest) throws -> (HTTPURLResponse, Data))? {
         get {
@@ -340,6 +460,7 @@ private final class MockURLProtocol: URLProtocol {
             lock.lock()
             _requestHandler = newValue
             _lastRequest = nil
+            _lastRequestBody = nil
             lock.unlock()
         }
     }
@@ -355,6 +476,12 @@ private final class MockURLProtocol: URLProtocol {
             _lastRequest = newValue
             lock.unlock()
         }
+    }
+
+    static var lastRequestBody: Data? {
+        lock.lock()
+        defer { lock.unlock() }
+        return _lastRequestBody
     }
 
     // swiftlint:disable:next static_over_final_class
@@ -374,6 +501,17 @@ private final class MockURLProtocol: URLProtocol {
         }
 
         Self.lastRequest = request
+        // URLProtocol captures the body on httpBodyStream rather than httpBody;
+        // drain the stream so tests can assert payload contents.
+        if let stream = request.httpBodyStream {
+            Self.lock.lock()
+            Self._lastRequestBody = MockURLProtocol.readAll(from: stream)
+            Self.lock.unlock()
+        } else if let body = request.httpBody {
+            Self.lock.lock()
+            Self._lastRequestBody = body
+            Self.lock.unlock()
+        }
 
         do {
             let (response, data) = try handler(request)
@@ -383,6 +521,19 @@ private final class MockURLProtocol: URLProtocol {
         } catch {
             client?.urlProtocol(self, didFailWithError: error)
         }
+    }
+
+    private static func readAll(from stream: InputStream) -> Data {
+        stream.open()
+        defer { stream.close() }
+        var buffer = [UInt8](repeating: 0, count: 4096)
+        var data = Data()
+        while stream.hasBytesAvailable {
+            let read = stream.read(&buffer, maxLength: buffer.count)
+            if read <= 0 { break }
+            data.append(buffer, count: read)
+        }
+        return data
     }
 
     override func stopLoading() {}

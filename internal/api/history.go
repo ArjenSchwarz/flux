@@ -69,10 +69,20 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 		return nil
 	})
 
+	// Notes read runs alongside the errgroup so a failure logs and leaves
+	// the per-day note field nil instead of cancelling the core queries.
+	// Uses the parent ctx (not gctx) so the notes read isn't aborted when
+	// g.Wait returns successfully — gctx is cancelled on Wait completion,
+	// which would race a still-in-flight QueryNotes and yield a spurious
+	// empty map.
+	waitNotes := fetchNotesAsync(ctx, h.reader, "history", h.serial, startDate, today)
+
 	if err := g.Wait(); err != nil {
+		waitNotes()
 		slog.Error("history query failed", "error", err)
 		return errorResponse(500, "internal error")
 	}
+	notesByDate := waitNotes()
 
 	var todayComputed *TodayEnergy
 	if len(allReadings) > 0 {
@@ -112,6 +122,10 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 				day.OffpeakGridImportKwh = floatPtr(imp)
 				day.OffpeakGridExportKwh = floatPtr(exp)
 			}
+		}
+		if note, ok := notesByDate[item.Date]; ok {
+			n := note
+			day.Note = &n
 		}
 		result[i] = day
 	}

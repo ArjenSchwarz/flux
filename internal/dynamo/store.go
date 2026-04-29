@@ -22,4 +22,5 @@ type TableNames struct {
 	DailyPower  string
 	System      string
 	Offpeak     string
+	Notes       string
 }

@@ -54,7 +54,7 @@ func TestHandleDayNormalCase(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, testSerial, testToken, "11:00", "14:00")
+	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
 	// Pin "now" to a date later than the requested one so the request is for a
 	// past day (deterministic across test machines).
 	h.nowFunc = func() time.Time { return fixedNow() }
@@ -109,7 +109,7 @@ func TestHandleDayDailyUsageOvercast(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, testSerial, testToken, "11:00", "14:00")
+	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
 	h.nowFunc = func() time.Time { return fixedNow() }
 
 	resp, err := h.Handle(context.Background(), dayRequest(map[string]string{"date": date}))
@@ -154,7 +154,7 @@ func TestHandleDayFallbackToDailyPower(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, testSerial, testToken, "11:00", "14:00")
+	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
 
 	resp, err := h.Handle(context.Background(), dayRequest(map[string]string{"date": date}))
 	require.NoError(t, err)
@@ -208,7 +208,7 @@ func TestHandleDayOnlyDailyEnergySocLowIsNull(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, testSerial, testToken, "11:00", "14:00")
+	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
 
 	resp, err := h.Handle(context.Background(), dayRequest(map[string]string{"date": "2026-04-14"}))
 	require.NoError(t, err)
@@ -234,7 +234,7 @@ func TestHandleDayNoDataFromEitherSource(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, testSerial, testToken, "11:00", "14:00")
+	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
 
 	resp, err := h.Handle(context.Background(), dayRequest(map[string]string{"date": "2026-04-14"}))
 	require.NoError(t, err)
@@ -265,7 +265,7 @@ func TestHandleDayReadingsButNoDailyEnergy(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, testSerial, testToken, "11:00", "14:00")
+	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
 
 	resp, err := h.Handle(context.Background(), dayRequest(map[string]string{"date": date}))
 	require.NoError(t, err)
@@ -312,7 +312,7 @@ func TestHandleDayPeakPeriods(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, testSerial, testToken, "11:00", "14:00")
+	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
 
 	resp, err := h.Handle(context.Background(), dayRequest(map[string]string{"date": date}))
 	require.NoError(t, err)
@@ -338,7 +338,7 @@ func TestHandleDayDateValidation(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			h := NewHandler(&mockReader{}, testSerial, testToken, "11:00", "14:00")
+			h := NewHandler(&mockReader{}, nil, testSerial, testToken, "11:00", "14:00")
 
 			resp, err := h.Handle(context.Background(), dayRequest(tc.params))
 			require.NoError(t, err)
@@ -369,7 +369,7 @@ func TestHandleDaySocLowFromRawNotDownsampled(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, testSerial, testToken, "11:00", "14:00")
+	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
 
 	resp, err := h.Handle(context.Background(), dayRequest(map[string]string{"date": date}))
 	require.NoError(t, err)
@@ -411,7 +411,7 @@ func TestHandleDayTodayReconcilesEnergy(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, testSerial, testToken, "11:00", "14:00")
+	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), dayRequest(map[string]string{"date": date}))
@@ -453,7 +453,7 @@ func TestHandleDayPastDateDoesNotReconcile(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, testSerial, testToken, "11:00", "14:00")
+	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), dayRequest(map[string]string{"date": pastDate}))
@@ -465,6 +465,62 @@ func TestHandleDayPastDateDoesNotReconcile(t *testing.T) {
 	assert.Equal(t, 0.05, *dr.Summary.Epv, "past dates use stored totals directly")
 	assert.Equal(t, 0.05, *dr.Summary.EInput)
 	assert.Equal(t, 0.05, *dr.Summary.EDischarge)
+}
+
+func TestHandleDayBundlesNote(t *testing.T) {
+	date := "2026-04-14"
+
+	t.Run("populated note for requested date", func(t *testing.T) {
+		mr := &mockReader{
+			getNoteFn: func(_ context.Context, _, d string) (*dynamo.NoteItem, error) {
+				assert.Equal(t, date, d, "/day reads the requested date")
+				return &dynamo.NoteItem{Date: d, Text: "Quiet day", UpdatedAt: "2026-04-14T01:00:00Z"}, nil
+			},
+		}
+		h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+		h.nowFunc = func() time.Time { return fixedNow() }
+
+		resp, err := h.Handle(context.Background(), dayRequest(map[string]string{"date": date}))
+		require.NoError(t, err)
+		require.Equal(t, 200, resp.StatusCode)
+
+		dr := parseDayResponse(t, resp)
+		require.NotNil(t, dr.Note)
+		assert.Equal(t, "Quiet day", *dr.Note)
+	})
+
+	t.Run("absent note serialises as null", func(t *testing.T) {
+		mr := &mockReader{
+			getNoteFn: func(_ context.Context, _, _ string) (*dynamo.NoteItem, error) { return nil, nil },
+		}
+		h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+		h.nowFunc = func() time.Time { return fixedNow() }
+
+		resp, err := h.Handle(context.Background(), dayRequest(map[string]string{"date": date}))
+		require.NoError(t, err)
+
+		var raw map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal([]byte(resp.Body), &raw))
+		require.Contains(t, raw, "note")
+		assert.Equal(t, "null", string(raw["note"]))
+	})
+
+	t.Run("note read failure leaves field nil and request 200", func(t *testing.T) {
+		mr := &mockReader{
+			getNoteFn: func(_ context.Context, _, _ string) (*dynamo.NoteItem, error) {
+				return nil, errors.New("throttled")
+			},
+		}
+		h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+		h.nowFunc = func() time.Time { return fixedNow() }
+
+		resp, err := h.Handle(context.Background(), dayRequest(map[string]string{"date": date}))
+		require.NoError(t, err)
+		assert.Equal(t, 200, resp.StatusCode, "/day must not 500 when only the note read fails")
+
+		dr := parseDayResponse(t, resp)
+		assert.Nil(t, dr.Note)
+	})
 }
 
 func TestHandleDayDynamoDBError(t *testing.T) {
@@ -491,7 +547,7 @@ func TestHandleDayDynamoDBError(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			h := NewHandler(tc.mock, testSerial, testToken, "11:00", "14:00")
+			h := NewHandler(tc.mock, nil, testSerial, testToken, "11:00", "14:00")
 
 			resp, err := h.Handle(context.Background(), dayRequest(map[string]string{"date": "2026-04-14"}))
 			require.NoError(t, err)

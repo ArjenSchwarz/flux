@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"log/slog"
+	"net/http"
 	"strings"
 	"time"
 
@@ -12,9 +13,17 @@ import (
 	"github.com/aws/aws-lambda-go/events"
 )
 
+// NoteWriter is the api-package-local view of the dynamo writer the handler
+// needs. Declared here so tests mock without importing dynamo internals.
+type NoteWriter interface {
+	PutNote(ctx context.Context, item dynamo.NoteItem) error
+	DeleteNote(ctx context.Context, serial, date string) error
+}
+
 // Handler processes Lambda Function URL requests with auth and routing.
 type Handler struct {
 	reader       dynamo.Reader
+	notes        NoteWriter
 	serial       string
 	apiToken     string
 	offpeakStart string
@@ -24,10 +33,12 @@ type Handler struct {
 	nowFunc func() time.Time
 }
 
-// NewHandler creates a Handler with all dependencies injected.
-func NewHandler(reader dynamo.Reader, serial, apiToken, offpeakStart, offpeakEnd string) *Handler {
+// NewHandler creates a Handler with all dependencies injected. Pass a nil
+// notes writer in tests that don't exercise the write endpoint.
+func NewHandler(reader dynamo.Reader, notes NoteWriter, serial, apiToken, offpeakStart, offpeakEnd string) *Handler {
 	return &Handler{
 		reader:       reader,
+		notes:        notes,
 		serial:       serial,
 		apiToken:     apiToken,
 		offpeakStart: offpeakStart,
@@ -60,26 +71,39 @@ func (h *Handler) Handle(ctx context.Context, req events.LambdaFunctionURLReques
 
 // handle contains the core logic, separated from Handle to simplify logging.
 func (h *Handler) handle(ctx context.Context, req events.LambdaFunctionURLRequest) events.LambdaFunctionURLResponse {
-	if req.RequestContext.HTTP.Method != "GET" {
-		resp := errorResponse(405, "method not allowed")
-		resp.Headers["Allow"] = "GET"
-		return resp
-	}
-
 	if !h.validToken(req.Headers["authorization"]) {
 		return errorResponse(401, "unauthorized")
 	}
 
-	switch req.RawPath {
-	case "/status":
-		return h.handleStatus(ctx, req)
-	case "/history":
-		return h.handleHistory(ctx, req)
-	case "/day":
-		return h.handleDay(ctx, req)
-	default:
-		return errorResponse(404, "not found")
+	method := req.RequestContext.HTTP.Method
+	switch method {
+	case http.MethodGet:
+		switch req.RawPath {
+		case "/status":
+			return h.handleStatus(ctx, req)
+		case "/history":
+			return h.handleHistory(ctx, req)
+		case "/day":
+			return h.handleDay(ctx, req)
+		}
+	case http.MethodPut:
+		if req.RawPath == "/note" {
+			return h.handleNote(ctx, req)
+		}
 	}
+
+	// Unknown method on a known path → 405 with the path's allowed methods.
+	allow := http.MethodGet
+	if req.RawPath == "/note" {
+		allow = http.MethodPut
+	}
+	switch req.RawPath {
+	case "/status", "/history", "/day", "/note":
+		resp := errorResponse(405, "method not allowed")
+		resp.Headers["Allow"] = allow
+		return resp
+	}
+	return errorResponse(404, "not found")
 }
 
 // validToken checks the Authorization header using constant-time comparison.

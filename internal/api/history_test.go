@@ -47,7 +47,7 @@ func TestHandleHistoryDefaultDays(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, testSerial, testToken, "11:00", "14:00")
+	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), historyRequest(nil))
@@ -82,7 +82,7 @@ func TestHandleHistoryExplicitDays(t *testing.T) {
 				},
 			}
 
-			h := NewHandler(mr, testSerial, testToken, "11:00", "14:00")
+			h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
 			h.nowFunc = func() time.Time { return now }
 
 			resp, err := h.Handle(context.Background(), historyRequest(map[string]string{"days": tc.days}))
@@ -107,7 +107,7 @@ func TestHandleHistoryInvalidDays(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			h := NewHandler(&mockReader{}, testSerial, testToken, "11:00", "14:00")
+			h := NewHandler(&mockReader{}, nil, testSerial, testToken, "11:00", "14:00")
 			h.nowFunc = func() time.Time { return now }
 
 			resp, err := h.Handle(context.Background(), historyRequest(map[string]string{"days": tc.days}))
@@ -129,7 +129,7 @@ func TestHandleHistoryNoData(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, testSerial, testToken, "11:00", "14:00")
+	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), historyRequest(nil))
@@ -153,7 +153,7 @@ func TestHandleHistoryAscendingOrder(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, testSerial, testToken, "11:00", "14:00")
+	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), historyRequest(nil))
@@ -176,7 +176,7 @@ func TestHandleHistoryEnergyRounding(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, testSerial, testToken, "11:00", "14:00")
+	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), historyRequest(nil))
@@ -218,7 +218,7 @@ func TestHandleHistoryReconcilesTodaysRow(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, testSerial, testToken, "11:00", "14:00")
+	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), historyRequest(nil))
@@ -281,7 +281,7 @@ func TestHandleHistoryOffpeakSplit(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, testSerial, testToken, "11:00", "14:00")
+	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), historyRequest(nil))
@@ -334,7 +334,7 @@ func TestHandleHistoryDynamoDBError(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			now := fixedNow()
-			h := NewHandler(tc.mock, testSerial, testToken, "11:00", "14:00")
+			h := NewHandler(tc.mock, nil, testSerial, testToken, "11:00", "14:00")
 			h.nowFunc = func() time.Time { return now }
 
 			resp, err := h.Handle(context.Background(), historyRequest(nil))
@@ -346,6 +346,100 @@ func TestHandleHistoryDynamoDBError(t *testing.T) {
 			assert.Equal(t, "internal error", body["error"])
 		})
 	}
+}
+
+func TestHandleHistoryBundlesNotes(t *testing.T) {
+	now := fixedNow()
+	today := now.Format("2006-01-02")
+	yesterday := now.AddDate(0, 0, -1).Format("2006-01-02")
+	twoDaysAgo := now.AddDate(0, 0, -2).Format("2006-01-02")
+	rangeStart := now.AddDate(0, 0, -6).Format("2006-01-02")
+
+	dailyEnergy := []dynamo.DailyEnergyItem{
+		{Date: twoDaysAgo, Epv: 10},
+		{Date: yesterday, Epv: 11},
+		{Date: today, Epv: 12},
+	}
+
+	t.Run("notes joined onto correct day, others null", func(t *testing.T) {
+		mr := &mockReader{
+			queryDailyEnergyFn: func(_ context.Context, _, _, _ string) ([]dynamo.DailyEnergyItem, error) {
+				return dailyEnergy, nil
+			},
+			queryNotesFn: func(_ context.Context, _, start, end string) ([]dynamo.NoteItem, error) {
+				assert.Equal(t, rangeStart, start, "history queries notes from start of requested window")
+				assert.Equal(t, today, end, "history queries notes up to today")
+				return []dynamo.NoteItem{
+					{Date: yesterday, Text: "Quiet"},
+					{Date: today, Text: "Busy"},
+				}, nil
+			},
+		}
+		h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+		h.nowFunc = func() time.Time { return now }
+
+		resp, err := h.Handle(context.Background(), historyRequest(nil))
+		require.NoError(t, err)
+		require.Equal(t, 200, resp.StatusCode)
+
+		hr := parseHistoryResponse(t, resp)
+		require.Len(t, hr.Days, 3)
+
+		assert.Nil(t, hr.Days[0].Note, "two days ago has no note")
+		require.NotNil(t, hr.Days[1].Note)
+		assert.Equal(t, "Quiet", *hr.Days[1].Note)
+		require.NotNil(t, hr.Days[2].Note)
+		assert.Equal(t, "Busy", *hr.Days[2].Note)
+	})
+
+	t.Run("absent notes serialise as null", func(t *testing.T) {
+		mr := &mockReader{
+			queryDailyEnergyFn: func(_ context.Context, _, _, _ string) ([]dynamo.DailyEnergyItem, error) {
+				return dailyEnergy, nil
+			},
+			queryNotesFn: func(_ context.Context, _, _, _ string) ([]dynamo.NoteItem, error) {
+				return []dynamo.NoteItem{}, nil
+			},
+		}
+		h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+		h.nowFunc = func() time.Time { return now }
+
+		resp, err := h.Handle(context.Background(), historyRequest(nil))
+		require.NoError(t, err)
+
+		var raw struct {
+			Days []map[string]json.RawMessage `json:"days"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(resp.Body), &raw))
+		require.Len(t, raw.Days, 3)
+		for i, day := range raw.Days {
+			require.Contains(t, day, "note", "day %d must always serialise note field", i)
+			assert.Equal(t, "null", string(day["note"]), "day %d note should be null", i)
+		}
+	})
+
+	t.Run("notes read failure leaves all notes nil and request 200", func(t *testing.T) {
+		mr := &mockReader{
+			queryDailyEnergyFn: func(_ context.Context, _, _, _ string) ([]dynamo.DailyEnergyItem, error) {
+				return dailyEnergy, nil
+			},
+			queryNotesFn: func(_ context.Context, _, _, _ string) ([]dynamo.NoteItem, error) {
+				return nil, errors.New("throttled")
+			},
+		}
+		h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+		h.nowFunc = func() time.Time { return now }
+
+		resp, err := h.Handle(context.Background(), historyRequest(nil))
+		require.NoError(t, err)
+		assert.Equal(t, 200, resp.StatusCode, "/history must not 500 when only the notes read fails")
+
+		hr := parseHistoryResponse(t, resp)
+		require.Len(t, hr.Days, 3)
+		for i, day := range hr.Days {
+			assert.Nil(t, day.Note, "day %d note should be nil after failure", i)
+		}
+	})
 }
 
 // TestHandleHistoryOffpeakSoftFailure verifies that an off-peak query
@@ -366,7 +460,7 @@ func TestHandleHistoryOffpeakSoftFailure(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, testSerial, testToken, "11:00", "14:00")
+	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), historyRequest(nil))

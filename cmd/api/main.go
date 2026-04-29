@@ -21,6 +21,7 @@ import (
 // config holds all resolved configuration for the Lambda.
 type config struct {
 	reader       dynamo.Reader
+	notes        api.NoteWriter
 	apiToken     string
 	serial       string
 	offpeakStart string
@@ -34,6 +35,7 @@ var requiredEnvVars = []string{
 	"TABLE_DAILY_POWER",
 	"TABLE_SYSTEM",
 	"TABLE_OFFPEAK",
+	"TABLE_NOTES",
 	"OFFPEAK_START",
 	"OFFPEAK_END",
 	"API_TOKEN_PARAM",
@@ -50,7 +52,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	handler := api.NewHandler(cfg.reader, cfg.serial, cfg.apiToken, cfg.offpeakStart, cfg.offpeakEnd)
+	handler := api.NewHandler(cfg.reader, cfg.notes, cfg.serial, cfg.apiToken, cfg.offpeakStart, cfg.offpeakEnd)
 	lambda.Start(handler.Handle)
 }
 
@@ -82,7 +84,9 @@ func loadConfig(ctx context.Context) (*config, error) {
 		return nil, fmt.Errorf("load serial: %w", err)
 	}
 
-	// Create DynamoDB reader.
+	// Create DynamoDB reader and note writer. The single client satisfies
+	// both ReadAPI and WriteAPI at compile time; there is no actual coupling
+	// between the read and write paths.
 	ddbClient := dynamodb.NewFromConfig(awsCfg)
 	reader := dynamo.NewDynamoReader(ddbClient, dynamo.TableNames{
 		Readings:    os.Getenv("TABLE_READINGS"),
@@ -90,10 +94,13 @@ func loadConfig(ctx context.Context) (*config, error) {
 		DailyPower:  os.Getenv("TABLE_DAILY_POWER"),
 		System:      os.Getenv("TABLE_SYSTEM"),
 		Offpeak:     os.Getenv("TABLE_OFFPEAK"),
+		Notes:       os.Getenv("TABLE_NOTES"),
 	})
+	notes := dynamo.NewDynamoNoteWriter(ddbClient, os.Getenv("TABLE_NOTES"))
 
 	return &config{
 		reader:       reader,
+		notes:        notes,
 		apiToken:     apiToken,
 		serial:       serial,
 		offpeakStart: os.Getenv("OFFPEAK_START"),

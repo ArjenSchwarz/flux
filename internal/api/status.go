@@ -54,10 +54,20 @@ func (h *Handler) handleStatus(ctx context.Context, _ events.LambdaFunctionURLRe
 		return err
 	})
 
+	// Note read runs alongside the errgroup so a note-read failure logs and
+	// leaves the field nil instead of cancelling the core queries (design
+	// §Read-side failure isolation). Uses the parent ctx (not gctx) so the
+	// note read isn't aborted when g.Wait returns successfully — gctx is
+	// cancelled on Wait completion, which would race a still-in-flight
+	// GetNote and yield a spurious nil.
+	waitNote := fetchNoteAsync(ctx, h.reader, "status", h.serial, today)
+
 	if err := g.Wait(); err != nil {
+		waitNote()
 		slog.Error("status query failed", "error", err)
 		return errorResponse(500, "internal error")
 	}
+	noteText := waitNote()
 
 	// Phase 2: in-memory computation — no I/O.
 	resp := &StatusResponse{}
@@ -158,6 +168,7 @@ func (h *Handler) handleStatus(ctx context.Context, _ events.LambdaFunctionURLRe
 	// dashboard never lags the underlying counter and never reports a
 	// number lower than the snapshot baseline.
 	resp.Offpeak = buildOffpeak(opItem, resp.TodayEnergy, h.offpeakStart, h.offpeakEnd)
+	resp.Note = noteText
 
 	return jsonResponse(resp)
 }

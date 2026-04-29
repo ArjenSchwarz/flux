@@ -77,6 +77,7 @@ final class HistoryViewModel {
                 cached.eDischarge = day.eDischarge
                 cached.offpeakGridImportKwh = day.offpeakGridImportKwh
                 cached.offpeakGridExportKwh = day.offpeakGridExportKwh
+                cached.note = day.note
             } else {
                 let newCachedDay = CachedDayEnergy(from: day)
                 modelContext.insert(newCachedDay)

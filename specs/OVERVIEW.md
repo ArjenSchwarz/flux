@@ -12,6 +12,7 @@
 | [History Multi Card](#history-multi-card) | 2026-04-26 | Done | History screen rewrite: solar / grid (peak vs off-peak) / battery cards with shared selection. |
 | [Evening / Night Stats](#evening--night-stats) | 2026-04-26 | Done | Day detail card showing usage during the no-solar evening (sunset → midnight) and night (midnight → sunrise) periods. |
 | [Peak Usage Stats](#peak-usage-stats) | 2026-04-27 | Done | Day detail card replacing Evening/Night with five chronological load blocks (Night, Morning Peak, Off-Peak, Afternoon Peak, Evening). |
+| [Day Notes](#day-notes) | 2026-04-28 | Done | Per-date free-text note (≤200 graphemes) shared across users; new `flux-notes` DynamoDB table and PUT /note endpoint; rendered on Dashboard, History, Day Detail; edited only on Day Detail. |
 
 ---
 
@@ -112,3 +113,12 @@ Day detail card replacing Evening/Night with five chronological load blocks (Nig
 - [design.md](peak-usage-stats/design.md)
 - [requirements.md](peak-usage-stats/requirements.md)
 - [tasks.md](peak-usage-stats/tasks.md)
+
+## Day Notes
+
+Per-date free-text note (≤200 graphemes after NFC + trim) shared across users. Adds the Lambda's first write endpoint (`PUT /note`) and a new `flux-notes` DynamoDB table with PITR. Notes bundled into `/status`, `/history`, `/day` responses; rendered read-only on Dashboard (today) and History (selected day); editable on Day Detail.
+
+- [decision_log.md](day-notes/decision_log.md)
+- [design.md](day-notes/design.md)
+- [requirements.md](day-notes/requirements.md)
+- [tasks.md](day-notes/tasks.md)
