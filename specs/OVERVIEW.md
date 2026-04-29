@@ -13,7 +13,7 @@
 | [Evening / Night Stats](#evening--night-stats) | 2026-04-26 | Done | Day detail card showing usage during the no-solar evening (sunset → midnight) and night (midnight → sunrise) periods. |
 | [Peak Usage Stats](#peak-usage-stats) | 2026-04-27 | Done | Day detail card replacing Evening/Night with five chronological load blocks (Night, Morning Peak, Off-Peak, Afternoon Peak, Evening). |
 | [Day Notes](#day-notes) | 2026-04-28 | Done | Per-date free-text note (≤200 graphemes) shared across users; new `flux-notes` DynamoDB table and PUT /note endpoint; rendered on Dashboard, History, Day Detail; edited only on Day Detail. |
-| [Daily Derived Stats](#daily-derived-stats) | 2026-04-29 | Planned | Pre-compute three reading-derived per-day stats (`findDailyUsage`, `findMinSOC`, `findPeakPeriods`) in the poller hourly against yesterday; persist on `flux-daily-energy` via UpdateItem; `/day` and `/history` read storage for past dates, live-compute for today. Unblocks history-daily-usage (T-1022). |
+| [Daily Derived Stats](#daily-derived-stats) | 2026-04-29 | Done | Pre-compute three reading-derived per-day stats (`findDailyUsage`, `findMinSOC`, `findPeakPeriods`) in the poller hourly against yesterday; persist on `flux-daily-energy` via UpdateItem; `/day` and `/history` read storage for past dates, live-compute for today. Unblocks history-daily-usage (T-1022). |
 
 ---
 

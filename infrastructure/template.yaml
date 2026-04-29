@@ -201,6 +201,25 @@ Resources:
                   - !GetAtt DailyPowerTable.Arn
                   - !GetAtt SystemTable.Arn
                   - !GetAtt OffpeakTable.Arn
+        # daily-derived-stats spec, AC 1.11 / 7.3 + Decision 3.
+        # UpdateItem on DailyEnergyTable is also covered by FluxTaskPolicy
+        # above; declared again here so the derivedStats writer's IAM
+        # surface is colocated with the CloudWatch grant it ships with.
+        # PutMetricData has no resource-level permissions, so Resource
+        # is "*" scoped by the cloudwatch:namespace condition.
+        - PolicyName: DerivedStatsWritePolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: dynamodb:UpdateItem
+                Resource: !GetAtt DailyEnergyTable.Arn
+              - Effect: Allow
+                Action: cloudwatch:PutMetricData
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    cloudwatch:namespace: Flux/Poller
 
   LambdaExecutionRole:
     Type: AWS::IAM::Role

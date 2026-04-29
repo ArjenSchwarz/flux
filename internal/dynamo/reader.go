@@ -167,9 +167,15 @@ func (r *DynamoReader) QueryDailyPower(ctx context.Context, serial, date string)
 
 // queryAll executes a paginated DynamoDB Query and collects all results.
 // All queries use ScanIndexForward: true (ascending sort key order).
+//
+// Accepts any client that exposes Query, so both DynamoReader (Lambda) and
+// DynamoStore (poller) can share this helper without needing a common
+// interface that bundles read and write methods together.
 func queryAll[T any](
 	ctx context.Context,
-	client ReadAPI,
+	client interface {
+		Query(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error)
+	},
 	table, desc string,
 	keyCondition string,
 	exprNames map[string]string,

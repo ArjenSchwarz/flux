@@ -1,6 +1,8 @@
 // Package api implements the Lambda API request handling and business logic.
 package api
 
+import "github.com/ArjenSchwarz/flux/internal/derivedstats"
+
 // StatusResponse is the JSON response for GET /status.
 type StatusResponse struct {
 	Live        *LiveData    `json:"live"`
@@ -80,79 +82,62 @@ type HistoryResponse struct {
 // OffpeakGridImportKwh and OffpeakGridExportKwh are populated when an
 // off-peak record exists for the date; they let clients separate intentional
 // off-peak imports from peak imports.
+//
+// DailyUsage, SocLow, SocLowTime and PeakPeriods are the per-day derived
+// stats added by the daily-derived-stats spec; absent when not yet computed
+// (pre-feature row, summarisation pending, or today readings query failed).
 type DayEnergy struct {
-	Date                 string   `json:"date"`
-	Epv                  float64  `json:"epv"`
-	EInput               float64  `json:"eInput"`
-	EOutput              float64  `json:"eOutput"`
-	ECharge              float64  `json:"eCharge"`
-	EDischarge           float64  `json:"eDischarge"`
-	OffpeakGridImportKwh *float64 `json:"offpeakGridImportKwh,omitempty"`
-	OffpeakGridExportKwh *float64 `json:"offpeakGridExportKwh,omitempty"`
-	Note                 *string  `json:"note"`
+	Date                 string                    `json:"date"`
+	Epv                  float64                   `json:"epv"`
+	EInput               float64                   `json:"eInput"`
+	EOutput              float64                   `json:"eOutput"`
+	ECharge              float64                   `json:"eCharge"`
+	EDischarge           float64                   `json:"eDischarge"`
+	OffpeakGridImportKwh *float64                  `json:"offpeakGridImportKwh,omitempty"`
+	OffpeakGridExportKwh *float64                  `json:"offpeakGridExportKwh,omitempty"`
+	DailyUsage           *derivedstats.DailyUsage  `json:"dailyUsage,omitempty"`
+	SocLow               *float64                  `json:"socLow,omitempty"`
+	SocLowTime           *string                   `json:"socLowTime,omitempty"`
+	PeakPeriods          []derivedstats.PeakPeriod `json:"peakPeriods,omitempty"`
+	Note                 *string                   `json:"note"`
 }
 
-// PeakPeriod represents a contiguous period of high household load.
-type PeakPeriod struct {
-	Start    string  `json:"start"`    // RFC 3339
-	End      string  `json:"end"`      // RFC 3339
-	AvgLoadW float64 `json:"avgLoadW"` // average Pload, rounded to 1 decimal
-	EnergyWh float64 `json:"energyWh"` // total energy, rounded to whole number
-}
+// PeakPeriod is the wire-side alias for derivedstats.PeakPeriod, kept for
+// backwards source compatibility with consumers that import the type by its
+// historical name.
+type PeakPeriod = derivedstats.PeakPeriod
+
+// DailyUsage is the wire-side alias for derivedstats.DailyUsage.
+type DailyUsage = derivedstats.DailyUsage
+
+// DailyUsageBlock is the wire-side alias for derivedstats.DailyUsageBlock.
+type DailyUsageBlock = derivedstats.DailyUsageBlock
 
 // DayDetailResponse is the JSON response for GET /day.
 type DayDetailResponse struct {
-	Date        string            `json:"date"`
-	Readings    []TimeSeriesPoint `json:"readings"`
-	Summary     *DaySummary       `json:"summary"`
-	PeakPeriods []PeakPeriod      `json:"peakPeriods"`
-	DailyUsage  *DailyUsage       `json:"dailyUsage,omitempty"`
-	Note        *string           `json:"note"`
+	Date        string                    `json:"date"`
+	Readings    []TimeSeriesPoint         `json:"readings"`
+	Summary     *DaySummary               `json:"summary"`
+	PeakPeriods []derivedstats.PeakPeriod `json:"peakPeriods"`
+	DailyUsage  *derivedstats.DailyUsage  `json:"dailyUsage,omitempty"`
+	Note        *string                   `json:"note"`
 }
 
-// Status, boundary-source, and kind values for a DailyUsageBlock. Defined as
-// constants so producers, consumers, and tests share a single source of
-// truth, mirroring the `OffpeakStatus*` convention in internal/dynamo.
+// Status, boundary-source, and kind values for a DailyUsageBlock. Aliased to
+// the canonical constants in derivedstats so producers, consumers, and tests
+// share a single source of truth.
 const (
-	DailyUsageStatusComplete    = "complete"
-	DailyUsageStatusInProgress  = "in-progress"
-	DailyUsageBoundaryReadings  = "readings"
-	DailyUsageBoundaryEstimated = "estimated"
+	DailyUsageStatusComplete    = derivedstats.DailyUsageStatusComplete
+	DailyUsageStatusInProgress  = derivedstats.DailyUsageStatusInProgress
+	DailyUsageBoundaryReadings  = derivedstats.DailyUsageBoundaryReadings
+	DailyUsageBoundaryEstimated = derivedstats.DailyUsageBoundaryEstimated
 
-	DailyUsageKindNight         = "night"
-	DailyUsageKindMorningPeak   = "morningPeak"
-	DailyUsageKindOffPeak       = "offPeak"
-	DailyUsageKindAfternoonPeak = "afternoonPeak"
-	DailyUsageKindEvening       = "evening"
+	DailyUsageKindNight         = derivedstats.DailyUsageKindNight
+	DailyUsageKindMorningPeak   = derivedstats.DailyUsageKindMorningPeak
+	DailyUsageKindOffPeak       = derivedstats.DailyUsageKindOffPeak
+	DailyUsageKindAfternoonPeak = derivedstats.DailyUsageKindAfternoonPeak
+	DailyUsageKindEvening       = derivedstats.DailyUsageKindEvening
 )
-
-// DailyUsage groups the chronological no-overlap usage blocks (night,
-// morningPeak, offPeak, afternoonPeak, evening) for a single calendar date.
-// Blocks is ordered chronologically by Start and contains at most five
-// entries; consumers identify each block by its Kind.
-type DailyUsage struct {
-	Blocks []DailyUsageBlock `json:"blocks"`
-}
-
-// DailyUsageBlock describes one chronological slice of a calendar day.
-//
-// Start and End are RFC 3339 timestamps in UTC. AverageKwhPerHour is omitted
-// when the elapsed duration is shorter than 60 seconds. Status is one of
-// "complete" or "in-progress"; BoundarySource is "readings" when the
-// emitted boundaries came from real data (readings, SSM-configured off-peak
-// times, calendar midnight, or in-progress request-time clamping) or
-// "estimated" when at least one emitted boundary was filled from the
-// Melbourne sunrise/sunset table.
-type DailyUsageBlock struct {
-	Kind              string   `json:"kind"`
-	Start             string   `json:"start"`
-	End               string   `json:"end"`
-	TotalKwh          float64  `json:"totalKwh"`
-	AverageKwhPerHour *float64 `json:"averageKwhPerHour,omitempty"`
-	PercentOfDay      int      `json:"percentOfDay"`
-	Status            string   `json:"status"`
-	BoundarySource    string   `json:"boundarySource"`
-}
 
 // TimeSeriesPoint is a single downsampled reading in the day detail response.
 type TimeSeriesPoint struct {

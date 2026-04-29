@@ -17,6 +17,8 @@ type mockDynamoAPI struct {
 	putItemFn        func(ctx context.Context, params *dynamodb.PutItemInput) (*dynamodb.PutItemOutput, error)
 	deleteItemFn     func(ctx context.Context, params *dynamodb.DeleteItemInput) (*dynamodb.DeleteItemOutput, error)
 	getItemFn        func(ctx context.Context, params *dynamodb.GetItemInput) (*dynamodb.GetItemOutput, error)
+	updateItemFn     func(ctx context.Context, params *dynamodb.UpdateItemInput) (*dynamodb.UpdateItemOutput, error)
+	queryFn          func(ctx context.Context, params *dynamodb.QueryInput) (*dynamodb.QueryOutput, error)
 	batchWriteItemFn func(ctx context.Context, params *dynamodb.BatchWriteItemInput) (*dynamodb.BatchWriteItemOutput, error)
 }
 
@@ -39,6 +41,20 @@ func (m *mockDynamoAPI) GetItem(ctx context.Context, params *dynamodb.GetItemInp
 		return m.getItemFn(ctx, params)
 	}
 	return &dynamodb.GetItemOutput{}, nil
+}
+
+func (m *mockDynamoAPI) UpdateItem(ctx context.Context, params *dynamodb.UpdateItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error) {
+	if m.updateItemFn != nil {
+		return m.updateItemFn(ctx, params)
+	}
+	return &dynamodb.UpdateItemOutput{}, nil
+}
+
+func (m *mockDynamoAPI) Query(ctx context.Context, params *dynamodb.QueryInput, _ ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
+	if m.queryFn != nil {
+		return m.queryFn(ctx, params)
+	}
+	return &dynamodb.QueryOutput{}, nil
 }
 
 func (m *mockDynamoAPI) BatchWriteItem(ctx context.Context, params *dynamodb.BatchWriteItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.BatchWriteItemOutput, error) {
@@ -100,25 +116,25 @@ func TestDynamoStore_WriteReading(t *testing.T) {
 
 func TestDynamoStore_WriteDailyEnergy(t *testing.T) {
 	tests := map[string]struct {
-		item    DailyEnergyItem
-		putErr  error
-		wantErr string
+		item      DailyEnergyItem
+		updateErr error
+		wantErr   string
 	}{
 		"success": {
 			item: DailyEnergyItem{SysSn: "AB1234", Date: "2026-04-13", Epv: 12.5},
 		},
-		"put error wraps context": {
-			item:    DailyEnergyItem{SysSn: "AB1234", Date: "2026-04-13"},
-			putErr:  errors.New("throttled"),
-			wantErr: "put daily energy (sysSn=AB1234, date=2026-04-13) (table=test-daily-energy)",
+		"update error wraps context": {
+			item:      DailyEnergyItem{SysSn: "AB1234", Date: "2026-04-13"},
+			updateErr: errors.New("throttled"),
+			wantErr:   "update daily energy (sysSn=AB1234, date=2026-04-13) (table=test-daily-energy)",
 		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			mock := &mockDynamoAPI{
-				putItemFn: func(_ context.Context, _ *dynamodb.PutItemInput) (*dynamodb.PutItemOutput, error) {
-					return &dynamodb.PutItemOutput{}, tc.putErr
+				updateItemFn: func(_ context.Context, _ *dynamodb.UpdateItemInput) (*dynamodb.UpdateItemOutput, error) {
+					return &dynamodb.UpdateItemOutput{}, tc.updateErr
 				},
 			}
 			store := NewDynamoStore(mock, testTables())

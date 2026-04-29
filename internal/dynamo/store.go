@@ -13,6 +13,15 @@ type Store interface {
 	WriteOffpeak(ctx context.Context, item OffpeakItem) error
 	DeleteOffpeak(ctx context.Context, serial, date string) error
 	GetOffpeak(ctx context.Context, serial, date string) (*OffpeakItem, error)
+
+	// daily-derived-stats spec — summarisation-pass write path.
+	GetDailyEnergy(ctx context.Context, serial, date string) (*DailyEnergyItem, error)
+	UpdateDailyEnergyDerived(ctx context.Context, serial, date string, stats DerivedStats) error
+	// QueryReadings is needed by the poller summarisation pass to fetch the
+	// day's readings. The Lambda Reader interface already exposes the same
+	// method against a separate ReadAPI client; the poller's Store interface
+	// gets it here so the pass can reuse the existing DynamoDB client.
+	QueryReadings(ctx context.Context, serial string, from, to int64) ([]ReadingItem, error)
 }
 
 // TableNames holds the DynamoDB table names, loaded from environment variables.

@@ -63,19 +63,25 @@ func (m *mockClient) GetEssList(_ context.Context, _ string) (*alphaess.SystemIn
 // --- Mock store ---
 
 type mockStore struct {
-	writeReadingErr     error
-	writeDailyEnergyErr error
-	writeDailyPowerErr  error
-	writeSystemErr      error
-	writeOffpeakErr     error
-	deleteOffpeakErr    error
-	getOffpeakResult    *dynamo.OffpeakItem
-	getOffpeakErr       error
+	writeReadingErr             error
+	writeDailyEnergyErr         error
+	writeDailyPowerErr          error
+	writeSystemErr              error
+	writeOffpeakErr             error
+	deleteOffpeakErr            error
+	getOffpeakResult            *dynamo.OffpeakItem
+	getOffpeakErr               error
+	getDailyEnergyResult        *dynamo.DailyEnergyItem
+	getDailyEnergyErr           error
+	updateDailyEnergyDerivedErr error
+	queryReadingsResult         []dynamo.ReadingItem
+	queryReadingsErr            error
 
 	readingsWritten    int
 	dailyEnergyWritten int
 	dailyPowerWritten  int
 	systemWritten      int
+	derivedUpdates     int
 }
 
 func (m *mockStore) WriteReading(_ context.Context, _ dynamo.ReadingItem) error {
@@ -108,6 +114,19 @@ func (m *mockStore) DeleteOffpeak(_ context.Context, _, _ string) error {
 
 func (m *mockStore) GetOffpeak(_ context.Context, _, _ string) (*dynamo.OffpeakItem, error) {
 	return m.getOffpeakResult, m.getOffpeakErr
+}
+
+func (m *mockStore) GetDailyEnergy(_ context.Context, _, _ string) (*dynamo.DailyEnergyItem, error) {
+	return m.getDailyEnergyResult, m.getDailyEnergyErr
+}
+
+func (m *mockStore) UpdateDailyEnergyDerived(_ context.Context, _, _ string, _ dynamo.DerivedStats) error {
+	m.derivedUpdates++
+	return m.updateDailyEnergyDerivedErr
+}
+
+func (m *mockStore) QueryReadings(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
+	return m.queryReadingsResult, m.queryReadingsErr
 }
 
 // --- Helpers ---

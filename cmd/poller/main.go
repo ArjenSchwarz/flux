@@ -12,6 +12,7 @@ import (
 	_ "time/tzdata" // Embed timezone data for distroless containers.
 
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 
 	"github.com/ArjenSchwarz/flux/internal/alphaess"
@@ -53,6 +54,18 @@ func main() {
 
 	// Run poller (blocks until ctx is cancelled).
 	p := poller.New(client, store, cfg)
+
+	// CloudWatch metrics for the daily-derived-stats summarisation pass.
+	// Dry-run keeps the no-op variant set by poller.New.
+	if !cfg.DryRun {
+		awsCfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(cfg.AWSRegion))
+		if err != nil {
+			slog.Error("load AWS config for cloudwatch", "error", err)
+			os.Exit(1)
+		}
+		p.SetMetrics(poller.NewMetrics(cloudwatch.NewFromConfig(awsCfg)))
+	}
+
 	if err := p.Run(ctx); err != nil {
 		slog.Error("poller stopped with error", "error", err)
 		os.Exit(1)

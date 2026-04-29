@@ -22,7 +22,7 @@
 // The decision log entry on table generation documents why the tool itself
 // is not committed.
 
-package api
+package derivedstats
 
 var melbourneSunLocal = map[string]struct {
 	riseLocal string // "HH:MM" wall-clock in sydneyTZ

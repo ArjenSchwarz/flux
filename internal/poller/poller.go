@@ -17,6 +17,7 @@ const (
 	livePollInterval     = 10 * time.Second
 	dailyPowerInterval   = 1 * time.Hour
 	dailyEnergyInterval  = 1 * time.Hour
+	dailySummaryInterval = 1 * time.Hour
 	systemInfoInterval   = 24 * time.Hour
 	shutdownDrainTimeout = 25 * time.Second
 	dateLayout           = "2006-01-02"
@@ -36,16 +37,37 @@ type Poller struct {
 	store   dynamo.Store
 	cfg     *config.Config
 	offpeak *OffpeakScheduler
+	metrics MetricsRecorder
 
 	// now returns the current time. Injectable for deterministic testing.
 	now func() time.Time
+
+	// lastDerivedForTest captures the last DerivedStats payload built by
+	// runSummarisationPass, so unit tests can assert idempotence / shape
+	// without round-tripping through a fake DynamoDB. Production code never
+	// reads this field.
+	lastDerivedForTest *dynamo.DerivedStats
 }
 
-// New creates a Poller with the given dependencies.
+// New creates a Poller with the given dependencies. The metrics recorder
+// defaults to NoopMetrics; production code overwrites it via the SetMetrics
+// helper after constructing a CloudWatch client.
 func New(client APIClient, store dynamo.Store, cfg *config.Config) *Poller {
-	p := &Poller{client: client, store: store, cfg: cfg, now: time.Now}
+	p := &Poller{
+		client:  client,
+		store:   store,
+		cfg:     cfg,
+		now:     time.Now,
+		metrics: NoopMetrics{},
+	}
 	p.offpeak = NewOffpeakScheduler(client, store, cfg)
 	return p
+}
+
+// SetMetrics overrides the metrics recorder. Used by cmd/poller to inject a
+// real CloudWatch client; tests inject a fake. Safe to call before Run.
+func (p *Poller) SetMetrics(m MetricsRecorder) {
+	p.metrics = m
 }
 
 // Run starts all polling goroutines and blocks until ctx is cancelled.
@@ -56,12 +78,13 @@ func (p *Poller) Run(ctx context.Context) error {
 	defer drainCancel()
 
 	var wg sync.WaitGroup
-	wg.Add(5)
+	wg.Add(6)
 	go p.pollLiveData(ctx, drainCtx, &wg)
 	go p.pollDailyPower(ctx, drainCtx, &wg)
 	go p.pollDailyEnergy(ctx, drainCtx, &wg)
 	go p.pollSystemInfo(ctx, drainCtx, &wg)
 	go p.offpeak.Run(ctx, drainCtx, &wg)
+	go p.pollDailySummary(ctx, drainCtx, &wg)
 
 	<-ctx.Done()
 	slog.Info("poller stopping")

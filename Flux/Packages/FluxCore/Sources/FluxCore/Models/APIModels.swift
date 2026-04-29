@@ -1,5 +1,6 @@
 import Foundation
 
+// swiftlint:disable file_length
 // MARK: - /status response
 
 public struct StatusResponse: Codable, Sendable {
@@ -182,6 +183,17 @@ public struct DayEnergy: Codable, Sendable, Identifiable {
     public let offpeakGridExportKwh: Double?
     public let note: String?
 
+    // Derived per-day stats, populated by the daily-derived-stats backend pass
+    // for completed dates and live-computed for today. Optional because
+    // pre-feature rows and rows that have not yet been summarised lack them.
+    // The `socLow` / `socLowTime` fields are flat on `DayEnergy` to match the
+    // `/history` wire shape (see daily-derived-stats design "Wire shape note");
+    // `/day` continues to surface the same values via `DaySummary`.
+    public let dailyUsage: DailyUsage?
+    public let socLow: Double?
+    public let socLowTime: String?
+    public let peakPeriods: [PeakPeriod]?
+
     public var id: String { date }
 
     /// Grid imports outside the off-peak window, derived by subtracting the
@@ -202,7 +214,11 @@ public struct DayEnergy: Codable, Sendable, Identifiable {
         eDischarge: Double,
         offpeakGridImportKwh: Double? = nil,
         offpeakGridExportKwh: Double? = nil,
-        note: String? = nil
+        note: String? = nil,
+        dailyUsage: DailyUsage? = nil,
+        socLow: Double? = nil,
+        socLowTime: String? = nil,
+        peakPeriods: [PeakPeriod]? = nil
     ) {
         self.date = date
         self.epv = epv
@@ -213,6 +229,10 @@ public struct DayEnergy: Codable, Sendable, Identifiable {
         self.offpeakGridImportKwh = offpeakGridImportKwh
         self.offpeakGridExportKwh = offpeakGridExportKwh
         self.note = note
+        self.dailyUsage = dailyUsage
+        self.socLow = socLow
+        self.socLowTime = socLowTime
+        self.peakPeriods = peakPeriods
     }
 }
 
@@ -400,3 +420,4 @@ public struct APIErrorResponse: Codable, Sendable {
         self.error = error
     }
 }
+// swiftlint:enable file_length
