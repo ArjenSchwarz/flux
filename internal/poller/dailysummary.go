@@ -31,6 +31,13 @@ func (p *Poller) summariseYesterday(ctx context.Context) {
 // returns the metric dimension value. Side-effects only: logs at info / warn
 // / error and writes derivedStats via Store.UpdateDailyEnergyDerived. Never
 // panics.
+//
+// The precheck (step 1) and write (step 5) form a read-then-write with no
+// DynamoDB ConditionExpression. Decision 8 accepts the TOCTOU window because
+// the ECS service runs at desiredCount=1 (concurrent passes cannot occur in
+// production) and the writes are idempotent — a duplicate pass would write
+// field-equivalent data. If the deployment topology ever scales out, add an
+// `attribute_not_exists(derivedStatsComputedAt)` condition to the write.
 func (p *Poller) runSummarisationPass(ctx context.Context, date string) string {
 	// 1. Precheck (AC 1.10) — sentinel attribute presence is the only signal.
 	item, err := p.store.GetDailyEnergy(ctx, p.cfg.Serial, date)

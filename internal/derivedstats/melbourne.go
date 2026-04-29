@@ -4,7 +4,9 @@ import "time"
 
 // sydneyTZ is the Australia/Sydney timezone used for all date-based
 // operations. Loaded once at package init to avoid repeated lookups and
-// silent error discarding.
+// silent error discarding. The Go runtime embeds time/tzdata since 1.21
+// and both binaries are built with CGO_DISABLED, so the panic is a
+// documented assertion rather than a realistic runtime path.
 var sydneyTZ = func() *time.Location {
 	loc, err := time.LoadLocation("Australia/Sydney")
 	if err != nil {
