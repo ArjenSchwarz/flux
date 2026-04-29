@@ -40,7 +40,7 @@ func fetchNotesAsync(ctx context.Context, reader dynamo.Reader, label, serial, s
 		items, err := reader.QueryNotes(ctx, serial, startDate, endDate)
 		if err != nil {
 			slog.Warn(label+" notes query failed; continuing without notes", "error", err)
-			done <- nil
+			done <- map[string]string{}
 			return
 		}
 		out := make(map[string]string, len(items))
