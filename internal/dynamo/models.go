@@ -27,6 +27,12 @@ type ReadingItem struct {
 }
 
 // DailyEnergyItem represents a row in the flux-daily-energy table.
+//
+// The DailyUsage / SocLow / PeakPeriods / DerivedStatsComputedAt fields are
+// populated by the poller's hourly summarisation pass (daily-derived-stats
+// spec). They are optional: pre-feature rows and rows whose pass has not
+// yet completed deserialise with these fields set to their zero value
+// (nil for pointers/slices, empty string for the sentinel).
 type DailyEnergyItem struct {
 	SysSn       string  `dynamodbav:"sysSn"`
 	Date        string  `dynamodbav:"date"`
@@ -36,6 +42,54 @@ type DailyEnergyItem struct {
 	ECharge     float64 `dynamodbav:"eCharge"`
 	EDischarge  float64 `dynamodbav:"eDischarge"`
 	EGridCharge float64 `dynamodbav:"eGridCharge"`
+
+	DailyUsage             *DailyUsageAttr  `dynamodbav:"dailyUsage,omitempty"`
+	SocLow                 *SocLowAttr      `dynamodbav:"socLow,omitempty"`
+	PeakPeriods            []PeakPeriodAttr `dynamodbav:"peakPeriods,omitempty"`
+	DerivedStatsComputedAt string           `dynamodbav:"derivedStatsComputedAt,omitempty"`
+}
+
+// DailyUsageAttr is the storage shape for derivedstats.DailyUsage.
+type DailyUsageAttr struct {
+	Blocks []DailyUsageBlockAttr `dynamodbav:"blocks"`
+}
+
+// DailyUsageBlockAttr is the storage shape for derivedstats.DailyUsageBlock.
+type DailyUsageBlockAttr struct {
+	Kind              string   `dynamodbav:"kind"`
+	Start             string   `dynamodbav:"start"`
+	End               string   `dynamodbav:"end"`
+	TotalKwh          float64  `dynamodbav:"totalKwh"`
+	AverageKwhPerHour *float64 `dynamodbav:"averageKwhPerHour,omitempty"`
+	PercentOfDay      int      `dynamodbav:"percentOfDay"`
+	Status            string   `dynamodbav:"status"`
+	BoundarySource    string   `dynamodbav:"boundarySource"`
+}
+
+// SocLowAttr is the storage shape for the day's lowest SOC reading. The
+// timestamp is RFC3339 UTC at write time (one int64 → string conversion in
+// the poller; readers re-publish the string as-is).
+type SocLowAttr struct {
+	Soc       float64 `dynamodbav:"soc"`
+	Timestamp string  `dynamodbav:"timestamp"`
+}
+
+// PeakPeriodAttr is the storage shape for derivedstats.PeakPeriod.
+type PeakPeriodAttr struct {
+	Start    string  `dynamodbav:"start"`
+	End      string  `dynamodbav:"end"`
+	AvgLoadW float64 `dynamodbav:"avgLoadW"`
+	EnergyWh float64 `dynamodbav:"energyWh"`
+}
+
+// DerivedStats bundles the four attributes the summarisation pass writes in a
+// single UpdateItem call. Lives in the dynamo package (not poller) per
+// Decision 9 — it is a storage-write argument, not a poller-only concept.
+type DerivedStats struct {
+	DailyUsage             *DailyUsageAttr
+	SocLow                 *SocLowAttr
+	PeakPeriods            []PeakPeriodAttr
+	DerivedStatsComputedAt string
 }
 
 // DailyPowerItem represents a row in the flux-daily-power table.

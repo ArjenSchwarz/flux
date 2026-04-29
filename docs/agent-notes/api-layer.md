@@ -14,12 +14,12 @@
 - `notetext.go` — `normalise(string) string` (NFC + leading/trailing whitespace trim) and `graphemeCountNormalised(string) int` (uses `rivo/uniseg`). Single source of truth for the grapheme-cap rule shared with the iOS client via `internal/api/testdata/note_lengths.json`.
 - `notes_fetch.go` — Helpers `fetchNoteAsync` / `fetchNotesAsync` that run a `GetNote` / `QueryNotes` in a goroutine and return a wait closure. Used by `/status`, `/day`, `/history` to bundle notes without coupling them to the core errgroup — a notes-table failure logs `slog.Warn` and yields nil instead of cancelling siblings. The handlers pass the parent `ctx` (not `gctx`) so the note read isn't aborted when `g.Wait()` returns successfully (gctx is cancelled on Wait completion). On the 500 path the handlers still call `waitNote()` to drain the goroutine before returning.
 - `response.go` — JSON response structs for all four endpoints (`StatusResponse`, `HistoryResponse`, `DayDetailResponse`, `noteResponse` plus their nested types). Uses pointer types (`*float64`, `*string`) for nullable fields. `Note *string` fields on `StatusResponse`, `DayEnergy`, and `DayDetailResponse` are NOT `omitempty` — absent must serialise as `null` so iOS Codable parsing is unambiguous.
-- `compute.go` — Pure business logic functions with no DynamoDB dependency.
+- `compute.go` — Pure business logic functions with no DynamoDB dependency. Reading-derived per-day stats (`findDailyUsage`, `findMinSOC`, `findPeakPeriods`, `integratePload`, `melbourneSunriseSunset`, `parseOffpeakWindow`, the Melbourne sunrise/sunset table, and the `DailyUsage`/`DailyUsageBlock`/`PeakPeriod` types) live in `internal/derivedstats` (extracted by the daily-derived-stats spec). `internal/api` re-exports the type names via type aliases so the wire shape and existing test imports stay stable. Conversion at call sites: `toDerivedReadings([]dynamo.ReadingItem) []derivedstats.Reading` (one helper per call site by design — Decision 9 in `specs/daily-derived-stats/decision_log.md`).
 - `handler_test.go` — Tests for method validation, auth, auth-before-routing, routing, and error response format. Also defines `mockReader` and shared test helpers.
 - `status_test.go` — Tests for all /status scenarios: all data present, no readings, offpeak pending/complete, no today energy, system missing/zero cobat fallback, DynamoDB errors, single now capture.
 - `history_test.go` — Tests for default/explicit days, invalid days, no data, ascending order, rounding, DynamoDB errors.
 - `day_test.go` — Tests for normal case, fallback to daily power, no data, readings without energy, date validation, socLow from raw data, DynamoDB errors.
-- `compute_test.go` — Table-driven tests using `map[string]struct` pattern.
+- `compute_test.go` — Table-driven tests using `map[string]struct` pattern. Reading-derived per-day stat tests (Blocks/MinSOC/PeakPeriods, Melbourne sun table, integratePload) live in `internal/derivedstats/*_test.go` after the daily-derived-stats extraction.
 
 ## Handler
 
@@ -114,7 +114,7 @@
 - Status tests inject `nowFunc` to control time capture.
 - `TestHandleStatusSingleNowCapture` verifies nowFunc is called exactly once.
 - `cmd/api/main_test.go` tests `loadConfig` missing-env-var validation path.
-- `compute_test.go` includes benchmarks: `BenchmarkDownsample` (8640 readings) and `BenchmarkComputePgridSustained` (360 readings).
+- `compute_test.go` includes benchmarks: `BenchmarkDownsample` (8640 readings) and `BenchmarkComputePgridSustained` (360 readings). Tests for the moved `findDailyUsage`/`findMinSOC`/`findPeakPeriods` helpers now live in `internal/derivedstats/{blocks,socmin,peakperiods,integrate,melbourne}_test.go`.
 - golangci-lint has a version mismatch (built with Go 1.25, project targets 1.26) — not related to API code.
 
 ## Known Issues

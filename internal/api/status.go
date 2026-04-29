@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/ArjenSchwarz/flux/internal/derivedstats"
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
 	"github.com/aws/aws-lambda-go/events"
 	"golang.org/x/sync/errgroup"
@@ -115,7 +116,7 @@ func (h *Handler) handleStatus(ctx context.Context, _ events.LambdaFunctionURLRe
 		}
 	}
 
-	if soc, ts, found := findMinSOC(allReadings); found {
+	if soc, ts, found := derivedstats.MinSOC(toDerivedReadings(allReadings)); found {
 		battery.Low24h = &Low24h{
 			Soc:       roundPower(soc),
 			Timestamp: time.Unix(ts, 0).UTC().Format(time.RFC3339),

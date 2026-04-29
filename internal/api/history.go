@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/ArjenSchwarz/flux/internal/derivedstats"
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
 	"github.com/aws/aws-lambda-go/events"
 	"golang.org/x/sync/errgroup"
@@ -30,14 +31,13 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 
 	startDate := now.AddDate(0, 0, -(days - 1)).Format("2006-01-02")
 
-	// Fetch daily energy rows, today's readings, and per-day off-peak rows
-	// concurrently. Today's row is reconciled against a live integration so
-	// it matches the dashboard's /status view; past rows are already
-	// finalized and pass through unchanged. Off-peak rows are joined by date
-	// to expose the peak vs. off-peak grid split.
+	// Fetch daily energy rows and per-day off-peak rows concurrently. The
+	// today readings query (used by both energy reconciliation and live
+	// derivedStats compute) runs on a separate goroutine: per AC 4.9 a
+	// failure there must NOT fail the whole request, so it stays out of the
+	// errgroup that gates the other queries.
 	var (
 		items        []dynamo.DailyEnergyItem
-		allReadings  []dynamo.ReadingItem
 		offpeakItems []dynamo.OffpeakItem
 	)
 
@@ -45,14 +45,6 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 	g.Go(func() error {
 		result, err := h.reader.QueryDailyEnergy(gctx, h.serial, startDate, today)
 		items = result
-		return err
-	})
-	g.Go(func() error {
-		// 24h window in Unix seconds; computeTodayEnergy filters to
-		// >= midnight Sydney, so any pre-midnight readings are discarded.
-		nowUnix := now.Unix()
-		result, err := h.reader.QueryReadings(gctx, h.serial, nowUnix-86400, nowUnix)
-		allReadings = result
 		return err
 	})
 	g.Go(func() error {
@@ -69,6 +61,21 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 		return nil
 	})
 
+	// Today readings: read on a sibling goroutine so a failure stays
+	// isolated from the gated queries above (AC 4.9). The 24-hour window in
+	// Unix seconds; computeTodayEnergy filters to >= midnight Sydney, so any
+	// pre-midnight readings are discarded.
+	type readingsResult struct {
+		readings []dynamo.ReadingItem
+		err      error
+	}
+	readingsCh := make(chan readingsResult, 1)
+	go func() {
+		nowUnix := now.Unix()
+		r, err := h.reader.QueryReadings(ctx, h.serial, nowUnix-86400, nowUnix)
+		readingsCh <- readingsResult{readings: r, err: err}
+	}()
+
 	// Notes read runs alongside the errgroup so a failure logs and leaves
 	// the per-day note field nil instead of cancelling the core queries.
 	// Uses the parent ctx (not gctx) so the notes read isn't aborted when
@@ -78,22 +85,46 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 	waitNotes := fetchNotesAsync(ctx, h.reader, "history", h.serial, startDate, today)
 
 	if err := g.Wait(); err != nil {
+		<-readingsCh // drain so the goroutine doesn't leak
 		waitNotes()
 		slog.Error("history query failed", "error", err)
 		return errorResponse(500, "internal error")
 	}
 	notesByDate := waitNotes()
+	rr := <-readingsCh
+	allReadings := rr.readings
+	if rr.err != nil {
+		// AC 4.9: log and proceed; the today row will skip live derivedStats
+		// and energy reconciliation but still serve its stored energy totals.
+		slog.Warn("history today readings query failed; today row served without live compute", "error", rr.err)
+		allReadings = nil
+	}
 
 	var todayComputed *TodayEnergy
+	var todayReadings []dynamo.ReadingItem
 	if len(allReadings) > 0 {
 		midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, sydneyTZ).Unix()
 		todayComputed = computeTodayEnergy(allReadings, midnight)
+		// PeakPeriods/MinSOC have no date-boundary filter, so trim the 24h
+		// sliding window to >= midnight Sydney before live-compute. Without
+		// this, yesterday's afternoon peak could leak into today's
+		// peakPeriods on /history (Blocks is safe — its integration is
+		// bounded by date).
+		for _, r := range allReadings {
+			if r.Timestamp >= midnight {
+				todayReadings = append(todayReadings, r)
+			}
+		}
 	}
 
 	offpeakByDate := make(map[string]dynamo.OffpeakItem, len(offpeakItems))
 	for _, op := range offpeakItems {
 		offpeakByDate[op.Date] = op
 	}
+
+	// Today's live-compute readings (lazy: only computed once if needed,
+	// and only when allReadings is non-empty).
+	var todayDerivedReadings []derivedstats.Reading
 
 	result := make([]DayEnergy, len(items))
 	for i, item := range items {
@@ -104,8 +135,9 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 			ECharge:    roundEnergy(item.ECharge),
 			EDischarge: roundEnergy(item.EDischarge),
 		}
+		isItemToday := item.Date == today
 		energy := stored
-		if item.Date == today {
+		if isItemToday {
 			energy = reconcileEnergy(todayComputed, stored)
 		}
 		day := DayEnergy{
@@ -117,7 +149,7 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 			EDischarge: energy.EDischarge,
 		}
 		if op, ok := offpeakByDate[item.Date]; ok {
-			imp, exp, hasSplit := offpeakSplit(op, energy, item.Date == today)
+			imp, exp, hasSplit := offpeakSplit(op, energy, isItemToday)
 			if hasSplit {
 				day.OffpeakGridImportKwh = floatPtr(imp)
 				day.OffpeakGridExportKwh = floatPtr(exp)
@@ -127,6 +159,36 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 			n := note
 			day.Note = &n
 		}
+
+		// derivedStats: storage for past rows, live compute for today.
+		if !isItemToday {
+			day.DailyUsage = dynamo.DailyUsageFromAttr(item.DailyUsage)
+			day.PeakPeriods = dynamo.PeakPeriodsFromAttr(item.PeakPeriods)
+			if item.SocLow != nil {
+				sl := item.SocLow.Soc
+				day.SocLow = &sl
+				slt := item.SocLow.Timestamp
+				day.SocLowTime = &slt
+			}
+		} else if len(todayReadings) > 0 {
+			// AC 4.3: live-compute against the same readings slice already
+			// loaded for energy reconciliation, trimmed to today.
+			if todayDerivedReadings == nil {
+				todayDerivedReadings = toDerivedReadings(todayReadings)
+			}
+			day.DailyUsage = derivedstats.Blocks(todayDerivedReadings, h.offpeakStart, h.offpeakEnd, today, today, now)
+			day.PeakPeriods = derivedstats.PeakPeriods(todayDerivedReadings, h.offpeakStart, h.offpeakEnd)
+			if soc, ts, found := derivedstats.MinSOC(todayDerivedReadings); found {
+				slv := soc
+				day.SocLow = &slv
+				slt := time.Unix(ts, 0).UTC().Format(time.RFC3339)
+				day.SocLowTime = &slt
+			}
+		}
+		// AC 4.9: when isItemToday but allReadings is nil (readings query
+		// failed) or todayReadings is empty (no post-midnight data yet),
+		// derivedStats remain absent on the today row by design.
+
 		result[i] = day
 	}
 

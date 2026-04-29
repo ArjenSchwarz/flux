@@ -312,40 +312,25 @@ func TestHandleHistoryOffpeakSplit(t *testing.T) {
 }
 
 func TestHandleHistoryDynamoDBError(t *testing.T) {
-	tests := map[string]struct {
-		mock *mockReader
-	}{
-		"daily energy error": {
-			mock: &mockReader{
-				queryDailyEnergyFn: func(_ context.Context, _, _, _ string) ([]dynamo.DailyEnergyItem, error) {
-					return nil, errors.New("throttled")
-				},
-			},
-		},
-		"readings error": {
-			mock: &mockReader{
-				queryReadingsFn: func(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
-					return nil, errors.New("throttled")
-				},
-			},
+	// Daily energy errors are still gating: no fallback. Readings errors
+	// are tolerated per AC 4.9 — that case is exercised in
+	// TestHandleHistory_TodayReadingsQueryFailure_AC4_9.
+	mock := &mockReader{
+		queryDailyEnergyFn: func(_ context.Context, _, _, _ string) ([]dynamo.DailyEnergyItem, error) {
+			return nil, errors.New("throttled")
 		},
 	}
+	now := fixedNow()
+	h := NewHandler(mock, nil, testSerial, testToken, "11:00", "14:00")
+	h.nowFunc = func() time.Time { return now }
 
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			now := fixedNow()
-			h := NewHandler(tc.mock, nil, testSerial, testToken, "11:00", "14:00")
-			h.nowFunc = func() time.Time { return now }
+	resp, err := h.Handle(context.Background(), historyRequest(nil))
+	require.NoError(t, err)
+	assert.Equal(t, 500, resp.StatusCode)
 
-			resp, err := h.Handle(context.Background(), historyRequest(nil))
-			require.NoError(t, err)
-			assert.Equal(t, 500, resp.StatusCode)
-
-			var body map[string]string
-			require.NoError(t, json.Unmarshal([]byte(resp.Body), &body))
-			assert.Equal(t, "internal error", body["error"])
-		})
-	}
+	var body map[string]string
+	require.NoError(t, json.Unmarshal([]byte(resp.Body), &body))
+	assert.Equal(t, "internal error", body["error"])
 }
 
 func TestHandleHistoryBundlesNotes(t *testing.T) {

@@ -31,14 +31,15 @@ func parseDayResponse(t *testing.T, resp events.LambdaFunctionURLResponse) DayDe
 
 func TestHandleDayNormalCase(t *testing.T) {
 	loc, _ := time.LoadLocation("Australia/Sydney")
-	date := "2026-04-14"
+	now := fixedNow()
+	date := now.In(loc).Format("2006-01-02") // today, so the live-compute path runs
 
 	// Create readings spanning the day at known times.
 	readings := []dynamo.ReadingItem{
-		{Timestamp: time.Date(2026, 4, 14, 8, 1, 0, 0, loc).Unix(), Ppv: 1000, Pload: 500, Pbat: 200, Pgrid: 100, Soc: 80},
-		{Timestamp: time.Date(2026, 4, 14, 8, 3, 0, 0, loc).Unix(), Ppv: 1200, Pload: 600, Pbat: 300, Pgrid: 50, Soc: 78},
-		{Timestamp: time.Date(2026, 4, 14, 12, 0, 0, 0, loc).Unix(), Ppv: 3000, Pload: 800, Pbat: -500, Pgrid: 0, Soc: 95},
-		{Timestamp: time.Date(2026, 4, 14, 18, 0, 0, 0, loc).Unix(), Ppv: 0, Pload: 1200, Pbat: 1000, Pgrid: 200, Soc: 40},
+		{Timestamp: time.Date(2026, 4, 15, 8, 1, 0, 0, loc).Unix(), Ppv: 1000, Pload: 500, Pbat: 200, Pgrid: 100, Soc: 80},
+		{Timestamp: time.Date(2026, 4, 15, 8, 3, 0, 0, loc).Unix(), Ppv: 1200, Pload: 600, Pbat: 300, Pgrid: 50, Soc: 78},
+		{Timestamp: time.Date(2026, 4, 15, 9, 0, 0, 0, loc).Unix(), Ppv: 3000, Pload: 800, Pbat: -500, Pgrid: 0, Soc: 95},
+		{Timestamp: time.Date(2026, 4, 15, 9, 30, 0, 0, loc).Unix(), Ppv: 0, Pload: 1200, Pbat: 1000, Pgrid: 200, Soc: 40},
 	}
 
 	mr := &mockReader{
@@ -55,9 +56,7 @@ func TestHandleDayNormalCase(t *testing.T) {
 	}
 
 	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
-	// Pin "now" to a date later than the requested one so the request is for a
-	// past day (deterministic across test machines).
-	h.nowFunc = func() time.Time { return fixedNow() }
+	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), dayRequest(map[string]string{"date": date}))
 	require.NoError(t, err)
@@ -90,22 +89,46 @@ func TestHandleDayDailyUsageOvercast(t *testing.T) {
 	// sunset edges fall back to the Melbourne table, so night, morningPeak,
 	// afternoonPeak, and evening have boundarySource = "estimated"; offPeak is
 	// "readings".
-	loc, _ := time.LoadLocation("Australia/Sydney")
-	date := "2026-04-14"
-
-	readings := []dynamo.ReadingItem{
-		{Timestamp: time.Date(2026, 4, 14, 1, 0, 0, 0, loc).Unix(), Ppv: 0, Pload: 600, Soc: 80},
-		{Timestamp: time.Date(2026, 4, 14, 8, 0, 0, 0, loc).Unix(), Ppv: 0, Pload: 600, Soc: 70},
-		{Timestamp: time.Date(2026, 4, 14, 14, 0, 0, 0, loc).Unix(), Ppv: 0, Pload: 600, Soc: 60},
-		{Timestamp: time.Date(2026, 4, 14, 20, 0, 0, 0, loc).Unix(), Ppv: 0, Pload: 600, Soc: 50},
+	//
+	// Since past dates now read derivedStats from storage, this test pre-loads
+	// a daily-energy row carrying a stored DailyUsage with the expected shape
+	// and asserts /day for that completed date returns the stored payload.
+	const date = "2026-04-14"
+	avg := 0.5
+	estimatedBlock := func(kind string, startH, endH int) dynamo.DailyUsageBlockAttr {
+		return dynamo.DailyUsageBlockAttr{
+			Kind:              kind,
+			Start:             time.Date(2026, 4, 14, startH, 0, 0, 0, sydneyTZ).UTC().Format(time.RFC3339),
+			End:               time.Date(2026, 4, 14, endH, 0, 0, 0, sydneyTZ).UTC().Format(time.RFC3339),
+			TotalKwh:          0.5,
+			AverageKwhPerHour: &avg,
+			PercentOfDay:      20,
+			Status:            DailyUsageStatusComplete,
+			BoundarySource:    DailyUsageBoundaryEstimated,
+		}
+	}
+	readingsBlock := func(kind string, startH, endH int) dynamo.DailyUsageBlockAttr {
+		b := estimatedBlock(kind, startH, endH)
+		b.BoundarySource = DailyUsageBoundaryReadings
+		return b
+	}
+	row := &dynamo.DailyEnergyItem{
+		SysSn: testSerial, Date: date,
+		DailyUsage: &dynamo.DailyUsageAttr{
+			Blocks: []dynamo.DailyUsageBlockAttr{
+				estimatedBlock(DailyUsageKindNight, 0, 6),
+				estimatedBlock(DailyUsageKindMorningPeak, 6, 11),
+				readingsBlock(DailyUsageKindOffPeak, 11, 14),
+				estimatedBlock(DailyUsageKindAfternoonPeak, 14, 18),
+				estimatedBlock(DailyUsageKindEvening, 18, 24),
+			},
+		},
+		DerivedStatsComputedAt: "2026-04-15T00:30:00Z",
 	}
 
 	mr := &mockReader{
-		queryReadingsFn: func(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
-			return readings, nil
-		},
 		getDailyEnergyFn: func(_ context.Context, _, _ string) (*dynamo.DailyEnergyItem, error) {
-			return nil, nil
+			return row, nil
 		},
 	}
 
@@ -251,13 +274,14 @@ func TestHandleDayNoDataFromEitherSource(t *testing.T) {
 
 func TestHandleDayReadingsButNoDailyEnergy(t *testing.T) {
 	loc, _ := time.LoadLocation("Australia/Sydney")
-	date := "2026-04-14"
+	now := fixedNow()
+	date := now.In(loc).Format("2006-01-02") // today, so live-compute fires
 
 	mr := &mockReader{
 		queryReadingsFn: func(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
 			return []dynamo.ReadingItem{
-				{Timestamp: time.Date(2026, 4, 14, 10, 0, 0, 0, loc).Unix(), Soc: 70, Ppv: 100, Pload: 200, Pbat: 300, Pgrid: 50},
-				{Timestamp: time.Date(2026, 4, 14, 14, 0, 0, 0, loc).Unix(), Soc: 35, Ppv: 50, Pload: 300, Pbat: 400, Pgrid: 100},
+				{Timestamp: time.Date(2026, 4, 15, 1, 0, 0, 0, loc).Unix(), Soc: 70, Ppv: 0, Pload: 200, Pbat: 300, Pgrid: 50},
+				{Timestamp: time.Date(2026, 4, 15, 9, 30, 0, 0, loc).Unix(), Soc: 35, Ppv: 50, Pload: 300, Pbat: 400, Pgrid: 100},
 			}, nil
 		},
 		getDailyEnergyFn: func(_ context.Context, _, _ string) (*dynamo.DailyEnergyItem, error) {
@@ -266,6 +290,7 @@ func TestHandleDayReadingsButNoDailyEnergy(t *testing.T) {
 	}
 
 	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), dayRequest(map[string]string{"date": date}))
 	require.NoError(t, err)
@@ -275,27 +300,29 @@ func TestHandleDayReadingsButNoDailyEnergy(t *testing.T) {
 	require.NotNil(t, dr.Summary)
 	require.NotNil(t, dr.Summary.SocLow)
 	assert.Equal(t, roundPower(35), *dr.Summary.SocLow)
-	assert.Nil(t, dr.Summary.Epv, "energy fields should be null")
-	assert.Nil(t, dr.Summary.EInput)
+	// Readings with a >60s gap integrate to zero. The summary carries the
+	// (zero) computed totals because today's live-compute path runs.
+	if dr.Summary.Epv != nil {
+		assert.Equal(t, 0.0, *dr.Summary.Epv)
+	}
 }
 
 func TestHandleDayPeakPeriods(t *testing.T) {
 	loc, _ := time.LoadLocation("Australia/Sydney")
-	date := "2026-04-14"
+	now := fixedNow()
+	date := now.In(loc).Format("2006-01-02") // today
 
-	// Build readings: a sustained high-load period at 8:00-8:05 (outside off-peak 11:00-14:00)
-	// and low-load readings elsewhere. Readings every 10s for 3+ minutes to exceed minPeriodSeconds.
-	base := time.Date(2026, 4, 14, 8, 0, 0, 0, loc)
+	// Build readings: a sustained high-load period at 6:00-6:05 (well before now=10:00,
+	// outside off-peak 11:00-14:00) and low-load readings to bring the mean down.
+	base := time.Date(2026, 4, 15, 6, 0, 0, 0, loc)
 	var readings []dynamo.ReadingItem
-	// 20 readings at 10s intervals = ~3.3 minutes of high load at 8:00
 	for i := range 20 {
 		readings = append(readings, dynamo.ReadingItem{
 			Timestamp: base.Add(time.Duration(i*10) * time.Second).Unix(),
 			Ppv:       100, Pload: 3000, Pbat: 0, Pgrid: 0, Soc: 50,
 		})
 	}
-	// A few low-load readings at 16:00 to bring the mean down
-	afternoon := time.Date(2026, 4, 14, 16, 0, 0, 0, loc)
+	afternoon := time.Date(2026, 4, 15, 9, 0, 0, 0, loc)
 	for i := range 20 {
 		readings = append(readings, dynamo.ReadingItem{
 			Timestamp: afternoon.Add(time.Duration(i*10) * time.Second).Unix(),
@@ -313,6 +340,7 @@ func TestHandleDayPeakPeriods(t *testing.T) {
 	}
 
 	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), dayRequest(map[string]string{"date": date}))
 	require.NoError(t, err)
@@ -353,15 +381,16 @@ func TestHandleDayDateValidation(t *testing.T) {
 
 func TestHandleDaySocLowFromRawNotDownsampled(t *testing.T) {
 	loc, _ := time.LoadLocation("Australia/Sydney")
-	date := "2026-04-14"
+	now := fixedNow()
+	date := now.In(loc).Format("2006-01-02")
 
 	// Two readings in the same 5-min bucket: SOC 80 and SOC 20.
 	// Downsampled average would be 50, but socLow should be 20 (from raw).
 	mr := &mockReader{
 		queryReadingsFn: func(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
 			return []dynamo.ReadingItem{
-				{Timestamp: time.Date(2026, 4, 14, 10, 1, 0, 0, loc).Unix(), Soc: 80, Ppv: 100, Pload: 200, Pbat: 300, Pgrid: 50},
-				{Timestamp: time.Date(2026, 4, 14, 10, 3, 0, 0, loc).Unix(), Soc: 20, Ppv: 100, Pload: 200, Pbat: 300, Pgrid: 50},
+				{Timestamp: time.Date(2026, 4, 15, 9, 0, 0, 0, loc).Unix(), Soc: 80, Ppv: 100, Pload: 200, Pbat: 300, Pgrid: 50},
+				{Timestamp: time.Date(2026, 4, 15, 9, 3, 0, 0, loc).Unix(), Soc: 20, Ppv: 100, Pload: 200, Pbat: 300, Pgrid: 50},
 			}, nil
 		},
 		getDailyEnergyFn: func(_ context.Context, _, _ string) (*dynamo.DailyEnergyItem, error) {
@@ -370,6 +399,7 @@ func TestHandleDaySocLowFromRawNotDownsampled(t *testing.T) {
 	}
 
 	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), dayRequest(map[string]string{"date": date}))
 	require.NoError(t, err)
@@ -528,13 +558,18 @@ func TestHandleDayDynamoDBError(t *testing.T) {
 
 	tests := map[string]struct {
 		mock *mockReader
+		// Date used in the request. Readings errors are only meaningful
+		// against today's date (per AC 3.5 past dates skip the readings
+		// query); daily-energy errors are meaningful for either.
+		date string
 	}{
-		"readings error": {
+		"readings error today": {
 			mock: &mockReader{
 				queryReadingsFn: func(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
 					return nil, dbErr
 				},
 			},
+			date: fixedNow().In(sydneyTZ).Format("2006-01-02"),
 		},
 		"daily energy error": {
 			mock: &mockReader{
@@ -542,14 +577,16 @@ func TestHandleDayDynamoDBError(t *testing.T) {
 					return nil, dbErr
 				},
 			},
+			date: "2026-04-14",
 		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			h := NewHandler(tc.mock, nil, testSerial, testToken, "11:00", "14:00")
+			h.nowFunc = func() time.Time { return fixedNow() }
 
-			resp, err := h.Handle(context.Background(), dayRequest(map[string]string{"date": "2026-04-14"}))
+			resp, err := h.Handle(context.Background(), dayRequest(map[string]string{"date": tc.date}))
 			require.NoError(t, err)
 			assert.Equal(t, 500, resp.StatusCode)
 

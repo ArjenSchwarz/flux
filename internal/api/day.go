@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/ArjenSchwarz/flux/internal/derivedstats"
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
 	"github.com/aws/aws-lambda-go/events"
 	"golang.org/x/sync/errgroup"
@@ -25,14 +26,17 @@ func (h *Handler) handleDay(ctx context.Context, req events.LambdaFunctionURLReq
 		return errorResponse(400, "invalid or missing date parameter")
 	}
 
+	// Single clock read per AC 3.7 — bucketing decision uses one instant.
 	now := h.nowFunc().In(sydneyTZ)
 	today := now.Format("2006-01-02")
+	isToday := date == today
 
 	// Compute day boundaries in Sydney timezone.
 	dayStart, _ := time.ParseInLocation("2006-01-02", date, sydneyTZ)
 	dayEnd := dayStart.AddDate(0, 0, 1)
 
-	// Concurrent queries: readings and daily energy are independent.
+	// Concurrent queries: readings (today only) and daily energy. Per AC 3.5
+	// past dates skip the readings query entirely.
 	var (
 		readings []dynamo.ReadingItem
 		deItem   *dynamo.DailyEnergyItem
@@ -40,11 +44,13 @@ func (h *Handler) handleDay(ctx context.Context, req events.LambdaFunctionURLReq
 
 	g, gctx := errgroup.WithContext(ctx)
 
-	g.Go(func() error {
-		items, err := h.reader.QueryReadings(gctx, h.serial, dayStart.Unix(), dayEnd.Unix()-1)
-		readings = items
-		return err
-	})
+	if isToday {
+		g.Go(func() error {
+			items, err := h.reader.QueryReadings(gctx, h.serial, dayStart.Unix(), dayEnd.Unix()-1)
+			readings = items
+			return err
+		})
+	}
 	g.Go(func() error {
 		item, err := h.reader.GetDailyEnergy(gctx, h.serial, date)
 		deItem = item
@@ -68,27 +74,61 @@ func (h *Handler) handleDay(ctx context.Context, req events.LambdaFunctionURLReq
 	var points []TimeSeriesPoint
 	var socLow float64
 	var socLowTime int64
-	var hasReadings bool
-	var peakPeriods []PeakPeriod
-	var dailyUsage *DailyUsage
+	var hasSocLow bool
+	var peakPeriods []derivedstats.PeakPeriod
+	var dailyUsage *derivedstats.DailyUsage
 
-	if len(readings) > 0 {
-		// Compute socLow from raw data before downsampling.
-		socLow, socLowTime, hasReadings = findMinSOC(readings)
-		points = downsample(readings, date)
-		peakPeriods = findPeakPeriods(readings, h.offpeakStart, h.offpeakEnd)
-		dailyUsage = findDailyUsage(readings, h.offpeakStart, h.offpeakEnd, date, today, now)
+	if isToday {
+		// Live-compute path for today (unchanged from pre-feature behaviour).
+		if len(readings) > 0 {
+			drs := toDerivedReadings(readings)
+			socLow, socLowTime, hasSocLow = derivedstats.MinSOC(drs)
+			points = downsample(readings, date)
+			peakPeriods = derivedstats.PeakPeriods(drs, h.offpeakStart, h.offpeakEnd)
+			dailyUsage = derivedstats.Blocks(drs, h.offpeakStart, h.offpeakEnd, date, today, now)
+		} else {
+			// Today with no readings: fall back to flux-daily-power for the
+			// chart and socLow.
+			powerItems, err := h.reader.QueryDailyPower(ctx, h.serial, date)
+			if err != nil {
+				slog.Error("day power query failed", "error", err)
+				return errorResponse(500, "internal error")
+			}
+			if len(powerItems) > 0 {
+				points = mapDailyPowerToPoints(powerItems)
+				socLow, socLowTime, hasSocLow = findMinSOCFromPower(powerItems)
+			}
+		}
 	} else {
-		// Fallback to flux-daily-power.
+		// Past-date path (AC 3.1, 3.3, 3.4, 3.5): read derivedStats from
+		// storage. Skip readings query entirely. Preserve the existing
+		// flux-daily-power fallback for the time-series chart and the
+		// daily-power-derived SOC low when readings have aged out.
+		if deItem != nil {
+			dailyUsage = dynamo.DailyUsageFromAttr(deItem.DailyUsage)
+			peakPeriods = dynamo.PeakPeriodsFromAttr(deItem.PeakPeriods)
+			if deItem.SocLow != nil {
+				socLow = deItem.SocLow.Soc
+				if t, err := time.Parse(time.RFC3339, deItem.SocLow.Timestamp); err == nil {
+					socLowTime = t.Unix()
+					hasSocLow = true
+				}
+			}
+		}
+
+		// Daily-power fallback for the chart and (when SocLow attribute is
+		// absent) the SOC low. Always queried because old dates may have lost
+		// their readings to TTL but still have a DailyPower row.
 		powerItems, err := h.reader.QueryDailyPower(ctx, h.serial, date)
 		if err != nil {
 			slog.Error("day power query failed", "error", err)
 			return errorResponse(500, "internal error")
 		}
-
 		if len(powerItems) > 0 {
 			points = mapDailyPowerToPoints(powerItems)
-			socLow, socLowTime, hasReadings = findMinSOCFromPower(powerItems)
+			if !hasSocLow {
+				socLow, socLowTime, hasSocLow = findMinSOCFromPower(powerItems)
+			}
 		}
 	}
 
@@ -103,13 +143,14 @@ func (h *Handler) handleDay(ctx context.Context, req events.LambdaFunctionURLReq
 		resp.Readings = []TimeSeriesPoint{}
 	}
 	if resp.PeakPeriods == nil {
-		resp.PeakPeriods = []PeakPeriod{}
+		resp.PeakPeriods = []derivedstats.PeakPeriod{}
 	}
 
-	// Build summary: null when neither readings nor daily energy exist.
-	if hasReadings || deItem != nil {
+	// Build summary: null when neither derivedStats / readings nor daily
+	// energy exist.
+	if hasSocLow || deItem != nil {
 		summary := &DaySummary{}
-		if hasReadings {
+		if hasSocLow {
 			sl := roundPower(socLow)
 			summary.SocLow = &sl
 			slt := time.Unix(socLowTime, 0).UTC().Format(time.RFC3339)
@@ -130,7 +171,7 @@ func (h *Handler) handleDay(ctx context.Context, req events.LambdaFunctionURLReq
 		// hourly from AlphaESS and lag the real-time integration. Past days'
 		// stored totals are finalized at midnight and are authoritative.
 		var computedEnergy *TodayEnergy
-		if date == today && len(readings) > 0 {
+		if isToday && len(readings) > 0 {
 			computedEnergy = computeTodayEnergy(readings, dayStart.Unix())
 		}
 		if energy := reconcileEnergy(computedEnergy, storedEnergy); energy != nil {

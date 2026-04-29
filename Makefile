@@ -35,6 +35,7 @@ help:
 	@echo "    build           - Build poller binary"
 	@echo "    build-api       - Build Lambda API binary (ARM64 Linux)"
 	@echo "    test            - Run Go tests"
+	@echo "    integration     - Run integration tests (starts DynamoDB Local)"
 	@echo "    fmt             - Format Go code"
 	@echo "    vet             - Run go vet"
 	@echo "    lint            - Run golangci-lint"
@@ -68,7 +69,12 @@ help:
 	@echo "Device targets use DEVICE_MODEL (default: iPhone 17 Pro)"
 	@echo "Override with: make ios-install DEVICE_MODEL='iPhone 16'"
 
-.PHONY: build build-api test fmt vet lint modernize check docker-build docker-dry-run deps-tidy deps-update
+.PHONY: build build-api test integration fmt vet lint modernize check docker-build docker-dry-run deps-tidy deps-update
+
+# DynamoDB Local container settings for `make integration`
+DYNAMODB_LOCAL_IMAGE ?= amazon/dynamodb-local:latest
+DYNAMODB_LOCAL_NAME  ?= flux-dynamodb-local
+DYNAMODB_LOCAL_PORT  ?= 8000
 
 build:
 	CGO_ENABLED=0 go build -o bin/poller ./cmd/poller
@@ -78,6 +84,29 @@ build-api:
 
 test:
 	go test ./...
+
+# integration runs the INTEGRATION-gated tests against a DynamoDB Local
+# container started for the duration of the run. The container is torn
+# down on success, on test failure, and on Ctrl-C (trap EXIT).
+#
+# DYNAMODB_LOCAL_ENDPOINT is exported so the e2e tests (Task 15 in the
+# daily-derived-stats spec) can dial the container without extra config.
+# Set DYNAMODB_LOCAL_PORT to a different value if 8000 is in use.
+integration:
+	@command -v docker >/dev/null 2>&1 || { \
+		echo "Error: docker is required for 'make integration'"; \
+		exit 1; \
+	}
+	@echo "Starting DynamoDB Local on port $(DYNAMODB_LOCAL_PORT)..."
+	@docker rm -f $(DYNAMODB_LOCAL_NAME) >/dev/null 2>&1 || true
+	@docker run -d --rm \
+		--name $(DYNAMODB_LOCAL_NAME) \
+		-p $(DYNAMODB_LOCAL_PORT):8000 \
+		$(DYNAMODB_LOCAL_IMAGE) >/dev/null
+	@trap 'echo "Stopping DynamoDB Local..."; docker rm -f $(DYNAMODB_LOCAL_NAME) >/dev/null 2>&1 || true' EXIT INT TERM; \
+		INTEGRATION=1 \
+		DYNAMODB_LOCAL_ENDPOINT=http://localhost:$(DYNAMODB_LOCAL_PORT) \
+		go test ./...
 
 fmt:
 	go fmt ./...
