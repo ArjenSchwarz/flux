@@ -13,6 +13,7 @@
 | [Evening / Night Stats](#evening--night-stats) | 2026-04-26 | Done | Day detail card showing usage during the no-solar evening (sunset → midnight) and night (midnight → sunrise) periods. |
 | [Peak Usage Stats](#peak-usage-stats) | 2026-04-27 | Done | Day detail card replacing Evening/Night with five chronological load blocks (Night, Morning Peak, Off-Peak, Afternoon Peak, Evening). |
 | [Day Notes](#day-notes) | 2026-04-28 | Done | Per-date free-text note (≤200 graphemes) shared across users; new `flux-notes` DynamoDB table and PUT /note endpoint; rendered on Dashboard, History, Day Detail; edited only on Day Detail. |
+| [Daily Derived Stats](#daily-derived-stats) | 2026-04-29 | Planned | Pre-compute three reading-derived per-day stats (`findDailyUsage`, `findMinSOC`, `findPeakPeriods`) in the poller hourly against yesterday; persist on `flux-daily-energy` via UpdateItem; `/day` and `/history` read storage for past dates, live-compute for today. Unblocks history-daily-usage (T-1022). |
 
 ---
 
@@ -122,3 +123,12 @@ Per-date free-text note (≤200 graphemes after NFC + trim) shared across users.
 - [design.md](day-notes/design.md)
 - [requirements.md](day-notes/requirements.md)
 - [tasks.md](day-notes/tasks.md)
+
+## Daily Derived Stats
+
+Pre-compute three reading-derived per-day stats (`findDailyUsage`, `findMinSOC`, `findPeakPeriods`) in the poller via an hourly summarisation pass against yesterday; persist on the existing `flux-daily-energy` row via `UpdateItem`; both `/day` and `/history` read derivedStats from storage for past dates and live-compute for today. New `internal/derivedstats` shared package decouples the helpers from `internal/api`. Unblocks history-daily-usage (T-1022) by avoiding a 30-day rollup that would otherwise re-fetch ~258k readings per call against the 30-day TTL.
+
+- [decision_log.md](daily-derived-stats/decision_log.md)
+- [design.md](daily-derived-stats/design.md)
+- [requirements.md](daily-derived-stats/requirements.md)
+- [tasks.md](daily-derived-stats/tasks.md)
