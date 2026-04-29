@@ -78,11 +78,11 @@ func TestSummarisation_SuccessPath(t *testing.T) {
 	p, m := summarisationFixturePoller(t, ms)
 
 	result := p.runSummarisationPass(context.Background(), "2026-04-14")
-	assert.Equal(t, "success", result)
+	assert.Equal(t, PassResultSuccess, result)
 	assert.Equal(t, 1, ms.derivedUpdates, "must call UpdateDailyEnergyDerived once on success")
 
 	p.summariseYesterday(context.Background())
-	require.Contains(t, m.recorded, "success")
+	require.Contains(t, m.recorded, PassResultSuccess)
 }
 
 func TestSummarisation_NoReadings(t *testing.T) {
@@ -93,7 +93,7 @@ func TestSummarisation_NoReadings(t *testing.T) {
 	p, _ := summarisationFixturePoller(t, ms)
 
 	result := p.runSummarisationPass(context.Background(), "2026-04-14")
-	assert.Equal(t, "skipped-no-readings", result)
+	assert.Equal(t, PassResultSkippedNoReadings, result)
 	assert.Zero(t, ms.derivedUpdates, "must NOT call UpdateDailyEnergyDerived when readings is empty")
 }
 
@@ -104,7 +104,7 @@ func TestSummarisation_NoRow(t *testing.T) {
 	p, _ := summarisationFixturePoller(t, ms)
 
 	result := p.runSummarisationPass(context.Background(), "2026-04-14")
-	assert.Equal(t, "skipped-no-row", result)
+	assert.Equal(t, PassResultSkippedNoRow, result)
 	assert.Zero(t, ms.derivedUpdates)
 }
 
@@ -118,7 +118,7 @@ func TestSummarisation_AlreadyPopulated(t *testing.T) {
 	p, _ := summarisationFixturePoller(t, ms)
 
 	result := p.runSummarisationPass(context.Background(), "2026-04-14")
-	assert.Equal(t, "skipped-already-populated", result)
+	assert.Equal(t, PassResultSkippedAlreadyDone, result)
 	// Critical: must NOT issue a readings query when sentinel is present
 	// (per AC 1.10 and the design — the precheck saves the query cost).
 	assert.Nil(t, ms.queryReadingsResult, "queryReadingsResult unset means QueryReadings must not have been called for default")
@@ -137,7 +137,7 @@ func TestSummarisation_SsmUnresolved(t *testing.T) {
 	p.cfg.OffpeakEnd = 0
 
 	result := p.runSummarisationPass(context.Background(), "2026-04-14")
-	assert.Equal(t, "skipped-ssm-unresolved", result)
+	assert.Equal(t, PassResultSkippedSSMUnresolved, result)
 	assert.Zero(t, ms.derivedUpdates)
 }
 
@@ -148,7 +148,7 @@ func TestSummarisation_ReadingsError(t *testing.T) {
 	}
 	p, _ := summarisationFixturePoller(t, ms)
 	result := p.runSummarisationPass(context.Background(), "2026-04-14")
-	assert.Equal(t, "error", result)
+	assert.Equal(t, PassResultError, result)
 	assert.Zero(t, ms.derivedUpdates)
 }
 
@@ -161,7 +161,7 @@ func TestSummarisation_UpdateError(t *testing.T) {
 	}
 	p, _ := summarisationFixturePoller(t, ms)
 	result := p.runSummarisationPass(context.Background(), "2026-04-14")
-	assert.Equal(t, "error", result)
+	assert.Equal(t, PassResultError, result)
 	assert.Equal(t, 1, ms.derivedUpdates)
 }
 
@@ -169,7 +169,7 @@ func TestSummarisation_GetDailyEnergyError(t *testing.T) {
 	ms := &mockStore{getDailyEnergyErr: errors.New("timeout")}
 	p, _ := summarisationFixturePoller(t, ms)
 	result := p.runSummarisationPass(context.Background(), "2026-04-14")
-	assert.Equal(t, "error", result)
+	assert.Equal(t, PassResultError, result)
 	assert.Zero(t, ms.derivedUpdates)
 }
 
@@ -185,12 +185,13 @@ func TestSummarisation_DateAsToday_SoTodayGateNeverFires(t *testing.T) {
 	p, _ := summarisationFixturePoller(t, ms)
 
 	result := p.runSummarisationPass(context.Background(), "2026-04-14")
-	require.Equal(t, "success", result)
+	require.Equal(t, PassResultSuccess, result)
 
-	// Inspect the derived-stats payload via test-only hook.
-	require.NotNil(t, p.lastDerivedForTest, "test hook must capture the last DerivedStats payload")
-	require.NotNil(t, p.lastDerivedForTest.DailyUsage, "expected dailyUsage to be present on a normal day")
-	for _, b := range p.lastDerivedForTest.DailyUsage.Blocks {
+	// Inspect the derived-stats payload captured via the mock store — that's
+	// the actual UpdateItem write contract, not an in-process side channel.
+	require.NotNil(t, ms.lastDerived, "mockStore must capture the UpdateDailyEnergyDerived payload")
+	require.NotNil(t, ms.lastDerived.DailyUsage, "expected dailyUsage to be present on a normal day")
+	for _, b := range ms.lastDerived.DailyUsage.Blocks {
 		assert.Equal(t, "complete", b.Status, "all blocks must be complete; the today-gate must not fire when date == today input")
 	}
 }
@@ -208,16 +209,17 @@ func TestSummarisation_Idempotence(t *testing.T) {
 	p, _ := summarisationFixturePoller(t, ms)
 
 	r1 := p.runSummarisationPass(context.Background(), "2026-04-14")
-	require.Equal(t, "success", r1)
-	first := p.lastDerivedForTest
-	require.NotNil(t, first)
+	require.Equal(t, PassResultSuccess, r1)
+	require.NotNil(t, ms.lastDerived)
+	first := *ms.lastDerived
 
 	// Second run — pretend the sentinel has not been written yet (the
 	// fakeMetrics + mockStore don't persist), so we re-invoke. Should
 	// produce field-equivalent payload.
 	r2 := p.runSummarisationPass(context.Background(), "2026-04-14")
-	require.Equal(t, "success", r2)
-	second := p.lastDerivedForTest
+	require.Equal(t, PassResultSuccess, r2)
+	require.NotNil(t, ms.lastDerived)
+	second := *ms.lastDerived
 
 	// Field-equivalence on dailyUsage.
 	require.NotNil(t, second.DailyUsage)
@@ -257,5 +259,5 @@ func TestSummarisation_PrecheckShortCircuits_NoReadingsQuery(t *testing.T) {
 	}
 	p, _ := summarisationFixturePoller(t, ms)
 	result := p.runSummarisationPass(context.Background(), "2026-04-14")
-	assert.Equal(t, "skipped-already-populated", result)
+	assert.Equal(t, PassResultSkippedAlreadyDone, result)
 }

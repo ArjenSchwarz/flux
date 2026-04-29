@@ -82,6 +82,10 @@ type mockStore struct {
 	dailyPowerWritten  int
 	systemWritten      int
 	derivedUpdates     int
+
+	// lastDerived captures the most recent payload passed to
+	// UpdateDailyEnergyDerived so tests can assert on the computed shape.
+	lastDerived *dynamo.DerivedStats
 }
 
 func (m *mockStore) WriteReading(_ context.Context, _ dynamo.ReadingItem) error {
@@ -120,8 +124,10 @@ func (m *mockStore) GetDailyEnergy(_ context.Context, _, _ string) (*dynamo.Dail
 	return m.getDailyEnergyResult, m.getDailyEnergyErr
 }
 
-func (m *mockStore) UpdateDailyEnergyDerived(_ context.Context, _, _ string, _ dynamo.DerivedStats) error {
+func (m *mockStore) UpdateDailyEnergyDerived(_ context.Context, _, _ string, derived dynamo.DerivedStats) error {
 	m.derivedUpdates++
+	d := derived
+	m.lastDerived = &d
 	return m.updateDailyEnergyDerivedErr
 }
 

@@ -41,12 +41,6 @@ type Poller struct {
 
 	// now returns the current time. Injectable for deterministic testing.
 	now func() time.Time
-
-	// lastDerivedForTest captures the last DerivedStats payload built by
-	// runSummarisationPass, so unit tests can assert idempotence / shape
-	// without round-tripping through a fake DynamoDB. Production code never
-	// reads this field.
-	lastDerivedForTest *dynamo.DerivedStats
 }
 
 // New creates a Poller with the given dependencies. The metrics recorder
@@ -68,6 +62,21 @@ func New(client APIClient, store dynamo.Store, cfg *config.Config) *Poller {
 // real CloudWatch client; tests inject a fake. Safe to call before Run.
 func (p *Poller) SetMetrics(m MetricsRecorder) {
 	p.metrics = m
+}
+
+// SetNow overrides the clock used by Run and the per-tick helpers. Intended
+// for deterministic tests (notably the integration test, which lives in
+// another package and cannot reach the unexported field). Safe to call
+// before Run.
+func (p *Poller) SetNow(now func() time.Time) {
+	p.now = now
+}
+
+// SummariseYesterday runs one summarisation pass against the date that is
+// "yesterday" in cfg.Location. Exposed for the integration test, which drives
+// the pass without spinning up the full Run loop. Production code uses Run.
+func (p *Poller) SummariseYesterday(ctx context.Context) {
+	p.summariseYesterday(ctx)
 }
 
 // Run starts all polling goroutines and blocks until ctx is cancelled.

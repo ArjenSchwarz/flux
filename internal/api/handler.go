@@ -47,6 +47,13 @@ func NewHandler(reader dynamo.Reader, notes NoteWriter, serial, apiToken, offpea
 	}
 }
 
+// SetNow overrides the clock used by request handlers. Intended for the
+// integration test, which lives in another package and cannot reach the
+// unexported nowFunc field directly. Safe to call before Handle.
+func (h *Handler) SetNow(now func() time.Time) {
+	h.nowFunc = now
+}
+
 // Handle is the Lambda entry point. Processing order:
 // 1. Check HTTP method (GET only)
 // 2. Validate bearer token (auth before routing)

@@ -16,10 +16,12 @@ package integration
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -29,11 +31,15 @@ import (
 
 	"github.com/ArjenSchwarz/flux/internal/api"
 	"github.com/ArjenSchwarz/flux/internal/config"
-	"github.com/ArjenSchwarz/flux/internal/derivedstats"
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
 	"github.com/ArjenSchwarz/flux/internal/poller"
 )
 
+// TestEndToEnd_DerivedStatsRoundTrip exercises the full poller→DynamoDB→Lambda
+// path against a real DynamoDB surface (DynamoDB Local), per AC 6.7. It
+// stages readings + an existing energy row, drives the poller's
+// summarisation pass, and then invokes the Lambda /day and /history handlers
+// to confirm the stored derivedStats survive the round-trip.
 func TestEndToEnd_DerivedStatsRoundTrip(t *testing.T) {
 	if os.Getenv("INTEGRATION") == "" {
 		t.Skip("set INTEGRATION=1 to run")
@@ -54,7 +60,6 @@ func TestEndToEnd_DerivedStatsRoundTrip(t *testing.T) {
 		o.BaseEndpoint = aws.String(endpoint)
 	})
 
-	// Create the tables this test needs.
 	tables := dynamo.TableNames{
 		Readings:    "flux-readings-itest",
 		DailyEnergy: "flux-daily-energy-itest",
@@ -101,6 +106,7 @@ func TestEndToEnd_DerivedStatsRoundTrip(t *testing.T) {
 	}
 
 	store := dynamo.NewDynamoStore(client, tables)
+	reader := dynamo.NewDynamoReader(client, tables)
 
 	// Stage a fixture day's readings + an existing energy row.
 	const serial = "TEST123"
@@ -122,7 +128,10 @@ func TestEndToEnd_DerivedStatsRoundTrip(t *testing.T) {
 		Epv: 12.0, EInput: 3.0, EOutput: 1.0, ECharge: 6.0, EDischarge: 5.0,
 	}))
 
-	// Drive the summarisation pass against the fixture date.
+	// Build a poller with the clock pinned so SummariseYesterday targets the
+	// fixture date, then run the actual summarisation pass — this exercises
+	// the writer side of the AC 6.7 contract end-to-end (no hand-rolled
+	// payload).
 	cfg := &config.Config{
 		Serial:       serial,
 		Location:     loc,
@@ -130,49 +139,70 @@ func TestEndToEnd_DerivedStatsRoundTrip(t *testing.T) {
 		OffpeakEnd:   14 * time.Hour,
 	}
 	p := poller.New(nil, store, cfg)
-	// Pin clock to 2026-04-15 02:00 AEST so summariseYesterday targets 2026-04-14.
-	// Direct call to runSummarisationPass is not exported; use summariseYesterday.
-	// To avoid time-of-day flakiness we use the public summariseYesterday.
 	p.SetMetrics(poller.NoopMetrics{})
-	// Override now via the package's exported test hook... but there isn't
-	// one. The public Poller.now is unexported and per-construction. The
-	// Run() loop is too heavy for this test, so we trigger the pass via a
-	// short-circuited helper.
-	// Instead: write the row, then call store-level helpers to achieve
-	// the same effect. The point of the e2e test is to exercise the
-	// shape contract on real DynamoDB, which is satisfied by:
-	//   1. WriteDailyEnergy via UpdateItem (energy fields)
-	//   2. UpdateDailyEnergyDerived via UpdateItem (derived attributes)
-	//   3. GetDailyEnergy reads the merged row.
-	derived := dynamo.DerivedStats{
-		DailyUsage: dynamo.DailyUsageToAttr(&derivedstats.DailyUsage{
-			Blocks: []derivedstats.DailyUsageBlock{
-				{
-					Kind: derivedstats.DailyUsageKindNight, Start: date + "T00:00:00Z", End: date + "T20:00:00Z",
-					TotalKwh: 1.5, PercentOfDay: 30, Status: derivedstats.DailyUsageStatusComplete,
-					BoundarySource: derivedstats.DailyUsageBoundaryReadings,
-				},
-			},
-		}),
-		SocLow:                 &dynamo.SocLowAttr{Soc: 22, Timestamp: date + "T19:45:00Z"},
-		PeakPeriods:            []dynamo.PeakPeriodAttr{{Start: date + "T22:00:00Z", End: date + "T22:30:00Z", AvgLoadW: 3500, EnergyWh: 1750}},
-		DerivedStatsComputedAt: time.Now().UTC().Format(time.RFC3339),
-	}
-	require.NoError(t, store.UpdateDailyEnergyDerived(ctx, serial, date, derived))
+	// 02:00 AEST on 2026-04-15 ⇒ yesterday-in-Sydney = 2026-04-14.
+	p.SetNow(func() time.Time { return time.Date(2026, 4, 15, 2, 0, 0, 0, loc) })
+	p.SummariseYesterday(ctx)
 
-	// Read back via GetDailyEnergy and verify both sets of attributes survive.
+	// Verify storage round-trip — the row now carries all four derived
+	// attributes, written by the real poller pass against real DynamoDB.
 	row, err := store.GetDailyEnergy(ctx, serial, date)
 	require.NoError(t, err)
 	require.NotNil(t, row)
-	require.NotNil(t, row.DailyUsage, "DailyUsage attribute must round-trip via DynamoDB Local")
-	require.Len(t, row.DailyUsage.Blocks, 1)
-	require.NotNil(t, row.SocLow)
-	require.Len(t, row.PeakPeriods, 1)
-	require.NotEmpty(t, row.DerivedStatsComputedAt)
+	require.NotNil(t, row.DailyUsage, "DailyUsage must round-trip via DynamoDB Local")
+	require.NotEmpty(t, row.DailyUsage.Blocks, "summarisation pass should produce at least one block")
+	require.NotNil(t, row.SocLow, "SocLow must round-trip")
+	require.NotEmpty(t, row.DerivedStatsComputedAt, "sentinel must be written")
 
-	// Verify the Lambda /day handler reads the round-tripped row correctly.
-	reader := dynamo.NewDynamoReader(client, tables)
-	_ = reader
-	_ = api.NewHandler
-	_ = p // placeholder to keep poller import live
+	// Verify the Lambda /day handler reads the row and surfaces the
+	// derivedStats sections to clients (read side of the AC 6.7 contract).
+	const apiToken = "test-token"
+	h := api.NewHandler(reader, nil, serial, apiToken, "11:00", "14:00")
+	// 12:00 AEST on 2026-04-15 ⇒ /day for 2026-04-14 takes the past-date
+	// branch (reads from storage, not the readings table).
+	h.SetNow(func() time.Time { return time.Date(2026, 4, 15, 12, 0, 0, 0, loc) })
+
+	dayResp, err := h.Handle(ctx, events.LambdaFunctionURLRequest{
+		QueryStringParameters: map[string]string{"date": date},
+		Headers:               map[string]string{"authorization": "Bearer " + apiToken},
+		RawPath:               "/day",
+		RequestContext: events.LambdaFunctionURLRequestContext{
+			HTTP: events.LambdaFunctionURLRequestContextHTTPDescription{Method: "GET"},
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, 200, dayResp.StatusCode, "/day must return 200; body=%s", dayResp.Body)
+
+	var dayBody api.DayDetailResponse
+	require.NoError(t, json.Unmarshal([]byte(dayResp.Body), &dayBody))
+	require.NotNil(t, dayBody.DailyUsage, "/day must surface dailyUsage from storage")
+	require.NotEmpty(t, dayBody.DailyUsage.Blocks)
+	require.NotNil(t, dayBody.Summary, "/day summary must include socLow")
+	require.NotNil(t, dayBody.Summary.SocLow, "summary.socLow must be populated from storage")
+
+	// Verify /history surfaces derivedStats per row.
+	historyResp, err := h.Handle(ctx, events.LambdaFunctionURLRequest{
+		QueryStringParameters: map[string]string{"days": "2"},
+		Headers:               map[string]string{"authorization": "Bearer " + apiToken},
+		RawPath:               "/history",
+		RequestContext: events.LambdaFunctionURLRequestContext{
+			HTTP: events.LambdaFunctionURLRequestContextHTTPDescription{Method: "GET"},
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, 200, historyResp.StatusCode, "/history must return 200; body=%s", historyResp.Body)
+
+	var historyBody api.HistoryResponse
+	require.NoError(t, json.Unmarshal([]byte(historyResp.Body), &historyBody))
+	var fixtureDay *api.DayEnergy
+	for i := range historyBody.Days {
+		if historyBody.Days[i].Date == date {
+			fixtureDay = &historyBody.Days[i]
+			break
+		}
+	}
+	require.NotNil(t, fixtureDay, "/history must include the fixture date in its range")
+	require.NotNil(t, fixtureDay.DailyUsage, "/history past-date row must surface dailyUsage from storage")
+	require.NotEmpty(t, fixtureDay.DailyUsage.Blocks)
+	require.NotNil(t, fixtureDay.SocLow, "/history past-date row must surface flat socLow from storage")
 }

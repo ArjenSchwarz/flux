@@ -15,6 +15,18 @@ const (
 	summarisationPassDimensionResult = "Result"
 )
 
+// SummarisationPassResult dimension values emitted by the daily-derived-stats
+// summarisation pass. These map 1:1 to the AC 1.11 dimensions; a CloudWatch
+// alarm on absence of `PassResultSuccess` for >24h flags a stuck pass.
+const (
+	PassResultSuccess              = "success"
+	PassResultError                = "error"
+	PassResultSkippedNoRow         = "skipped-no-row"
+	PassResultSkippedAlreadyDone   = "skipped-already-populated"
+	PassResultSkippedSSMUnresolved = "skipped-ssm-unresolved"
+	PassResultSkippedNoReadings    = "skipped-no-readings"
+)
+
 // MetricsRecorder is the small surface the poller uses for emitting custom
 // metrics. Implemented by the production Metrics struct and by NoopMetrics
 // for dry-run mode.

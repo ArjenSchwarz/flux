@@ -37,15 +37,15 @@ func (p *Poller) runSummarisationPass(ctx context.Context, date string) string {
 	switch {
 	case err != nil:
 		slog.Error("summary precheck failed", "date", date, "error", err)
-		return "error"
+		return PassResultError
 	case item == nil:
 		// AC 1.4: skip when row does not yet exist; let the next AlphaESS
 		// energy poll create the row.
 		slog.Info("summary skipped: no daily-energy row yet", "date", date)
-		return "skipped-no-row"
+		return PassResultSkippedNoRow
 	case item.DerivedStatsComputedAt != "":
 		// AC 1.10 / Decision 8 — sentinel present means a prior pass succeeded.
-		return "skipped-already-populated"
+		return PassResultSkippedAlreadyDone
 	}
 
 	// 2. Off-peak window resolution (AC 1.6 / 1.14).
@@ -53,7 +53,7 @@ func (p *Poller) runSummarisationPass(ctx context.Context, date string) string {
 	offpeakEnd := config.FormatHHMM(p.cfg.OffpeakEnd)
 	if _, _, ok := derivedstats.ParseOffpeakWindow(offpeakStart, offpeakEnd); !ok {
 		slog.Warn("summary skipped: off-peak window unresolved", "date", date)
-		return "skipped-ssm-unresolved"
+		return PassResultSkippedSSMUnresolved
 	}
 
 	// 3. Fetch the day's readings.
@@ -62,11 +62,11 @@ func (p *Poller) runSummarisationPass(ctx context.Context, date string) string {
 	rawReadings, err := p.store.QueryReadings(ctx, p.cfg.Serial, dayStart.Unix(), dayEnd.Unix()-1)
 	if err != nil {
 		slog.Error("summary readings query failed", "date", date, "error", err)
-		return "error"
+		return PassResultError
 	}
 	if len(rawReadings) == 0 {
 		slog.Info("summary skipped: no readings for date", "date", date)
-		return "skipped-no-readings"
+		return PassResultSkippedNoReadings
 	}
 	readings := summaryToDerivedReadings(rawReadings)
 
@@ -87,18 +87,13 @@ func (p *Poller) runSummarisationPass(ctx context.Context, date string) string {
 		}
 	}
 
-	// Test hook: capture the last computed payload so unit tests can assert
-	// determinism / today-gate non-firing without round-tripping through a
-	// fake DynamoDB.
-	p.lastDerivedForTest = &derived
-
 	// 5. Write — single SET expression covers all four attributes atomically.
 	if err := p.store.UpdateDailyEnergyDerived(ctx, p.cfg.Serial, date, derived); err != nil {
 		slog.Error("summary write failed", "date", date, "error", err)
-		return "error"
+		return PassResultError
 	}
 	slog.Info("summary written", "date", date)
-	return "success"
+	return PassResultSuccess
 }
 
 // summaryToDerivedReadings converts the storage-level []dynamo.ReadingItem

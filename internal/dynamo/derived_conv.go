@@ -46,29 +46,10 @@ func DailyUsageToAttr(d *derivedstats.DailyUsage) *DailyUsageAttr {
 	return out
 }
 
-// SocLowFromAttr returns a copy of the storage shape. Returns nil when the
-// input is nil. Symmetry with DailyUsage / PeakPeriods conversion.
-func SocLowFromAttr(a *SocLowAttr) *SocLowAttr {
-	if a == nil {
-		return nil
-	}
-	c := *a
-	return &c
-}
-
-// SocLowToAttr returns a copy of the storage shape. Returns nil when the
-// input is nil. The asymmetry with DailyUsage and PeakPeriods is deliberate:
-// `derivedstats.MinSOC` returns `(soc, unixTimestamp int64, found bool)`,
-// which the call site converts to RFC3339 once at write time. The
-// in-process and storage shapes for SOC are identical (Soc + RFC3339
-// string), so there is no separate `derivedstats.SocLow`-style type.
-func SocLowToAttr(a *SocLowAttr) *SocLowAttr {
-	if a == nil {
-		return nil
-	}
-	c := *a
-	return &c
-}
+// SocLow has no conversion helper: derivedstats.MinSOC returns
+// (soc, unixTimestamp int64, found bool), which call sites convert to RFC3339
+// once at write time. The storage shape (SocLowAttr) is read directly by the
+// Lambda handlers.
 
 // PeakPeriodsFromAttr converts a slice of stored peak periods into the
 // in-process []derivedstats.PeakPeriod. Returns nil for a nil input.

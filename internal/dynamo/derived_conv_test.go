@@ -62,18 +62,6 @@ func TestDailyUsageRoundTrip(t *testing.T) {
 	}
 }
 
-func TestSocLowAttr_RoundTrip(t *testing.T) {
-	a := &SocLowAttr{Soc: 18.5, Timestamp: "2026-04-28T19:45:00Z"}
-	got := SocLowToAttr(SocLowFromAttr(a))
-	require.NotNil(t, got)
-	assert.InDelta(t, a.Soc, got.Soc, 1e-9)
-	assert.Equal(t, a.Timestamp, got.Timestamp)
-
-	// Nil round-trips to nil.
-	assert.Nil(t, SocLowFromAttr(nil))
-	assert.Nil(t, SocLowToAttr(nil))
-}
-
 func TestPeakPeriodsRoundTrip(t *testing.T) {
 	periods := []derivedstats.PeakPeriod{
 		{Start: "2026-04-12T22:00:00Z", End: "2026-04-12T22:30:00Z", AvgLoadW: 3500.5, EnergyWh: 1750},

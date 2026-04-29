@@ -28,12 +28,12 @@ func (f *fakeCloudWatch) PutMetricData(ctx context.Context, in *cloudwatch.PutMe
 
 func TestMetrics_RecordSummarisationPass_EmitsCorrectShape(t *testing.T) {
 	results := []string{
-		"success",
-		"skipped-no-readings",
-		"skipped-no-row",
-		"skipped-ssm-unresolved",
-		"skipped-already-populated",
-		"error",
+		PassResultSuccess,
+		PassResultSkippedNoReadings,
+		PassResultSkippedNoRow,
+		PassResultSkippedSSMUnresolved,
+		PassResultSkippedAlreadyDone,
+		PassResultError,
 	}
 
 	for _, result := range results {
@@ -67,7 +67,7 @@ func TestMetrics_RecordSummarisationPass_PutFailureNotPropagated(t *testing.T) {
 	}
 	m := NewMetrics(fake)
 	// Should not panic and should not return anything (logs warn).
-	m.RecordSummarisationPass(context.Background(), "success")
+	m.RecordSummarisationPass(context.Background(), PassResultSuccess)
 	assert.Len(t, fake.calls, 1)
 }
 
@@ -75,6 +75,6 @@ func TestMetrics_DryRunNoOp_MakesNoCalls(t *testing.T) {
 	fake := &fakeCloudWatch{}
 	// NoopMetrics is a stub used when cfg.DryRun is set.
 	m := NoopMetrics{}
-	m.RecordSummarisationPass(context.Background(), "success")
+	m.RecordSummarisationPass(context.Background(), PassResultSuccess)
 	assert.Empty(t, fake.calls, "no calls should be issued in dry-run mode")
 }
