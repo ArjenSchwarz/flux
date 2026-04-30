@@ -8,9 +8,11 @@ extension DailyUsageBlock.Kind {
         [.night, .morningPeak, .offPeak, .afternoonPeak, .evening]
 
     /// Position in `chronologicalOrder`. Drives sort + tie-break on
-    /// largest-kind comparisons (AC 1.8).
+    /// largest-kind comparisons (AC 1.8). Force-unwrap is intentional —
+    /// a future `Kind` case missing from `chronologicalOrder` should crash
+    /// loudly rather than silently sort as 0.
     var chronologicalIndex: Int {
-        Self.chronologicalOrder.firstIndex(of: self) ?? 0
+        Self.chronologicalOrder.firstIndex(of: self)!
     }
 
     /// Pinned palette per Decision 5. Lives in the iOS app target rather

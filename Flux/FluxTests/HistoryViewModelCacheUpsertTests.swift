@@ -36,7 +36,7 @@ struct HistoryViewModelCacheUpsertTests {
             apiClient: apiClient,
             modelContext: modelContext,
             nowProvider: { now },
-            warn: { line in Task { await sink.record(line) } }
+            warn: { sink.record($0) }
         )
         await viewModel.loadHistory(days: 7)
 
@@ -47,9 +47,7 @@ struct HistoryViewModelCacheUpsertTests {
         #expect(row.socLowTime == "2026-04-14T03:30:00Z")
         #expect(row.peakPeriods?.count == 1)
 
-        try? await Task.sleep(for: .milliseconds(50))
-        let lines = await sink.snapshot()
-        #expect(lines.isEmpty, "no warning when backfilling previously-nil fields")
+        #expect(sink.lines.isEmpty, "no warning when backfilling previously-nil fields")
     }
 
     @Test
@@ -80,7 +78,7 @@ struct HistoryViewModelCacheUpsertTests {
             apiClient: apiClient,
             modelContext: modelContext,
             nowProvider: { now },
-            warn: { line in Task { await sink.record(line) } }
+            warn: { sink.record($0) }
         )
         await viewModel.loadHistory(days: 7)
 
@@ -91,10 +89,9 @@ struct HistoryViewModelCacheUpsertTests {
         #expect(row.socLowTime == nil)
         #expect(row.peakPeriods == nil)
 
-        let lines = await sink.waitForLines(count: 4)
-        #expect(lines.count == 4, "one warning per cleared field")
+        #expect(sink.lines.count == 4, "one warning per cleared field")
         for field in ["dailyUsage", "socLow", "socLowTime", "peakPeriods"] {
-            #expect(lines.contains(where: { $0.contains("2026-04-14") && $0.contains(field) }),
+            #expect(sink.lines.contains(where: { $0.contains("2026-04-14") && $0.contains(field) }),
                     "missing warning for \(field)")
         }
     }
@@ -165,25 +162,15 @@ struct HistoryViewModelCacheUpsertTests {
     }
 }
 
-private actor WarnSink {
-    private var lines: [String] = []
+/// MainActor-isolated sink for the synchronous `warn` callback. The test
+/// suite runs `@MainActor .serialized`, so the closure executes on the same
+/// actor as the recorder — direct mutation, no actor hop, no polling.
+@MainActor
+private final class WarnSink {
+    private(set) var lines: [String] = []
 
     func record(_ line: String) {
         lines.append(line)
-    }
-
-    func snapshot() -> [String] {
-        lines
-    }
-
-    /// Poll-with-timeout for closure-spawned `Task { await record(line) }`s
-    /// to land. Avoids racing with unstructured task scheduling.
-    func waitForLines(count: Int, timeoutMillis: Int = 500) async -> [String] {
-        let deadline = Date.now.addingTimeInterval(Double(timeoutMillis) / 1000.0)
-        while lines.count < count, Date.now < deadline {
-            try? await Task.sleep(for: .milliseconds(10))
-        }
-        return lines
     }
 }
 

@@ -13,13 +13,13 @@ final class HistoryViewModel {
     private let apiClient: any FluxAPIClient
     private let modelContext: ModelContext
     private let nowProvider: @Sendable () -> Date
-    private let warn: @Sendable (String) -> Void
+    private let warn: (String) -> Void
 
     init(
         apiClient: any FluxAPIClient,
         modelContext: ModelContext,
         nowProvider: @escaping @Sendable () -> Date = { .now },
-        warn: @escaping @Sendable (String) -> Void = HistoryCacheLog.defaultWarn
+        warn: @escaping (String) -> Void = HistoryCacheLog.defaultWarn
     ) {
         self.apiClient = apiClient
         self.modelContext = modelContext

@@ -8,7 +8,7 @@ import os
 enum HistoryCacheLog {
     static let logger = Logger(subsystem: "eu.arjen.flux", category: "history-cache")
 
-    static let defaultWarn: @Sendable (String) -> Void = { message in
+    static let defaultWarn: (String) -> Void = { message in
         logger.warning("\(message, privacy: .public)")
     }
 }
