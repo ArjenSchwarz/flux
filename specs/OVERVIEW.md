@@ -14,6 +14,7 @@
 | [Peak Usage Stats](#peak-usage-stats) | 2026-04-27 | Done | Day detail card replacing Evening/Night with five chronological load blocks (Night, Morning Peak, Off-Peak, Afternoon Peak, Evening). |
 | [Day Notes](#day-notes) | 2026-04-28 | Done | Per-date free-text note (≤200 graphemes) shared across users; new `flux-notes` DynamoDB table and PUT /note endpoint; rendered on Dashboard, History, Day Detail; edited only on Day Detail. |
 | [Daily Derived Stats](#daily-derived-stats) | 2026-04-29 | Done | Pre-compute three reading-derived per-day stats (`findDailyUsage`, `findMinSOC`, `findPeakPeriods`) in the poller hourly against yesterday; persist on `flux-daily-energy` via UpdateItem; `/day` and `/history` read storage for past dates, live-compute for today. Unblocks history-daily-usage (T-1022). |
+| [History Daily Usage](#history-daily-usage) | 2026-04-30 | Planned | New History card rendering one stacked bar per day across the five chronological blocks (Night, Morning Peak, Off-Peak, Afternoon Peak, Evening) over the 7/14/30-day range, plus a fix to the cache upsert path so derived fields backfill on already-cached rows with observability on unexpected nil-overwrites. UI-only consumer of the data shipped by Daily Derived Stats. |
 
 ---
 
@@ -132,3 +133,12 @@ Pre-compute three reading-derived per-day stats (`findDailyUsage`, `findMinSOC`,
 - [design.md](daily-derived-stats/design.md)
 - [requirements.md](daily-derived-stats/requirements.md)
 - [tasks.md](daily-derived-stats/tasks.md)
+
+## History Daily Usage
+
+New History card rendering one stacked bar per day across the five chronological blocks (Night, Morning Peak, Off-Peak, Afternoon Peak, Evening) over the 7/14/30-day range, with column-level selection synced to the existing Solar/Grid/Battery cards and a chart density spec for 30-day readability. Bundles the cache upsert fix so the four derived fields (`dailyUsage`, `socLow`, `socLowTime`, `peakPeriods`) backfill on already-cached `CachedDayEnergy` rows on every successful response, with a warning-level log emitted via `os.Logger` whenever a previously non-nil value is overwritten with nil (observability for unexpected backend regressions). UI-only consumer of the data shipped by Daily Derived Stats; no backend, FluxCore, or SwiftData migration changes.
+
+- [decision_log.md](history-daily-usage/decision_log.md)
+- [design.md](history-daily-usage/design.md)
+- [requirements.md](history-daily-usage/requirements.md)
+- [tasks.md](history-daily-usage/tasks.md)
