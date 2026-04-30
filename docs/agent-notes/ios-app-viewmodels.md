@@ -12,11 +12,13 @@ All ViewModels follow `@MainActor @Observable final class` pattern with `private
 
 ## HistoryViewModel (History/HistoryViewModel.swift)
 
-- **Dependencies:** `apiClient`, `modelContext` (SwiftData), `nowProvider`.
-- **State:** `days`, `selectedDay`, `selectedDayRange` (7/14/30), `chartDays`, `chartEntries`, `isLoading`, `error`.
-- Upsert-based caching: `cacheHistoricalDays()` updates existing `CachedDayEnergy` records instead of relying on unique constraint violations.
+- **Dependencies:** `apiClient`, `modelContext` (SwiftData), `nowProvider`, injectable `warn: @Sendable (String) -> Void` (defaults to `HistoryCacheLog.defaultWarn`, which logs to `Logger(subsystem: "eu.arjen.flux", category: "history-cache")`).
+- **State:** `days`, `selectedDay`, `isLoading`, `error`. Range (7/14/30) is owned by `HistoryView`, not the ViewModel.
+- **Derived series:** `derived` computed property returns `DerivedState` (`solar`, `grid`, `battery`, `dailyUsage` series + `summary`). Built in a single pass in `DerivedState.init(days:now:)`. Convenience accessors (`solarSeries`, `gridSeries`, `batterySeries`, `dailyUsageSeries`, `summary`) for tests/previews.
+- **PeriodSummary:** Aggregates per-day totals across complete days (today excluded except for grid off-peak counts, which include today). Daily-usage fields: `dailyUsageTotalKwh`, `dailyUsageDayCount`, `dailyUsageLargestKind` (with 0.01 kWh tolerance-band tie-break by chronological order), `dailyUsageLargestKindTotalKwh`, plus `dailyUsageAvgKwh` / `dailyUsageLargestKindAvgKwh` accessors.
+- **DailyUsageEntry:** Per-day struct with `blocks` sorted into chronological order, clamped `totalKwh` ≥ 0 per block, `stackedTotalKwh`, `isToday`. `accessibilitySummary` formats `{date}: {kwh}, {largestKind} largest` for VoiceOver.
+- Upsert-based caching: `cacheHistoricalDays()` updates existing `CachedDayEnergy` records, including the four derived fields (`dailyUsage`, `socLow`, `socLowTime`, `peakPeriods`). `warnIfClearing(cached:day:)` fires the injected `warn` callback once per (date, fieldName) pair when a non-nil cached value is overwritten with nil — observability for unexpected backend nil-emit (Decision 6).
 - Falls back to SwiftData cache on network failure via `loadCachedDays()`.
-- `rebuildChartData()` transforms raw `DayEnergy` arrays into typed `HistoryChartDay`/`HistoryChartEntry`/`HistoryChartMetric` structs. Triggered automatically via `didSet` on `days`. This keeps chart computation out of view bodies.
 - `selectDefaultDayIfNeeded()` preserves selection across reloads.
 - Concurrent load guard prevents duplicate requests.
 

@@ -6,7 +6,7 @@ references:
 ---
 # T-1022: History Daily Usage
 
-- [ ] 1. Write tests for DailyUsageBlock.Kind styling extension <!-- id:bshb2qo -->
+- [x] 1. Write tests for DailyUsageBlock.Kind styling extension <!-- id:bshb2qo -->
   - File: Flux/FluxTests/DailyUsageBlockKindStylingTests.swift (new)
   - Asserts: chronologicalOrder length 5 in night → morningPeak → offPeak → afternoonPeak → evening order
   - Asserts: chronologicalIndex 0…4 matches that order
@@ -16,7 +16,7 @@ references:
   - Stream: 1
   - Requirements: [1.3](requirements.md#1.3), [1.4](requirements.md#1.4), [1.5](requirements.md#1.5)
 
-- [ ] 2. Implement DailyUsageBlock.Kind extension (chronologicalOrder, chronologicalIndex, chartColor, displayLabel) <!-- id:bshb2qp -->
+- [x] 2. Implement DailyUsageBlock.Kind extension (chronologicalOrder, chronologicalIndex, chartColor, displayLabel) <!-- id:bshb2qp -->
   - File: Flux/Flux/History/DailyUsageBlockKindStyling.swift (new)
   - Extension on FluxCore.DailyUsageBlock.Kind
   - Exposes: static chronologicalOrder, chronologicalIndex computed property, chartColor (SwiftUI.Color), displayLabel
@@ -25,7 +25,7 @@ references:
   - Stream: 1
   - Requirements: [1.3](requirements.md#1.3), [1.4](requirements.md#1.4), [1.5](requirements.md#1.5)
 
-- [ ] 3. Refactor Day Detail DailyUsageCard to use shared displayLabel <!-- id:bshb2qq -->
+- [x] 3. Refactor Day Detail DailyUsageCard to use shared displayLabel <!-- id:bshb2qq -->
   - File: Flux/Flux/DayDetail/DailyUsageCard.swift
   - Replace private label(for:) with block.kind.displayLabel; delete the now-unused method
   - Wiring/types — exempt from TDD pairing per skill rules
@@ -34,7 +34,7 @@ references:
   - Stream: 1
   - Requirements: [1.5](requirements.md#1.5)
 
-- [ ] 4. Write tests for HistoryViewModel daily-usage series and PeriodSummary aggregates <!-- id:bshb2qr -->
+- [x] 4. Write tests for HistoryViewModel daily-usage series and PeriodSummary aggregates <!-- id:bshb2qr -->
   - File: Flux/FluxTests/HistoryViewModelTests.swift (extend existing)
   - Cases (a)-(j) per AC 5.1:
   - (a) all five blocks chronological
@@ -51,7 +51,7 @@ references:
   - Stream: 1
   - Requirements: [5.1](requirements.md#5.1), [3.1](requirements.md#3.1), [3.2](requirements.md#3.2), [3.3](requirements.md#3.3), [3.4](requirements.md#3.4), [1.3](requirements.md#1.3), [1.8](requirements.md#1.8), [1.13](requirements.md#1.13)
 
-- [ ] 5. Implement DerivedState/PeriodSummary/Totals additions in HistoryViewModel <!-- id:bshb2qs -->
+- [x] 5. Implement DerivedState/PeriodSummary/Totals additions in HistoryViewModel <!-- id:bshb2qs -->
   - File: Flux/Flux/History/HistoryViewModel.swift
   - Add nested DailyUsageEntry struct (date, dayID, sorted blocks via chronologicalOrder, stackedTotalKwh, isToday) with nested Block (kind, clamped totalKwh)
   - Extend DerivedState with dailyUsage: [DailyUsageEntry]
@@ -63,7 +63,7 @@ references:
   - Stream: 1
   - Requirements: [3.1](requirements.md#3.1), [3.2](requirements.md#3.2), [3.3](requirements.md#3.3), [3.4](requirements.md#3.4), [3.5](requirements.md#3.5), [1.3](requirements.md#1.3), [1.8](requirements.md#1.8), [1.13](requirements.md#1.13)
 
-- [ ] 6. Write tests for cache upsert backfill and nil-clear warning <!-- id:bshb2qt -->
+- [x] 6. Write tests for cache upsert backfill and nil-clear warning <!-- id:bshb2qt -->
   - File: Flux/FluxTests/HistoryViewModelTests.swift (extend)
   - Backfill case: preload CachedDayEnergy with all four derived fields nil → loadHistory returns non-nil → values populated, warn sink empty
   - Clear case: preload CachedDayEnergy with non-nil derived fields → loadHistory returns nil for those fields → cleared, warn sink received one line per (date, fieldName) pair
@@ -73,7 +73,7 @@ references:
   - Stream: 1
   - Requirements: [5.2](requirements.md#5.2), [5.3](requirements.md#5.3), [4.1](requirements.md#4.1), [4.2](requirements.md#4.2)
 
-- [ ] 7. Implement cacheHistoricalDays four-field backfill and warn injection (HistoryCacheLog.swift) <!-- id:bshb2qu -->
+- [x] 7. Implement cacheHistoricalDays four-field backfill and warn injection (HistoryCacheLog.swift) <!-- id:bshb2qu -->
   - Files: Flux/Flux/History/HistoryViewModel.swift, Flux/Flux/History/HistoryCacheLog.swift (new)
   - HistoryCacheLog.swift: static defaultWarn closure wrapping Logger(subsystem: "eu.arjen.flux", category: "history-cache").warning with .public privacy
   - Extend HistoryViewModel.init signature with `warn: @escaping @Sendable (String) -> Void = HistoryCacheLog.defaultWarn`
@@ -83,7 +83,7 @@ references:
   - Stream: 1
   - Requirements: [4.1](requirements.md#4.1), [4.2](requirements.md#4.2)
 
-- [ ] 8. Update MockFluxAPIClient.historyDays to emit dailyUsage per row for previews <!-- id:bshb2qv -->
+- [x] 8. Update MockFluxAPIClient.historyDays to emit dailyUsage per row for previews <!-- id:bshb2qv -->
   - File: Flux/Flux/Services/MockFluxAPIClient.swift
   - Currently `historyDays` static factory builds DayEnergy without dailyUsage
   - Reuse the existing `dayDailyUsage(for:)` helper (already produces a five-block fixture for /day responses) per row
@@ -93,7 +93,7 @@ references:
   - Stream: 1
   - Requirements: [1.1](requirements.md#1.1), [1.2](requirements.md#1.2)
 
-- [ ] 9. Write tests for HistoryDailyUsageCard view <!-- id:bshb2qw -->
+- [x] 9. Write tests for HistoryDailyUsageCard view <!-- id:bshb2qw -->
   - File: Flux/FluxTests/HistoryDailyUsageCardTests.swift (new)
   - Asserts via rendered-tree inspection (project convention; no snapshot test infrastructure)
   - Today bar opacity == 0.5, other bars == 1.0
@@ -105,7 +105,7 @@ references:
   - Stream: 1
   - Requirements: [5.4](requirements.md#5.4), [1.6](requirements.md#1.6), [1.8](requirements.md#1.8), [1.9](requirements.md#1.9), [1.12](requirements.md#1.12)
 
-- [ ] 10. Implement HistoryDailyUsageCard view <!-- id:bshb2qx -->
+- [x] 10. Implement HistoryDailyUsageCard view <!-- id:bshb2qx -->
   - File: Flux/Flux/History/HistoryDailyUsageCard.swift (new)
   - HistoryCardChrome wrapper, title `Daily usage`
   - Branch summary.dailyUsageDayCount==0 → placeholder (mirror HistoryGridUsageCard.placeholder)
@@ -125,7 +125,7 @@ references:
   - Stream: 1
   - Requirements: [1.1](requirements.md#1.1), [1.2](requirements.md#1.2), [1.3](requirements.md#1.3), [1.4](requirements.md#1.4), [1.5](requirements.md#1.5), [1.6](requirements.md#1.6), [1.7](requirements.md#1.7), [1.8](requirements.md#1.8), [1.9](requirements.md#1.9), [1.10](requirements.md#1.10), [1.11](requirements.md#1.11), [1.12](requirements.md#1.12), [1.13](requirements.md#1.13), [2.1](requirements.md#2.1), [2.2](requirements.md#2.2), [2.3](requirements.md#2.3)
 
-- [ ] 11. Wire HistoryDailyUsageCard into HistoryView <!-- id:bshb2qy -->
+- [x] 11. Wire HistoryDailyUsageCard into HistoryView <!-- id:bshb2qy -->
   - File: Flux/Flux/History/HistoryView.swift
   - Insert HistoryDailyUsageCard between HistoryBatteryCard and the per-day summaryCard branch
   - Pass derived.dailyUsage, derived.summary, selectedDate, selectDay (same plumbing the other three cards use)
@@ -134,7 +134,7 @@ references:
   - Stream: 1
   - Requirements: [1.1](requirements.md#1.1)
 
-- [ ] 12. Refresh agent notes (ios-app-views, ios-app-viewmodels) <!-- id:bshb2qz -->
+- [x] 12. Refresh agent notes (ios-app-views, ios-app-viewmodels) <!-- id:bshb2qz -->
   - Files: docs/agent-notes/ios-app-views.md, docs/agent-notes/ios-app-viewmodels.md
   - ios-app-views.md HistoryView entry: add the new Daily usage card to the layout description (between Battery and per-day summary)
   - ios-app-viewmodels.md HistoryViewModel entry is stale — references chartDays/chartEntries/rebuildChartData() which do not exist; actual shape is days, selectedDay, derived (computed)

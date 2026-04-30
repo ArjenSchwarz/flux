@@ -13,15 +13,18 @@ final class HistoryViewModel {
     private let apiClient: any FluxAPIClient
     private let modelContext: ModelContext
     private let nowProvider: @Sendable () -> Date
+    private let warn: @Sendable (String) -> Void
 
     init(
         apiClient: any FluxAPIClient,
         modelContext: ModelContext,
-        nowProvider: @escaping @Sendable () -> Date = { .now }
+        nowProvider: @escaping @Sendable () -> Date = { .now },
+        warn: @escaping @Sendable (String) -> Void = HistoryCacheLog.defaultWarn
     ) {
         self.apiClient = apiClient
         self.modelContext = modelContext
         self.nowProvider = nowProvider
+        self.warn = warn
     }
 
     func loadHistory(days requestedDays: Int) async {
@@ -78,6 +81,11 @@ final class HistoryViewModel {
                 cached.offpeakGridImportKwh = day.offpeakGridImportKwh
                 cached.offpeakGridExportKwh = day.offpeakGridExportKwh
                 cached.note = day.note
+                warnIfClearing(cached: cached, day: day)
+                cached.dailyUsage = day.dailyUsage
+                cached.socLow = day.socLow
+                cached.socLowTime = day.socLowTime
+                cached.peakPeriods = day.peakPeriods
             } else {
                 let newCachedDay = CachedDayEnergy(from: day)
                 modelContext.insert(newCachedDay)
@@ -87,6 +95,21 @@ final class HistoryViewModel {
 
         if modelContext.hasChanges {
             try modelContext.save()
+        }
+    }
+
+    private func warnIfClearing(cached: CachedDayEnergy, day: DayEnergy) {
+        if cached.dailyUsage != nil, day.dailyUsage == nil {
+            warn("Clearing cached dailyUsage for \(day.date)")
+        }
+        if cached.socLow != nil, day.socLow == nil {
+            warn("Clearing cached socLow for \(day.date)")
+        }
+        if cached.socLowTime != nil, day.socLowTime == nil {
+            warn("Clearing cached socLowTime for \(day.date)")
+        }
+        if cached.peakPeriods != nil, day.peakPeriods == nil {
+            warn("Clearing cached peakPeriods for \(day.date)")
         }
     }
 
@@ -129,173 +152,6 @@ extension HistoryViewModel {
     var solarSeries: [SolarEntry] { derived.solar }
     var gridSeries: [GridEntry] { derived.grid }
     var batterySeries: [BatteryEntry] { derived.battery }
+    var dailyUsageSeries: [DailyUsageEntry] { derived.dailyUsage }
     var summary: PeriodSummary { derived.summary }
-}
-
-extension HistoryViewModel {
-    struct SolarEntry: Identifiable, Equatable {
-        let date: Date
-        let dayID: String
-        let kwh: Double
-        let isToday: Bool
-
-        var id: String { dayID }
-    }
-
-    struct GridEntry: Identifiable, Equatable {
-        let date: Date
-        let dayID: String
-        let peakImportKwh: Double
-        let offpeakImportKwh: Double
-        let exportKwh: Double
-        let isToday: Bool
-
-        var id: String { dayID }
-    }
-
-    struct BatteryEntry: Identifiable, Equatable {
-        let date: Date
-        let dayID: String
-        let chargeKwh: Double
-        let dischargeKwh: Double
-        let isToday: Bool
-
-        var id: String { dayID }
-    }
-
-    struct PeriodSummary: Equatable {
-        let solarTotalKwh: Double
-        /// Excludes today (today is partial; including it would skew daily
-        /// averages). `batteryDayCount` follows the same rule.
-        let solarDayCount: Int
-        let peakImportTotalKwh: Double
-        let offpeakImportTotalKwh: Double
-        let exportTotalKwh: Double
-        /// Includes today when an off-peak record exists. Off-peak imports
-        /// are the actionable headline so showing today's in-progress
-        /// number matters more than a clean daily average.
-        let gridDayCount: Int
-        let chargeTotalKwh: Double
-        let dischargeTotalKwh: Double
-        let batteryDayCount: Int
-
-        static let empty = PeriodSummary(
-            solarTotalKwh: 0,
-            solarDayCount: 0,
-            peakImportTotalKwh: 0,
-            offpeakImportTotalKwh: 0,
-            exportTotalKwh: 0,
-            gridDayCount: 0,
-            chargeTotalKwh: 0,
-            dischargeTotalKwh: 0,
-            batteryDayCount: 0
-        )
-
-        var solarPerDayKwh: Double? {
-            solarDayCount > 0 ? solarTotalKwh / Double(solarDayCount) : nil
-        }
-
-        var dischargePerDayKwh: Double? {
-            batteryDayCount > 0 ? dischargeTotalKwh / Double(batteryDayCount) : nil
-        }
-    }
-
-    struct DerivedState {
-        let solar: [SolarEntry]
-        let grid: [GridEntry]
-        let battery: [BatteryEntry]
-        let summary: PeriodSummary
-
-        init(days: [DayEnergy], now: Date) {
-            guard !days.isEmpty else {
-                solar = []
-                grid = []
-                battery = []
-                summary = .empty
-                return
-            }
-
-            var solar: [SolarEntry] = []
-            var grid: [GridEntry] = []
-            var battery: [BatteryEntry] = []
-            var totals = Totals()
-            solar.reserveCapacity(days.count)
-            grid.reserveCapacity(days.count)
-            battery.reserveCapacity(days.count)
-
-            for day in days {
-                guard let parsedDate = DateFormatting.parseDayDate(day.date) else { continue }
-                let isToday = DateFormatting.isToday(day.date, now: now)
-                solar.append(SolarEntry(date: parsedDate, dayID: day.date, kwh: day.epv, isToday: isToday))
-                battery.append(BatteryEntry(
-                    date: parsedDate, dayID: day.date,
-                    chargeKwh: day.eCharge, dischargeKwh: day.eDischarge, isToday: isToday
-                ))
-                if let entry = Self.gridEntry(day: day, parsedDate: parsedDate, isToday: isToday) {
-                    grid.append(entry)
-                    totals.addGrid(entry)
-                }
-                if !isToday {
-                    totals.addCompleteDay(day)
-                }
-            }
-
-            self.solar = solar
-            self.grid = grid
-            self.battery = battery
-            self.summary = totals.snapshot
-        }
-
-        private static func gridEntry(day: DayEnergy, parsedDate: Date, isToday: Bool) -> GridEntry? {
-            guard let offpeakImport = day.offpeakGridImportKwh else { return nil }
-            let peak = max(0, day.eInput - offpeakImport)
-            return GridEntry(
-                date: parsedDate,
-                dayID: day.date,
-                peakImportKwh: peak,
-                offpeakImportKwh: offpeakImport,
-                exportKwh: day.eOutput,
-                isToday: isToday
-            )
-        }
-    }
-
-    private struct Totals {
-        var solarTotal = 0.0
-        var peakImportTotal = 0.0
-        var offpeakImportTotal = 0.0
-        var exportTotal = 0.0
-        var chargeTotal = 0.0
-        var dischargeTotal = 0.0
-        var completeDayCount = 0
-        var gridDayCount = 0
-
-        mutating func addGrid(_ entry: GridEntry) {
-            peakImportTotal += entry.peakImportKwh
-            offpeakImportTotal += entry.offpeakImportKwh
-            exportTotal += entry.exportKwh
-            gridDayCount += 1
-        }
-
-        mutating func addCompleteDay(_ day: DayEnergy) {
-            solarTotal += day.epv
-            chargeTotal += day.eCharge
-            dischargeTotal += day.eDischarge
-            completeDayCount += 1
-        }
-
-        var snapshot: PeriodSummary {
-            PeriodSummary(
-                solarTotalKwh: solarTotal,
-                solarDayCount: completeDayCount,
-                peakImportTotalKwh: peakImportTotal,
-                offpeakImportTotalKwh: offpeakImportTotal,
-                exportTotalKwh: exportTotal,
-                gridDayCount: gridDayCount,
-                chargeTotalKwh: chargeTotal,
-                dischargeTotalKwh: dischargeTotal,
-                batteryDayCount: completeDayCount
-            )
-        }
-    }
 }
