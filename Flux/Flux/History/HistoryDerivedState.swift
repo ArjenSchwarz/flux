@@ -54,7 +54,20 @@ extension HistoryViewModel {
         var accessibilitySummary: String {
             let total = HistoryFormatters.kwh(stackedTotalKwh)
             let dateText = DateFormatting.dayDateString(from: date)
-            guard let largest = blocks.max(by: { $0.totalKwh < $1.totalKwh }) else {
+            // Tolerance-band tie-break matching `PeriodSummary.largestDailyUsageKind`
+            // (AC 1.8): blocks whose kWh differ by < 0.01 are tied; earliest
+            // chronological kind wins. `blocks` is already sorted into
+            // chronologicalOrder so a single pass gives that behaviour.
+            var best: DailyUsageEntryBlock?
+            for block in blocks {
+                guard let current = best else {
+                    best = block
+                    continue
+                }
+                if (block.totalKwh - current.totalKwh).magnitude < 0.01 { continue }
+                if block.totalKwh > current.totalKwh { best = block }
+            }
+            guard let largest = best else {
                 return "\(dateText): \(total)"
             }
             return "\(dateText): \(total), \(largest.kind.displayLabel) largest"

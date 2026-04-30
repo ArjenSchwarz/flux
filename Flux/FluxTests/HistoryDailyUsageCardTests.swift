@@ -44,6 +44,14 @@ struct HistoryDailyUsageCardTests {
     }
 
     @Test
+    func accessibilitySummaryTieBreakMatchesPeriodSummary() {
+        // All five blocks tied at 1.0 kWh: per AC 1.8 the earliest chronological
+        // kind (.night) wins, matching `PeriodSummary.dailyUsageLargestKind`.
+        let entry = makeEntry(dayID: "2026-04-14", isToday: false)
+        #expect(entry.accessibilitySummary.contains("Night largest"))
+    }
+
+    @Test
     func accessibilityElementsCountMatchesEntries() {
         let entries = [
             makeEntry(dayID: "2026-04-13", isToday: false),
