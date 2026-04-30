@@ -68,6 +68,13 @@ struct HistoryView: View {
                             onSelect: selectDay
                         )
 
+                        HistoryDailyUsageCard(
+                            entries: derived.dailyUsage,
+                            summary: derived.summary,
+                            selectedDate: selectedDate,
+                            onSelect: selectDay
+                        )
+
                         if let selectedDay = viewModel.selectedDay {
                             summaryCard(for: selectedDay)
                         }

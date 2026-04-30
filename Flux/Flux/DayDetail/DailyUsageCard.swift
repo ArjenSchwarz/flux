@@ -21,7 +21,7 @@ struct DailyUsageCard: View {
     private func row(_ block: DailyUsageBlock) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack {
-                Text(label(for: block.kind))
+                Text(block.kind.displayLabel)
                     .font(.subheadline)
                 Spacer()
                 timeRangeView(block)
@@ -65,16 +65,6 @@ struct DailyUsageCard: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-        }
-    }
-
-    private func label(for kind: DailyUsageBlock.Kind) -> String {
-        switch kind {
-        case .night: return "Night"
-        case .morningPeak: return "Morning Peak"
-        case .offPeak: return "Off-Peak"
-        case .afternoonPeak: return "Afternoon Peak"
-        case .evening: return "Evening"
         }
     }
 

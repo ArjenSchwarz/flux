@@ -10,10 +10,12 @@
 
 ## History Views (History/)
 
-- **HistoryView** — Multi-card layout. Range picker (7/14/30), three chart cards (solar, grid usage, battery), then a per-day summary card and `View day detail` link. Empty/error states replace the cards when there is no data.
+- **HistoryView** — Multi-card layout. Range picker (7/14/30), four chart cards (solar, grid usage, battery, daily usage), then a per-day summary card and `View day detail` link. Empty/error states replace the cards when there is no data.
 - **HistorySolarCard** — Green daily bars with a dashed average rule. Today's bar dimmed.
 - **HistoryGridUsageCard** — Diverging stacked bars: peak import (red) on top of off-peak import (teal), exports (blue) below the zero line. Header KPI leads with peak imports because that's the actionable number for an off-peak charging strategy. Days without an off-peak record are hidden from this card; if no day has a split the card shows a placeholder.
 - **HistoryBatteryCard** — Charge (orange, above zero) and discharge (purple, below zero) per day.
+- **HistoryDailyUsageCard** — Stacked bars per day with five segments in chronological order (Night → Morning Peak → Off-Peak → Afternoon Peak → Evening). Colour palette pinned per Decision 5: indigo / orange / teal / red / purple. Today's bar at 50% opacity. Placeholder copy `No load breakdown available for this range.` when `summary.dailyUsageDayCount == 0` (catches both no-blocks and today-only ranges). Subtitle is `"{kind} largest at {kwh} kWh/day average"`. Static helpers (`kpi(for:)`, `subtitle(for:)`, `opacity(for:)`, `placeholderCopy`, `shouldShowPlaceholder(summary:)`) are exposed for unit tests since the project has no rendered-tree inspection library.
+- **DailyUsageBlockKindStyling** — Extension on `FluxCore.DailyUsageBlock.Kind` exposing `chronologicalOrder`, `chronologicalIndex`, `chartColor`, `displayLabel`. Lives in the iOS app target (not FluxCore) because `Color` is SwiftUI; shared with Day Detail's `DailyUsageCard` so labels stay aligned across screens.
 - **HistoryCardChrome** — Shared rounded-rectangle container, header (title + KPI) and optional subtitle.
 - **ChartHighlightOverlay** — `historySelectionOverlay` view extension. Shared drag-to-select gesture that maps the touch x-position to the nearest entry's date and reports the day ID; a single `selectedDay` on the view model drives the highlight rectangle in every chart.
 - **HistoryFormatters** — `kwh` helper picks 1 decimal under 100 kWh, 0 above.

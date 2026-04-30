@@ -290,7 +290,7 @@ public struct DailyUsage: Codable, Sendable {
 }
 
 public struct DailyUsageBlock: Codable, Sendable, Identifiable {
-    public enum Kind: String, Codable, Sendable {
+    public enum Kind: String, Codable, Sendable, CaseIterable {
         case night
         case morningPeak
         case offPeak
