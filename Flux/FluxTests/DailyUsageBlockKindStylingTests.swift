@@ -11,6 +11,17 @@ struct DailyUsageBlockKindStylingTests {
         #expect(order == [.night, .morningPeak, .offPeak, .afternoonPeak, .evening])
     }
 
+    /// Guards against a future `Kind` case being added to `FluxCore` without
+    /// being added to `chronologicalOrder` — `chronologicalIndex` would crash
+    /// at render time. This test fails at build/test time instead.
+    @Test
+    func chronologicalOrderCoversAllKinds() {
+        #expect(DailyUsageBlock.Kind.chronologicalOrder.count == DailyUsageBlock.Kind.allCases.count)
+        for kind in DailyUsageBlock.Kind.allCases {
+            #expect(DailyUsageBlock.Kind.chronologicalOrder.contains(kind), "missing \(kind)")
+        }
+    }
+
     @Test
     func chronologicalIndexMatchesOrder() {
         #expect(DailyUsageBlock.Kind.night.chronologicalIndex == 0)

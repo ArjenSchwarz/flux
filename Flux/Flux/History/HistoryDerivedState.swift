@@ -54,24 +54,13 @@ extension HistoryViewModel {
         var accessibilitySummary: String {
             let total = HistoryFormatters.kwh(stackedTotalKwh)
             let dateText = DateFormatting.dayDateString(from: date)
-            // Tolerance-band tie-break matching `PeriodSummary.largestDailyUsageKind`
-            // (AC 1.8): blocks whose kWh differ by < 0.01 are tied; earliest
-            // chronological kind wins. `blocks` is already sorted into
-            // chronologicalOrder so a single pass gives that behaviour. Keep
-            // this in sync with `largestDailyUsageKind` (period-level).
-            var best: DailyUsageEntryBlock?
-            for block in blocks {
-                guard let current = best else {
-                    best = block
-                    continue
-                }
-                if (block.totalKwh - current.totalKwh).magnitude < 0.01 { continue }
-                if block.totalKwh > current.totalKwh { best = block }
-            }
-            guard let largest = best else {
+            let largest = DailyUsageBlock.Kind.largest(
+                among: blocks.lazy.map { (kind: $0.kind, value: $0.totalKwh) }
+            )
+            guard let largest else {
                 return "\(dateText): \(total)"
             }
-            return "\(dateText): \(total), \(largest.kind.displayLabel) largest"
+            return "\(dateText): \(total), \(largest.displayLabel) largest"
         }
     }
 
@@ -286,29 +275,13 @@ extension HistoryViewModel {
             )
         }
 
-        // Tolerance-band tie-break per AC 1.8: kinds whose sums differ by
-        // less than 0.01 kWh are treated as tied, with chronological order
-        // breaking the tie. Iteration in chronological order gives the
-        // earliest-kind-wins behaviour without an explicit secondary sort.
-        // Keep this in sync with `DailyUsageEntry.accessibilitySummary`,
-        // which applies the same rule per-day for VoiceOver.
         private var largestDailyUsageKind: DailyUsageBlock.Kind? {
             guard dailyUsageDayCount > 0 else { return nil }
-            var best: (kind: DailyUsageBlock.Kind, sum: Double)?
-            for kind in DailyUsageBlock.Kind.chronologicalOrder {
-                let sum = dailyUsageKindSums[kind] ?? 0
-                guard let current = best else {
-                    best = (kind, sum)
-                    continue
+            return DailyUsageBlock.Kind.largest(
+                among: DailyUsageBlock.Kind.chronologicalOrder.lazy.map {
+                    (kind: $0, value: dailyUsageKindSums[$0] ?? 0)
                 }
-                if (sum - current.sum).magnitude < 0.01 {
-                    continue
-                }
-                if sum > current.sum {
-                    best = (kind, sum)
-                }
-            }
-            return best?.kind
+            )
         }
     }
 }

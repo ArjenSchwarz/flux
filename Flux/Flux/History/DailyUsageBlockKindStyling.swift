@@ -27,6 +27,25 @@ extension DailyUsageBlock.Kind {
         }
     }
 
+    /// Returns the kind with the largest value, breaking ties below 0.01
+    /// (AC 1.8) by chronological order. `entries` must already be in
+    /// chronological order — both call sites iterate that way already.
+    /// Returns nil when `entries` is empty.
+    static func largest(
+        among entries: some Sequence<(kind: DailyUsageBlock.Kind, value: Double)>
+    ) -> DailyUsageBlock.Kind? {
+        var best: (kind: DailyUsageBlock.Kind, value: Double)?
+        for entry in entries {
+            guard let current = best else {
+                best = entry
+                continue
+            }
+            if (entry.value - current.value).magnitude < 0.01 { continue }
+            if entry.value > current.value { best = entry }
+        }
+        return best?.kind
+    }
+
     /// Shared with the Day Detail Daily Usage card so labels stay aligned
     /// across screens (AC 1.5).
     var displayLabel: String {
