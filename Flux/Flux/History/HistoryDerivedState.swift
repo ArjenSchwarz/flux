@@ -57,7 +57,8 @@ extension HistoryViewModel {
             // Tolerance-band tie-break matching `PeriodSummary.largestDailyUsageKind`
             // (AC 1.8): blocks whose kWh differ by < 0.01 are tied; earliest
             // chronological kind wins. `blocks` is already sorted into
-            // chronologicalOrder so a single pass gives that behaviour.
+            // chronologicalOrder so a single pass gives that behaviour. Keep
+            // this in sync with `largestDailyUsageKind` (period-level).
             var best: DailyUsageEntryBlock?
             for block in blocks {
                 guard let current = best else {
@@ -130,6 +131,10 @@ extension HistoryViewModel {
             dailyUsageDayCount > 0 ? dailyUsageTotalKwh / Double(dailyUsageDayCount) : nil
         }
 
+        /// Denominator is `dailyUsageDayCount` (all complete days), not the
+        /// subset that contained the largest kind. Keeping it consistent with
+        /// `dailyUsageAvgKwh` lets the subtitle compare like-for-like with the
+        /// KPI: both averages are over the same cohort.
         var dailyUsageLargestKindAvgKwh: Double? {
             dailyUsageDayCount > 0 ? dailyUsageLargestKindTotalKwh / Double(dailyUsageDayCount) : nil
         }
@@ -227,7 +232,7 @@ extension HistoryViewModel {
 }
 
 extension HistoryViewModel {
-    struct Totals {
+    fileprivate struct Totals {
         var solarTotal = 0.0
         var peakImportTotal = 0.0
         var offpeakImportTotal = 0.0
@@ -285,6 +290,8 @@ extension HistoryViewModel {
         // less than 0.01 kWh are treated as tied, with chronological order
         // breaking the tie. Iteration in chronological order gives the
         // earliest-kind-wins behaviour without an explicit secondary sort.
+        // Keep this in sync with `DailyUsageEntry.accessibilitySummary`,
+        // which applies the same rule per-day for VoiceOver.
         private var largestDailyUsageKind: DailyUsageBlock.Kind? {
             guard dailyUsageDayCount > 0 else { return nil }
             var best: (kind: DailyUsageBlock.Kind, sum: Double)?
