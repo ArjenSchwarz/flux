@@ -1,0 +1,143 @@
+---
+references:
+    - specs/history-daily-usage/requirements.md
+    - specs/history-daily-usage/design.md
+    - specs/history-daily-usage/decision_log.md
+---
+# T-1022: History Daily Usage
+
+- [x] 1. Write tests for DailyUsageBlock.Kind styling extension <!-- id:bshb2qo -->
+  - File: Flux/FluxTests/DailyUsageBlockKindStylingTests.swift (new)
+  - Asserts: chronologicalOrder length 5 in night → morningPeak → offPeak → afternoonPeak → evening order
+  - Asserts: chronologicalIndex 0…4 matches that order
+  - Asserts: chartColor mapping per Decision 5 (.indigo / .orange / .teal / .red / .purple)
+  - Asserts: displayLabel matches Day Detail strings (Night, Morning Peak, Off-Peak, Afternoon Peak, Evening)
+  - Red — extension does not exist yet
+  - Stream: 1
+  - Requirements: [1.3](requirements.md#1.3), [1.4](requirements.md#1.4), [1.5](requirements.md#1.5)
+
+- [x] 2. Implement DailyUsageBlock.Kind extension (chronologicalOrder, chronologicalIndex, chartColor, displayLabel) <!-- id:bshb2qp -->
+  - File: Flux/Flux/History/DailyUsageBlockKindStyling.swift (new)
+  - Extension on FluxCore.DailyUsageBlock.Kind
+  - Exposes: static chronologicalOrder, chronologicalIndex computed property, chartColor (SwiftUI.Color), displayLabel
+  - Lives in iOS app target (not FluxCore) because Color is SwiftUI
+  - Blocked-by: bshb2qo (Write tests for DailyUsageBlock.Kind styling extension)
+  - Stream: 1
+  - Requirements: [1.3](requirements.md#1.3), [1.4](requirements.md#1.4), [1.5](requirements.md#1.5)
+
+- [x] 3. Refactor Day Detail DailyUsageCard to use shared displayLabel <!-- id:bshb2qq -->
+  - File: Flux/Flux/DayDetail/DailyUsageCard.swift
+  - Replace private label(for:) with block.kind.displayLabel; delete the now-unused method
+  - Wiring/types — exempt from TDD pairing per skill rules
+  - Verify any existing DayDetail tests still pass (rendered strings unchanged)
+  - Blocked-by: bshb2qp (Implement DailyUsageBlock.Kind extension (chronologicalOrder, chronologicalIndex, chartColor, displayLabel))
+  - Stream: 1
+  - Requirements: [1.5](requirements.md#1.5)
+
+- [x] 4. Write tests for HistoryViewModel daily-usage series and PeriodSummary aggregates <!-- id:bshb2qr -->
+  - File: Flux/FluxTests/HistoryViewModelTests.swift (extend existing)
+  - Cases (a)-(j) per AC 5.1:
+  - (a) all five blocks chronological
+  - (b) non-chronological payload — asserts client-side sort per AC 1.3
+  - (c) off-peak-unresolved day (only night + evening blocks)
+  - (d) mixed presence — some days nil
+  - (e) all-nil — empty series, placeholder
+  - (f) today-only — placeholder, no average
+  - (g) empty-blocks-array treated as nil per AC 3.2
+  - (h) today mid-window with status==inProgress — asserts isToday flag and exclusion from average
+  - (i) zero-totalKwh and negative-totalKwh blocks — asserts clamp ≥0 per AC 1.13
+  - (j) two block kinds tied at integer-half kWh values (0.5/1.0/1.5) for IEEE 754 exactness — asserts chronological tie-break per AC 1.8
+  - Red — DerivedState fields and PeriodSummary additions do not exist yet
+  - Stream: 1
+  - Requirements: [5.1](requirements.md#5.1), [3.1](requirements.md#3.1), [3.2](requirements.md#3.2), [3.3](requirements.md#3.3), [3.4](requirements.md#3.4), [1.3](requirements.md#1.3), [1.8](requirements.md#1.8), [1.13](requirements.md#1.13)
+
+- [x] 5. Implement DerivedState/PeriodSummary/Totals additions in HistoryViewModel <!-- id:bshb2qs -->
+  - File: Flux/Flux/History/HistoryViewModel.swift
+  - Add nested DailyUsageEntry struct (date, dayID, sorted blocks via chronologicalOrder, stackedTotalKwh, isToday) with nested Block (kind, clamped totalKwh)
+  - Extend DerivedState with dailyUsage: [DailyUsageEntry]
+  - Extend PeriodSummary with dailyUsageTotalKwh, dailyUsageDayCount, dailyUsageLargestKind plus dailyUsageAvgKwh accessor
+  - Extend Totals to track [Kind: Double] per-kind sums and complete-day stack-total sum/count
+  - Tie-break: 0.01 kWh tolerance band — (sumA-sumB).magnitude < 0.01 → tie, then chronologicalIndex ascending wins
+  - Build series in the existing single-pass init(days:now:) loop; today excluded from aggregates
+  - Blocked-by: bshb2qp (Implement DailyUsageBlock.Kind extension (chronologicalOrder, chronologicalIndex, chartColor, displayLabel)), bshb2qr (Write tests for HistoryViewModel daily-usage series and PeriodSummary aggregates)
+  - Stream: 1
+  - Requirements: [3.1](requirements.md#3.1), [3.2](requirements.md#3.2), [3.3](requirements.md#3.3), [3.4](requirements.md#3.4), [3.5](requirements.md#3.5), [1.3](requirements.md#1.3), [1.8](requirements.md#1.8), [1.13](requirements.md#1.13)
+
+- [x] 6. Write tests for cache upsert backfill and nil-clear warning <!-- id:bshb2qt -->
+  - File: Flux/FluxTests/HistoryViewModelTests.swift (extend)
+  - Backfill case: preload CachedDayEnergy with all four derived fields nil → loadHistory returns non-nil → values populated, warn sink empty
+  - Clear case: preload CachedDayEnergy with non-nil derived fields → loadHistory returns nil for those fields → cleared, warn sink received one line per (date, fieldName) pair
+  - Round-trip: persist via cacheHistoricalDays, read back via loadCachedDays / asDayEnergy, assert dailyUsage blocks list field-equality (AC 5.3)
+  - Use actor WarnSink test helper (record/lines async accessors) for Swift 6 strict-concurrency-safe capture
+  - Red — cacheHistoricalDays does not yet update the four fields, no warn injection point
+  - Stream: 1
+  - Requirements: [5.2](requirements.md#5.2), [5.3](requirements.md#5.3), [4.1](requirements.md#4.1), [4.2](requirements.md#4.2)
+
+- [x] 7. Implement cacheHistoricalDays four-field backfill and warn injection (HistoryCacheLog.swift) <!-- id:bshb2qu -->
+  - Files: Flux/Flux/History/HistoryViewModel.swift, Flux/Flux/History/HistoryCacheLog.swift (new)
+  - HistoryCacheLog.swift: static defaultWarn closure wrapping Logger(subsystem: "eu.arjen.flux", category: "history-cache").warning with .public privacy
+  - Extend HistoryViewModel.init signature with `warn: @escaping @Sendable (String) -> Void = HistoryCacheLog.defaultWarn`
+  - In cacheHistoricalDays existing-row branch, add private warnIfClearing(cached:day:) that for each of the four fields checks `cached.field != nil && day.field == nil` and emits one warn line per cleared (date, fieldName) BEFORE the assignment
+  - Then assign dailyUsage / socLow / socLowTime / peakPeriods unconditionally (overwrites both directions per AC 4.1)
+  - Blocked-by: bshb2qt (Write tests for cache upsert backfill and nil-clear warning)
+  - Stream: 1
+  - Requirements: [4.1](requirements.md#4.1), [4.2](requirements.md#4.2)
+
+- [x] 8. Update MockFluxAPIClient.historyDays to emit dailyUsage per row for previews <!-- id:bshb2qv -->
+  - File: Flux/Flux/Services/MockFluxAPIClient.swift
+  - Currently `historyDays` static factory builds DayEnergy without dailyUsage
+  - Reuse the existing `dayDailyUsage(for:)` helper (already produces a five-block fixture for /day responses) per row
+  - Wiring/data — exempt from TDD pairing
+  - Verify HistoryView preview renders the new card with five-segment bars
+  - Blocked-by: bshb2qs (Implement DerivedState/PeriodSummary/Totals additions in HistoryViewModel)
+  - Stream: 1
+  - Requirements: [1.1](requirements.md#1.1), [1.2](requirements.md#1.2)
+
+- [x] 9. Write tests for HistoryDailyUsageCard view <!-- id:bshb2qw -->
+  - File: Flux/FluxTests/HistoryDailyUsageCardTests.swift (new)
+  - Asserts via rendered-tree inspection (project convention; no snapshot test infrastructure)
+  - Today bar opacity == 0.5, other bars == 1.0
+  - Placeholder copy `No load breakdown available for this range.` when summary.dailyUsageDayCount == 0
+  - Today-only placeholder (entries non-empty but dailyUsageDayCount == 0)
+  - Subtitle for fixture with largest=Evening, avg=3.4 kWh equals literal `Evening largest at 3.4 kWh/day average`
+  - Chart accessibility tree count == entries.count (one element per day, not per BarMark)
+  - Red — view does not exist
+  - Stream: 1
+  - Requirements: [5.4](requirements.md#5.4), [1.6](requirements.md#1.6), [1.8](requirements.md#1.8), [1.9](requirements.md#1.9), [1.12](requirements.md#1.12)
+
+- [x] 10. Implement HistoryDailyUsageCard view <!-- id:bshb2qx -->
+  - File: Flux/Flux/History/HistoryDailyUsageCard.swift (new)
+  - HistoryCardChrome wrapper, title `Daily usage`
+  - Branch summary.dailyUsageDayCount==0 → placeholder (mirror HistoryGridUsageCard.placeholder)
+  - Otherwise Chart with .frame(minHeight: 180)
+  - Selection RuleMark when selectedDate is set (no zero baseline rule — values are non-negative)
+  - One BarMark per block in chronologicalOrder stacked at the same Date x-position
+  - .opacity(entry.isToday ? 0.5 : 1.0)
+  - .foregroundStyle(by:) keyed on displayLabel
+  - chartForegroundStyleScale(domain: kinds.map(\.displayLabel), range: kinds.map(\.chartColor)) — explicit array overload, NOT dictionary literal
+  - .chartXAxis with AxisMarks(values: .stride(by: .day, count: max(1, entries.count / 6)))
+  - Animation: .animation(.default, value: entries.count); if device shows per-mark stutter, fall back to .transaction(value: entries.count) { $0.animation = .default }
+  - Selection: .historySelectionOverlay(entries: entries.map { ($0.dayID, $0.date) }, onSelect: onSelect) — overlay file unchanged
+  - Accessibility primary: .accessibilityElement(children: .ignore) + .accessibilityRepresentation { List { ForEach(entries) { Text($0.accessibilitySummary) } } }
+  - Accessibility fallback: ZStack with Chart .accessibilityHidden(true) + sibling visually-hidden List
+  - accessibilitySummary returns `{date}: {stackedTotal} kWh, {largestKindForThisDay} largest` using clamped values
+  - Blocked-by: bshb2qp (Implement DailyUsageBlock.Kind extension (chronologicalOrder, chronologicalIndex, chartColor, displayLabel)), bshb2qs (Implement DerivedState/PeriodSummary/Totals additions in HistoryViewModel), bshb2qw (Write tests for HistoryDailyUsageCard view)
+  - Stream: 1
+  - Requirements: [1.1](requirements.md#1.1), [1.2](requirements.md#1.2), [1.3](requirements.md#1.3), [1.4](requirements.md#1.4), [1.5](requirements.md#1.5), [1.6](requirements.md#1.6), [1.7](requirements.md#1.7), [1.8](requirements.md#1.8), [1.9](requirements.md#1.9), [1.10](requirements.md#1.10), [1.11](requirements.md#1.11), [1.12](requirements.md#1.12), [1.13](requirements.md#1.13), [2.1](requirements.md#2.1), [2.2](requirements.md#2.2), [2.3](requirements.md#2.3)
+
+- [x] 11. Wire HistoryDailyUsageCard into HistoryView <!-- id:bshb2qy -->
+  - File: Flux/Flux/History/HistoryView.swift
+  - Insert HistoryDailyUsageCard between HistoryBatteryCard and the per-day summaryCard branch
+  - Pass derived.dailyUsage, derived.summary, selectedDate, selectDay (same plumbing the other three cards use)
+  - Wiring — exempt from TDD pairing
+  - Blocked-by: bshb2qx (Implement HistoryDailyUsageCard view)
+  - Stream: 1
+  - Requirements: [1.1](requirements.md#1.1)
+
+- [x] 12. Refresh agent notes (ios-app-views, ios-app-viewmodels) <!-- id:bshb2qz -->
+  - Files: docs/agent-notes/ios-app-views.md, docs/agent-notes/ios-app-viewmodels.md
+  - ios-app-views.md HistoryView entry: add the new Daily usage card to the layout description (between Battery and per-day summary)
+  - ios-app-viewmodels.md HistoryViewModel entry is stale — references chartDays/chartEntries/rebuildChartData() which do not exist; actual shape is days, selectedDay, derived (computed)
+  - Refresh: DerivedState now also exposes dailyUsage; PeriodSummary now also exposes dailyUsage* fields; warn callback in init for cache observability
+  - Blocked-by: bshb2qy (Wire HistoryDailyUsageCard into HistoryView)
+  - Stream: 1

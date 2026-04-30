@@ -68,16 +68,18 @@ final actor MockFluxAPIClient: FluxAPIClient {
             guard let date = calendar.date(byAdding: .day, value: -dayOffset, to: baseDate) else {
                 continue
             }
+            let dateString = DateFormatting.dayDateString(from: date)
             let trend = Double(dayOffset)
             days.append(
                 DayEnergy(
-                    date: DateFormatting.dayDateString(from: date),
+                    date: dateString,
                     epv: max(0, 14.2 - trend * 0.17),
                     eInput: max(0.2, 2.3 - trend * 0.03),
                     eOutput: max(0.5, 5.1 - trend * 0.09),
                     eCharge: max(0.8, 5.4 - trend * 0.08),
                     eDischarge: max(1.0, 6.2 - trend * 0.10),
-                    note: dayOffset == 0 ? previewNote : nil
+                    note: dayOffset == 0 ? previewNote : nil,
+                    dailyUsage: dayDailyUsage(for: dateString)
                 )
             )
         }
