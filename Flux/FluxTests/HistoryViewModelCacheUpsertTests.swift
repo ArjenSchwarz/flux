@@ -31,10 +31,11 @@ struct HistoryViewModelCacheUpsertTests {
         ]))
 
         let sink = WarnSink()
+        let now = makeUTCDate(year: 2026, month: 4, day: 15, hour: 14, minute: 30)
         let viewModel = HistoryViewModel(
             apiClient: apiClient,
             modelContext: modelContext,
-            nowProvider: { self.makeUTCDate(year: 2026, month: 4, day: 15, hour: 14, minute: 30) },
+            nowProvider: { now },
             warn: { line in Task { await sink.record(line) } }
         )
         await viewModel.loadHistory(days: 7)
@@ -74,10 +75,11 @@ struct HistoryViewModelCacheUpsertTests {
         ]))
 
         let sink = WarnSink()
+        let now = makeUTCDate(year: 2026, month: 4, day: 15, hour: 14, minute: 30)
         let viewModel = HistoryViewModel(
             apiClient: apiClient,
             modelContext: modelContext,
-            nowProvider: { self.makeUTCDate(year: 2026, month: 4, day: 15, hour: 14, minute: 30) },
+            nowProvider: { now },
             warn: { line in Task { await sink.record(line) } }
         )
         await viewModel.loadHistory(days: 7)
