@@ -23,12 +23,14 @@ public enum WidgetAccessibility {
         let verb = statusVerb(live: live)
 
         switch family {
+        #if !os(macOS)
         case .accessoryInline:
             return "Battery \(socInt) percent, \(verb)"
         case .accessoryCircular:
             return "Battery \(socInt) percent"
         case .accessoryRectangular:
             return "Battery \(socInt) percent, \(verb)"
+        #endif
         case .systemSmall:
             if let live {
                 return "Battery \(socInt) percent, \(verb). Load \(watts(live.pload))."
@@ -39,7 +41,7 @@ public enum WidgetAccessibility {
                 return "Battery \(socInt) percent, \(verb). Solar \(watts(live.ppv)), load \(watts(live.pload)), grid \(gridPhrase(live))."
             }
             return "Battery \(socInt) percent, \(verb)."
-        @unknown default:
+        default:
             return "Battery \(socInt) percent, \(verb)."
         }
     }

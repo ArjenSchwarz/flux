@@ -7,14 +7,18 @@ public enum KeychainServiceError: Error, Sendable, Equatable {
 
 public enum KeychainAccessibility: Sendable, Equatable {
     case afterFirstUnlockThisDeviceOnly
+    case afterFirstUnlock
     case other(String)
     case missing
 
     init(cfString: CFString) {
-        if (cfString as String) == (kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly as String) {
+        let raw = cfString as String
+        if raw == (kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly as String) {
             self = .afterFirstUnlockThisDeviceOnly
+        } else if raw == (kSecAttrAccessibleAfterFirstUnlock as String) {
+            self = .afterFirstUnlock
         } else {
-            self = .other(cfString as String)
+            self = .other(raw)
         }
     }
 
@@ -22,10 +26,12 @@ public enum KeychainAccessibility: Sendable, Equatable {
         switch self {
         case .afterFirstUnlockThisDeviceOnly:
             return kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        case .afterFirstUnlock:
+            return kSecAttrAccessibleAfterFirstUnlock
         case .other(let raw):
             return raw as CFString
         case .missing:
-            return kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            return kSecAttrAccessibleAfterFirstUnlock
         }
     }
 }
@@ -35,17 +41,20 @@ public final class KeychainService: Sendable {
     private let account: String
     private let accessGroup: String?
     private let accessibility: KeychainAccessibility
+    private let synchronizable: Bool
 
     public init(
         service: String = "me.nore.ig.flux",
         account: String = "api-token",
         accessGroup: String? = "group.me.nore.ig.flux",
-        accessibility: KeychainAccessibility = .afterFirstUnlockThisDeviceOnly
+        accessibility: KeychainAccessibility = .afterFirstUnlock,
+        synchronizable: Bool = true
     ) {
         self.service = service
         self.account = account
         self.accessGroup = accessGroup
         self.accessibility = accessibility
+        self.synchronizable = synchronizable
     }
 
     public func saveToken(_ token: String) throws {
@@ -54,6 +63,7 @@ public final class KeychainService: Sendable {
         var query = keychainQuery()
         query[kSecValueData] = Data(token.utf8)
         query[kSecAttrAccessible] = accessibility.cfString
+        query[kSecAttrSynchronizable] = synchronizable ? kCFBooleanTrue : kCFBooleanFalse
 
         let status = SecItemAdd(query as CFDictionary, nil)
         guard status == errSecSuccess else {
@@ -65,6 +75,7 @@ public final class KeychainService: Sendable {
         var query = keychainQuery()
         query[kSecReturnData] = kCFBooleanTrue
         query[kSecMatchLimit] = kSecMatchLimitOne
+        query[kSecAttrSynchronizable] = kSecAttrSynchronizableAny
 
         var item: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &item)
@@ -81,7 +92,9 @@ public final class KeychainService: Sendable {
     }
 
     public func deleteToken() throws {
-        let status = SecItemDelete(keychainQuery() as CFDictionary)
+        var query = keychainQuery()
+        query[kSecAttrSynchronizable] = kSecAttrSynchronizableAny
+        let status = SecItemDelete(query as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw KeychainServiceError.unexpectedStatus(status)
         }

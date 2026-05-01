@@ -84,6 +84,7 @@ struct WidgetAccessibilityTests {
         #expect(!label.lowercased().contains("solar"))
     }
 
+    #if !os(macOS)
     @Test
     func accessoryInlineIsSingleSentenceWithSOCAndStatusWord() {
         let env = freshDischargeEnvelope()
@@ -94,18 +95,23 @@ struct WidgetAccessibilityTests {
         let sentenceCount = label.split { $0 == "." }.count
         #expect(sentenceCount == 1)
     }
+    #endif
 
     @Test
     func offlineLabelBeginsWithOfflineAcrossFamilies() {
         let env = freshDischargeEnvelope()
-        let families: [WidgetFamily] = [
+        var families: [WidgetFamily] = [
             .systemSmall,
             .systemMedium,
-            .systemLarge,
+            .systemLarge
+        ]
+        #if !os(macOS)
+        families.append(contentsOf: [
             .accessoryCircular,
             .accessoryRectangular,
             .accessoryInline
-        ]
+        ])
+        #endif
 
         for family in families {
             let label = WidgetAccessibility.label(
@@ -140,14 +146,18 @@ struct WidgetAccessibilityTests {
     @Test
     func labelBeginsWithBatteryPercentWhenEnvelopePresent() {
         let env = freshDischargeEnvelope(soc: 42.0)
-        let families: [WidgetFamily] = [
+        var families: [WidgetFamily] = [
             .systemSmall,
             .systemMedium,
-            .systemLarge,
+            .systemLarge
+        ]
+        #if !os(macOS)
+        families.append(contentsOf: [
             .accessoryCircular,
             .accessoryRectangular,
             .accessoryInline
-        ]
+        ])
+        #endif
 
         for family in families {
             let label = WidgetAccessibility.label(
@@ -159,6 +169,7 @@ struct WidgetAccessibilityTests {
         }
     }
 
+    #if !os(macOS)
     @Test
     func chargingVerbAppearsWhenPbatNegative() {
         let env = StatusSnapshotEnvelope(
@@ -194,4 +205,5 @@ struct WidgetAccessibilityTests {
         #expect(!label.lowercased().contains("discharging"))
         #expect(!label.lowercased().contains("full"))
     }
+    #endif
 }

@@ -250,7 +250,8 @@ struct URLSessionAPIClientTests {
         let keychain = KeychainService(
             service: "me.nore.ig.flux.tests.\(UUID().uuidString)",
             account: "api-token",
-            accessGroup: nil
+            accessGroup: nil,
+            synchronizable: false
         )
         let session = makeSession()
         MockURLProtocol.requestHandler = { request in
@@ -401,7 +402,8 @@ struct URLSessionAPIClientTests {
         let keychain = KeychainService(
             service: "me.nore.ig.flux.tests.\(UUID().uuidString)",
             account: "api-token",
-            accessGroup: nil
+            accessGroup: nil,
+            synchronizable: false
         )
         defer { try? keychain.deleteToken() }
         try keychain.saveToken("stored-token")

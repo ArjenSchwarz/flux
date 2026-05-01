@@ -9,24 +9,24 @@ references:
 
 ## FluxCore foundation
 
-- [ ] 1. Add macOS platform to FluxCore Package.swift <!-- id:ntwcpwe -->
+- [x] 1. Add macOS platform to FluxCore Package.swift <!-- id:ntwcpwe -->
   - Modify Flux/Packages/FluxCore/Package.swift to add `.macOS(.v26)` to the platforms array. No test pair (config-only change).
   - Requirements: [1.2](requirements.md#1.2)
 
-- [ ] 2. Write KeychainService tests for SynchronizableAny + new defaults (red) <!-- id:ntwcpvx -->
+- [x] 2. Write KeychainService tests for SynchronizableAny + new defaults (red) <!-- id:ntwcpvx -->
   - Add tests in Flux/Packages/FluxCore/Tests/FluxCoreTests/KeychainServiceTests.swift covering: loadToken finds a legacy non-synchronisable item; saveToken removes both legacy and synchronisable variants then writes a single synchronisable item; deleteToken removes both variants. Tests should fail against current implementation.
   - Requirements: [7.1](requirements.md#7.1), [7.2](requirements.md#7.2), [7.3](requirements.md#7.3)
 
-- [ ] 3. Implement KeychainService SynchronizableAny semantics + new defaults <!-- id:ntwcpvy -->
+- [x] 3. Implement KeychainService SynchronizableAny semantics + new defaults <!-- id:ntwcpvy -->
   - Modify Flux/Packages/FluxCore/Sources/FluxCore/Security/KeychainService.swift: change accessibility default to `.afterFirstUnlock`, add `synchronizable: Bool = true` parameter, set `kSecAttrSynchronizable` on writes via `kCFBooleanTrue/False`, query with `kSecAttrSynchronizableAny` on loadToken and deleteToken. Add `.afterFirstUnlock` case to KeychainAccessibility enum.
   - Blocked-by: ntwcpvx (Write KeychainService tests for SynchronizableAny + new defaults (red))
   - Requirements: [7.1](requirements.md#7.1), [7.2](requirements.md#7.2), [7.3](requirements.md#7.3)
 
-- [ ] 4. Write iCloudURLMirror tests (red) <!-- id:ntwcpvz -->
+- [x] 4. Write iCloudURLMirror tests (red) <!-- id:ntwcpvz -->
   - Add tests covering: write(url) updates both NSUbiquitousKeyValueStore and App Group UserDefaults; external KVS change notification updates UserDefaults mirror within MainActor; start() seeds UserDefaults from KVS on first call. Inject test doubles for both stores.
   - Requirements: [7.4](requirements.md#7.4)
 
-- [ ] 5. Implement iCloudURLMirror <!-- id:ntwcpw0 -->
+- [x] 5. Implement iCloudURLMirror <!-- id:ntwcpw0 -->
   - New file Flux/Packages/FluxCore/Sources/FluxCore/Settings/iCloudURLMirror.swift. Singleton @MainActor @Observable; `start()` registers async-sequence observer on `NSUbiquitousKeyValueStore.didChangeExternallyNotification`; `write(url)` updates both stores.
   - Blocked-by: ntwcpvz (Write iCloudURLMirror tests (red))
   - Requirements: [7.4](requirements.md#7.4)

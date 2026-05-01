@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "FluxCore",
-    platforms: [.iOS(.v26)],
+    platforms: [.iOS(.v26), .macOS(.v26)],
     products: [
         .library(name: "FluxCore", targets: ["FluxCore"])
     ],
