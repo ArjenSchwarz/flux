@@ -90,21 +90,21 @@ references:
 
 ## Widget extension Mac support
 
-- [ ] 18. Add WidgetKinds.controlBattery constant <!-- id:ntwcpwa -->
+- [x] 18. Add WidgetKinds.controlBattery constant <!-- id:ntwcpwa -->
   - Modify Flux/Packages/FluxCore/Sources/FluxCore/Widget/WidgetKinds.swift to add `public static let controlBattery = "FluxControlBattery"`.
   - Requirements: [8.2](requirements.md#8.2)
 
-- [ ] 19. Write ControlSOCProvider tests (red) <!-- id:ntwcpwb -->
+- [x] 19. Write ControlSOCProvider tests (red) <!-- id:ntwcpwb -->
   - Add tests covering: cache hit (cache.read() returns recent envelope) returns SOCValue with stale=false; cache stale or missing path falls back to live snapshot. Inject WidgetSnapshotCache + StatusTimelineLogic test doubles.
   - Blocked-by: ntwcpwa (Add WidgetKinds.controlBattery constant)
   - Requirements: [8.2](requirements.md#8.2), [8.6](requirements.md#8.6)
 
-- [ ] 20. Implement FluxControlWidget and ControlSOCProvider <!-- id:ntwcpwc -->
+- [x] 20. Implement FluxControlWidget and ControlSOCProvider <!-- id:ntwcpwc -->
   - New file Flux/FluxWidgets/FluxControlWidget.swift gated by `#if os(macOS)`. Defines FluxControlWidget: ControlWidget with StaticControlConfiguration + ControlValueProvider (ControlSOCProvider). Action uses Apple OpenURLIntent(URL(string: "flux://dashboard")!) directly — no custom intent struct. Label shows `Int(value.percent)%` with SOCFormatting.symbol icon.
   - Blocked-by: ntwcpwb (Write ControlSOCProvider tests (red))
   - Requirements: [8.2](requirements.md#8.2), [8.6](requirements.md#8.6)
 
-- [ ] 21. Update FluxWidgetsBundle for platform-conditional widget registration <!-- id:ntwcpwd -->
+- [x] 21. Update FluxWidgetsBundle for platform-conditional widget registration <!-- id:ntwcpwd -->
   - Modify Flux/FluxWidgets/FluxWidgetsBundle.swift to gate `FluxAccessoryWidget()` with `#if os(iOS)` and add `FluxControlWidget()` under `#if os(macOS)`. FluxBatteryWidget remains on both.
   - Blocked-by: ntwcpwc (Implement FluxControlWidget and ControlSOCProvider)
   - Requirements: [8.1](requirements.md#8.1), [8.2](requirements.md#8.2), [8.3](requirements.md#8.3)
