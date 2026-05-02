@@ -135,7 +135,13 @@ public final class URLSessionAPIClient: FluxAPIClient, Sendable {
     /// iteration. `Task.sleep` propagates `CancellationError` when the
     /// surrounding task is cancelled, which short-circuits the loop without
     /// an explicit (and racy) `Task.isCancelled` probe.
+    ///
+    /// iOS doesn't exhibit this warm-up race; on iOS, a `.cancelled` URLError
+    /// is virtually always a real cancellation (view disappear, app
+    /// background) that should propagate immediately rather than triggering
+    /// an unwanted ~3.7 s retry.
     private func fetch(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        #if os(macOS)
         let backoffs: [Duration] = [
             .milliseconds(200),
             .milliseconds(500),
@@ -150,6 +156,9 @@ public final class URLSessionAPIClient: FluxAPIClient, Sendable {
             }
         }
         return try await session.data(for: request)
+        #else
+        return try await session.data(for: request)
+        #endif
     }
 
     private func decodeResponse<T: Decodable>(_ data: Data) throws -> T {

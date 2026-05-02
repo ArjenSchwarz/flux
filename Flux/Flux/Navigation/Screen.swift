@@ -28,9 +28,13 @@ enum Screen: String, CaseIterable, Identifiable {
 
     static var sidebarVisible: [Screen] {
         #if os(macOS)
+        // macOS uses the Settings scene (⌘,) instead of an inline entry.
         return Screen.allCases.filter { $0 != .settings }
         #else
-        return Screen.allCases
+        // `.today` is a macOS-only sidebar entry per T-1081 polish; iOS
+        // continues to reach Day Detail via the Dashboard's "Today detail"
+        // button.
+        return Screen.allCases.filter { $0 != .today }
         #endif
     }
 }
