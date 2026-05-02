@@ -30,24 +30,24 @@ struct DayDetailView: View {
                     }
 
                     SOCChartView(date: viewModel.date, readings: viewModel.parsedReadings, summary: viewModel.summary)
-
-                    if viewModel.hasPowerData && !viewModel.peakPeriods.isEmpty {
-                        PeakUsageCard(periods: viewModel.peakPeriods)
-                    }
-
-                    if viewModel.hasPowerData,
-                       let dailyUsage = viewModel.dailyUsage,
-                       !dailyUsage.blocks.isEmpty {
-                        DailyUsageCard(dailyUsage: dailyUsage)
-                    }
                 } else if let error = viewModel.error {
                     errorCard(error: error)
                 } else if viewModel.isLoading {
                     ProgressView("Loading day data…")
                         .frame(maxWidth: .infinity)
                         .padding()
-                } else {
+                } else if viewModel.peakPeriods.isEmpty,
+                          viewModel.dailyUsage?.blocks.isEmpty ?? true,
+                          viewModel.summary == nil {
                     emptyStateCard
+                }
+
+                if !viewModel.peakPeriods.isEmpty {
+                    PeakUsageCard(periods: viewModel.peakPeriods)
+                }
+
+                if let dailyUsage = viewModel.dailyUsage, !dailyUsage.blocks.isEmpty {
+                    DailyUsageCard(dailyUsage: dailyUsage)
                 }
 
                 summaryCard

@@ -167,9 +167,9 @@ func TestHandleDayFallbackToDailyPower(t *testing.T) {
 		queryDailyPowerFn: func(_ context.Context, serial, d string) ([]dynamo.DailyPowerItem, error) {
 			assert.Equal(t, date, d)
 			return []dynamo.DailyPowerItem{
-				{UploadTime: "2026-04-14 08:00:00", Cbat: 85},
-				{UploadTime: "2026-04-14 12:00:00", Cbat: 95},
-				{UploadTime: "2026-04-14 18:00:00", Cbat: 45},
+				{UploadTime: "2026-04-14 08:00:00", Cbat: 85, Ppv: 1000, Load: 400, FeedIn: 0, GridCharge: 0},
+				{UploadTime: "2026-04-14 12:00:00", Cbat: 95, Ppv: 3000, Load: 800, FeedIn: 1500, GridCharge: 0},
+				{UploadTime: "2026-04-14 18:00:00", Cbat: 45, Ppv: 0, Load: 600, FeedIn: 0, GridCharge: 200},
 			}, nil
 		},
 		getDailyEnergyFn: func(_ context.Context, _, _ string) (*dynamo.DailyEnergyItem, error) {
@@ -187,16 +187,29 @@ func TestHandleDayFallbackToDailyPower(t *testing.T) {
 	assert.Equal(t, date, dr.Date)
 	require.Len(t, dr.Readings, 3, "fallback data used directly, not downsampled")
 
-	// Verify cbat mapped to soc, power fields are 0.
-	for _, r := range dr.Readings {
-		assert.Equal(t, float64(0), r.Ppv)
-		assert.Equal(t, float64(0), r.Pload)
-		assert.Equal(t, float64(0), r.Pbat)
-		assert.Equal(t, float64(0), r.Pgrid)
-	}
+	// cbat → soc, ppv/load pass through, pgrid = gridCharge − feedIn,
+	// pbat derived from the instantaneous power balance pbat = pload − ppv − pgrid.
 	assert.Equal(t, roundPower(85), dr.Readings[0].Soc)
 	assert.Equal(t, roundPower(95), dr.Readings[1].Soc)
 	assert.Equal(t, roundPower(45), dr.Readings[2].Soc)
+
+	// 08:00 — pure self-consumption: ppv 1000, load 400, no grid → battery charging at 600W (pbat = -600).
+	assert.Equal(t, roundPower(1000), dr.Readings[0].Ppv)
+	assert.Equal(t, roundPower(400), dr.Readings[0].Pload)
+	assert.Equal(t, float64(0), dr.Readings[0].Pgrid)
+	assert.Equal(t, roundPower(-600), dr.Readings[0].Pbat)
+
+	// 12:00 — solar covering load and exporting: ppv 3000, load 800, feedIn 1500 → battery charging at 700W (pbat = -700).
+	assert.Equal(t, roundPower(3000), dr.Readings[1].Ppv)
+	assert.Equal(t, roundPower(800), dr.Readings[1].Pload)
+	assert.Equal(t, roundPower(-1500), dr.Readings[1].Pgrid)
+	assert.Equal(t, roundPower(-700), dr.Readings[1].Pbat)
+
+	// 18:00 — evening: ppv 0, load 600, gridCharge 200 → battery discharging at 400W (pbat = +400).
+	assert.Equal(t, float64(0), dr.Readings[2].Ppv)
+	assert.Equal(t, roundPower(600), dr.Readings[2].Pload)
+	assert.Equal(t, roundPower(200), dr.Readings[2].Pgrid)
+	assert.Equal(t, roundPower(400), dr.Readings[2].Pbat)
 
 	// Summary should have socLow from fallback data.
 	require.NotNil(t, dr.Summary)
