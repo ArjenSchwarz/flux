@@ -63,6 +63,11 @@ help:
 	@echo "    ios-archive     - Create xcarchive for iOS"
 	@echo "    ios-upload      - Archive and upload to App Store Connect"
 	@echo ""
+	@echo "  Mac App:"
+	@echo "    macos-lint      - Run SwiftLint"
+	@echo "    macos-build     - Build for macOS (arm64)"
+	@echo "    macos-test      - Run unit tests on macOS (UI tests deferred)"
+	@echo ""
 	@echo "  Utilities:"
 	@echo "    ios-clean       - Clean iOS build artifacts"
 	@echo ""
@@ -269,3 +274,35 @@ ios-clean:
 		-project $(IOS_PROJECT) \
 		-scheme $(IOS_SCHEME)
 	rm -rf $(IOS_DERIVED_DATA) build
+
+# =============================================================================
+# Mac App
+# =============================================================================
+
+.PHONY: macos-lint
+macos-lint:
+	cd Flux && swiftlint lint --strict
+
+.PHONY: macos-build
+macos-build:
+	xcodebuild build \
+		-project $(IOS_PROJECT) \
+		-scheme $(IOS_SCHEME) \
+		-destination 'platform=macOS,arch=arm64' \
+		-configuration $(IOS_CONFIG) \
+		-derivedDataPath $(IOS_DERIVED_DATA) \
+		$(PIPE_PRETTY)
+
+.PHONY: macos-test
+# Runs FluxTests on macOS. FluxUITests are skipped on macOS for v1 (Decision 15).
+# FluxCoreTests live in the local Swift Package and are not picked up by
+# xcodebuild from this scheme — see the `ios-test` note above.
+macos-test:
+	xcodebuild test \
+		-project $(IOS_PROJECT) \
+		-scheme $(IOS_SCHEME) \
+		-destination 'platform=macOS,arch=arm64' \
+		-configuration Debug \
+		-derivedDataPath $(IOS_DERIVED_DATA) \
+		-skip-testing:FluxUITests \
+		$(PIPE_PRETTY)

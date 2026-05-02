@@ -111,7 +111,7 @@ references:
 
 ## Build verification
 
-- [ ] 22. Add macos-build, macos-test, macos-lint targets to the Makefile <!-- id:ntwcpwf -->
+- [x] 22. Add macos-build, macos-test, macos-lint targets to the Makefile <!-- id:ntwcpwf -->
   - Modify the Makefile to add `macos-build`, `macos-test`, and `macos-lint` targets mirroring the iOS equivalents but with `-destination platform=macOS,arch=arm64`. UI test target deferred (Decision 15).
   - Blocked-by: ntwcpwe (Add macOS platform to FluxCore Package.swift)
   - Requirements: [1.2](requirements.md#1.2)
