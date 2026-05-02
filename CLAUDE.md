@@ -81,3 +81,13 @@ The V1 plan (`docs/flux-v1.md`) is the authoritative product spec covering both 
 - SwiftData for caching, Keychain for credentials
 - Auto-refresh every 10s on Dashboard
 - Architecture should support future iPad/macOS/widgets without rewrite
+
+## macOS App
+
+- macOS 26+ native build (not Catalyst, not Designed-for-iPad)
+- Shares FluxCore, views, and widget extension with iOS
+- Dedicated Settings scene (⌘,), ⌘R refresh, ←/→ Day Detail navigation
+- Refresh tiers: 10s active, 60s inactive (via `appearsActive`)
+- Credentials sync via iCloud Keychain + `NSUbiquitousKeyValueStore`
+- Control Center widget (`ControlWidget` protocol)
+- Build/test: `make macos-build`, `make macos-test`, `make macos-lint`

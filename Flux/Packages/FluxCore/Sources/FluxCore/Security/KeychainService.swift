@@ -104,6 +104,7 @@ public final class KeychainService: Sendable {
         var query = keychainQuery()
         query[kSecReturnAttributes] = kCFBooleanTrue
         query[kSecMatchLimit] = kSecMatchLimitOne
+        query[kSecAttrSynchronizable] = kSecAttrSynchronizableAny
 
         var item: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &item)
@@ -128,7 +129,8 @@ public final class KeychainService: Sendable {
 
     @discardableResult
     public func updateAccessibility(_ accessibility: KeychainAccessibility) throws -> Bool {
-        let query = keychainQuery()
+        var query = keychainQuery()
+        query[kSecAttrSynchronizable] = kSecAttrSynchronizableAny
         let attributes: [CFString: Any] = [
             kSecAttrAccessible: accessibility.cfString
         ]

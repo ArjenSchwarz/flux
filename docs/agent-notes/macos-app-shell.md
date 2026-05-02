@@ -47,3 +47,16 @@ The macOS build (T-1081) is a native SwiftUI app — no Mac Catalyst, no "Design
 - `Makefile` adds `macos-build`, `macos-test`, `macos-lint` mirroring the iOS targets but with `-destination 'platform=macOS,arch=arm64'`. `macos-test` passes `-skip-testing:FluxUITests` since UI tests on macOS are deferred to v1.1 (Decision 15). FluxCore tests run via `swift test` from `Flux/Packages/FluxCore/` and stay platform-agnostic.
 - `Flux/Packages/FluxCore/Package.swift` declares `.macOS(.v26)` alongside iOS.
 - Per-platform entitlements, Info.plist trim, and the Mac destination on both targets are user-managed manual prerequisites — see `specs/macos-app/prerequisites.md`. The widget-extension's macOS embed validation will fail until those are completed.
+
+## Cross-platform widget gating
+
+- `WidgetAccessibility.swift` and `WidgetAccessibilityTests.swift` gate the iOS-only accessory families (`.accessoryInline`, `.accessoryCircular`, `.accessoryRectangular`) with `#if !os(macOS)` / `#if os(iOS)`. macOS doesn't ship lock-screen accessory families, so referencing them would fail to compile.
+- `FluxAccessoryWidget()` is removed from the bundle on macOS (`#if os(iOS)` in `FluxWidgetsBundle`); `FluxControlWidget()` is added under `#if os(macOS)`. `FluxBatteryWidget()` (system small/medium/large) ships on both.
+- `SystemMediumView` calls `SOCFormatting.symbol(for:)` (FluxCore) instead of an inline switch so the Control widget reuses the same SOC → battery SF Symbol mapping.
+
+## Testing notes
+
+- `KeychainServiceTests` runs `swift test` against the host process. On a bare `swift test` invocation the test bundle has no Keychain entitlements and `SecItemAdd` returns `errSecMissingEntitlement` (-34018). The suite probes for this once at setup and skips the affected tests rather than failing — Xcode-driven runs (with the proper entitlements) execute them normally. `makeUniqueIds` / `baseQuery` / `writeRawItem` / `countItemsAcrossVariants` / `cleanupAllVariants` helpers dedupe the per-test boilerplate around seeding both legacy and synchronisable items.
+- `iCloudURLMirrorTests` injects a private `NotificationCenter` and posts the real `NSUbiquitousKeyValueStore.didChangeExternallyNotification` rather than calling an internal sync method directly. The mirror's async-sequence observer runs on the same `MainActor` and the test asserts the resulting mirror state. Keeps the production API (`start`/`write`/`stop`) as the only public surface.
+- `SettingsViewModelTests` injects a `writeURL` closure into `SettingsViewModel` instead of mocking the singleton. Production default is `iCloudURLMirror.shared.write`; tests capture the URL into a recorder.
+- `DashboardViewModelActivityTierTests` (split out into its own file to stay under SwiftLint's per-file line cap) covers the in-flight refresh guard, immediate refresh on `inactive → active`, and the per-tick `currentInterval` read.
