@@ -3,9 +3,6 @@ import SwiftData
 import SwiftUI
 
 struct HistoryView: View {
-    #if os(macOS)
-    @Environment(FluxRefreshCoordinator.self) private var refreshCoordinator
-    #endif
     @State private var viewModel: HistoryViewModel
     @State private var selectedRange: Int = 7
     @State private var showingSettings = false
@@ -99,13 +96,8 @@ struct HistoryView: View {
             Task { await viewModel.loadHistory(days: newRange) }
         }
         #if os(macOS)
-        .onAppear {
-            refreshCoordinator.refresh = { [viewModel] in
-                Task { await viewModel.reload() }
-            }
-        }
-        .onDisappear {
-            refreshCoordinator.refresh = nil
+        .macRefreshAction { [viewModel] in
+            await viewModel.reload()
         }
         #endif
         .refreshable {

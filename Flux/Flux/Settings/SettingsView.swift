@@ -20,12 +20,16 @@ struct SettingsView: View {
         Form {
             Section("Backend") {
                 TextField("API URL", text: $viewModel.apiURL)
+                    #if !os(macOS)
                     .textInputAutocapitalization(.never)
                     .keyboardType(.URL)
+                    #endif
                     .autocorrectionDisabled()
 
                 SecureField("API Token", text: $viewModel.apiToken)
+                    #if !os(macOS)
                     .textInputAutocapitalization(.never)
+                    #endif
                     .autocorrectionDisabled()
             }
 
@@ -38,7 +42,9 @@ struct SettingsView: View {
                         value: $viewModel.loadAlertThreshold,
                         format: .number.precision(.fractionLength(0))
                     )
+                        #if !os(macOS)
                         .keyboardType(.numberPad)
+                        #endif
                         .multilineTextAlignment(.trailing)
                         .frame(maxWidth: 120)
                 }

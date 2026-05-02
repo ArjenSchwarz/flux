@@ -39,13 +39,13 @@ public final class iCloudURLMirror {
 
     public func start() {
         _ = kvs.synchronize()
-        seedFromKVS()
+        pullFromRemote()
         observerTask?.cancel()
         let center = notificationCenter
         let stream = center.notifications(named: Self.externalChangeNotification)
         observerTask = Task { @MainActor [weak self] in
             for await _ in stream {
-                self?.syncFromRemote()
+                self?.pullFromRemote()
             }
         }
     }
@@ -61,16 +61,7 @@ public final class iCloudURLMirror {
         _ = kvs.synchronize()
     }
 
-    private func seedFromKVS() {
-        guard let remote = kvs.string(forKey: Self.key), !remote.isEmpty else {
-            return
-        }
-        if defaults.apiURL != remote {
-            defaults.apiURL = remote
-        }
-    }
-
-    private func syncFromRemote() {
+    private func pullFromRemote() {
         guard let remote = kvs.string(forKey: Self.key), !remote.isEmpty else {
             return
         }

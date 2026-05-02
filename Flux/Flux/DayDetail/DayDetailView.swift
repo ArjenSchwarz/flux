@@ -2,9 +2,6 @@ import FluxCore
 import SwiftUI
 
 struct DayDetailView: View {
-    #if os(macOS)
-    @Environment(FluxRefreshCoordinator.self) private var refreshCoordinator
-    #endif
     @State private var viewModel: DayDetailViewModel
     @State private var showingSettings = false
     @State private var editingNote = false
@@ -65,13 +62,8 @@ struct DayDetailView: View {
             await viewModel.loadDay()
         }
         #if os(macOS)
-        .onAppear {
-            refreshCoordinator.refresh = { [viewModel] in
-                Task { await viewModel.loadDay() }
-            }
-        }
-        .onDisappear {
-            refreshCoordinator.refresh = nil
+        .macRefreshAction { [viewModel] in
+            await viewModel.loadDay()
         }
         .focusable()
         .onKeyPress(.leftArrow) {
