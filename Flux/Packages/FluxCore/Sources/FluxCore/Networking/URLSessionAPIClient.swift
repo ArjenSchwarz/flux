@@ -130,9 +130,11 @@ public final class URLSessionAPIClient: FluxAPIClient, Sendable {
 
     /// On macOS, URLSession requests issued right after launch can be cancelled
     /// by the system before they go out (window/`nehelper`/URLSession warm-up
-    /// race). The retry budget below covers ~3.7 s of backoff so the user sees
-    /// data on the first dashboard appear instead of waiting for the next
-    /// auto-refresh iteration. Cancellation of the surrounding task aborts.
+    /// race). The backoff sequence covers ~3.7 s so the user sees data on the
+    /// first dashboard appear instead of waiting for the next auto-refresh
+    /// iteration. `Task.sleep` propagates `CancellationError` when the
+    /// surrounding task is cancelled, which short-circuits the loop without
+    /// an explicit (and racy) `Task.isCancelled` probe.
     private func fetch(_ request: URLRequest) async throws -> (Data, URLResponse) {
         let backoffs: [Duration] = [
             .milliseconds(200),
@@ -144,7 +146,6 @@ public final class URLSessionAPIClient: FluxAPIClient, Sendable {
             do {
                 return try await session.data(for: request)
             } catch let error as URLError where error.code == .cancelled {
-                if Task.isCancelled { throw error }
                 try await Task.sleep(for: backoff)
             }
         }

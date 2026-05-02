@@ -58,6 +58,11 @@ public final class KeychainService: Sendable {
     }
 
     public func saveToken(_ token: String) throws {
+        // Capture the existing token (if any) before deleting so we can
+        // restore it on SecItemAdd failure — otherwise a transient keychain
+        // lock between delete and add silently destroys the user's token,
+        // and there's no recovery flow that re-prompts for it.
+        let previousToken = loadToken()
         try deleteToken()
 
         var query = keychainQuery()
@@ -67,6 +72,16 @@ public final class KeychainService: Sendable {
 
         let status = SecItemAdd(query as CFDictionary, nil)
         guard status == errSecSuccess else {
+            // Best-effort restore of the old token. If this also fails the
+            // keychain is in a wedged state and there's nothing useful we
+            // can do beyond surfacing the original failure.
+            if let previousToken {
+                var restore = keychainQuery()
+                restore[kSecValueData] = Data(previousToken.utf8)
+                restore[kSecAttrAccessible] = accessibility.cfString
+                restore[kSecAttrSynchronizable] = synchronizable ? kCFBooleanTrue : kCFBooleanFalse
+                _ = SecItemAdd(restore as CFDictionary, nil)
+            }
             throw KeychainServiceError.unexpectedStatus(status)
         }
     }
