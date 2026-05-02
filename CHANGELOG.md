@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Pre-push review for T-1081 macos-app (round 3): `iCloudURLMirror.pullFromRemote` now posts `.fluxCredentialsChanged` whenever a remote-driven URL change actually mutates `defaults.apiURL`, so the running host's API client reloads against the new URL instead of using the previous one until the next launch (without this, `AppNavigationView`'s `.fluxCredentialsChanged` listener only ever fired on local saves). `iCloudURLMirror.start()` is now idempotent — second calls no-op via `guard observerTask == nil` instead of cancelling and restarting the async-sequence observer task and re-running `kvs.synchronize() + pullFromRemote()`. `iCloudURLMirror.key` reuses a new public `UserDefaults.apiURLKey` constant in `UserDefaults+Settings.swift` so the KVS source-of-truth and the App Group `UserDefaults` mirror key off the same string instead of two duplicate `"apiURL"` literals. `specs/macos-app/implementation.md` updated to describe the new behaviour and corrects a stale `WidgetRuntime.swift:18-37` line reference to the actual `:26-38`.
+
 ### Added
 
 - T-1081 macOS App phase 4 (build verification): three new Makefile targets — `macos-lint` (runs `swiftlint lint --strict` from `Flux/`, identical command to `ios-lint` since SwiftLint is platform-agnostic), `macos-build` (mirrors `ios-build` but with `-destination 'platform=macOS,arch=arm64'`), and `macos-test` (mirrors `ios-test` with the macOS destination plus `-skip-testing:FluxUITests` since UI tests on macOS are deferred to v1.1 per Decision 15). Help section gains a "Mac App" subsection listing the three targets. `specs/OVERVIEW.md` macOS App status moved from `In Progress` to `Done`.

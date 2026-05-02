@@ -19,7 +19,7 @@ public final class iCloudURLMirror {
 // swiftlint:enable type_name
     public static let shared: iCloudURLMirror = iCloudURLMirror()
 
-    public static let key = "apiURL"
+    public static let key = UserDefaults.apiURLKey
     public static let externalChangeNotification = NSUbiquitousKeyValueStore.didChangeExternallyNotification
 
     private let kvs: any KeyValueStore
@@ -38,9 +38,9 @@ public final class iCloudURLMirror {
     }
 
     public func start() {
+        guard observerTask == nil else { return }
         _ = kvs.synchronize()
         pullFromRemote()
-        observerTask?.cancel()
         let center = notificationCenter
         let stream = center.notifications(named: Self.externalChangeNotification)
         observerTask = Task { @MainActor [weak self] in
@@ -67,6 +67,7 @@ public final class iCloudURLMirror {
         }
         if defaults.apiURL != remote {
             defaults.apiURL = remote
+            notificationCenter.post(name: .fluxCredentialsChanged, object: nil)
         }
     }
 }
