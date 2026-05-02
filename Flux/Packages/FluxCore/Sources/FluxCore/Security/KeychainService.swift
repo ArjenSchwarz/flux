@@ -58,11 +58,13 @@ public final class KeychainService: Sendable {
     }
 
     public func saveToken(_ token: String) throws {
-        // Capture the existing token (if any) before deleting so we can
-        // restore it on SecItemAdd failure — otherwise a transient keychain
-        // lock between delete and add silently destroys the user's token,
-        // and there's no recovery flow that re-prompts for it.
-        let previousToken = loadToken()
+        // Capture the existing token AND its keychain attributes (accessibility
+        // and synchronizable flag) before deleting so a failed SecItemAdd
+        // doesn't silently destroy the user's token. Restoring with the new
+        // post-migration attrs would also fail on the upgrade path where the
+        // existing item is non-synchronisable, so we replay the original
+        // attributes verbatim.
+        let previous = loadTokenWithAttributes()
         try deleteToken()
 
         var query = keychainQuery()
@@ -75,15 +77,57 @@ public final class KeychainService: Sendable {
             // Best-effort restore of the old token. If this also fails the
             // keychain is in a wedged state and there's nothing useful we
             // can do beyond surfacing the original failure.
-            if let previousToken {
+            if let previous {
                 var restore = keychainQuery()
-                restore[kSecValueData] = Data(previousToken.utf8)
-                restore[kSecAttrAccessible] = accessibility.cfString
-                restore[kSecAttrSynchronizable] = synchronizable ? kCFBooleanTrue : kCFBooleanFalse
+                restore[kSecValueData] = Data(previous.token.utf8)
+                restore[kSecAttrAccessible] = previous.accessibility.cfString
+                restore[kSecAttrSynchronizable] = previous.synchronizable
+                    ? kCFBooleanTrue
+                    : kCFBooleanFalse
                 _ = SecItemAdd(restore as CFDictionary, nil)
             }
             throw KeychainServiceError.unexpectedStatus(status)
         }
+    }
+
+    private struct PreviousTokenItem {
+        let token: String
+        let accessibility: KeychainAccessibility
+        let synchronizable: Bool
+    }
+
+    private func loadTokenWithAttributes() -> PreviousTokenItem? {
+        var query = keychainQuery()
+        query[kSecReturnData] = kCFBooleanTrue
+        query[kSecReturnAttributes] = kCFBooleanTrue
+        query[kSecMatchLimit] = kSecMatchLimitOne
+        query[kSecAttrSynchronizable] = kSecAttrSynchronizableAny
+
+        var item: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        guard status == errSecSuccess, let dict = item as? [String: Any] else {
+            return nil
+        }
+
+        guard let data = dict[kSecValueData as String] as? Data,
+              let token = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+
+        let accessibility: KeychainAccessibility
+        if let raw = dict[kSecAttrAccessible as String] as? String {
+            accessibility = KeychainAccessibility(cfString: raw as CFString)
+        } else {
+            accessibility = self.accessibility
+        }
+
+        let synchronizable = (dict[kSecAttrSynchronizable as String] as? Bool) ?? false
+
+        return PreviousTokenItem(
+            token: token,
+            accessibility: accessibility,
+            synchronizable: synchronizable
+        )
     }
 
     public func loadToken() -> String? {

@@ -15,7 +15,9 @@ public struct SOCValue: Sendable, Equatable {
 public struct ControlSOCProvider: ControlValueProvider {
     public typealias Value = SOCValue
 
-    public let previewValue = SOCValue(percent: 0, stale: true)
+    // Representative value for the widget gallery; an empty/stale battery
+    // preview looks alarming and isn't a useful illustration of the widget.
+    public let previewValue = SOCValue(percent: 80, stale: false)
 
     private let cache: WidgetSnapshotCache
     private let logic: StatusTimelineLogic

@@ -143,10 +143,11 @@ private struct MacUnconfiguredView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+            // ⌘, is registered globally by the Settings scene; no explicit
+            // .keyboardShortcut is needed (and adding one duplicates it).
             SettingsLink {
                 Text("Open Settings…")
             }
-            .keyboardShortcut(",", modifiers: .command)
         }
         .padding(32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)

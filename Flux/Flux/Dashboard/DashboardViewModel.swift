@@ -85,15 +85,20 @@ final class DashboardViewModel {
     /// from view lifecycle, this runs structured under the caller's task, so
     /// SwiftUI can cancel it deterministically on view disappear.
     ///
-    /// Until the first successful load, the loop retries every second so that
-    /// transient launch-time cancellations on macOS clear quickly without the
-    /// user having to wait for the full active-tier interval.
+    /// Until the first successful load, the loop retries every second up to
+    /// `runAutoRefreshFastPathLimit` attempts so that transient launch-time
+    /// cancellations on macOS clear quickly. After that cap, fall back to the
+    /// normal active/inactive interval so a persistent error (no network,
+    /// misconfiguration) doesn't hammer the API every second indefinitely.
     func runAutoRefresh() async {
         var hasLoadedOnce = false
+        var fastPathAttempts = 0
         while !Task.isCancelled {
             await refresh()
             if status != nil { hasLoadedOnce = true }
-            let interval: Duration = hasLoadedOnce ? currentInterval : .seconds(1)
+            let useFastPath = !hasLoadedOnce && fastPathAttempts < Self.runAutoRefreshFastPathLimit
+            let interval: Duration = useFastPath ? .seconds(1) : currentInterval
+            if useFastPath { fastPathAttempts += 1 }
             do {
                 try await sleep(interval)
             } catch {
@@ -101,6 +106,8 @@ final class DashboardViewModel {
             }
         }
     }
+
+    static let runAutoRefreshFastPathLimit = 10
 
     func updateActivityTier(_ tier: ActivityTier) {
         let wasActive = (activityTier == .active)
