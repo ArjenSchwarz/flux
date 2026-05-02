@@ -15,9 +15,6 @@ struct SidebarView: View {
                 .tag(screen)
         }
         .navigationTitle("Flux")
-        #if os(macOS)
-        .backgroundExtensionEffect()
-        #endif
     }
 }
 

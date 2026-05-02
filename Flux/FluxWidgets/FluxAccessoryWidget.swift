@@ -1,3 +1,4 @@
+#if os(iOS)
 import FluxCore
 import SwiftUI
 import WidgetKit
@@ -28,8 +29,9 @@ private struct FluxAccessoryEntryView: View {
             AccessoryRectangularView(entry: entry)
         case .accessoryInline:
             AccessoryInlineView(entry: entry)
-        @unknown default:
+        default:
             AccessoryCircularView(entry: entry)
         }
     }
 }
+#endif

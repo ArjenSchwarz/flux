@@ -7,23 +7,35 @@ struct WidgetDiagnosticsView: View {
     @State private var lines: [DiagnosticLine] = []
 
     var body: some View {
-        Section("Widget diagnostics") {
-            ForEach(lines) { line in
-                HStack(alignment: .top) {
-                    Image(systemName: line.passed ? "checkmark.circle.fill" : "xmark.octagon.fill")
-                        .foregroundStyle(line.passed ? .green : .red)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(line.title).font(.subheadline)
-                        Text(line.detail)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
-                    }
-                }
-            }
-            Button("Re-run diagnostics") { run() }
+        #if os(macOS)
+        VStack(alignment: .leading, spacing: 10) {
+            diagnosticRows
         }
         .onAppear { run() }
+        #else
+        Section("Widget diagnostics") {
+            diagnosticRows
+        }
+        .onAppear { run() }
+        #endif
+    }
+
+    @ViewBuilder
+    private var diagnosticRows: some View {
+        ForEach(lines) { line in
+            HStack(alignment: .top) {
+                Image(systemName: line.passed ? "checkmark.circle.fill" : "xmark.octagon.fill")
+                    .foregroundStyle(line.passed ? .green : .red)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(line.title).font(.subheadline)
+                    Text(line.detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+            }
+        }
+        Button("Re-run diagnostics") { run() }
     }
 
     private func run() {

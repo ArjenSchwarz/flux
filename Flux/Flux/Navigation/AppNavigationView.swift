@@ -72,6 +72,12 @@ struct AppNavigationView: View {
             } else {
                 unconfiguredView
             }
+        case .today:
+            if let apiClient {
+                DayDetailView(date: DateFormatting.todayDateString(), apiClient: apiClient)
+            } else {
+                unconfiguredView
+            }
         case .history:
             if let apiClient {
                 HistoryView(apiClient: apiClient, modelContext: modelContext)

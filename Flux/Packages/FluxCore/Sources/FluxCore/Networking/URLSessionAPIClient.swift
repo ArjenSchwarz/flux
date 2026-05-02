@@ -93,11 +93,23 @@ public final class URLSessionAPIClient: FluxAPIClient, Sendable {
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await session.data(for: request)
+            (data, response) = try await fetch(request)
         } catch {
-            throw FluxAPIError.networkError(error.localizedDescription)
+            throw mapTransportError(error)
         }
 
+        return try interpret(data: data, response: response)
+    }
+
+    /// Cancellation propagates as-is so callers (refresh loops, view-driven
+    /// requests) can silence it; everything else is surfaced as a network error.
+    private func mapTransportError(_ error: Error) -> Error {
+        if error is CancellationError { return error }
+        if let urlError = error as? URLError, urlError.code == .cancelled { return urlError }
+        return FluxAPIError.networkError(error.localizedDescription)
+    }
+
+    private func interpret<T: Decodable>(data: Data, response: URLResponse) throws -> T {
         guard let httpResponse = response as? HTTPURLResponse else {
             throw FluxAPIError.networkError("Invalid HTTP response")
         }
@@ -114,6 +126,29 @@ public final class URLSessionAPIClient: FluxAPIClient, Sendable {
         default:
             throw FluxAPIError.unexpectedStatus(httpResponse.statusCode)
         }
+    }
+
+    /// On macOS, URLSession requests issued right after launch can be cancelled
+    /// by the system before they go out (window/`nehelper`/URLSession warm-up
+    /// race). The retry budget below covers ~3.7 s of backoff so the user sees
+    /// data on the first dashboard appear instead of waiting for the next
+    /// auto-refresh iteration. Cancellation of the surrounding task aborts.
+    private func fetch(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        let backoffs: [Duration] = [
+            .milliseconds(200),
+            .milliseconds(500),
+            .seconds(1),
+            .seconds(2)
+        ]
+        for backoff in backoffs {
+            do {
+                return try await session.data(for: request)
+            } catch let error as URLError where error.code == .cancelled {
+                if Task.isCancelled { throw error }
+                try await Task.sleep(for: backoff)
+            }
+        }
+        return try await session.data(for: request)
     }
 
     private func decodeResponse<T: Decodable>(_ data: Data) throws -> T {

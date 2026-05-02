@@ -1,3 +1,4 @@
+#if os(iOS)
 import FluxCore
 import SwiftUI
 import WidgetKit
@@ -59,4 +60,5 @@ struct AccessoryRectangularView: View {
 } timeline: {
     WidgetFixtures.placeholderEntry
 }
+#endif
 #endif

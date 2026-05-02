@@ -17,19 +17,38 @@ struct SettingsView: View {
     }
 
     var body: some View {
+        Group {
+            #if os(macOS)
+            macOSForm
+            #else
+            iOSForm
+            #endif
+        }
+        .onAppear { viewModel.loadExisting() }
+        .onChange(of: viewModel.shouldDismiss) { _, shouldDismiss in
+            if shouldDismiss {
+                onSaved()
+                dismiss()
+            }
+        }
+    }
+
+    private var hasMissingRequiredFields: Bool {
+        viewModel.apiURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+            viewModel.apiToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    #if os(iOS)
+    private var iOSForm: some View {
         Form {
             Section("Backend") {
                 TextField("API URL", text: $viewModel.apiURL)
-                    #if !os(macOS)
                     .textInputAutocapitalization(.never)
                     .keyboardType(.URL)
-                    #endif
                     .autocorrectionDisabled()
 
                 SecureField("API Token", text: $viewModel.apiToken)
-                    #if !os(macOS)
                     .textInputAutocapitalization(.never)
-                    #endif
                     .autocorrectionDisabled()
             }
 
@@ -42,11 +61,9 @@ struct SettingsView: View {
                         value: $viewModel.loadAlertThreshold,
                         format: .number.precision(.fractionLength(0))
                     )
-                        #if !os(macOS)
-                        .keyboardType(.numberPad)
-                        #endif
-                        .multilineTextAlignment(.trailing)
-                        .frame(maxWidth: 120)
+                    .keyboardType(.numberPad)
+                    .multilineTextAlignment(.trailing)
+                    .frame(maxWidth: 120)
                 }
 
                 Toggle("Widget icons instead of labels", isOn: $viewModel.widgetUsesSymbols)
@@ -79,22 +96,137 @@ struct SettingsView: View {
             #endif
         }
         .navigationTitle("Settings")
-        .onAppear {
-            viewModel.loadExisting()
-        }
-        .onChange(of: viewModel.shouldDismiss) { _, shouldDismiss in
-            if shouldDismiss {
-                onSaved()
-                dismiss()
+    }
+    #endif
+
+    #if os(macOS)
+    private static let labelWidth: CGFloat = 160
+
+    private var macOSForm: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                LiquidGlassSection(title: "Backend") {
+                    Grid(alignment: .leadingFirstTextBaseline,
+                         horizontalSpacing: 16, verticalSpacing: 14) {
+                        FormRow("API URL", labelWidth: Self.labelWidth) {
+                            TextField("https://…", text: $viewModel.apiURL)
+                                .autocorrectionDisabled()
+                        }
+                        FormRow("API Token", labelWidth: Self.labelWidth) {
+                            SecureField("", text: $viewModel.apiToken)
+                                .autocorrectionDisabled()
+                        }
+                    }
+                }
+
+                LiquidGlassSection(title: "Display") {
+                    Grid(alignment: .leadingFirstTextBaseline,
+                         horizontalSpacing: 16, verticalSpacing: 14) {
+                        FormRow("Load alert threshold", labelWidth: Self.labelWidth) {
+                            HStack(spacing: 6) {
+                                TextField(
+                                    "",
+                                    value: $viewModel.loadAlertThreshold,
+                                    format: .number.precision(.fractionLength(0))
+                                )
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: 100)
+                                Text("W")
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                            }
+                        }
+                        FormRow("", labelWidth: Self.labelWidth) {
+                            Toggle("Widget icons instead of labels", isOn: $viewModel.widgetUsesSymbols)
+                        }
+                    }
+                }
+
+                if let validationError = viewModel.validationError {
+                    Text(validationError)
+                        .font(.callout)
+                        .foregroundStyle(.red)
+                }
+
+                HStack {
+                    Spacer()
+                    Button {
+                        Task { await viewModel.save() }
+                    } label: {
+                        if viewModel.isValidating {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Text("Save")
+                        }
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
+                    .disabled(viewModel.isValidating || hasMissingRequiredFields)
+                }
+
+                #if DEBUG
+                LiquidGlassSection(title: "Widget diagnostics") {
+                    WidgetDiagnosticsView()
+                }
+                #endif
             }
+            .padding(28)
+            .frame(maxWidth: 640, alignment: .leading)
+            .frame(maxWidth: .infinity)
         }
+        .navigationTitle("Settings")
+    }
+    #endif
+}
+
+#if os(macOS)
+private struct FormRow<Content: View>: View {
+    let label: String
+    let labelWidth: CGFloat
+    let content: Content
+
+    init(_ label: String, labelWidth: CGFloat, @ViewBuilder content: () -> Content) {
+        self.label = label
+        self.labelWidth = labelWidth
+        self.content = content()
     }
 
-    private var hasMissingRequiredFields: Bool {
-        viewModel.apiURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-            viewModel.apiToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    var body: some View {
+        GridRow {
+            Text(label)
+                .foregroundStyle(.secondary)
+                .frame(width: labelWidth, alignment: .trailing)
+            content
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }
+
+private struct LiquidGlassSection<Content: View>: View {
+    let title: String
+    let content: Content
+
+    init(title: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title).font(.headline)
+            content
+                .padding(18)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(.clear)
+                        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+        }
+    }
+}
+#endif
 
 #Preview {
     NavigationStack {

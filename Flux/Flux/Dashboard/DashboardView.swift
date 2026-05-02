@@ -79,18 +79,20 @@ struct DashboardView: View {
         .refreshable {
             await viewModel.refresh()
         }
+        #if os(macOS)
+        .task {
+            await viewModel.runAutoRefresh()
+        }
+        .macRefreshAction { [viewModel] in
+            await viewModel.refresh()
+        }
+        #else
         .onAppear {
             viewModel.startAutoRefresh()
         }
         .onDisappear {
             viewModel.stopAutoRefresh()
         }
-        #if os(macOS)
-        .macRefreshAction { [viewModel] in
-            await viewModel.refresh()
-        }
-        #endif
-        #if !os(macOS)
         .onChange(of: scenePhase) { _, newPhase in
             switch newPhase {
             case .active:

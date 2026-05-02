@@ -28,7 +28,7 @@ private struct FluxBatteryEntryView: View {
             SystemMediumView(entry: entry)
         case .systemLarge:
             SystemLargeView(entry: entry)
-        @unknown default:
+        default:
             SystemMediumView(entry: entry)
         }
     }

@@ -56,6 +56,7 @@ help:
 	@echo "    ios-run         - Build, install, and launch Debug on device"
 	@echo ""
 	@echo "  iOS App (Release):"
+	@echo "    ios-build-release   - Build Release for iOS Simulator"
 	@echo "    ios-install-release - Build and install Release on device"
 	@echo "    ios-run-release     - Build, install, and launch Release on device"
 	@echo ""
@@ -64,9 +65,10 @@ help:
 	@echo "    ios-upload      - Archive and upload to App Store Connect"
 	@echo ""
 	@echo "  Mac App:"
-	@echo "    macos-lint      - Run SwiftLint"
-	@echo "    macos-build     - Build for macOS (arm64)"
-	@echo "    macos-test      - Run unit tests on macOS (UI tests deferred)"
+	@echo "    macos-lint          - Run SwiftLint"
+	@echo "    macos-build         - Build for macOS (arm64)"
+	@echo "    macos-build-release - Build Release for macOS (arm64)"
+	@echo "    macos-test          - Run unit tests on macOS (UI tests deferred)"
 	@echo ""
 	@echo "  Utilities:"
 	@echo "    ios-clean       - Clean iOS build artifacts"
@@ -234,6 +236,10 @@ ios-run: ios-install
 	xcrun devicectl device process launch --device $(DEVICE_ID) $(IOS_BUNDLE_ID)
 
 # Release builds — delegate to base targets with IOS_CONFIG=Release
+.PHONY: ios-build-release
+ios-build-release:
+	$(MAKE) ios-build IOS_CONFIG=Release
+
 .PHONY: ios-install-release
 ios-install-release:
 	$(MAKE) ios-install IOS_CONFIG=Release
@@ -291,7 +297,12 @@ macos-build:
 		-destination 'platform=macOS,arch=arm64' \
 		-configuration $(IOS_CONFIG) \
 		-derivedDataPath $(IOS_DERIVED_DATA) \
+		-allowProvisioningUpdates \
 		$(PIPE_PRETTY)
+
+.PHONY: macos-build-release
+macos-build-release:
+	$(MAKE) macos-build IOS_CONFIG=Release
 
 .PHONY: macos-test
 # Runs FluxTests on macOS. FluxUITests are skipped on macOS for v1 (Decision 15).

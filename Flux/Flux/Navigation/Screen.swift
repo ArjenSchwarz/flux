@@ -2,6 +2,7 @@ import Foundation
 
 enum Screen: String, CaseIterable, Identifiable {
     case dashboard
+    case today
     case history
     case settings
 
@@ -10,6 +11,7 @@ enum Screen: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .dashboard: "Dashboard"
+        case .today: "Today"
         case .history: "History"
         case .settings: "Settings"
         }
@@ -18,6 +20,7 @@ enum Screen: String, CaseIterable, Identifiable {
     var systemImage: String {
         switch self {
         case .dashboard: "speedometer"
+        case .today: "sun.max"
         case .history: "chart.bar.xaxis"
         case .settings: "gearshape"
         }

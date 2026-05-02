@@ -80,6 +80,28 @@ final class DashboardViewModel {
         refreshTask = nil
     }
 
+    /// Async version of the auto-refresh loop, intended for use with SwiftUI's
+    /// `.task` modifier. Unlike `startAutoRefresh()` which detaches a `Task`
+    /// from view lifecycle, this runs structured under the caller's task, so
+    /// SwiftUI can cancel it deterministically on view disappear.
+    ///
+    /// Until the first successful load, the loop retries every second so that
+    /// transient launch-time cancellations on macOS clear quickly without the
+    /// user having to wait for the full active-tier interval.
+    func runAutoRefresh() async {
+        var hasLoadedOnce = false
+        while !Task.isCancelled {
+            await refresh()
+            if status != nil { hasLoadedOnce = true }
+            let interval: Duration = hasLoadedOnce ? currentInterval : .seconds(1)
+            do {
+                try await sleep(interval)
+            } catch {
+                return
+            }
+        }
+    }
+
     func updateActivityTier(_ tier: ActivityTier) {
         let wasActive = (activityTier == .active)
         activityTier = tier
