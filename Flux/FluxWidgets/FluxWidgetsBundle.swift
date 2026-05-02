@@ -5,6 +5,11 @@ import WidgetKit
 struct FluxWidgetsBundle: WidgetBundle {
     var body: some Widget {
         FluxBatteryWidget()
+        #if os(iOS)
         FluxAccessoryWidget()
+        #endif
+        #if os(macOS)
+        FluxControlWidget()
+        #endif
     }
 }

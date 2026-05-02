@@ -15,6 +15,7 @@
 | [Day Notes](#day-notes) | 2026-04-28 | Done | Per-date free-text note (≤200 graphemes) shared across users; new `flux-notes` DynamoDB table and PUT /note endpoint; rendered on Dashboard, History, Day Detail; edited only on Day Detail. |
 | [Daily Derived Stats](#daily-derived-stats) | 2026-04-29 | Done | Pre-compute three reading-derived per-day stats (`findDailyUsage`, `findMinSOC`, `findPeakPeriods`) in the poller hourly against yesterday; persist on `flux-daily-energy` via UpdateItem; `/day` and `/history` read storage for past dates, live-compute for today. Unblocks history-daily-usage (T-1022). |
 | [History Daily Usage](#history-daily-usage) | 2026-04-30 | Done | New History card rendering one stacked bar per day across the five chronological blocks (Night, Morning Peak, Off-Peak, Afternoon Peak, Evening) over the 7/14/30-day range, plus a fix to the cache upsert path so derived fields backfill on already-cached rows with observability on unexpected nil-overwrites. UI-only consumer of the data shipped by Daily Derived Stats. |
+| [macOS App](#macos-app) | 2026-05-01 | Done | Native macOS 26+ build of Flux (no Catalyst, no Designed-for-iPad). Adds dedicated Settings scene, menu commands (⌘R, ←/→), single main window that quits on close, refresh tiers via `appearsActive`, iCloud Keychain + `NSUbiquitousKeyValueStore` credential sync (no migrator), and a macOS Control Center widget alongside the existing home-screen widgets. iOS scenePhase pause preserved unchanged. T-1081. |
 
 ---
 
@@ -142,3 +143,13 @@ New History card rendering one stacked bar per day across the five chronological
 - [design.md](history-daily-usage/design.md)
 - [requirements.md](history-daily-usage/requirements.md)
 - [tasks.md](history-daily-usage/tasks.md)
+
+## macOS App
+
+Native macOS 26+ build of Flux that reuses FluxCore, the existing widget extension, and ~all of the iOS view code, with platform-specific shells for app entry (Settings scene + commands + NSApplicationDelegate), navigation chrome (sidebar filter, Liquid Glass modifiers), Dashboard refresh tier signal (Mac-only via `appearsActive`), credential plane (iCloud Keychain + `NSUbiquitousKeyValueStore` mirror — no migrator), and a Control Center widget. Single main window that quits on close; ⌘R + ←/→ keyboard shortcuts; iOS scenePhase pause preserved. Distribution via TestFlight Mac / Mac App Store under the same `me.nore.ig.Flux` bundle ID. T-1081.
+
+- [decision_log.md](macos-app/decision_log.md)
+- [design.md](macos-app/design.md)
+- [prerequisites.md](macos-app/prerequisites.md)
+- [requirements.md](macos-app/requirements.md)
+- [tasks.md](macos-app/tasks.md)

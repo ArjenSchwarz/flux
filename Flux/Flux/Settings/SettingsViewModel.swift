@@ -17,17 +17,25 @@ final class SettingsViewModel {
     private let keychainService: KeychainService
     private let userDefaults: UserDefaults
     private let apiClientFactory: @Sendable (URL, String) -> any FluxAPIClient
+    private let writeURL: @MainActor (String) -> Void
+    private let notificationCenter: NotificationCenter
 
     init(
         keychainService: KeychainService = KeychainService(),
         userDefaults: UserDefaults = .fluxAppGroup,
         apiClientFactory: @escaping @Sendable (URL, String) -> any FluxAPIClient = { baseURL, token in
             URLSessionAPIClient(baseURL: baseURL, token: token)
-        }
+        },
+        writeURL: @escaping @MainActor (String) -> Void = { url in
+            iCloudURLMirror.shared.write(url)
+        },
+        notificationCenter: NotificationCenter = .default
     ) {
         self.keychainService = keychainService
         self.userDefaults = userDefaults
         self.apiClientFactory = apiClientFactory
+        self.writeURL = writeURL
+        self.notificationCenter = notificationCenter
     }
 
     func save() async {
@@ -58,10 +66,11 @@ final class SettingsViewModel {
             _ = try await validationClient.fetchStatus()
 
             try keychainService.saveToken(capturedToken)
-            userDefaults.apiURL = capturedURLString
+            writeURL(capturedURLString)
             userDefaults.loadAlertThreshold = capturedThreshold
             userDefaults.widgetUsesSymbols = capturedUsesSymbols
             WidgetCenter.shared.reloadAllTimelines()
+            notificationCenter.post(name: .fluxCredentialsChanged, object: nil)
             shouldDismiss = true
         } catch let apiError as FluxAPIError {
             validationError = message(for: apiError)

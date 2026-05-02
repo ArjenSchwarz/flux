@@ -79,6 +79,14 @@ struct DashboardView: View {
         .refreshable {
             await viewModel.refresh()
         }
+        #if os(macOS)
+        .task {
+            await viewModel.runAutoRefresh()
+        }
+        .macRefreshAction { [viewModel] in
+            await viewModel.refresh()
+        }
+        #else
         .onAppear {
             viewModel.startAutoRefresh()
         }
@@ -95,6 +103,10 @@ struct DashboardView: View {
                 viewModel.stopAutoRefresh()
             }
         }
+        #endif
+        #if os(macOS)
+        .modifier(AppearsActiveMonitor(viewModel: viewModel))
+        #else
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Settings") {
@@ -114,6 +126,7 @@ struct DashboardView: View {
                     }
             }
         }
+        #endif
     }
 
     @ViewBuilder
@@ -141,10 +154,17 @@ struct DashboardView: View {
                 }
                 .buttonStyle(.borderedProminent)
 
+                #if os(macOS)
+                SettingsLink {
+                    Text("Settings")
+                }
+                .buttonStyle(.bordered)
+                #else
                 Button("Settings") {
                     showingSettings = true
                 }
                 .buttonStyle(.bordered)
+                #endif
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

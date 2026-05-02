@@ -168,17 +168,7 @@ struct SystemMediumView: View {
         if entry.staleness == .offline { return "bolt.slash" }
         guard let live = entry.live else { return "battery.50percent" }
         if live.pbat < 0 { return "battery.100percent.bolt" }
-        return socBatterySymbol(soc: live.soc)
-    }
-
-    private func socBatterySymbol(soc: Double) -> String {
-        switch soc {
-        case ..<13: return "battery.0percent"
-        case ..<38: return "battery.25percent"
-        case ..<63: return "battery.50percent"
-        case ..<88: return "battery.75percent"
-        default: return "battery.100percent"
-        }
+        return SOCFormatting.symbol(for: live.soc)
     }
 
     private var gridSymbol: String {

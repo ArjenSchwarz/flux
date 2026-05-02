@@ -85,6 +85,9 @@ struct HistoryView: View {
             }
             .padding()
         }
+        #if os(macOS)
+        .scrollContentBackground(.hidden)
+        #endif
         .navigationTitle("History")
         .task {
             await viewModel.loadHistory(days: selectedRange)
@@ -92,9 +95,15 @@ struct HistoryView: View {
         .onChange(of: selectedRange) { _, newRange in
             Task { await viewModel.loadHistory(days: newRange) }
         }
+        #if os(macOS)
+        .macRefreshAction { [viewModel] in
+            await viewModel.reload()
+        }
+        #endif
         .refreshable {
             await viewModel.loadHistory(days: selectedRange)
         }
+        #if !os(macOS)
         .sheet(isPresented: $showingSettings) {
             NavigationStack {
                 SettingsView()
@@ -107,6 +116,7 @@ struct HistoryView: View {
                     }
             }
         }
+        #endif
     }
 
     private func selectDay(_ dayID: String) {
@@ -176,10 +186,17 @@ struct HistoryView: View {
                 .buttonStyle(.borderedProminent)
 
                 if error.suggestsSettings {
+                    #if os(macOS)
+                    SettingsLink {
+                        Text("Settings")
+                    }
+                    .buttonStyle(.bordered)
+                    #else
                     Button("Settings") {
                         showingSettings = true
                     }
                     .buttonStyle(.bordered)
+                    #endif
                 }
             }
         }

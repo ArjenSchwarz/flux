@@ -5,8 +5,10 @@ extension UserDefaults {
 
     public static let fluxAppGroup: UserDefaults = UserDefaults(suiteName: fluxAppGroupSuiteName) ?? .standard
 
+    public static let apiURLKey = "apiURL"
+
     private enum Keys {
-        static let apiURL = "apiURL"
+        static let apiURL = UserDefaults.apiURLKey
         static let loadAlertThreshold = "loadAlertThreshold"
         static let widgetUsesSymbols = "widgetUsesSymbols"
     }

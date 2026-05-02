@@ -93,11 +93,23 @@ public final class URLSessionAPIClient: FluxAPIClient, Sendable {
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await session.data(for: request)
+            (data, response) = try await fetch(request)
         } catch {
-            throw FluxAPIError.networkError(error.localizedDescription)
+            throw mapTransportError(error)
         }
 
+        return try interpret(data: data, response: response)
+    }
+
+    /// Cancellation propagates as-is so callers (refresh loops, view-driven
+    /// requests) can silence it; everything else is surfaced as a network error.
+    private func mapTransportError(_ error: Error) -> Error {
+        if error is CancellationError { return error }
+        if let urlError = error as? URLError, urlError.code == .cancelled { return urlError }
+        return FluxAPIError.networkError(error.localizedDescription)
+    }
+
+    private func interpret<T: Decodable>(data: Data, response: URLResponse) throws -> T {
         guard let httpResponse = response as? HTTPURLResponse else {
             throw FluxAPIError.networkError("Invalid HTTP response")
         }
@@ -114,6 +126,39 @@ public final class URLSessionAPIClient: FluxAPIClient, Sendable {
         default:
             throw FluxAPIError.unexpectedStatus(httpResponse.statusCode)
         }
+    }
+
+    /// On macOS, URLSession requests issued right after launch can be cancelled
+    /// by the system before they go out (window/`nehelper`/URLSession warm-up
+    /// race). The backoff sequence covers ~3.7 s so the user sees data on the
+    /// first dashboard appear instead of waiting for the next auto-refresh
+    /// iteration. `Task.sleep` propagates `CancellationError` when the
+    /// surrounding task is cancelled, which short-circuits the loop without
+    /// an explicit (and racy) `Task.isCancelled` probe.
+    ///
+    /// iOS doesn't exhibit this warm-up race; on iOS, a `.cancelled` URLError
+    /// is virtually always a real cancellation (view disappear, app
+    /// background) that should propagate immediately rather than triggering
+    /// an unwanted ~3.7 s retry.
+    private func fetch(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        #if os(macOS)
+        let backoffs: [Duration] = [
+            .milliseconds(200),
+            .milliseconds(500),
+            .seconds(1),
+            .seconds(2)
+        ]
+        for backoff in backoffs {
+            do {
+                return try await session.data(for: request)
+            } catch let error as URLError where error.code == .cancelled {
+                try await Task.sleep(for: backoff)
+            }
+        }
+        return try await session.data(for: request)
+        #else
+        return try await session.data(for: request)
+        #endif
     }
 
     private func decodeResponse<T: Decodable>(_ data: Data) throws -> T {

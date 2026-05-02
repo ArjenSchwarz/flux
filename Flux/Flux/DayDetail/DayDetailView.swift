@@ -54,10 +54,29 @@ struct DayDetailView: View {
             }
             .padding()
         }
+        #if os(macOS)
+        .scrollContentBackground(.hidden)
+        #endif
         .navigationTitle("Day Detail")
         .task(id: viewModel.date) {
             await viewModel.loadDay()
         }
+        #if os(macOS)
+        .macRefreshAction { [viewModel] in
+            await viewModel.loadDay()
+        }
+        .focusable()
+        .onKeyPress(.leftArrow) {
+            viewModel.navigatePrevious()
+            return .handled
+        }
+        .onKeyPress(.rightArrow) {
+            guard !viewModel.isToday else { return .ignored }
+            viewModel.navigateNext()
+            return .handled
+        }
+        #endif
+        #if !os(macOS)
         .sheet(isPresented: $showingSettings) {
             NavigationStack {
                 SettingsView()
@@ -70,6 +89,7 @@ struct DayDetailView: View {
                     }
             }
         }
+        #endif
         .sheet(isPresented: $editingNote) {
             NoteEditorSheet(
                 viewModel: NoteEditorViewModel(initial: viewModel.note ?? "", parent: viewModel)
@@ -223,10 +243,17 @@ struct DayDetailView: View {
                 .buttonStyle(.borderedProminent)
 
                 if error.suggestsSettings {
+                    #if os(macOS)
+                    SettingsLink {
+                        Text("Settings")
+                    }
+                    .buttonStyle(.bordered)
+                    #else
                     Button("Settings") {
                         showingSettings = true
                     }
                     .buttonStyle(.bordered)
+                    #endif
                 }
             }
         }

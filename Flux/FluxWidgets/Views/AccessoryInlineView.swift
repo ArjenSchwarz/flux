@@ -1,3 +1,4 @@
+#if os(iOS)
 import FluxCore
 import SwiftUI
 import WidgetKit
@@ -40,4 +41,5 @@ struct AccessoryInlineView: View {
 } timeline: {
     WidgetFixtures.placeholderEntry
 }
+#endif
 #endif

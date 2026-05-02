@@ -6,9 +6,9 @@ import os
 /// closure on `HistoryViewModel.init`; operators filter on these strings in
 /// Console.app.
 enum HistoryCacheLog {
-    static let logger = Logger(subsystem: "eu.arjen.flux", category: "history-cache")
+    nonisolated static let logger = Logger(subsystem: "eu.arjen.flux", category: "history-cache")
 
-    static let defaultWarn: (String) -> Void = { message in
+    nonisolated static let defaultWarn: (String) -> Void = { message in
         logger.warning("\(message, privacy: .public)")
     }
 }
