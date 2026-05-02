@@ -43,7 +43,10 @@ struct DashboardViewModelTests {
     func startAutoRefreshIsIdempotent() async throws {
         let apiClient = MockDashboardAPIClient()
         await apiClient.setStatusResults(Array(repeating: .success(makeStatusResponse(soc: 71)), count: 16))
-        let viewModel = DashboardViewModel(apiClient: apiClient, refreshInterval: .milliseconds(15))
+        let viewModel = DashboardViewModel(
+            apiClient: apiClient,
+            sleep: { _ in try await Task.sleep(for: .milliseconds(15)) }
+        )
 
         viewModel.startAutoRefresh()
         viewModel.startAutoRefresh()
@@ -59,7 +62,10 @@ struct DashboardViewModelTests {
     func stopAutoRefreshCancelsRefreshTask() async throws {
         let apiClient = MockDashboardAPIClient()
         await apiClient.setStatusResults(Array(repeating: .success(makeStatusResponse(soc: 75)), count: 16))
-        let viewModel = DashboardViewModel(apiClient: apiClient, refreshInterval: .milliseconds(10))
+        let viewModel = DashboardViewModel(
+            apiClient: apiClient,
+            sleep: { _ in try await Task.sleep(for: .milliseconds(10)) }
+        )
 
         viewModel.startAutoRefresh()
         try await Task.sleep(for: .milliseconds(30))

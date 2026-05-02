@@ -2,6 +2,9 @@ import FluxCore
 import SwiftUI
 
 struct DayDetailView: View {
+    #if os(macOS)
+    @Environment(FluxRefreshCoordinator.self) private var refreshCoordinator
+    #endif
     @State private var viewModel: DayDetailViewModel
     @State private var showingSettings = false
     @State private var editingNote = false
@@ -54,10 +57,34 @@ struct DayDetailView: View {
             }
             .padding()
         }
+        #if os(macOS)
+        .scrollContentBackground(.hidden)
+        #endif
         .navigationTitle("Day Detail")
         .task(id: viewModel.date) {
             await viewModel.loadDay()
         }
+        #if os(macOS)
+        .onAppear {
+            refreshCoordinator.refresh = { [viewModel] in
+                Task { await viewModel.loadDay() }
+            }
+        }
+        .onDisappear {
+            refreshCoordinator.refresh = nil
+        }
+        .focusable()
+        .onKeyPress(.leftArrow) {
+            viewModel.navigatePrevious()
+            return .handled
+        }
+        .onKeyPress(.rightArrow) {
+            guard !viewModel.isToday else { return .ignored }
+            viewModel.navigateNext()
+            return .handled
+        }
+        #endif
+        #if !os(macOS)
         .sheet(isPresented: $showingSettings) {
             NavigationStack {
                 SettingsView()
@@ -70,6 +97,7 @@ struct DayDetailView: View {
                     }
             }
         }
+        #endif
         .sheet(isPresented: $editingNote) {
             NoteEditorSheet(
                 viewModel: NoteEditorViewModel(initial: viewModel.note ?? "", parent: viewModel)
@@ -223,10 +251,17 @@ struct DayDetailView: View {
                 .buttonStyle(.borderedProminent)
 
                 if error.suggestsSettings {
+                    #if os(macOS)
+                    SettingsLink {
+                        Text("Settings")
+                    }
+                    .buttonStyle(.bordered)
+                    #else
                     Button("Settings") {
                         showingSettings = true
                     }
                     .buttonStyle(.bordered)
+                    #endif
                 }
             }
         }

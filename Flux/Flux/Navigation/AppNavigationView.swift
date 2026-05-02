@@ -13,17 +13,36 @@ struct AppNavigationView: View {
     @State private var keychainService = KeychainService()
     @State private var apiClient: (any FluxAPIClient)?
 
+    #if os(macOS)
+    @SceneStorage("flux.sidebar.selectedScreen") private var storedSelection: String = Screen.dashboard.rawValue
+    #endif
+
     var body: some View {
         NavigationSplitView(preferredCompactColumn: $preferredCompactColumn) {
             SidebarView(selection: $selectedScreen)
         } detail: {
             NavigationStack(path: $navigationPath) {
                 currentScreenView
+                    #if os(macOS)
+                    .scrollContentBackground(.hidden)
+                    #endif
             }
         }
-        .onAppear(perform: reloadDependencies)
-        .onChange(of: selectedScreen) { _, _ in
+        .onAppear {
+            #if os(macOS)
+            if let restored = Screen(rawValue: storedSelection), restored != .settings {
+                selectedScreen = restored
+            }
+            #endif
+            reloadDependencies()
+        }
+        .onChange(of: selectedScreen) { _, newScreen in
             navigationPath = NavigationPath()
+            #if os(macOS)
+            if let newScreen, newScreen != .settings {
+                storedSelection = newScreen.rawValue
+            }
+            #endif
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
@@ -39,6 +58,9 @@ struct AppNavigationView: View {
                 break
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .fluxCredentialsChanged)) { _ in
+            reloadDependencies()
+        }
     }
 
     @ViewBuilder
@@ -48,17 +70,30 @@ struct AppNavigationView: View {
             if let apiClient {
                 DashboardView(apiClient: apiClient)
             } else {
-                SettingsView(onSaved: handleSettingsSaved)
+                unconfiguredView
             }
         case .history:
             if let apiClient {
                 HistoryView(apiClient: apiClient, modelContext: modelContext)
             } else {
-                SettingsView(onSaved: handleSettingsSaved)
+                unconfiguredView
             }
         case .settings:
+            #if os(macOS)
+            unconfiguredView
+            #else
             SettingsView(onSaved: handleSettingsSaved)
+            #endif
         }
+    }
+
+    @ViewBuilder
+    private var unconfiguredView: some View {
+        #if os(macOS)
+        MacUnconfiguredView()
+        #else
+        SettingsView(onSaved: handleSettingsSaved)
+        #endif
     }
 
     private var effectiveScreen: Screen {
@@ -88,6 +123,30 @@ struct AppNavigationView: View {
         return URLSessionAPIClient(baseURL: url, keychainService: keychainService)
     }
 }
+
+#if os(macOS)
+private struct MacUnconfiguredView: View {
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "gearshape")
+                .font(.largeTitle)
+                .foregroundStyle(.secondary)
+            Text("Flux is not configured")
+                .font(.headline)
+            Text("Open Settings to enter your API URL and token.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            SettingsLink {
+                Text("Open Settings…")
+            }
+            .keyboardShortcut(",", modifiers: .command)
+        }
+        .padding(32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+#endif
 
 #Preview {
     AppNavigationView()

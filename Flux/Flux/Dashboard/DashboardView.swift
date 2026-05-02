@@ -5,6 +5,9 @@ import SwiftUI
 struct DashboardView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.modelContext) private var modelContext
+    #if os(macOS)
+    @Environment(FluxRefreshCoordinator.self) private var refreshCoordinator
+    #endif
     @State private var viewModel: DashboardViewModel
     @State private var showingSettings = false
     private let historyFactory: (ModelContext) -> AnyView
@@ -81,10 +84,19 @@ struct DashboardView: View {
         }
         .onAppear {
             viewModel.startAutoRefresh()
+            #if os(macOS)
+            refreshCoordinator.refresh = { [viewModel] in
+                Task { await viewModel.refresh() }
+            }
+            #endif
         }
         .onDisappear {
             viewModel.stopAutoRefresh()
+            #if os(macOS)
+            refreshCoordinator.refresh = nil
+            #endif
         }
+        #if !os(macOS)
         .onChange(of: scenePhase) { _, newPhase in
             switch newPhase {
             case .active:
@@ -95,6 +107,10 @@ struct DashboardView: View {
                 viewModel.stopAutoRefresh()
             }
         }
+        #endif
+        #if os(macOS)
+        .modifier(AppearsActiveMonitor(viewModel: viewModel))
+        #else
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Settings") {
@@ -114,6 +130,7 @@ struct DashboardView: View {
                     }
             }
         }
+        #endif
     }
 
     @ViewBuilder
@@ -141,10 +158,17 @@ struct DashboardView: View {
                 }
                 .buttonStyle(.borderedProminent)
 
+                #if os(macOS)
+                SettingsLink {
+                    Text("Settings")
+                }
+                .buttonStyle(.bordered)
+                #else
                 Button("Settings") {
                     showingSettings = true
                 }
                 .buttonStyle(.bordered)
+                #endif
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

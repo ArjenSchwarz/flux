@@ -1,5 +1,9 @@
 import Foundation
 
+public extension Notification.Name {
+    static let fluxCredentialsChanged = Notification.Name("me.nore.ig.flux.credentialsChanged")
+}
+
 public protocol KeyValueStore: AnyObject {
     func string(forKey key: String) -> String?
     func set(_ value: String?, forKey key: String)

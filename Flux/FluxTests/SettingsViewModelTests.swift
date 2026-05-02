@@ -24,7 +24,8 @@ struct SettingsViewModelTests {
             apiClientFactory: { _, token in
                 capture.token = token
                 return apiClient
-            }
+            },
+            writeURL: { url in userDefaults.apiURL = url }
         )
 
         viewModel.apiURL = "https://example.com"
@@ -55,7 +56,8 @@ struct SettingsViewModelTests {
         let viewModel = SettingsViewModel(
             keychainService: keychain,
             userDefaults: userDefaults,
-            apiClientFactory: { _, _ in apiClient }
+            apiClientFactory: { _, _ in apiClient },
+            writeURL: { url in userDefaults.apiURL = url }
         )
 
         viewModel.apiURL = "https://example.com"
@@ -88,7 +90,8 @@ struct SettingsViewModelTests {
                 capture.url = url
                 capture.token = token
                 return apiClient
-            }
+            },
+            writeURL: { url in userDefaults.apiURL = url }
         )
 
         viewModel.apiURL = "https://initial.example.com"
@@ -109,6 +112,86 @@ struct SettingsViewModelTests {
         #expect(userDefaults.apiURL == "https://initial.example.com")
         #expect(userDefaults.loadAlertThreshold == 3100)
         #expect(viewModel.shouldDismiss)
+    }
+
+    @Test
+    func saveWritesURLThroughMirrorAndPostsCredentialsChangedNotification() async throws {
+        let keychain = makeKeychainService()
+        defer { try? keychain.deleteToken() }
+
+        let userDefaults = makeUserDefaults()
+        defer { userDefaults.removePersistentDomain(forName: suiteName) }
+
+        let apiClient = MockSettingsAPIClient()
+        await apiClient.setStatusResult(.success(Self.validStatusResponse))
+
+        let mirrorCapture = MirrorCapture()
+        let notificationCenter = NotificationCenter()
+        let notificationFired = NotificationFiredFlag()
+        let observer = notificationCenter.addObserver(
+            forName: .fluxCredentialsChanged,
+            object: nil,
+            queue: nil
+        ) { _ in
+            notificationFired.fire()
+        }
+        defer { notificationCenter.removeObserver(observer) }
+
+        let viewModel = SettingsViewModel(
+            keychainService: keychain,
+            userDefaults: userDefaults,
+            apiClientFactory: { _, _ in apiClient },
+            writeURL: { url in mirrorCapture.url = url },
+            notificationCenter: notificationCenter
+        )
+
+        viewModel.apiURL = "https://example.com"
+        viewModel.apiToken = "entered-token"
+        await viewModel.save()
+
+        #expect(mirrorCapture.url == "https://example.com")
+        #expect(notificationFired.fired)
+        #expect(keychain.loadToken() == "entered-token")
+        #expect(viewModel.shouldDismiss)
+    }
+
+    @Test
+    func saveDoesNotPostCredentialsChangedNotificationOnFailure() async throws {
+        let keychain = makeKeychainService()
+        defer { try? keychain.deleteToken() }
+
+        let userDefaults = makeUserDefaults()
+        defer { userDefaults.removePersistentDomain(forName: suiteName) }
+
+        let apiClient = MockSettingsAPIClient()
+        await apiClient.setStatusResult(.failure(FluxAPIError.unauthorized))
+
+        let mirrorCapture = MirrorCapture()
+        let notificationCenter = NotificationCenter()
+        let notificationFired = NotificationFiredFlag()
+        let observer = notificationCenter.addObserver(
+            forName: .fluxCredentialsChanged,
+            object: nil,
+            queue: nil
+        ) { _ in
+            notificationFired.fire()
+        }
+        defer { notificationCenter.removeObserver(observer) }
+
+        let viewModel = SettingsViewModel(
+            keychainService: keychain,
+            userDefaults: userDefaults,
+            apiClientFactory: { _, _ in apiClient },
+            writeURL: { url in mirrorCapture.url = url },
+            notificationCenter: notificationCenter
+        )
+
+        viewModel.apiURL = "https://example.com"
+        viewModel.apiToken = "bad-token"
+        await viewModel.save()
+
+        #expect(mirrorCapture.url == nil)
+        #expect(notificationFired.fired == false)
     }
 
     @Test
@@ -197,4 +280,21 @@ private actor MockSettingsAPIClient: FluxAPIClient {
 private final class CaptureBox: @unchecked Sendable {
     var token = ""
     var url: URL?
+}
+
+private final class MirrorCapture: @unchecked Sendable {
+    var url: String?
+}
+
+private final class NotificationFiredFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _fired = false
+    var fired: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return _fired
+    }
+    func fire() {
+        lock.lock(); defer { lock.unlock() }
+        _fired = true
+    }
 }

@@ -22,4 +22,12 @@ enum Screen: String, CaseIterable, Identifiable {
         case .settings: "gearshape"
         }
     }
+
+    static var sidebarVisible: [Screen] {
+        #if os(macOS)
+        return Screen.allCases.filter { $0 != .settings }
+        #else
+        return Screen.allCases
+        #endif
+    }
 }

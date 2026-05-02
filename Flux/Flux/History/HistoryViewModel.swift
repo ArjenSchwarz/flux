@@ -9,6 +9,7 @@ final class HistoryViewModel {
     private(set) var selectedDay: DayEnergy?
     private(set) var isLoading = false
     private(set) var error: FluxAPIError?
+    private(set) var lastRequestedDays: Int = 7
 
     private let apiClient: any FluxAPIClient
     private let modelContext: ModelContext
@@ -30,6 +31,7 @@ final class HistoryViewModel {
     func loadHistory(days requestedDays: Int) async {
         guard !isLoading else { return }
 
+        lastRequestedDays = requestedDays
         isLoading = true
         defer { isLoading = false }
 
@@ -55,6 +57,10 @@ final class HistoryViewModel {
 
     func selectDay(_ day: DayEnergy) {
         selectedDay = day
+    }
+
+    func reload() async {
+        await loadHistory(days: lastRequestedDays)
     }
 
     private func cacheHistoricalDays(_ dayEnergies: [DayEnergy]) throws {
