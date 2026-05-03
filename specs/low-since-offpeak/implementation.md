@@ -1,6 +1,6 @@
 # Implementation: Low SoC Since Last Off-Peak End (T-1084)
 
-Branch: `chore/low-since-offpeak-T-1084` (single commit `e2ad373`).
+Branch: `chore/low-since-offpeak-T-1084` (single commit; SHA omitted because it changes on rebase).
 
 Linked: [smolspec.md](smolspec.md), [decision_log.md](decision_log.md), [tasks.md](tasks.md).
 
