@@ -85,9 +85,6 @@ func TestNewDailyEnergyItem(t *testing.T) {
 }
 
 func TestNewDailyPowerItems(t *testing.T) {
-	now := time.Date(2026, 4, 13, 12, 0, 0, 0, time.UTC)
-	ttl := now.Add(30 * 24 * time.Hour).Unix()
-
 	tests := map[string]struct {
 		serial    string
 		snapshots []alphaess.PowerSnapshot
@@ -100,8 +97,8 @@ func TestNewDailyPowerItems(t *testing.T) {
 				{Cbat: 82.0, Ppv: 2.5, Load: 1.1, FeedIn: 0.6, GridCharge: 0.1, UploadTime: "2026-04-13 10:05:00"},
 			},
 			want: []DailyPowerItem{
-				{SysSn: "AB1234", UploadTime: "2026-04-13 10:00:00", Cbat: 80.0, Ppv: 2.0, Load: 1.0, FeedIn: 0.5, TTL: ttl},
-				{SysSn: "AB1234", UploadTime: "2026-04-13 10:05:00", Cbat: 82.0, Ppv: 2.5, Load: 1.1, FeedIn: 0.6, GridCharge: 0.1, TTL: ttl},
+				{SysSn: "AB1234", UploadTime: "2026-04-13 10:00:00", Cbat: 80.0, Ppv: 2.0, Load: 1.0, FeedIn: 0.5},
+				{SysSn: "AB1234", UploadTime: "2026-04-13 10:05:00", Cbat: 82.0, Ppv: 2.5, Load: 1.1, FeedIn: 0.6, GridCharge: 0.1},
 			},
 		},
 		"empty snapshots": {
@@ -115,14 +112,14 @@ func TestNewDailyPowerItems(t *testing.T) {
 				{Cbat: -1.0, Ppv: 0, Load: 0, FeedIn: -0.5, UploadTime: "2026-04-13 00:00:00"},
 			},
 			want: []DailyPowerItem{
-				{SysSn: "SN1", UploadTime: "2026-04-13 00:00:00", Cbat: -1.0, FeedIn: -0.5, TTL: ttl},
+				{SysSn: "SN1", UploadTime: "2026-04-13 00:00:00", Cbat: -1.0, FeedIn: -0.5},
 			},
 		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := NewDailyPowerItems(tc.serial, tc.snapshots, now)
+			got := NewDailyPowerItems(tc.serial, tc.snapshots)
 			assert.Equal(t, tc.want, got)
 		})
 	}

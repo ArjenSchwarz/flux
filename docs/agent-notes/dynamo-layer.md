@@ -19,7 +19,7 @@
 - `LogStore` uses hardcoded table name labels (e.g. `"flux-readings"`) since in dry-run mode there are no real table names configured.
 - `OffpeakItem.Status` field distinguishes `"pending"` (start captured) from `"complete"` (both snapshots + deltas).
 - `WriteDailyPower` chunks at 25 items (DynamoDB limit) and retries unprocessed items once.
-- TTL is 30 days for both readings and daily power items (Decision 10).
+- TTL is 30 days on `flux-readings` only. `flux-daily-power` rows are retained indefinitely so Day Detail charts work for any historical date — ~3-5 KB compressed per day, ~21 MB/year per system at the current single-serial scale.
 - `NewSystemItem` formats `LastUpdated` as RFC3339 in UTC.
 - Shared `getItem[T]` generic helper used by both `DynamoStore.GetOffpeak` and all `DynamoReader.Get*` methods — avoids implementation divergence.
 - Shared `offpeakKey` helper builds the composite key for offpeak items.

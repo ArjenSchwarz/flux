@@ -377,9 +377,6 @@ Resources:
           KeyType: HASH
         - AttributeName: uploadTime
           KeyType: RANGE
-      TimeToLiveSpecification:
-        AttributeName: ttl
-        Enabled: true
 
   SystemTable:
     Type: AWS::DynamoDB::Table
