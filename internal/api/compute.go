@@ -267,6 +267,26 @@ func nextOffpeakStart(now time.Time, offpeakStart, offpeakEnd string) (time.Time
 	return todayStart, true
 }
 
+// lastOffpeakEnd returns the absolute Sydney-local time of the most recent
+// off-peak window end, used as the lower bound for the "lowest SOC since
+// last off-peak end" stat. Today's end is returned once now is at or after
+// it; otherwise yesterday's end is returned (including when now falls inside
+// today's window — see specs/low-since-offpeak/decision_log.md). Returns
+// (_, false) for an unparseable off-peak configuration.
+func lastOffpeakEnd(now time.Time, offpeakStart, offpeakEnd string) (time.Time, bool) {
+	_, endMin, ok := derivedstats.ParseOffpeakWindow(offpeakStart, offpeakEnd)
+	if !ok {
+		return time.Time{}, false
+	}
+	local := now.In(sydneyTZ)
+	dayStart := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, sydneyTZ)
+	todayEnd := dayStart.Add(time.Duration(endMin) * time.Minute)
+	if local.Before(todayEnd) {
+		return todayEnd.AddDate(0, 0, -1), true
+	}
+	return todayEnd, true
+}
+
 // roundEnergy rounds a kWh value to 2 decimal places.
 func roundEnergy(v float64) float64 {
 	return math.Round(v*100) / 100

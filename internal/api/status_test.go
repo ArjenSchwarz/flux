@@ -44,9 +44,15 @@ func TestHandleStatusAllDataPresent(t *testing.T) {
 		queryReadingsFn: func(_ context.Context, serial string, from, to int64) ([]dynamo.ReadingItem, error) {
 			assert.Equal(t, testSerial, serial)
 			// Return readings spanning 24h with a few in the last 15min and 60s.
+			// The lowest SOC is positioned ~14h ago so it falls *after* the
+			// most recent off-peak window end (yesterday 14:00, ~16h ago)
+			// and is still picked up by the low24h filter.
 			return []dynamo.ReadingItem{
-				// Old reading (24h ago) — lowest SOC.
-				{Timestamp: nowUnix - 86000, Ppv: 100, Pload: 200, Pbat: 300, Pgrid: 50, Soc: 20},
+				// Pre-window reading (24h ago, before yesterday's 14:00 off-peak
+				// end) — must be excluded from low24h.
+				{Timestamp: nowUnix - 86000, Ppv: 100, Pload: 200, Pbat: 300, Pgrid: 50, Soc: 15},
+				// In-window low (14h ago, ~16:07 yesterday).
+				{Timestamp: nowUnix - 50000, Ppv: 100, Pload: 200, Pbat: 300, Pgrid: 50, Soc: 20},
 				// 15min ago.
 				{Timestamp: nowUnix - 800, Ppv: 500, Pload: 1000, Pbat: 800, Pgrid: 100, Soc: 55},
 				// Within 60s — 3 consecutive readings with pgrid > 500.
@@ -134,6 +140,33 @@ func TestHandleStatusNoReadings(t *testing.T) {
 	assert.Nil(t, sr.Rolling15m, "rolling15min should be null when no readings")
 	require.NotNil(t, sr.Battery)
 	assert.Nil(t, sr.Battery.Low24h, "low24h should be null when no readings")
+}
+
+// TestHandleStatusLow24hUnparseableOffpeak verifies that when the off-peak
+// window configuration cannot be parsed, low24h is omitted from the response
+// even though readings exist — the boundary is undefined without a window.
+func TestHandleStatusLow24hUnparseableOffpeak(t *testing.T) {
+	now := time.Date(2026, 4, 15, 6, 0, 0, 0, sydneyTZ)
+	nowUnix := now.Unix()
+
+	mr := &mockReader{
+		queryReadingsFn: func(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
+			return []dynamo.ReadingItem{
+				{Timestamp: nowUnix - 1000, Ppv: 100, Pload: 200, Pbat: 300, Pgrid: 50, Soc: 42},
+			}, nil
+		},
+	}
+
+	h := NewHandler(mr, nil, testSerial, testToken, "bad", "also-bad")
+	h.nowFunc = func() time.Time { return now }
+
+	resp, err := h.Handle(context.Background(), statusRequest())
+	require.NoError(t, err)
+	assert.Equal(t, 200, resp.StatusCode)
+
+	sr := parseStatusResponse(t, resp)
+	require.NotNil(t, sr.Battery)
+	assert.Nil(t, sr.Battery.Low24h, "low24h should be null when off-peak config is unparseable")
 }
 
 func TestHandleStatusOffpeakPendingNoDailyEnergy(t *testing.T) {

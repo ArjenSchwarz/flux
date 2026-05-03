@@ -116,10 +116,16 @@ func (h *Handler) handleStatus(ctx context.Context, _ events.LambdaFunctionURLRe
 		}
 	}
 
-	if soc, ts, found := derivedstats.MinSOC(toDerivedReadings(allReadings)); found {
-		battery.Low24h = &Low24h{
-			Soc:       roundPower(soc),
-			Timestamp: time.Unix(ts, 0).UTC().Format(time.RFC3339),
+	// Lowest SOC since the most recent off-peak window end. If the off-peak
+	// configuration is unparseable or no readings fall inside the resolved
+	// window, the field is left nil — see specs/low-since-offpeak/smolspec.md.
+	if lastOpEnd, ok := lastOffpeakEnd(now, h.offpeakStart, h.offpeakEnd); ok {
+		sinceReadings := filterReadings(allReadings, lastOpEnd.Unix(), nowUnix)
+		if soc, ts, found := derivedstats.MinSOC(toDerivedReadings(sinceReadings)); found {
+			battery.Low24h = &Low24h{
+				Soc:       roundPower(soc),
+				Timestamp: time.Unix(ts, 0).UTC().Format(time.RFC3339),
+			}
 		}
 	}
 	resp.Battery = battery

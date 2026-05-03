@@ -4,7 +4,7 @@
 
 - **BatteryHeroView** — SOC percentage (large text), ProgressView, status line with cutoff time. Uses `BatteryColor.forSOC().color` for text and progress tint.
 - **PowerTrioView** — Solar/Load/Grid columns. Solar green when ppv > 0, load red above threshold, grid colored via `GridColor.forGrid().color`. Accepts `nowProvider` for testable time.
-- **SecondaryStatsView** — 24h low, off-peak grid/delta, 15-min avg load with cutoff time colored via `CutoffTimeColor.forCutoff().color`. Accepts `nowProvider`.
+- **SecondaryStatsView** — "Lowest" (lowest SoC since the most recent off-peak window end; reads `battery.low24h` — wire field name retained), off-peak grid/delta, 15-min avg load with cutoff time colored via `CutoffTimeColor.forCutoff().color`. Accepts `nowProvider`.
 - **TodayEnergyView** — kWh totals for solar, grid in/out, charge/discharge.
 - **DashboardView** — ScrollView + VStack with `.refreshable`. Two distinct error states: `initialLoadErrorCard` (when status is nil + error) and `stalenessBanner` (when status exists + error). Both have Retry and conditional Settings buttons. Sheet-based settings access.
 
