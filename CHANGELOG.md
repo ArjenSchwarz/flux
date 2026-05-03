@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Removed
+
+- 30-day TTL on the `flux-daily-power` DynamoDB table. The `TimeToLiveSpecification` is gone from `infrastructure/template.yaml` and the poller no longer writes the `ttl` attribute (`DailyPowerItem.TTL` field deleted, `NewDailyPowerItems` signature drops the unused `now time.Time` parameter and its single caller in `internal/poller/poller.go` is updated). Existing rows keep their `ttl` attribute on disk, harmless once TTL processing is disabled on the table; new rows are written without it. Day Detail's existing past-date `flux-daily-power` fallback in `internal/api/day.go` now works indefinitely instead of stopping at 30 days. Replaces abandoned T-1098 (S3 cold-tier archive) — at ~21 MB/year per system, retaining the rows in DynamoDB is ~$0.05/month and avoids the entire S3 archive surface (separate bucket, IAM split, sentinel column, read cascade, failure modes). `docs/agent-notes/dynamo-layer.md` updated to reflect readings-only TTL.
+
 ### Added
 
 - T-1081 macOS App polish: `ios-build-release` and `macos-build-release` Makefile targets that delegate to the corresponding base targets with `IOS_CONFIG=Release`. `macos-build` now passes `-allowProvisioningUpdates` so first-time signing of the widget extension on a new machine doesn't fail with "no profile" before Xcode has minted one. New `Screen.today` case (`sun.max` icon) added to the sidebar so Day Detail is reachable from the navigation list, not only via the Dashboard's "Today detail" button. New `DashboardViewModel.runAutoRefresh()` async loop intended for SwiftUI's `.task` modifier so the auto-refresh task is structured under the view's lifetime and cancels deterministically on disappear. New `URLSessionAPIClient.fetch(_:)` private helper that retries `URLError.cancelled` with exponential backoff (200ms, 500ms, 1s, 2s) so launch-time URLSession warm-up cancellations don't surface as errors.

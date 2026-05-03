@@ -182,7 +182,7 @@ func (p *Poller) fetchAndStoreDailyPower(ctx context.Context) {
 		logDryRunPayload("getOneDayPowerBySn", snapshots)
 	}
 
-	items := dynamo.NewDailyPowerItems(p.cfg.Serial, snapshots, p.now())
+	items := dynamo.NewDailyPowerItems(p.cfg.Serial, snapshots)
 	if err := p.store.WriteDailyPower(ctx, items); err != nil {
 		slog.Error("write daily power failed", "error", err)
 		return

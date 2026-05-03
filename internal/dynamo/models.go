@@ -101,7 +101,6 @@ type DailyPowerItem struct {
 	Load       float64 `dynamodbav:"load"`
 	FeedIn     float64 `dynamodbav:"feedIn"`
 	GridCharge float64 `dynamodbav:"gridCharge"`
-	TTL        int64   `dynamodbav:"ttl"`
 }
 
 // SystemItem represents a row in the flux-system table.
@@ -178,9 +177,8 @@ func NewDailyEnergyItem(serial, date string, data *alphaess.EnergyData) DailyEne
 }
 
 // NewDailyPowerItems transforms AlphaESS power snapshots into DynamoDB daily power items.
-func NewDailyPowerItems(serial string, snapshots []alphaess.PowerSnapshot, now time.Time) []DailyPowerItem {
+func NewDailyPowerItems(serial string, snapshots []alphaess.PowerSnapshot) []DailyPowerItem {
 	items := make([]DailyPowerItem, len(snapshots))
-	ttl := now.Add(ttl30Days).Unix()
 	for i, s := range snapshots {
 		items[i] = DailyPowerItem{
 			SysSn:      serial,
@@ -190,7 +188,6 @@ func NewDailyPowerItems(serial string, snapshots []alphaess.PowerSnapshot, now t
 			Load:       s.Load,
 			FeedIn:     s.FeedIn,
 			GridCharge: s.GridCharge,
-			TTL:        ttl,
 		}
 	}
 	return items
