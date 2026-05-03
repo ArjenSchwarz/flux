@@ -21,7 +21,7 @@ struct SecondaryStatsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            statRow(title: "24h low", value: low24hText)
+            statRow(title: "Lowest", value: low24hText)
             statRow(title: "Off-peak grid", value: offpeakGridText)
             statRow(title: "Off-peak Δ battery", value: offpeakDeltaText)
             rollingLoadRow

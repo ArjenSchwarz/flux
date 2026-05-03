@@ -36,7 +36,7 @@ struct SystemLargeView: View {
     @ViewBuilder
     private var statsRow: some View {
         VStack(alignment: .leading, spacing: 4) {
-            statRow(title: "24h low", value: low24hText)
+            statRow(title: "Lowest", value: low24hText)
             statRow(title: "Off-peak grid", value: offpeakGridText)
             statRow(title: "Off-peak Δ battery", value: offpeakDeltaText)
         }

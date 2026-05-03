@@ -24,7 +24,8 @@ type LiveData struct {
 	Timestamp      string  `json:"timestamp"`
 }
 
-// BatteryInfo contains battery capacity, cutoff estimates, and 24h low.
+// BatteryInfo contains battery capacity, cutoff estimates, and the lowest
+// SOC since the most recent off-peak window end.
 type BatteryInfo struct {
 	CapacityKwh     float64 `json:"capacityKwh"`
 	CutoffPercent   int     `json:"cutoffPercent"`
@@ -32,7 +33,11 @@ type BatteryInfo struct {
 	Low24h          *Low24h `json:"low24h"`
 }
 
-// Low24h contains the lowest SOC reading in the last 24 hours.
+// Low24h contains the lowest SOC reading since the most recent off-peak
+// window end (Sydney local). The JSON field name is preserved for
+// backwards compatibility with existing clients; the underlying window is
+// no longer 24 hours. Nil when the off-peak window is unparseable or no
+// readings exist in the resolved window.
 type Low24h struct {
 	Soc       float64 `json:"soc"`
 	Timestamp string  `json:"timestamp"`
