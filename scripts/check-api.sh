@@ -27,7 +27,10 @@ if ! command -v jq >/dev/null 2>&1; then
 fi
 
 URL="${URL%/}"
-TODAY="$(date +%Y-%m-%d)"
+# All Flux date keys are Sydney-local; use that TZ so the script doesn't
+# request tomorrow's date and false-fail the off-peak split check when
+# run between Sydney midnight and UTC midnight.
+TODAY="$(TZ=Australia/Sydney date +%Y-%m-%d)"
 
 # All status text goes to stderr so command-substitution captures only the
 # JSON body returned by `fetch`.

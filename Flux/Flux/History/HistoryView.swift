@@ -153,10 +153,6 @@ struct HistoryView: View {
         #endif
     }
 
-    private var eyebrow: String {
-        "Last \(selectedRange) days"
-    }
-
     private func selectDay(_ dayID: String) {
         if let day = viewModel.days.first(where: { $0.date == dayID }) {
             viewModel.selectDay(day)

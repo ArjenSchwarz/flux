@@ -19,19 +19,15 @@ struct OffPeakBlock: View {
         FluxPanel {
             VStack(spacing: 0) {
                 if showsBatteryCharged {
-                    FluxStatRow(label: "Battery charged", value: deltaText, last: !showsLowest && !showsAvgLoad)
+                    FluxStatRow(label: "Battery charged", value: deltaText, last: !showsAvgLoad)
                 }
-                if showsLowest {
-                    FluxStatRow(label: "Lowest", value: lowestValue, sub: lowestSubtitle, last: !showsAvgLoad)
-                }
+                FluxStatRow(label: "Lowest", value: lowestValue, sub: lowestSubtitle, last: !showsAvgLoad)
                 if showsAvgLoad {
                     FluxStatRow(label: "15m avg load", value: avgLoadText, last: true)
                 }
             }
         }
     }
-
-    private var showsLowest: Bool { true }
 
     private var deltaText: String {
         guard let value = offpeak?.batteryDeltaPercent else { return "—" }
