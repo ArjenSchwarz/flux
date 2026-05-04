@@ -27,6 +27,11 @@ final class DayDetailViewModel {
     private(set) var peakPeriods: [PeakPeriod] = []
     private(set) var dailyUsage: DailyUsage?
     private(set) var note: String?
+    /// Derived off-peak stats computed once per `loadDay()` rather than
+    /// on every SwiftUI body re-render. `OffpeakReadingStats.compute` is
+    /// O(n) over `parsedReadings`, so caching it here saves work on
+    /// frequent re-renders (selection cursor, scroll, etc.).
+    private(set) var offpeakStats: OffpeakReadingStats = .empty
 
     private let apiClient: any FluxAPIClient
     private let nowProvider: @Sendable () -> Date
@@ -60,6 +65,7 @@ final class DayDetailViewModel {
             peakPeriods = response.peakPeriods ?? []
             dailyUsage = response.dailyUsage
             note = response.note
+            offpeakStats = OffpeakReadingStats.compute(date: date, readings: parsedReadings)
             error = nil
         } catch {
             readings = []
@@ -69,6 +75,7 @@ final class DayDetailViewModel {
             peakPeriods = []
             dailyUsage = nil
             note = nil
+            offpeakStats = .empty
             self.error = FluxAPIError.from(error)
         }
     }

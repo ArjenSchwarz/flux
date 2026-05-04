@@ -59,13 +59,13 @@ struct DayDetailView: View {
                     // it for any date with an off-peak record); fall back to
                     // the readings-derived approximation when the server
                     // hasn't returned a split.
-                    offpeakGridImport: viewModel.summary?.offpeakGridImportKwh ?? offpeakStats.gridImportKwh
+                    offpeakGridImport: viewModel.summary?.offpeakGridImportKwh ?? viewModel.offpeakStats.gridImportKwh
                 )
                 OffPeakBlock(
                     offpeak: nil,
-                    lowestSOC: offpeakStats.lowestSOC,
-                    lowestSOCTimestamp: offpeakStats.lowestSOCTimestamp,
-                    avgLoadWatts: offpeakStats.avgLoadWatts,
+                    lowestSOC: viewModel.offpeakStats.lowestSOC,
+                    lowestSOCTimestamp: viewModel.offpeakStats.lowestSOCTimestamp,
+                    avgLoadWatts: viewModel.offpeakStats.avgLoadWatts,
                     showsBatteryCharged: false,
                     showsAvgLoad: false
                 )
@@ -200,9 +200,6 @@ struct DayDetailView: View {
         return DayDetailEyebrow.summaryDate.string(from: parsedDate)
     }
 
-    private var offpeakStats: OffpeakReadingStats {
-        OffpeakReadingStats.compute(date: viewModel.date, readings: viewModel.parsedReadings)
-    }
 }
 
 #if DEBUG

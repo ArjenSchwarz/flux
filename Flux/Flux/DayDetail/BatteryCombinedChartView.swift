@@ -31,23 +31,23 @@ struct BatteryCombinedChartView: View {
                         x: .value("Time", reading.date),
                         y: .value("SOC", reading.point.soc)
                     )
-                    .foregroundStyle(.blue.opacity(0.22))
+                    .foregroundStyle(FluxTheme.Palette.soc.opacity(0.22))
                 }
 
                 RuleMark(y: .value("Zero", powerZeroOnSOCScale))
-                    .foregroundStyle(.secondary.opacity(0.4))
+                    .foregroundStyle(FluxTheme.Palette.tertiaryText)
                     .lineStyle(StrokeStyle(lineWidth: 0.5, dash: [3, 3]))
 
                 RuleMark(y: .value("Cutoff", 10))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 3]))
-                    .foregroundStyle(.red.opacity(0.6))
+                    .foregroundStyle(FluxTheme.Palette.grid.opacity(0.6))
 
                 ForEach(readings) { reading in
                     LineMark(
                         x: .value("Time", reading.date),
                         y: .value("Power", scaledPower(reading.point.pbat))
                     )
-                    .foregroundStyle(.purple)
+                    .foregroundStyle(FluxTheme.Palette.battery)
                     .interpolationMethod(.monotone)
                 }
 
@@ -58,7 +58,7 @@ struct BatteryCombinedChartView: View {
                         y: .value("Low SOC", socLow)
                     )
                     .symbolSize(50)
-                    .foregroundStyle(.purple)
+                    .foregroundStyle(FluxTheme.Palette.battery)
                     .annotation(position: .top) {
                         Text("\(SOCFormatting.format(socLow)) at \(DateFormatting.clockTime(from: socLowTime))")
                             .font(.caption2)
@@ -69,20 +69,20 @@ struct BatteryCombinedChartView: View {
 
                 if let selected = selectedReading {
                     RuleMark(x: .value("Selected", selected.date))
-                        .foregroundStyle(.secondary.opacity(0.5))
+                        .foregroundStyle(FluxTheme.Palette.secondaryText)
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 2]))
                     PointMark(
                         x: .value("Selected", selected.date),
                         y: .value("SOC", selected.point.soc)
                     )
                     .symbolSize(40)
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(FluxTheme.Palette.soc)
                     PointMark(
                         x: .value("Selected", selected.date),
                         y: .value("Power", scaledPower(selected.point.pbat))
                     )
                     .symbolSize(40)
-                    .foregroundStyle(.purple)
+                    .foregroundStyle(FluxTheme.Palette.battery)
                 }
             }
             .chartYScale(domain: 0 ... 100)
