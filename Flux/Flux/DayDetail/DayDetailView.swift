@@ -45,6 +45,10 @@ struct DayDetailView: View {
                 DayNavigationHeader(viewModel: viewModel)
                 DayDetailNoteSection(viewModel: viewModel, editingNote: $editingNote)
 
+                if let dailyUsage = viewModel.dailyUsage, !dailyUsage.blocks.isEmpty {
+                    DayInFiveBlocksPanel(dailyUsage: dailyUsage)
+                }
+
                 contentSection
 
                 SummaryBlock(
@@ -65,10 +69,6 @@ struct DayDetailView: View {
                     showsBatteryCharged: false,
                     showsAvgLoad: false
                 )
-
-                if let dailyUsage = viewModel.dailyUsage, !dailyUsage.blocks.isEmpty {
-                    DayInFiveBlocksPanel(dailyUsage: dailyUsage)
-                }
             }
             .padding(.horizontal, FluxTheme.Metrics.screenHorizontalPadding)
             .padding(.bottom, FluxTheme.Metrics.screenBottomPadding)
