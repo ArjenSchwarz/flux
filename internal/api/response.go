@@ -155,12 +155,18 @@ type TimeSeriesPoint struct {
 }
 
 // DaySummary contains energy totals and the SOC low for a day.
+//
+// OffpeakGridImportKwh and OffpeakGridExportKwh are populated when an
+// off-peak record exists for the date, so clients can split EInput into
+// peak vs off-peak imports without re-deriving the window from readings.
 type DaySummary struct {
-	Epv        *float64 `json:"epv"`
-	EInput     *float64 `json:"eInput"`
-	EOutput    *float64 `json:"eOutput"`
-	ECharge    *float64 `json:"eCharge"`
-	EDischarge *float64 `json:"eDischarge"`
-	SocLow     *float64 `json:"socLow"`
-	SocLowTime *string  `json:"socLowTime"`
+	Epv                  *float64 `json:"epv"`
+	EInput               *float64 `json:"eInput"`
+	EOutput              *float64 `json:"eOutput"`
+	ECharge              *float64 `json:"eCharge"`
+	EDischarge           *float64 `json:"eDischarge"`
+	SocLow               *float64 `json:"socLow"`
+	SocLowTime           *string  `json:"socLowTime"`
+	OffpeakGridImportKwh *float64 `json:"offpeakGridImportKwh,omitempty"`
+	OffpeakGridExportKwh *float64 `json:"offpeakGridExportKwh,omitempty"`
 }

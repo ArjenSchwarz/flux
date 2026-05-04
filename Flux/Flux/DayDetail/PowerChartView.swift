@@ -10,9 +10,6 @@ struct PowerChartView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Power Flows")
-                .font(.headline)
-
             if let selected = selectedReading {
                 HStack(spacing: 12) {
                     Text(DateFormatting.clockTime(from: selected.date))
@@ -95,8 +92,6 @@ struct PowerChartView: View {
             .frame(minHeight: 220)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     private var selectedReading: ParsedReading? {

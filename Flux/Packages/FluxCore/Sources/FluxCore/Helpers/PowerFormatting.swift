@@ -9,6 +9,16 @@ public enum PowerFormatting {
         return String(format: "%.0f W", absolute)
     }
 
+    /// Returns the formatted numeric portion and the unit separately so the
+    /// caller can render them at different sizes (used by the V5 live trio).
+    public static func split(_ watts: Double) -> (value: String, unit: String) {
+        let absolute = abs(watts)
+        if absolute >= 1000 {
+            return (String(format: "%.2f", absolute / 1000), "kW")
+        }
+        return (String(format: "%.0f", absolute), "W")
+    }
+
     public static func formatAxis(_ watts: Double) -> String {
         let absolute = abs(watts)
         if absolute >= 1000 {
@@ -19,5 +29,17 @@ public enum PowerFormatting {
             return String(format: "%.1f kW", kilowatts)
         }
         return String(format: "%.0f W", watts)
+    }
+}
+
+public enum EnergyFormatting {
+    /// Formats a kilowatt-hour value, falling back to Wh when below 1 kWh.
+    /// Returns "—" for nil.
+    public static func format(_ kilowattHours: Double?) -> String {
+        guard let value = kilowattHours else { return "—" }
+        if abs(value) >= 1 {
+            return String(format: "%.2f kWh", value)
+        }
+        return String(format: "%.0f Wh", value * 1000)
     }
 }

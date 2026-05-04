@@ -67,6 +67,12 @@ struct SettingsView: View {
                 }
 
                 Toggle("Widget icons instead of labels", isOn: $viewModel.widgetUsesSymbols)
+
+                Picker("Hero font", selection: $viewModel.heroFont) {
+                    ForEach(HeroFontChoice.allCases) { choice in
+                        Text(choice.displayName).tag(choice)
+                    }
+                }
             }
 
             Section {
@@ -138,6 +144,14 @@ struct SettingsView: View {
                         }
                         FormRow("", labelWidth: Self.labelWidth) {
                             Toggle("Widget icons instead of labels", isOn: $viewModel.widgetUsesSymbols)
+                        }
+                        FormRow("Hero font", labelWidth: Self.labelWidth) {
+                            Picker("", selection: $viewModel.heroFont) {
+                                ForEach(HeroFontChoice.allCases) { choice in
+                                    Text(choice.displayName).tag(choice)
+                                }
+                            }
+                            .labelsHidden()
                         }
                     }
                 }

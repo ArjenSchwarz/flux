@@ -11,7 +11,7 @@ enum Screen: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .dashboard: "Dashboard"
-        case .today: "Today"
+        case .today: "Details"
         case .history: "History"
         case .settings: "Settings"
         }

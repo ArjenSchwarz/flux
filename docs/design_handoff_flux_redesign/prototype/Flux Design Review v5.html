@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Flux — Design Review</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  body { margin: 0; font-family: -apple-system, system-ui, sans-serif; background: #f0eee9; }
+  .intro {
+    padding: 14px 18px; max-width: 720px; color: #2a251f; font-size: 14px; line-height: 1.55;
+    border: 1px dashed rgba(60,50,40,.25); border-radius: 8px; background: rgba(255,255,255,.55);
+  }
+  .intro h2 { font-size: 18px; margin: 0 0 6px; letter-spacing: -.2px; }
+  .intro h3 { font-size: 13px; margin: 14px 0 4px; letter-spacing: 1px; text-transform: uppercase; color: rgba(60,50,40,.6); }
+  .intro ul { margin: 4px 0 0; padding-left: 18px; }
+  .intro li { margin: 3px 0; }
+  .intro b { color: #1a1410; }
+  /* Annotations on the recreated current screens */
+  .anno {
+    position: absolute; max-width: 220px;
+    background: #fef4a8; color: #5a4a2a;
+    font-size: 11px; line-height: 1.35;
+    padding: 7px 9px; border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,.18);
+    transform: rotate(-1deg);
+    z-index: 5;
+    font-family: -apple-system, system-ui, sans-serif;
+  }
+  .anno b { color: #3a2a10; }
+  .anno::before {
+    content: ''; position: absolute; top: 50%; left: -6px;
+    width: 0; height: 0; border-top: 6px solid transparent;
+    border-bottom: 6px solid transparent; border-right: 6px solid #fef4a8;
+    transform: translateY(-50%);
+  }
+  .anno.right::before { left: auto; right: -6px;
+    border-right: none; border-left: 6px solid #fef4a8; }
+  .anno.t::before { top: -6px; left: 16px; transform: none;
+    border-top: none; border-bottom: 6px solid #fef4a8;
+    border-left: 6px solid transparent; border-right: 6px solid transparent; }
+  .screen-wrap { position: relative; width: 100%; height: 100%; }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="screens/current.jsx"></script>
+<script type="text/babel" src="screens/safe.jsx"></script>
+<script type="text/babel" src="screens/bold.jsx"></script>
+<script type="text/babel" src="screens/v2.jsx"></script>
+<script type="text/babel" src="screens/v3.jsx"></script>
+<script type="text/babel" src="screens/v4.jsx"></script>
+<script type="text/babel" src="screens/v5.jsx"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600;700&family=Fraunces:wght@300;400;500;600&family=Newsreader:wght@300;400;500;600&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { DesignCanvas, DCSection, DCArtboard, DCPostIt } = window;
+const { SafeDashboardV2, BoldDashboardV2, SafeTodayV2, BoldTodayV2, SafeHistoryV2, BoldHistoryV2 } = window;
+const { DashboardV3Geist, DashboardV3Plex, TodayV3A, TodayV3B, TodayV3C } = window;
+const { DashboardV4Wrapped, TodayV4Wrapped, HeroFontPicker } = window;
+const { FluxV5, DashboardV5Preview, TodayV5Preview, HistoryV5Preview } = window;
+
+// iPhone-ish frame for screen content (no real device chrome — user said no device frames)
+function Phone({ children, w = 320, h = 660 }) {
+  return (
+    <div style={{
+      width: w, height: h, overflow: 'hidden',
+      borderRadius: 28, background: '#000',
+      position: 'relative',
+    }}>
+      <div style={{ position: 'absolute', inset: 0, overflow: 'auto' }}>
+        {/* status bar mock */}
+        <div style={{ height: 44, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 22px', color: '#fff', fontFamily: '-apple-system,system-ui', fontSize: 13, fontWeight: 600 }}>
+          <span>9:41</span>
+          <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            <span style={{ width: 14, height: 9, border: '1px solid rgba(255,255,255,.5)', borderRadius: 2, position: 'relative' }}>
+              <span style={{ position: 'absolute', inset: 1, background: '#fff', width: 8 }} />
+            </span>
+          </span>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function Annotated({ children, notes }) {
+  return (
+    <div className="screen-wrap">
+      {children}
+      {notes.map((n, i) => (
+        <div key={i} className={`anno ${n.cls || ''}`} style={{ top: n.top, left: n.left, right: n.right }}
+          dangerouslySetInnerHTML={{ __html: n.text }} />
+      ))}
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <DesignCanvas defaultZoom={0.85}>
+      <DCSection id="v5-intro" title="V5 — May 4" subtitle="Tab bar · cleaned off-peak block · handover note">
+        <DCArtboard id="v5-readme" label="What changed in V5" width={760} height={460} background="transparent">
+          <div className="intro">
+            <h2>V5 — latest round</h2>
+            <h3>Off-peak block</h3>
+            <ul>
+              <li>Title row removed.</li>
+              <li>Kept: <b>Free grid in</b>, <b>Battery charged</b>.</li>
+              <li>Dropped: Solar surplus exported, House load during window.</li>
+              <li>Added: <b>Lowest</b> (lowest SOC reached during the window) and <b>15m avg load</b>.</li>
+              <li>Same shape on both Dashboard and Today.</li>
+            </ul>
+            <h3>Navigation</h3>
+            <ul>
+              <li>Top <b>tab bar</b> on every screen — Dashboard / Today / History. Glassy segmented control, sits above the title.</li>
+              <li>Functional in the live preview below: tap any tab to switch.</li>
+            </ul>
+            <h3>Handover note (font picker)</h3>
+            <ul>
+              <li>The font picker on V4 was a canvas-side preview. <b>For real testing, build an in-app font picker</b> in Settings: lets you flip the hero typeface on a real device with real type rendering and persistence.</li>
+              <li>Suggested options to expose: Geist (default), San Francisco, IBM Plex Sans, Inter, Fraunces, Newsreader, Instrument Sans, JetBrains Mono.</li>
+              <li>Scope: only the hero number on Dashboard. Body and values stay on San Francisco.</li>
+            </ul>
+          </div>
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="v5-live" title="V5 · Live (tap tabs to switch)" subtitle="One stateful prototype — use the tab bar at the top">
+        <DCArtboard id="v5-prototype" label="Prototype" width={320} height={1300}>
+          <Phone w={300} h={1280}><FluxV5 /></Phone>
+        </DCArtboard>
+        <DCArtboard id="v5-dash" label="Dashboard (preview)" width={320} height={820}>
+          <Phone w={300} h={800}><DashboardV5Preview /></Phone>
+        </DCArtboard>
+        <DCArtboard id="v5-today" label="Today (preview)" width={320} height={1300}>
+          <Phone w={300} h={1280}><TodayV5Preview /></Phone>
+        </DCArtboard>
+        <DCArtboard id="v5-history" label="History (placeholder)" width={320} height={500}>
+          <Phone w={300} h={480}><HistoryV5Preview /></Phone>
+        </DCArtboard>
+        <DCPostIt x={1320} y={20}>
+          <b>Live prototype</b><br />
+          The leftmost artboard has a working tab bar — tap Dashboard / Today / History to switch screens. The other three are static previews of each tab.
+        </DCPostIt>
+      </DCSection>
+
+      <DCSection id="v4-intro" title="V4 — May 3" subtitle="Final cleanup · font picker">
+        <DCArtboard id="v4-readme" label="What changed in V4" width={760} height={420} background="transparent">
+          <div className="intro">
+            <h2>V4 — your latest round</h2>
+            <h3>Dashboard</h3>
+            <ul>
+              <li>Hero is Geist by default; body & values are San Francisco. <b>Hero font picker</b> sits next to the dashboard — try 8 alternatives live.</li>
+              <li>Off-peak block: tint and time/state header removed. Same chrome as Today So Far now.</li>
+              <li>Grid (live trio) shows <span style={{ fontFamily: '-apple-system, system-ui' }}>0.05 kW · exporting</span> — no minus, the word does the work.</li>
+              <li>Summary fields reconciled with Today (the Today set was closer to reality): Solar produced, House used, Grid in (peak), Grid in (off-peak), Grid out, Battery cycle.</li>
+            </ul>
+            <h3>Today</h3>
+            <ul>
+              <li>Three charts kept exactly as they are in the live app — Power, Battery power, SOC. No combined chart.</li>
+              <li>Off-peak block matches Dashboard 1:1.</li>
+              <li>Summary block uses the same six rows as Dashboard.</li>
+              <li>TOU "five blocks" panel kept from earlier rounds.</li>
+            </ul>
+          </div>
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="v4-screens" title="V4 · Dashboard + Today" subtitle="SF for body · pick the hero font">
+        <DCArtboard id="v4-fontpicker" label="Hero font picker" width={280} height={520} background="transparent">
+          <HeroFontPicker />
+        </DCArtboard>
+        <DCArtboard id="v4-dash" label="Dashboard" width={320} height={780}>
+          <Phone w={300} h={760}><DashboardV4Wrapped /></Phone>
+        </DCArtboard>
+        <DCArtboard id="v4-today" label="Today" width={320} height={1280}>
+          <Phone w={300} h={1260}><TodayV4Wrapped /></Phone>
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="v3-intro" title="V3 — May 3" subtitle="Dashboard · Today (3 chart ideas)">
+        <DCArtboard id="v3-readme" label="What changed in V3" width={760} height={460} background="transparent">
+          <div className="intro">
+            <h2>V3 — your latest round of feedback</h2>
+            <h3>Dashboard</h3>
+            <ul>
+              <li>Ribbon is gone. Hero number sits clean at the top.</li>
+              <li>Off-peak block now uses the same row layout as Today So Far — same chrome, just cyan-flavoured.</li>
+              <li>Two font options to compare: <b>Geist</b> (geometric, modern, slight warmth) and <b>IBM Plex Sans</b> (humanist, friendlier numerals). Same content in both — pick on feel.</li>
+            </ul>
+            <h3>Today</h3>
+            <ul>
+              <li>Three different chart ideas. The summary block is back, with off-peak (peak grid / off-peak grid) called out as their own rows.</li>
+              <li>The off-peak panel and TOU blocks live below — these are kept identical across the three.</li>
+              <li><b>A · Energy flow.</b> One chart. Stacked sources (solar / grid / battery) as filled areas, house load as a single line on top. Reads as "where did the energy that ran the house come from, hour by hour."</li>
+              <li><b>B · Three measures, one timeline.</b> Closer to today's app: separate small charts for solar, house, battery — but locked to one x-axis with the off-peak band running through all three. Each chart breathes; reading across is a vertical glance.</li>
+              <li><b>C · Day stream.</b> One chart, signed: solar fills upward, house fills downward, battery SOC dotted-line overlay. Most graphic of the three.</li>
+              <li>History deferred per your note.</li>
+            </ul>
+          </div>
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="v3-dash" title="V3 · Dashboard" subtitle="No ribbon · off-peak in summary style · font choices">
+        <DCArtboard id="v3-dash-geist" label="Geist" width={320} height={900}>
+          <Phone w={300} h={880}><DashboardV3Geist /></Phone>
+        </DCArtboard>
+        <DCArtboard id="v3-dash-plex" label="IBM Plex Sans" width={320} height={900}>
+          <Phone w={300} h={880}><DashboardV3Plex /></Phone>
+        </DCArtboard>
+        <DCPostIt x={680} y={20}>
+          <b>Dashboard moves</b><br />
+          • Ribbon dropped<br />
+          • Off-peak block = Today So Far style w/ cyan label<br />
+          • Window utilisation row = how much of the 3h budget you actually used<br />
+          • Geist vs Plex — same layout, font swap only<br />
+          • Numbers are JetBrains/Geist/Plex Mono w/ tabular figures everywhere
+        </DCPostIt>
+      </DCSection>
+
+      <DCSection id="v3-today" title="V3 · Today" subtitle="Three chart ideas · same blocks below">
+        <DCArtboard id="v3-today-a" label="A · Energy flow" width={320} height={1100}>
+          <Phone w={300} h={1080}><TodayV3A /></Phone>
+        </DCArtboard>
+        <DCArtboard id="v3-today-b" label="B · Three measures, one timeline" width={320} height={1100}>
+          <Phone w={300} h={1080}><TodayV3B /></Phone>
+        </DCArtboard>
+        <DCArtboard id="v3-today-c" label="C · Day stream" width={320} height={1100}>
+          <Phone w={300} h={1080}><TodayV3C /></Phone>
+        </DCArtboard>
+        <DCPostIt x={1020} y={20}>
+          <b>Today chart options</b><br />
+          • <b>A — Energy flow.</b> Stacked areas: solar+grid+battery (sources). Load as one line. Best for "where did our power come from?"<br />
+          • <b>B — Small multiples.</b> 3 mini charts, locked x-axis, off-peak band runs through all. Closest to current app, just better aligned.<br />
+          • <b>C — Day stream.</b> Solar above zero, house below, SOC overlay. Most graphic; story-like.<br />
+          <br />
+          All three include the off-peak band, summary block w/ peak/off-peak grid split, dedicated off-peak panel, and the TOU blocks you liked from V2.
+        </DCPostIt>
+      </DCSection>
+
+      <DCSection id="v2-intro" title="V2 — Responding to your feedback" subtitle="Off-peak as 1st-class · combined-chart argument · less prose · per-day glance">
+        <DCArtboard id="v2-readme" label="What changed" width={760} height={520} background="transparent">
+          <div className="intro">
+            <h2>What I changed in v2 (and why)</h2>
+
+            <h3>Universal</h3>
+            <ul>
+              <li><b>Off-peak (the 3-hr free-grid window) is now first-class</b> on every screen — its own panel with three structured stats (free kWh, battery Δ, surplus / % of load). Distinct cyan accent so you can spot it in any chart.</li>
+              <li><b>Self-sufficiency is gone everywhere.</b> You said it'd be misleading given off-peak; replaced with the off-peak-aware grid breakdown.</li>
+              <li><b>Bold copy is now numbers and 1–2 word labels</b> — no sentences, no LLM-generated narrative. The serif/editorial feel comes from typography and structure, not prose.</li>
+            </ul>
+
+            <h3>Dashboard</h3>
+            <ul>
+              <li>The little graph in Safe v1 was unlabeled — now it's a <b>24h energy ribbon</b> with stacked solar/grid-import/battery-out per hour, the SOC % traced on top as a line, and the off-peak window shaded. Legend below makes each color obvious.</li>
+              <li>Live trio (solar/house/grid) kept exactly — you liked it. Now appears the same way on both directions for consistency.</li>
+              <li>Bold dashboard keeps the giant 62 numeral but loses the paragraph; "Today so far" is a 2-column kWh grid.</li>
+            </ul>
+
+            <h3>Today (the case for combining)</h3>
+            <ul>
+              <li>I'm not collapsing into a single multi-line chart — you're right that gets unreadable. Instead: <b>three small charts stacked, sharing one x-axis ruler and one off-peak band</b>. Top: power (solar + house). Middle: signed grid + battery (above zero = into house, below = out of house). Bottom: SOC %.</li>
+              <li><b>Why combine the axis at all?</b> So the question "what was the load when SOC dropped at 17:30?" is a single vertical eye-line — not chart-jumping. You still get three separate plots; you just don't have to remember which hour you were looking at.</li>
+              <li>If the shared-axis still doesn't sell it, this falls back trivially to the existing 3-card layout — the off-peak panel and TOU blocks below are independent of the chart choice.</li>
+              <li>Daily-usage block list (which you liked in Bold v1) is now in <b>both</b> directions.</li>
+            </ul>
+
+            <h3>History</h3>
+            <ul>
+              <li>No more metric tabs hiding things. <b>One mirrored chart, always-on:</b> solar + house bars above the baseline; grid stacked below (off-peak / peak / export). Five colors, one read.</li>
+              <li><b>Per-day glance row</b> — sparkline of solar+house shape, daily totals, off-peak kWh, battery Δ. Lets you scan "what was Mon like?" without opening the day. Tap drills in like before.</li>
+              <li>Headline numbers up top now: Solar / House / <b>Off-peak</b> / Peak in. Bold uses 4 enormous serif numerals; safe uses 4 modest ones.</li>
+            </ul>
+
+            <h3>Below this row</h3>
+            <p>v2 of all three screens, both directions. v1 is still pinned in the sections further down so you can compare. Critique stickies on the original screens are unchanged.</p>
+          </div>
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="v2-dash" title="V2 · Dashboard" subtitle="Off-peak panel + labeled 24h ribbon · trimmed prose">
+        <DCArtboard id="v2-dash-safe" label="Safe v2 · refined glass" width={320} height={920}>
+          <Phone w={300} h={900}><SafeDashboardV2 /></Phone>
+        </DCArtboard>
+        <DCArtboard id="v2-dash-bold" label="Bold v2 · atmosphere" width={320} height={920}>
+          <Phone w={300} h={900}><BoldDashboardV2 /></Phone>
+        </DCArtboard>
+        <DCPostIt x={720} y={20}>
+          <b>Changes from v1</b><br />
+          • Off-peak panel — 3 structured stats, cyan-accented. Live/Done/Upcoming chip.<br />
+          • Ribbon now labeled: stacked sources + SOC line + shaded window<br />
+          • Bold "Today so far" is a number grid, no prose<br />
+          • Self-suff. removed
+        </DCPostIt>
+      </DCSection>
+
+      <DCSection id="v2-today" title="V2 · Today" subtitle="Three charts · one shared axis · one off-peak band">
+        <DCArtboard id="v2-today-safe" label="Safe v2 · refined glass" width={320} height={1080}>
+          <Phone w={300} h={1060}><SafeTodayV2 /></Phone>
+        </DCArtboard>
+        <DCArtboard id="v2-today-bold" label="Bold v2 · atmosphere" width={320} height={1080}>
+          <Phone w={300} h={1060}><BoldTodayV2 /></Phone>
+        </DCArtboard>
+        <DCPostIt x={720} y={20}>
+          <b>The pitch for combining</b><br />
+          • Three separate plots — power / ± grid+battery / SOC<br />
+          • <b>Shared</b> x-axis ruler and shared off-peak band, dashed at 11 + 14<br />
+          • Single dashed "now" line crosses all three<br />
+          • Lets you eye-line "load at 17:30 → SOC at 17:30" without re-finding the hour
+        </DCPostIt>
+        <DCPostIt x={720} y={240} color="#d6f0ff">
+          <b>If you reject the combine</b><br />
+          The TOU blocks, off-peak panel, and headline can drop straight into the existing 3-card layout. The combined chart is the only piece that depends on this argument.
+        </DCPostIt>
+      </DCSection>
+
+      <DCSection id="v2-hist" title="V2 · History" subtitle="Mirrored chart always-on + per-day glance row">
+        <DCArtboard id="v2-hist-safe" label="Safe v2 · refined glass" width={320} height={1100}>
+          <Phone w={300} h={1080}><SafeHistoryV2 /></Phone>
+        </DCArtboard>
+        <DCArtboard id="v2-hist-bold" label="Bold v2 · atmosphere" width={320} height={1100}>
+          <Phone w={300} h={1080}><BoldHistoryV2 /></Phone>
+        </DCArtboard>
+        <DCPostIt x={720} y={20}>
+          <b>Glance without drilling</b><br />
+          Per-day row: sparkline of solar+house shape, totals, off-peak kWh, battery Δ. You can compare Mon-vs-Wed by eyes alone — drill in only when something looks weird.
+        </DCPostIt>
+        <DCPostIt x={720} y={220} color="#d6f0ff">
+          <b>Connections between days</b><br />
+          The mirrored chart is always-visible: solar/house above zero, grid stacked below. You can spot e.g. "Mon was the cloudy day → peak grid spiked" in one glance.
+        </DCPostIt>
+      </DCSection>
+
+      <DCSection id="v1-intro" title="V1 (for reference)" subtitle="Original review below — unchanged">
+        <DCArtboard id="v1-readme" label="Original review" width={760} height={520} background="transparent">
+          <div className="intro">
+            <h2>What you'll see below</h2>
+            <p>Three sections, each pinned to a screen: <b>Dashboard</b>, <b>Today</b>, <b>History</b>. Per row: the current build (with critique stickies), then a <b>Safe</b> redesign (refined Liquid Glass), then a <b>Bold</b> redesign (editorial / atmospheric). Drag any artboard, double-click a label to rename, click ⤢ to focus.</p>
+
+            <h3>What I think isn't working today</h3>
+            <ul>
+              <li><b>Card monotony.</b> Every screen is 5–7 thin-material cards in a vertical stack at the same width, padding, and font size. There's no figure-and-ground; everything competes for attention.</li>
+              <li><b>No hero.</b> The Dashboard's job is to answer "are we ok right now?". The 56pt SOC is the only visual anchor and it's buried mid-card. Off-peak status, cutoff time, and grid direction are equally weighted with secondary stats.</li>
+              <li><b>Day Detail is three charts, not one day.</b> Power, Battery Power, and SOC stack as separate cards — the user has to mentally cross-reference them. The stories ("when did we charge?", "what was the peak draw?") are split across cards.</li>
+              <li><b>History stacks 4 chart cards.</b> Solar, Grid, Battery, Daily Usage are visually identical chrome with different bars. Hard to compare across them, and the day you tap to drill into is way at the bottom.</li>
+              <li><b>Type is doing one thing.</b> SF, three sizes, mostly secondary gray. No rhythm, no headline moments, no narrative voice — feels like a settings screen for energy.</li>
+              <li><b>Color is purely semantic</b> (red bad / green good / orange warn) with no brand identity. The app could be any AlphaESS skin.</li>
+              <li><b>Density is awkwardly mid.</b> Too dense for at-a-glance, too sparse for power-user tables.</li>
+            </ul>
+
+            <h3>Two directions to react to</h3>
+            <ul>
+              <li><b>Safe — Refined Liquid Glass.</b> Same iOS 26 vocabulary, but with one hero metric per screen, a unified 24-hour ribbon replacing the three Day Detail charts, a single combined daily chart on History with metric tabs, and a single warm amber accent so the app has a face.</li>
+              <li><b>Bold — Energy as Atmosphere.</b> Treats Flux as a small daily diary of your house and the sun. Serif numerals, vertical rails, sun-arc and mountain charts, sentence-style summaries ("Sun gave 14.82, house took 17.94…"). Less screen, more story. Riskier — but you and your wife are the only users, so taste can lead.</li>
+            </ul>
+
+            <h3>Mix-and-match</h3>
+            <ul>
+              <li>Most "safe" pieces (the 24h ribbon, single daily chart, off-peak callout) drop into the bold direction without changes.</li>
+              <li>The bold sun-arc could replace the bold dashboard ribbon if you want one strong metaphor across all screens.</li>
+              <li>The newspaper-column live trio in bold works well even on the safe direction.</li>
+            </ul>
+          </div>
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection id="dash" title="Dashboard" subtitle='"Are we ok right now?"'>
+        <DCArtboard id="dash-current" label="Current · annotated" width={420} height={780}>
+          <Annotated notes={[
+            { top: 80,  left: 330, text: '<b>Hero buried.</b> 56pt is the only big number — but the card frame, padding and progress bar dilute it.' },
+            { top: 200, left: 330, text: '<b>Live trio is tiny.</b> 17pt headline values for the only realtime data on the screen.' },
+            { top: 290, left: 330, text: '<b>Two label/value cards in a row</b> read as one mass of small text.' },
+            { top: 470, left: 330, text: '<b>Off-peak Δ</b> is one of the most useful numbers — hidden as a stat row.' },
+            { top: 600, left: 330, text: '<b>Nav as buttons.</b> Tab bar would do this work without taking a screen-full of space.' },
+          ]}>
+            <Phone w={300} h={760}><CurrentDashboard /></Phone>
+          </Annotated>
+        </DCArtboard>
+
+        <DCArtboard id="dash-safe" label="Safe · refined glass" width={320} height={780}>
+          <Phone w={300} h={760}><SafeDashboard /></Phone>
+        </DCArtboard>
+
+        <DCArtboard id="dash-bold" label="Bold · atmosphere" width={320} height={780}>
+          <Phone w={300} h={760}><BoldDashboard /></Phone>
+        </DCArtboard>
+
+        <DCPostIt x={1340} y={20}>
+          <b>Safe moves</b><br />
+          • One hero (88pt SOC + amber) instead of card-framed 56pt<br />
+          • 24h energy ribbon under it = the 3 Day-Detail charts collapsed into one ambient strip<br />
+          • Dividers, not nested cards, for the live trio<br />
+          • Off-peak gets its own callout panel<br />
+          • Single accent color (amber) replaces semantic-soup
+        </DCPostIt>
+
+        <DCPostIt x={1340} y={260} color="#d6f0ff">
+          <b>Bold moves</b><br />
+          • SOC as 168pt serif numeral — the screen's reason for existing<br />
+          • A literal sun arc placing "now" in the day<br />
+          • Three live values as newspaper columns w/ colored top rules<br />
+          • Off-peak as a sentence + radial dial<br />
+          • Today's totals as a single sentence: "Sun gave 14.82, house took 17.94…"
+        </DCPostIt>
+      </DCSection>
+
+      <DCSection id="today" title="Today" subtitle="Day Detail — what happened">
+        <DCArtboard id="today-current" label="Current · annotated" width={420} height={1100}>
+          <Annotated notes={[
+            { top: 110, left: 330, text: '<b>Three charts, three cards.</b> Power, Battery, SOC — all axes are time but you can\'t cross-read them.' },
+            { top: 480, left: 330, text: '<b>Peak Usage table</b> is good — but the times-of-day context (morning vs evening) is gone.' },
+            { top: 700, left: 330, text: '<b>Daily Usage row</b> uses 3 stacked alignments (label, time, kWh, %) — eye has to ricochet.' },
+            { top: 950, left: 330, text: '<b>Summary at the bottom</b> is the data the user came for; should be near the top.' },
+          ]}>
+            <Phone w={300} h={1080}><CurrentToday /></Phone>
+          </Annotated>
+        </DCArtboard>
+
+        <DCArtboard id="today-safe" label="Safe · refined glass" width={320} height={1100}>
+          <Phone w={300} h={1080}><SafeToday /></Phone>
+        </DCArtboard>
+
+        <DCArtboard id="today-bold" label="Bold · atmosphere" width={320} height={1100}>
+          <Phone w={300} h={1080}><BoldToday /></Phone>
+        </DCArtboard>
+
+        <DCPostIt x={1340} y={20}>
+          <b>Safe moves</b><br />
+          • One composite "Day shape" ribbon (solar/grid/battery stack + SOC line) replaces 3 charts<br />
+          • Summary stats inline under the ribbon, not at the bottom<br />
+          • TOU blocks as one horizontal stacked bar w/ percentages, then aligned rows w/ tabular numerics<br />
+          • Peaks compress to 3 mono-spaced rows
+        </DCPostIt>
+
+        <DCPostIt x={1340} y={260} color="#d6f0ff">
+          <b>Bold moves</b><br />
+          • "April 15" as a 56pt serif headline w/ italic weather note<br />
+          • Day-as-landscape: sun curve above, house curve below, off-peak band shaded<br />
+          • Sun gave / house took / grid gave numbers as 30pt serif columns<br />
+          • Peaks read like a feature article: <i>"17:30 — 4.2 kW — kettle and the oven, probably."</i>
+        </DCPostIt>
+      </DCSection>
+
+      <DCSection id="history" title="History" subtitle="Last 7 / 14 / 30 days">
+        <DCArtboard id="hist-current" label="Current · annotated" width={420} height={1080}>
+          <Annotated notes={[
+            { top: 130, left: 330, text: '<b>Four chart cards</b> — Solar / Grid / Battery / Daily Usage — same chrome, different colors. Hard to compare.' },
+            { top: 360, left: 330, text: '<b>Each card carries its own KPI</b> — but no single "how did the week go?" number.' },
+            { top: 720, left: 330, text: '<b>Selection feedback</b> is a faint gray rule mark; easy to miss.' },
+            { top: 880, left: 330, text: '<b>Drill-down link</b> hides at the bottom of a long scroll.' },
+          ]}>
+            <Phone w={300} h={1060}><CurrentHistory /></Phone>
+          </Annotated>
+        </DCArtboard>
+
+        <DCArtboard id="hist-safe" label="Safe · refined glass" width={320} height={1080}>
+          <Phone w={300} h={1060}><SafeHistory /></Phone>
+        </DCArtboard>
+
+        <DCArtboard id="hist-bold" label="Bold · atmosphere" width={320} height={1080}>
+          <Phone w={300} h={1060}><BoldHistory /></Phone>
+        </DCArtboard>
+
+        <DCPostIt x={1340} y={20}>
+          <b>Safe moves</b><br />
+          • Three headline numbers up top (Solar / Imported / Self-suff.) so the week has a shape<br />
+          • One unified daily chart with metric tabs (Energy / Solar / Grid / Battery)<br />
+          • Days as a tap-list w/ inline mini-bars, not a separate summary card<br />
+          • Self-sufficiency % is new — most useful single number for a battery owner
+        </DCPostIt>
+
+        <DCPostIt x={1340} y={300} color="#d6f0ff">
+          <b>Bold moves</b><br />
+          • Headline: "A bright week." — set by the data, not chrome<br />
+          • Mirror chart: sun mountains above zero, house valleys below<br />
+          • Each day = a row with date as 26pt serif, twin bars, self-suff. % at right<br />
+          • Vertical "FLUX · SEVEN DAYS" rail as quiet branding
+        </DCPostIt>
+      </DCSection>
+
+      <DCSection id="next" title="Next steps" subtitle="What I'd want from you">
+        <DCArtboard id="next-readme" label="Where to go next" width={760} height={420} background="transparent">
+          <div className="intro">
+            <h2>If you like Safe</h2>
+            <ul>
+              <li>Pick the accent (amber is friendly to AlphaESS data; teal/blue/green options can be tweakable).</li>
+              <li>Decide whether the 24h ribbon replaces the three Day-Detail charts or sits above them as a summary.</li>
+              <li>Decide on tab bar vs. button rail at bottom of Dashboard.</li>
+            </ul>
+
+            <h2>If you like Bold</h2>
+            <ul>
+              <li>Confirm taste: serif headlines, sentence summaries, sun-arc metaphor — these are personality choices, not iterations.</li>
+              <li>Think about whether widgets need to follow the same language (the post-it suggestion is yes, but quieter).</li>
+              <li>Pick a serif (New York system serif used here; Fraunces/IBM Plex Serif work too).</li>
+            </ul>
+
+            <h2>Things I left alone but flagged</h2>
+            <ul>
+              <li>Note row — currently italic gray subhead. In bold it becomes the dateline. In safe it could become a chip.</li>
+              <li>The settings entry — should be a profile glyph or a long-press, not a top-bar button.</li>
+              <li>Loading and stale-data states — both directions need designed empty/error variants; not in scope here.</li>
+              <li>Widgets — explicitly excluded per your note.</li>
+            </ul>
+          </div>
+        </DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

@@ -1,63 +1,83 @@
 import FluxCore
 import SwiftUI
 
+/// V5 "Today" screen. Wraps the existing chart implementations
+/// (PowerChartView / BatteryPowerChartView / SOCChartView) in V5 panels and
+/// adds the Summary, Off-peak, and "five blocks" panels.
 struct DayDetailView: View {
     @State private var viewModel: DayDetailViewModel
     @State private var showingSettings = false
     @State private var editingNote = false
 
-    init(date: String, apiClient: any FluxAPIClient) {
+    private var tabBinding: Binding<FluxTab>?
+    private var onSettingsTap: (() -> Void)?
+    private var onTabActivate: ((FluxTab) -> Void)?
+
+    init(
+        date: String,
+        apiClient: any FluxAPIClient,
+        tab: Binding<FluxTab>? = nil,
+        onSettingsTap: (() -> Void)? = nil,
+        onTabActivate: ((FluxTab) -> Void)? = nil
+    ) {
         _viewModel = State(initialValue: DayDetailViewModel(date: date, apiClient: apiClient))
+        tabBinding = tab
+        self.onSettingsTap = onSettingsTap
+        self.onTabActivate = onTabActivate
     }
 
-    init(viewModel: DayDetailViewModel) {
+    init(
+        viewModel: DayDetailViewModel,
+        tab: Binding<FluxTab>? = nil,
+        onSettingsTap: (() -> Void)? = nil,
+        onTabActivate: ((FluxTab) -> Void)? = nil
+    ) {
         _viewModel = State(initialValue: viewModel)
+        tabBinding = tab
+        self.onSettingsTap = onSettingsTap
+        self.onTabActivate = onTabActivate
     }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                dayNavigationHeader
+            VStack(alignment: .leading, spacing: FluxTheme.Metrics.panelGap) {
+                header
+                DayNavigationHeader(viewModel: viewModel)
+                DayDetailNoteSection(viewModel: viewModel, editingNote: $editingNote)
 
-                noteSection
+                contentSection
 
-                if !viewModel.parsedReadings.isEmpty {
-                    if viewModel.hasPowerData {
-                        PowerChartView(date: viewModel.date, readings: viewModel.parsedReadings)
-                        BatteryPowerChartView(date: viewModel.date, readings: viewModel.parsedReadings)
-                    } else {
-                        noPowerDataCard
-                    }
-
-                    SOCChartView(date: viewModel.date, readings: viewModel.parsedReadings, summary: viewModel.summary)
-                } else if let error = viewModel.error {
-                    errorCard(error: error)
-                } else if viewModel.isLoading {
-                    ProgressView("Loading day data…")
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                } else if viewModel.peakPeriods.isEmpty,
-                          viewModel.dailyUsage?.blocks.isEmpty ?? true,
-                          viewModel.summary == nil {
-                    emptyStateCard
-                }
-
-                if !viewModel.peakPeriods.isEmpty {
-                    PeakUsageCard(periods: viewModel.peakPeriods)
-                }
+                SummaryBlock(
+                    title: "Summary",
+                    trailing: trailingSummaryDate,
+                    summary: viewModel.summary,
+                    // Prefer the canonical server value (DaySummary now carries
+                    // it for any date with an off-peak record); fall back to
+                    // the readings-derived approximation when the server
+                    // hasn't returned a split.
+                    offpeakGridImport: viewModel.summary?.offpeakGridImportKwh ?? offpeakStats.gridImportKwh
+                )
+                OffPeakBlock(
+                    offpeak: nil,
+                    lowestSOC: offpeakStats.lowestSOC,
+                    lowestSOCTimestamp: offpeakStats.lowestSOCTimestamp,
+                    avgLoadWatts: offpeakStats.avgLoadWatts,
+                    showsBatteryCharged: false,
+                    showsAvgLoad: false
+                )
 
                 if let dailyUsage = viewModel.dailyUsage, !dailyUsage.blocks.isEmpty {
-                    DailyUsageCard(dailyUsage: dailyUsage)
+                    DayInFiveBlocksPanel(dailyUsage: dailyUsage)
                 }
-
-                summaryCard
             }
-            .padding()
+            .padding(.horizontal, FluxTheme.Metrics.screenHorizontalPadding)
+            .padding(.bottom, FluxTheme.Metrics.screenBottomPadding)
         }
-        #if os(macOS)
         .scrollContentBackground(.hidden)
+        .fluxScreenBackground()
+        #if os(iOS)
+        .toolbar(.hidden, for: .navigationBar)
         #endif
-        .navigationTitle("Day Detail")
         .task(id: viewModel.date) {
             await viewModel.loadDay()
         }
@@ -82,9 +102,7 @@ struct DayDetailView: View {
                 SettingsView()
                     .toolbar {
                         ToolbarItem(placement: .topBarTrailing) {
-                            Button("Done") {
-                                showingSettings = false
-                            }
+                            Button("Done") { showingSettings = false }
                         }
                     }
             }
@@ -98,179 +116,93 @@ struct DayDetailView: View {
     }
 
     @ViewBuilder
-    private var noteSection: some View {
-        if isFutureDate {
-            EmptyView()
-        } else if let note = viewModel.note, !note.isEmpty {
-            Button {
-                editingNote = true
-            } label: {
-                NoteRowView(text: note)
-            }
-            .buttonStyle(.plain)
+    private var header: some View {
+        if let tabBinding {
+            // The Day Detail view always represents the "Details" tab visually,
+            // even when pushed from History. The setter still writes through to
+            // the real tab state so cross-tab taps switch correctly.
+            let displaySelection = Binding<FluxTab>(
+                get: { .today },
+                set: { tabBinding.wrappedValue = $0 }
+            )
+            FluxScreenHeader(
+                selection: displaySelection,
+                onSettingsTap: onSettingsTap,
+                onTabActivate: onTabActivate
+            )
         } else {
-            Button {
-                editingNote = true
-            } label: {
-                Label("Add note", systemImage: "plus")
-                    .font(.subheadline)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
-                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            // macOS keeps the eyebrow + title since the sidebar handles tabs.
+            VStack(alignment: .leading, spacing: 2) {
+                Text(eyebrow.uppercased())
+                    .font(FluxTheme.Typography.eyebrow)
+                    .tracking(1.6)
+                    .foregroundStyle(FluxTheme.Palette.tertiaryText)
+                Text(pageTitle)
+                    .font(FluxTheme.Typography.pageTitle)
+                    .tracking(-0.6)
+                    .foregroundStyle(FluxTheme.Palette.primaryText)
             }
-            .buttonStyle(.plain)
+            .padding(.top, 6)
         }
     }
 
-    private var isFutureDate: Bool {
-        viewModel.date > DateFormatting.todayDateString()
-    }
-
-    private var dayNavigationHeader: some View {
-        HStack {
-            Button {
-                viewModel.navigatePrevious()
-            } label: {
-                Image(systemName: "chevron.left")
+    @ViewBuilder
+    private var contentSection: some View {
+        if !viewModel.parsedReadings.isEmpty {
+            if viewModel.hasPowerData {
+                DayDetailPanels.power(date: viewModel.date, readings: viewModel.parsedReadings)
+                DayDetailPanels.battery(date: viewModel.date,
+                                        readings: viewModel.parsedReadings,
+                                        summary: viewModel.summary)
+            } else {
+                DayDetailMessagePanel(title: "Power charts unavailable",
+                                      detail: "This day has fallback data with SOC readings only.")
+                DayDetailPanels.battery(date: viewModel.date,
+                                        readings: viewModel.parsedReadings,
+                                        summary: viewModel.summary)
             }
-            .buttonStyle(.bordered)
-
-            Spacer()
-
-            Text(formattedDate)
-                .font(.headline)
-
-            Spacer()
-
-            Button {
-                viewModel.navigateNext()
-            } label: {
-                Image(systemName: "chevron.right")
+        } else if let error = viewModel.error {
+            DayDetailErrorPanel(error: error,
+                                showingSettings: $showingSettings,
+                                onRetry: { Task { await viewModel.loadDay() } })
+        } else if viewModel.isLoading {
+            FluxPanel {
+                HStack {
+                    Spacer()
+                    ProgressView("Loading day data…")
+                        .tint(FluxTheme.Palette.primaryText)
+                    Spacer()
+                }
             }
-            .buttonStyle(.bordered)
-            .disabled(viewModel.isToday)
+        } else if viewModel.peakPeriods.isEmpty,
+                  viewModel.dailyUsage?.blocks.isEmpty ?? true,
+                  viewModel.summary == nil {
+            DayDetailMessagePanel(title: "No readings available",
+                                  detail: "Try a different day or pull to refresh.")
         }
     }
 
-    private var formattedDate: String {
+    private var eyebrow: String {
         guard let parsedDate = DateFormatting.parseDayDate(viewModel.date) else {
             return viewModel.date
         }
-        return DayDetailDateFormatters.headerFormatter.string(from: parsedDate)
+        return DayDetailEyebrow.formatter.string(from: parsedDate)
     }
 
-    private var summaryCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Summary")
-                .font(.headline)
+    private var pageTitle: String {
+        viewModel.isToday ? "Today" : eyebrow
+    }
 
-            ForEach(EnergySummaryFormatter.rows(for: viewModel.summary)) { row in
-                summaryRow(row)
-            }
-
-            HStack {
-                Text("24h low")
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text(lowText)
-            }
-            .font(.subheadline)
+    private var trailingSummaryDate: String {
+        guard let parsedDate = DateFormatting.parseDayDate(viewModel.date) else {
+            return viewModel.date
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        return DayDetailEyebrow.summaryDate.string(from: parsedDate)
     }
 
-    private var lowText: String {
-        guard let low = viewModel.summary?.socLow else { return "—" }
-        let lowText = String(format: "%.1f", low)
-        if let lowTimeString = viewModel.summary?.socLowTime,
-           let lowTime = DateFormatting.parseTimestamp(lowTimeString) {
-            return "\(lowText)% at \(DateFormatting.clockTime(from: lowTime))"
-        }
-        return "\(lowText)%"
+    private var offpeakStats: OffpeakReadingStats {
+        OffpeakReadingStats.compute(date: viewModel.date, readings: viewModel.parsedReadings)
     }
-
-    private func summaryRow(_ row: EnergySummaryRow) -> some View {
-        HStack {
-            Text(row.title)
-                .foregroundStyle(.secondary)
-            Spacer()
-            Text(row.value)
-        }
-        .font(.subheadline)
-    }
-
-    private var noPowerDataCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Power Charts Unavailable")
-                .font(.headline)
-            Text("This day has fallback data with SOC readings only.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-
-    private var emptyStateCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("No readings available")
-                .font(.headline)
-            Text("Try a different day or pull to refresh.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-
-    private func errorCard(error: FluxAPIError) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Unable to load day data")
-                .font(.headline)
-            Text(error.message)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            HStack {
-                Button("Retry") {
-                    Task {
-                        await viewModel.loadDay()
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-
-                if error.suggestsSettings {
-                    #if os(macOS)
-                    SettingsLink {
-                        Text("Settings")
-                    }
-                    .buttonStyle(.bordered)
-                    #else
-                    Button("Settings") {
-                        showingSettings = true
-                    }
-                    .buttonStyle(.bordered)
-                    #endif
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-}
-
-private enum DayDetailDateFormatters {
-    static let headerFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.timeZone = DateFormatting.sydneyTimeZone
-        formatter.dateStyle = .full
-        formatter.timeStyle = .none
-        return formatter
-    }()
 }
 
 #if DEBUG
