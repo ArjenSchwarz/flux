@@ -2,83 +2,49 @@ import FluxCore
 import SwiftData
 import SwiftUI
 
+/// V5 dashboard. All the V4 sub-views (BatteryHeroView / PowerTrioView /
+/// SecondaryStatsView / TodayEnergyView / NoteRowView) have been folded into
+/// the panels below.
 struct DashboardView: View {
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.modelContext) private var modelContext
     @State private var viewModel: DashboardViewModel
     @State private var showingSettings = false
-    private let historyFactory: (ModelContext) -> AnyView
-    private let dayDetailFactory: (String) -> AnyView
+    @AppStorage("heroFontIdentifier", store: .fluxAppGroup) private var heroFontIdentifier: String = ""
 
-    init(viewModel: DashboardViewModel) {
+    private var tabBinding: Binding<FluxTab>?
+    private var onSettingsTap: (() -> Void)?
+    private var onTabActivate: ((FluxTab) -> Void)?
+
+    init(
+        viewModel: DashboardViewModel,
+        tab: Binding<FluxTab>? = nil,
+        onSettingsTap: (() -> Void)? = nil,
+        onTabActivate: ((FluxTab) -> Void)? = nil
+    ) {
         _viewModel = State(initialValue: viewModel)
-        historyFactory = { _ in AnyView(Text("History unavailable")) }
-        dayDetailFactory = { _ in AnyView(Text("Day detail unavailable")) }
+        tabBinding = tab
+        self.onSettingsTap = onSettingsTap
+        self.onTabActivate = onTabActivate
     }
 
-    init(apiClient: any FluxAPIClient) {
+    init(
+        apiClient: any FluxAPIClient,
+        tab: Binding<FluxTab>? = nil,
+        onSettingsTap: (() -> Void)? = nil,
+        onTabActivate: ((FluxTab) -> Void)? = nil
+    ) {
         _viewModel = State(initialValue: DashboardViewModel(apiClient: apiClient))
-        historyFactory = { modelContext in
-            AnyView(HistoryView(apiClient: apiClient, modelContext: modelContext))
-        }
-        dayDetailFactory = { date in
-            AnyView(DayDetailView(date: date, apiClient: apiClient))
-        }
+        tabBinding = tab
+        self.onSettingsTap = onSettingsTap
+        self.onTabActivate = onTabActivate
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                if viewModel.error != nil {
-                    stalenessBanner
-                }
-
-                    BatteryHeroView(
-                        live: viewModel.status?.live,
-                        rolling15min: viewModel.status?.rolling15min
-                    )
-
-                    NoteRowView(text: viewModel.status?.note)
-
-                    PowerTrioView(
-                        live: viewModel.status?.live,
-                        offpeak: viewModel.status?.offpeak
-                    )
-
-                    SecondaryStatsView(
-                        battery: viewModel.status?.battery,
-                        rolling15min: viewModel.status?.rolling15min,
-                        offpeak: viewModel.status?.offpeak
-                    )
-
-                    TodayEnergyView(todayEnergy: viewModel.status?.todayEnergy)
-
-                    HStack(spacing: 12) {
-                        NavigationLink {
-                            dayDetailFactory(DateFormatting.todayDateString())
-                        } label: {
-                            Text("Today detail")
-                                .font(.headline)
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered)
-
-                        NavigationLink {
-                            historyFactory(modelContext)
-                        } label: {
-                            Text("History")
-                                .font(.headline)
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered)
-                    }
-                }
-                .padding()
-        }
-        .navigationTitle("Dashboard")
-        .refreshable {
-            await viewModel.refresh()
-        }
+        contentContainer
+            .fluxScreenBackground()
+        #if os(iOS)
+            .toolbar(.hidden, for: .navigationBar)
+        #endif
         #if os(macOS)
         .task {
             await viewModel.runAutoRefresh()
@@ -86,6 +52,7 @@ struct DashboardView: View {
         .macRefreshAction { [viewModel] in
             await viewModel.refresh()
         }
+        .modifier(AppearsActiveMonitor(viewModel: viewModel))
         #else
         .onAppear {
             viewModel.startAutoRefresh()
@@ -101,17 +68,6 @@ struct DashboardView: View {
                 viewModel.stopAutoRefresh()
             @unknown default:
                 viewModel.stopAutoRefresh()
-            }
-        }
-        #endif
-        #if os(macOS)
-        .modifier(AppearsActiveMonitor(viewModel: viewModel))
-        #else
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("Settings") {
-                    showingSettings = true
-                }
             }
         }
         .sheet(isPresented: $showingSettings) {
@@ -130,46 +86,129 @@ struct DashboardView: View {
     }
 
     @ViewBuilder
+    private var contentContainer: some View {
+        ScrollView {
+            dashboardContent
+        }
+        .scrollContentBackground(.hidden)
+        .scrollBounceBehavior(.basedOnSize)
+    }
+
+    @ViewBuilder
+    private var dashboardContent: some View {
+        VStack(alignment: .leading, spacing: FluxTheme.Metrics.panelGap) {
+            if let tabBinding {
+                FluxScreenHeader(
+                    selection: tabBinding,
+                    onSettingsTap: onSettingsTap,
+                    onTabActivate: onTabActivate
+                )
+            } else {
+                legacyHeader
+            }
+
+            if viewModel.error != nil {
+                stalenessBanner
+            }
+
+            DashboardHeroPanel(
+                live: viewModel.status?.live,
+                rolling15min: viewModel.status?.rolling15min,
+                heroFont: heroFont
+            )
+
+            LiveTrioPanel(live: viewModel.status?.live)
+
+            // `low24h` tracks the lowest SoC since the last off-peak end
+            // (per T-1084) — the existing "lowest since charged" signal
+            // the V4 dashboard surfaced. Reuse it here.
+            OffPeakBlock(
+                offpeak: viewModel.status?.offpeak,
+                lowestSOC: viewModel.status?.battery?.low24h?.soc,
+                lowestSOCTimestamp: (viewModel.status?.battery?.low24h?.timestamp)
+                    .flatMap(DateFormatting.parseTimestamp),
+                avgLoadWatts: viewModel.status?.rolling15min?.avgLoad
+            )
+
+            SummaryBlock(
+                todayEnergy: viewModel.status?.todayEnergy,
+                offpeakGridImport: viewModel.status?.offpeak?.gridUsageKwh
+            )
+        }
+        .padding(.horizontal, FluxTheme.Metrics.screenHorizontalPadding)
+        .padding(.bottom, FluxTheme.Metrics.screenBottomPadding)
+    }
+
+    private var heroFont: HeroFontChoice {
+        HeroFontChoice(rawValue: heroFontIdentifier) ?? .default
+    }
+
+    private var eyebrow: String {
+        let now = Date()
+        let time = DateFormatting.clockTime(from: now)
+        let date = DashboardEyebrowFormatter.short.string(from: now)
+        return "Now · \(time) · \(date)"
+    }
+
+    private var trailingTime: String {
+        DateFormatting.clockTime(from: Date())
+    }
+
+    @ViewBuilder
+    private var legacyHeader: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(eyebrow.uppercased())
+                .font(FluxTheme.Typography.eyebrow)
+                .tracking(1.6)
+                .foregroundStyle(FluxTheme.Palette.tertiaryText)
+            Text("Battery")
+                .font(FluxTheme.Typography.pageTitle)
+                .tracking(-0.6)
+                .foregroundStyle(FluxTheme.Palette.primaryText)
+        }
+        .padding(.top, 6)
+    }
+
+    @ViewBuilder
     private var stalenessBanner: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label(stalenessTitle, systemImage: "exclamationmark.triangle.fill")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.orange)
+        FluxPanel {
+            VStack(alignment: .leading, spacing: 8) {
+                Label(stalenessTitle, systemImage: "exclamationmark.triangle.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.orange)
 
-            if let error = viewModel.error {
-                Text(error.message)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            if let lastSuccessfulFetch = viewModel.lastSuccessfulFetch {
-                Text("Last updated \(lastSuccessfulFetch, style: .relative) ago")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            HStack {
-                Button("Retry") {
-                    Task { await viewModel.refresh() }
+                if let error = viewModel.error {
+                    Text(error.message)
+                        .font(.caption)
+                        .foregroundStyle(FluxTheme.Palette.secondaryText)
                 }
-                .buttonStyle(.borderedProminent)
 
-                #if os(macOS)
-                SettingsLink {
-                    Text("Settings")
+                if let lastSuccessfulFetch = viewModel.lastSuccessfulFetch {
+                    Text("Last updated \(lastSuccessfulFetch, style: .relative) ago")
+                        .font(.caption)
+                        .foregroundStyle(FluxTheme.Palette.secondaryText)
                 }
-                .buttonStyle(.bordered)
-                #else
-                Button("Settings") {
-                    showingSettings = true
+
+                HStack {
+                    Button("Retry") {
+                        Task { await viewModel.refresh() }
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                    #if os(macOS)
+                    SettingsLink {
+                        Text("Settings")
+                    }
+                    .buttonStyle(.bordered)
+                    #else
+                    Button("Settings") {
+                        showingSettings = true
+                    }
+                    .buttonStyle(.bordered)
+                    #endif
                 }
-                .buttonStyle(.bordered)
-                #endif
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private var stalenessTitle: String {
@@ -181,13 +220,19 @@ struct DashboardView: View {
         }
         return "Showing stale data"
     }
+}
 
+private enum DashboardEyebrowFormatter {
+    static let short: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.timeZone = DateFormatting.sydneyTimeZone
+        formatter.dateFormat = "MMM d"
+        return formatter
+    }()
 }
 
 #if DEBUG
 #Preview {
-    NavigationStack {
-        DashboardView(apiClient: MockFluxAPIClient.preview)
-    }
+    DashboardView(apiClient: MockFluxAPIClient.preview)
 }
 #endif

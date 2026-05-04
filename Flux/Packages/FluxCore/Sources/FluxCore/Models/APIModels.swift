@@ -377,6 +377,8 @@ public struct DaySummary: Codable, Sendable {
     public let eDischarge: Double?
     public let socLow: Double?
     public let socLowTime: String?
+    public let offpeakGridImportKwh: Double?
+    public let offpeakGridExportKwh: Double?
 
     public init(
         epv: Double?,
@@ -385,7 +387,9 @@ public struct DaySummary: Codable, Sendable {
         eCharge: Double?,
         eDischarge: Double?,
         socLow: Double?,
-        socLowTime: String?
+        socLowTime: String?,
+        offpeakGridImportKwh: Double? = nil,
+        offpeakGridExportKwh: Double? = nil
     ) {
         self.epv = epv
         self.eInput = eInput
@@ -394,6 +398,8 @@ public struct DaySummary: Codable, Sendable {
         self.eDischarge = eDischarge
         self.socLow = socLow
         self.socLowTime = socLowTime
+        self.offpeakGridImportKwh = offpeakGridImportKwh
+        self.offpeakGridExportKwh = offpeakGridExportKwh
     }
 }
 

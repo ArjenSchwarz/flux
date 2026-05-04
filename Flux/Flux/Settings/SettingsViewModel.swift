@@ -9,6 +9,7 @@ final class SettingsViewModel {
     var apiToken = ""
     var loadAlertThreshold: Double = 3000
     var widgetUsesSymbols = false
+    var heroFont: HeroFontChoice = .default
 
     private(set) var isValidating = false
     private(set) var validationError: String?
@@ -69,6 +70,7 @@ final class SettingsViewModel {
             writeURL(capturedURLString)
             userDefaults.loadAlertThreshold = capturedThreshold
             userDefaults.widgetUsesSymbols = capturedUsesSymbols
+            userDefaults.heroFontIdentifier = heroFont.rawValue
             WidgetCenter.shared.reloadAllTimelines()
             notificationCenter.post(name: .fluxCredentialsChanged, object: nil)
             shouldDismiss = true
@@ -84,6 +86,7 @@ final class SettingsViewModel {
         apiToken = keychainService.loadToken() ?? ""
         loadAlertThreshold = userDefaults.loadAlertThreshold
         widgetUsesSymbols = userDefaults.widgetUsesSymbols
+        heroFont = HeroFontChoice(rawValue: userDefaults.heroFontIdentifier) ?? .default
     }
 
     private func message(for error: FluxAPIError) -> String {

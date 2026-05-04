@@ -12,54 +12,69 @@ struct AppNavigationView: View {
     @State private var preferredCompactColumn: NavigationSplitViewColumn = .detail
     @State private var keychainService = KeychainService()
     @State private var apiClient: (any FluxAPIClient)?
+    @State private var iosTab: FluxTab = .dashboard
 
     #if os(macOS)
     @SceneStorage("flux.sidebar.selectedScreen") private var storedSelection: String = Screen.dashboard.rawValue
     #endif
 
     var body: some View {
+        rootView
+            .onAppear {
+                #if os(macOS)
+                if let restored = Screen(rawValue: storedSelection), restored != .settings {
+                    selectedScreen = restored
+                }
+                #endif
+                reloadDependencies()
+            }
+            .onChange(of: selectedScreen) { _, newScreen in
+                navigationPath = NavigationPath()
+                #if os(macOS)
+                if let newScreen, newScreen != .settings {
+                    storedSelection = newScreen.rawValue
+                }
+                #endif
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                if newPhase == .active {
+                    reloadDependencies()
+                }
+            }
+            .onOpenURL { url in
+                switch DeepLinkHandler.handle(url) {
+                case let .navigate(screen):
+                    selectedScreen = screen
+                    navigationPath = NavigationPath()
+                    iosTab = screen.tab ?? .dashboard
+                case .none:
+                    break
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .fluxCredentialsChanged)) { _ in
+                reloadDependencies()
+            }
+    }
+
+    @ViewBuilder
+    private var rootView: some View {
+        #if os(macOS)
+        macOSRoot
+        #else
+        iOSRoot
+        #endif
+    }
+
+    #if os(macOS)
+    @ViewBuilder
+    private var macOSRoot: some View {
         NavigationSplitView(preferredCompactColumn: $preferredCompactColumn) {
             SidebarView(selection: $selectedScreen)
         } detail: {
             NavigationStack(path: $navigationPath) {
                 currentScreenView
-                    #if os(macOS)
                     .scrollContentBackground(.hidden)
-                    #endif
             }
-        }
-        .onAppear {
-            #if os(macOS)
-            if let restored = Screen(rawValue: storedSelection), restored != .settings {
-                selectedScreen = restored
-            }
-            #endif
-            reloadDependencies()
-        }
-        .onChange(of: selectedScreen) { _, newScreen in
-            navigationPath = NavigationPath()
-            #if os(macOS)
-            if let newScreen, newScreen != .settings {
-                storedSelection = newScreen.rawValue
-            }
-            #endif
-        }
-        .onChange(of: scenePhase) { _, newPhase in
-            if newPhase == .active {
-                reloadDependencies()
-            }
-        }
-        .onOpenURL { url in
-            switch DeepLinkHandler.handle(url) {
-            case let .navigate(screen):
-                selectedScreen = screen
-                navigationPath = NavigationPath()
-            case .none:
-                break
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .fluxCredentialsChanged)) { _ in
-            reloadDependencies()
         }
     }
 
@@ -70,37 +85,37 @@ struct AppNavigationView: View {
             if let apiClient {
                 DashboardView(apiClient: apiClient)
             } else {
-                unconfiguredView
+                MacUnconfiguredView()
             }
         case .today:
             if let apiClient {
                 DayDetailView(date: DateFormatting.todayDateString(), apiClient: apiClient)
             } else {
-                unconfiguredView
+                MacUnconfiguredView()
             }
         case .history:
             if let apiClient {
                 HistoryView(apiClient: apiClient, modelContext: modelContext)
             } else {
-                unconfiguredView
+                MacUnconfiguredView()
             }
         case .settings:
-            #if os(macOS)
-            unconfiguredView
-            #else
-            SettingsView(onSaved: handleSettingsSaved)
-            #endif
+            MacUnconfiguredView()
         }
     }
+    #endif
 
+    #if !os(macOS)
     @ViewBuilder
-    private var unconfiguredView: some View {
-        #if os(macOS)
-        MacUnconfiguredView()
-        #else
-        SettingsView(onSaved: handleSettingsSaved)
-        #endif
+    private var iOSRoot: some View {
+        if let apiClient {
+            FluxiOSRoot(apiClient: apiClient, tab: $iosTab)
+                .modelContext(modelContext)
+        } else {
+            SettingsView(onSaved: handleSettingsSaved)
+        }
     }
+    #endif
 
     private var effectiveScreen: Screen {
         if apiClient == nil {
@@ -127,6 +142,17 @@ struct AppNavigationView: View {
         }
 
         return URLSessionAPIClient(baseURL: url, keychainService: keychainService)
+    }
+}
+
+private extension Screen {
+    var tab: FluxTab? {
+        switch self {
+        case .dashboard: .dashboard
+        case .today: .today
+        case .history: .history
+        case .settings: nil
+        }
     }
 }
 

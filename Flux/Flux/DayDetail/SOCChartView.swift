@@ -11,9 +11,6 @@ struct SOCChartView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Battery %")
-                .font(.headline)
-
             if let selected = selectedReading {
                 Text("\(DateFormatting.clockTime(from: selected.date)): \(SOCFormatting.format(selected.point.soc))")
                     .font(.caption)
@@ -82,8 +79,6 @@ struct SOCChartView: View {
             .frame(minHeight: 220)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     private var selectedReading: ParsedReading? {

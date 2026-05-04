@@ -8,26 +8,52 @@ struct HistoryView: View {
     @State private var showingSettings = false
 
     private let makeDayDetailViewModel: (String) -> DayDetailViewModel
+    private var tabBinding: Binding<FluxTab>?
+    private var onSettingsTap: (() -> Void)?
+    private var onTabActivate: ((FluxTab) -> Void)?
 
-    init(apiClient: any FluxAPIClient, modelContext: ModelContext) {
+    init(
+        apiClient: any FluxAPIClient,
+        modelContext: ModelContext,
+        tab: Binding<FluxTab>? = nil,
+        onSettingsTap: (() -> Void)? = nil,
+        onTabActivate: ((FluxTab) -> Void)? = nil
+    ) {
         let viewModel = HistoryViewModel(apiClient: apiClient, modelContext: modelContext)
         _viewModel = State(initialValue: viewModel)
         makeDayDetailViewModel = { date in
             DayDetailViewModel(date: date, apiClient: apiClient)
         }
+        tabBinding = tab
+        self.onSettingsTap = onSettingsTap
+        self.onTabActivate = onTabActivate
     }
 
     init(
         viewModel: HistoryViewModel,
-        makeDayDetailViewModel: @escaping (String) -> DayDetailViewModel
+        makeDayDetailViewModel: @escaping (String) -> DayDetailViewModel,
+        tab: Binding<FluxTab>? = nil,
+        onSettingsTap: (() -> Void)? = nil,
+        onTabActivate: ((FluxTab) -> Void)? = nil
     ) {
         _viewModel = State(initialValue: viewModel)
         self.makeDayDetailViewModel = makeDayDetailViewModel
+        tabBinding = tab
+        self.onSettingsTap = onSettingsTap
+        self.onTabActivate = onTabActivate
     }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                if let tabBinding {
+                    FluxScreenHeader(
+                        selection: tabBinding,
+                        onSettingsTap: onSettingsTap,
+                        onTabActivate: onTabActivate
+                    )
+                }
+
                 Picker("Range", selection: $selectedRange) {
                     Text("7d").tag(7)
                     Text("14d").tag(14)
@@ -61,13 +87,6 @@ struct HistoryView: View {
                             onSelect: selectDay
                         )
 
-                        HistoryBatteryCard(
-                            entries: derived.battery,
-                            summary: derived.summary,
-                            selectedDate: selectedDate,
-                            onSelect: selectDay
-                        )
-
                         HistoryDailyUsageCard(
                             entries: derived.dailyUsage,
                             summary: derived.summary,
@@ -83,12 +102,27 @@ struct HistoryView: View {
                     .animation(.easeInOut(duration: 0.15), value: viewModel.isLoading)
                 }
             }
-            .padding()
+            .padding(.horizontal, FluxTheme.Metrics.screenHorizontalPadding)
+            .padding(.bottom, FluxTheme.Metrics.screenBottomPadding)
         }
-        #if os(macOS)
         .scrollContentBackground(.hidden)
+        .scrollBounceBehavior(.basedOnSize)
+        .fluxScreenBackground()
+        #if os(iOS)
+        .toolbar(tabBinding == nil ? .visible : .hidden, for: .navigationBar)
         #endif
         .navigationTitle("History")
+        .navigationDestination(for: HistoryRoute.self) { route in
+            switch route {
+            case .dayDetail(let date):
+                DayDetailView(
+                    viewModel: makeDayDetailViewModel(date),
+                    tab: tabBinding,
+                    onSettingsTap: onSettingsTap,
+                    onTabActivate: onTabActivate
+                )
+            }
+        }
         .task {
             await viewModel.loadHistory(days: selectedRange)
         }
@@ -126,23 +160,32 @@ struct HistoryView: View {
     }
 
     private func summaryCard(for day: DayEnergy) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(day.date)
-                .font(.headline)
+        VStack(alignment: .leading, spacing: FluxTheme.Metrics.panelGap) {
+            SummaryBlock(title: "Summary", trailing: shortDate(day.date), day: day)
 
-            ForEach(EnergySummaryFormatter.rows(for: day)) { row in
-                summaryRow(row)
+            // Value-based NavigationLink so the enclosing NavigationStack(path:)
+            // owns the push and our root-level path-reset on tab activate
+            // actually pops back to the History list.
+            NavigationLink(value: HistoryRoute.dayDetail(day.date)) {
+                FluxPanel {
+                    HStack {
+                        Text("View day detail")
+                            .font(FluxTheme.Typography.statRowLabel.weight(.semibold))
+                            .foregroundStyle(FluxTheme.Palette.primaryText)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(FluxTheme.Palette.tertiaryText)
+                    }
+                }
             }
-
-            NavigationLink("View day detail") {
-                DayDetailView(viewModel: makeDayDetailViewModel(day.date))
-            }
-            .font(.headline)
-            .padding(.top, 4)
+            .buttonStyle(.plain)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private func shortDate(_ date: String) -> String {
+        guard let parsed = DateFormatting.parseDayDate(date) else { return date }
+        return HistorySummaryDateFormatter.short.string(from: parsed)
     }
 
     private var emptyState: some View {
@@ -160,16 +203,6 @@ struct HistoryView: View {
         .frame(maxWidth: .infinity)
         .padding(24)
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-
-    private func summaryRow(_ row: EnergySummaryRow) -> some View {
-        HStack {
-            Text(row.title)
-                .foregroundStyle(.secondary)
-            Spacer()
-            Text(row.value)
-        }
-        .font(.subheadline)
     }
 
     private func errorState(_ error: FluxAPIError) -> some View {
@@ -204,6 +237,19 @@ struct HistoryView: View {
         .padding()
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
+}
+
+enum HistoryRoute: Hashable {
+    case dayDetail(String)
+}
+
+private enum HistorySummaryDateFormatter {
+    static let short: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.timeZone = DateFormatting.sydneyTimeZone
+        formatter.dateFormat = "MMM d"
+        return formatter
+    }()
 }
 
 #if DEBUG

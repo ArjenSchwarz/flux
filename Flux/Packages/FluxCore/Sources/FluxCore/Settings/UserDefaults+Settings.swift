@@ -11,6 +11,7 @@ extension UserDefaults {
         static let apiURL = UserDefaults.apiURLKey
         static let loadAlertThreshold = "loadAlertThreshold"
         static let widgetUsesSymbols = "widgetUsesSymbols"
+        static let heroFontIdentifier = "heroFontIdentifier"
     }
 
     public static let loadAlertThresholdDefault: Double = 3000
@@ -47,5 +48,13 @@ extension UserDefaults {
     public var widgetUsesSymbols: Bool {
         get { bool(forKey: Keys.widgetUsesSymbols) }
         set { set(newValue, forKey: Keys.widgetUsesSymbols) }
+    }
+
+    /// Identifier of the font used for the Dashboard hero numeral. Body and
+    /// values stay on San Francisco regardless. Persisted as a raw string so
+    /// the app group can mirror the value into widgets if needed later.
+    public var heroFontIdentifier: String {
+        get { string(forKey: Keys.heroFontIdentifier) ?? "" }
+        set { set(newValue, forKey: Keys.heroFontIdentifier) }
     }
 }

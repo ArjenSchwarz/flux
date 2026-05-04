@@ -10,9 +10,6 @@ struct BatteryPowerChartView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Battery Load")
-                .font(.headline)
-
             if let selected = selectedReading {
                 let pbat = -selected.point.pbat
                 let label = pbat > 0 ? "charging" : pbat < 0 ? "discharging" : "idle"
@@ -81,8 +78,6 @@ struct BatteryPowerChartView: View {
             .frame(minHeight: 220)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     private var selectedReading: ParsedReading? {

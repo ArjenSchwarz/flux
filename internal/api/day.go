@@ -35,11 +35,15 @@ func (h *Handler) handleDay(ctx context.Context, req events.LambdaFunctionURLReq
 	dayStart, _ := time.ParseInLocation("2006-01-02", date, sydneyTZ)
 	dayEnd := dayStart.AddDate(0, 0, 1)
 
-	// Concurrent queries: readings (today only) and daily energy. Per AC 3.5
-	// past dates skip the readings query entirely.
+	// Concurrent queries: readings (today only), daily energy, and off-peak
+	// record. Per AC 3.5 past dates skip the readings query entirely. The
+	// off-peak query is supplementary — Day Detail summary still serves
+	// without the peak/off-peak split if it fails — so a query error logs
+	// and continues without aborting the request.
 	var (
 		readings []dynamo.ReadingItem
 		deItem   *dynamo.DailyEnergyItem
+		opItem   *dynamo.OffpeakItem
 	)
 
 	g, gctx := errgroup.WithContext(ctx)
@@ -55,6 +59,15 @@ func (h *Handler) handleDay(ctx context.Context, req events.LambdaFunctionURLReq
 		item, err := h.reader.GetDailyEnergy(gctx, h.serial, date)
 		deItem = item
 		return err
+	})
+	g.Go(func() error {
+		item, err := h.reader.GetOffpeak(gctx, h.serial, date)
+		if err != nil {
+			slog.Warn("day offpeak query failed; proceeding without split", "error", err)
+			return nil
+		}
+		opItem = item
+		return nil
 	})
 
 	// Note read runs alongside the errgroup so a failure logs and leaves the
@@ -174,12 +187,19 @@ func (h *Handler) handleDay(ctx context.Context, req events.LambdaFunctionURLReq
 		if isToday && len(readings) > 0 {
 			computedEnergy = computeTodayEnergy(readings, dayStart.Unix())
 		}
-		if energy := reconcileEnergy(computedEnergy, storedEnergy); energy != nil {
+		energy := reconcileEnergy(computedEnergy, storedEnergy)
+		if energy != nil {
 			summary.Epv = floatPtr(energy.Epv)
 			summary.EInput = floatPtr(energy.EInput)
 			summary.EOutput = floatPtr(energy.EOutput)
 			summary.ECharge = floatPtr(energy.ECharge)
 			summary.EDischarge = floatPtr(energy.EDischarge)
+		}
+		if opItem != nil {
+			if imp, exp, hasSplit := offpeakSplit(*opItem, energy, isToday); hasSplit {
+				summary.OffpeakGridImportKwh = floatPtr(imp)
+				summary.OffpeakGridExportKwh = floatPtr(exp)
+			}
 		}
 		resp.Summary = summary
 	}
