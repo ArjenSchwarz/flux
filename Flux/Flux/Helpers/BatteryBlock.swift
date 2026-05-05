@@ -25,16 +25,15 @@ struct BatteryBlock: View {
                     sub: lowestSubtitle,
                     last: offpeakBatteryDeltaPercent == nil
                 )
-                if offpeakBatteryDeltaPercent != nil {
-                    FluxStatRow(label: "Charged during off-peak", value: offpeakDeltaText, last: true)
+                if let offpeakBatteryDeltaPercent {
+                    FluxStatRow(
+                        label: "Charged during off-peak",
+                        value: String(format: "%+.0f%%", offpeakBatteryDeltaPercent),
+                        last: true
+                    )
                 }
             }
         }
-    }
-
-    private var offpeakDeltaText: String {
-        guard let value = offpeakBatteryDeltaPercent else { return "—" }
-        return String(format: "%+.0f%%", value)
     }
 
     private var cycleText: String {

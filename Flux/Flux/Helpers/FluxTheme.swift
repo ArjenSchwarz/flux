@@ -113,6 +113,8 @@ private func adaptiveColor(light: Color, dark: Color) -> Color {
         return isDark ? NSColor(dark) : NSColor(light)
     })
     #else
+    // Fallback for platforms without UIKit/AppKit (watchOS, visionOS, Linux):
+    // no dynamic provider is available, so collapse to the dark value.
     return dark
     #endif
 }
