@@ -43,16 +43,15 @@ func TestHandleStatusAllDataPresent(t *testing.T) {
 	mr := &mockReader{
 		queryReadingsFn: func(_ context.Context, serial string, from, to int64) ([]dynamo.ReadingItem, error) {
 			assert.Equal(t, testSerial, serial)
-			// Return readings spanning 24h with a few in the last 15min and 60s.
-			// The lowest SOC is positioned ~14h ago so it falls *after* the
-			// most recent off-peak window end (yesterday 14:00, ~16h ago)
-			// and is still picked up by the low24h filter.
+			// Sydney midnight today = nowUnix - 21600 (06:00 AEST → 00:00 AEST is 6h).
+			// Pre-midnight readings must be excluded from low24h.
 			return []dynamo.ReadingItem{
-				// Pre-window reading (24h ago, before yesterday's 14:00 off-peak
-				// end) — must be excluded from low24h.
+				// Yesterday morning (~24h ago) — pre-midnight, must be excluded.
 				{Timestamp: nowUnix - 86000, Ppv: 100, Pload: 200, Pbat: 300, Pgrid: 50, Soc: 15},
-				// In-window low (14h ago, ~16:07 yesterday).
+				// Yesterday evening (~14h ago) — pre-midnight, must be excluded.
 				{Timestamp: nowUnix - 50000, Ppv: 100, Pload: 200, Pbat: 300, Pgrid: 50, Soc: 20},
+				// Today ~02:00 AEST (~4h ago) — in-window low for low24h.
+				{Timestamp: nowUnix - 14400, Ppv: 100, Pload: 200, Pbat: 300, Pgrid: 50, Soc: 25},
 				// 15min ago.
 				{Timestamp: nowUnix - 800, Ppv: 500, Pload: 1000, Pbat: 800, Pgrid: 100, Soc: 55},
 				// Within 60s — 3 consecutive readings with pgrid > 500.
@@ -103,7 +102,7 @@ func TestHandleStatusAllDataPresent(t *testing.T) {
 	assert.Equal(t, 10, sr.Battery.CutoffPercent)
 	require.NotNil(t, sr.Battery.EstimatedCutoff, "should have cutoff since discharging")
 	require.NotNil(t, sr.Battery.Low24h)
-	assert.Equal(t, roundPower(20), sr.Battery.Low24h.Soc)
+	assert.Equal(t, roundPower(25), sr.Battery.Low24h.Soc)
 
 	// Rolling 15min: at least 2 readings in 15min window.
 	require.NotNil(t, sr.Rolling15m)
@@ -142,22 +141,28 @@ func TestHandleStatusNoReadings(t *testing.T) {
 	assert.Nil(t, sr.Battery.Low24h, "low24h should be null when no readings")
 }
 
-// TestHandleStatusLow24hUnparseableOffpeak verifies that when the off-peak
-// window configuration cannot be parsed, low24h is omitted from the response
-// even though readings exist — the boundary is undefined without a window.
-func TestHandleStatusLow24hUnparseableOffpeak(t *testing.T) {
-	now := time.Date(2026, 4, 15, 6, 0, 0, 0, sydneyTZ)
+// TestHandleStatusLow24hNoReadingsToday verifies that low24h is nil when
+// readings exist but all of them predate Sydney midnight on now's date — the
+// brief case just after midnight before the first reading of the new day
+// arrives.
+func TestHandleStatusLow24hNoReadingsToday(t *testing.T) {
+	// now = 00:00:30 AEST on 2026-04-15. Sydney midnight today is 30 seconds
+	// before. All readings are placed before that boundary.
+	now := time.Date(2026, 4, 15, 0, 0, 30, 0, sydneyTZ)
 	nowUnix := now.Unix()
 
 	mr := &mockReader{
 		queryReadingsFn: func(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
 			return []dynamo.ReadingItem{
-				{Timestamp: nowUnix - 1000, Ppv: 100, Pload: 200, Pbat: 300, Pgrid: 50, Soc: 42},
+				// Yesterday afternoon — pre-midnight today.
+				{Timestamp: nowUnix - 50000, Ppv: 100, Pload: 200, Pbat: 300, Pgrid: 50, Soc: 42},
+				// Yesterday a minute before midnight — still pre-midnight today.
+				{Timestamp: nowUnix - 90, Ppv: 100, Pload: 200, Pbat: 300, Pgrid: 50, Soc: 38},
 			}, nil
 		},
 	}
 
-	h := NewHandler(mr, nil, testSerial, testToken, "bad", "also-bad")
+	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), statusRequest())
@@ -166,7 +171,7 @@ func TestHandleStatusLow24hUnparseableOffpeak(t *testing.T) {
 
 	sr := parseStatusResponse(t, resp)
 	require.NotNil(t, sr.Battery)
-	assert.Nil(t, sr.Battery.Low24h, "low24h should be null when off-peak config is unparseable")
+	assert.Nil(t, sr.Battery.Low24h, "low24h should be null when no readings exist since Sydney midnight")
 }
 
 func TestHandleStatusOffpeakPendingNoDailyEnergy(t *testing.T) {
