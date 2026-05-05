@@ -161,7 +161,12 @@ struct HistoryView: View {
 
     private func summaryCard(for day: DayEnergy) -> some View {
         VStack(alignment: .leading, spacing: FluxTheme.Metrics.panelGap) {
-            SummaryBlock(title: "Summary", trailing: shortDate(day.date), day: day)
+            SummaryBlock(
+                title: "Power",
+                trailing: shortDate(day.date),
+                day: day,
+                showsBatteryCycle: false
+            )
 
             // Value-based NavigationLink so the enclosing NavigationStack(path:)
             // owns the push and our root-level path-reset on tab activate

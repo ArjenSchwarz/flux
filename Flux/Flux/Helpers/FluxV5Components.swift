@@ -116,7 +116,7 @@ struct FluxTabBar: View {
                         .padding(.vertical, 7)
                         .background(
                             RoundedRectangle(cornerRadius: FluxTheme.Metrics.tabBarItemCornerRadius, style: .continuous)
-                                .fill(selection == tab ? Color.white.opacity(0.12) : Color.clear)
+                                .fill(selection == tab ? FluxTheme.Palette.tabBarItemActiveFill : Color.clear)
                         )
                         .contentShape(Rectangle())
                 }
@@ -128,7 +128,7 @@ struct FluxTabBar: View {
         .padding(FluxTheme.Metrics.tabBarPadding)
         .background(
             RoundedRectangle(cornerRadius: FluxTheme.Metrics.tabBarCornerRadius, style: .continuous)
-                .fill(Color.white.opacity(0.05))
+                .fill(FluxTheme.Palette.tabBarFill)
         )
         .overlay(
             RoundedRectangle(cornerRadius: FluxTheme.Metrics.tabBarCornerRadius, style: .continuous)
@@ -155,7 +155,7 @@ struct FluxTabBarSettingsButton: View {
         .buttonStyle(.plain)
         .background(
             RoundedRectangle(cornerRadius: FluxTheme.Metrics.tabBarCornerRadius, style: .continuous)
-                .fill(Color.white.opacity(0.05))
+                .fill(FluxTheme.Palette.tabBarFill)
         )
         .overlay(
             RoundedRectangle(cornerRadius: FluxTheme.Metrics.tabBarCornerRadius, style: .continuous)

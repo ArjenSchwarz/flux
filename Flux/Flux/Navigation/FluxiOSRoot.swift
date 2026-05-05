@@ -71,7 +71,6 @@ struct FluxiOSRoot: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
         .sheet(isPresented: $showingSettings) {
             NavigationStack {
                 SettingsView()

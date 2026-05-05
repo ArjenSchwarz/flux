@@ -1,16 +1,51 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
+#if canImport(AppKit)
+import AppKit
+#endif
 
 // V5 redesign tokens. Values are taken verbatim from
 // docs/design_handoff_flux_redesign/prototype/screens/v5.jsx and the
 // accompanying README.
 enum FluxTheme {
     enum Palette {
-        static let background = Color(red: 10 / 255, green: 10 / 255, blue: 12 / 255)
-        static let panel = Color.white.opacity(0.04)
-        static let border = Color.white.opacity(0.07)
-        static let primaryText = Color.white
-        static let secondaryText = Color(red: 235 / 255, green: 235 / 255, blue: 245 / 255).opacity(0.55)
-        static let tertiaryText = Color(red: 235 / 255, green: 235 / 255, blue: 245 / 255).opacity(0.32)
+        // Adaptive tokens: chrome and text swap between the dark V5 palette
+        // and a light equivalent. Accent / data colours below stay tuned for
+        // the dark design until light mode gets its own palette.
+        static let background = adaptiveColor(
+            light: Color.white,
+            dark: Color(red: 10 / 255, green: 10 / 255, blue: 12 / 255)
+        )
+        static let primaryText = adaptiveColor(
+            light: Color.black,
+            dark: Color.white
+        )
+        static let secondaryText = adaptiveColor(
+            light: Color.black.opacity(0.6),
+            dark: Color(red: 235 / 255, green: 235 / 255, blue: 245 / 255).opacity(0.55)
+        )
+        static let tertiaryText = adaptiveColor(
+            light: Color.black.opacity(0.36),
+            dark: Color(red: 235 / 255, green: 235 / 255, blue: 245 / 255).opacity(0.32)
+        )
+        static let panel = adaptiveColor(
+            light: Color.black.opacity(0.04),
+            dark: Color.white.opacity(0.04)
+        )
+        static let border = adaptiveColor(
+            light: Color.black.opacity(0.12),
+            dark: Color.white.opacity(0.07)
+        )
+        static let tabBarFill = adaptiveColor(
+            light: Color.black.opacity(0.05),
+            dark: Color.white.opacity(0.05)
+        )
+        static let tabBarItemActiveFill = adaptiveColor(
+            light: Color.black.opacity(0.10),
+            dark: Color.white.opacity(0.12)
+        )
 
         static let amber = Color(red: 1.0, green: 179 / 255, blue: 71 / 255)
         static let offpeak = Color(red: 90 / 255, green: 200 / 255, blue: 250 / 255)
@@ -65,4 +100,21 @@ extension View {
         background(FluxTheme.Palette.background.ignoresSafeArea())
             .foregroundStyle(FluxTheme.Palette.primaryText)
     }
+}
+
+private func adaptiveColor(light: Color, dark: Color) -> Color {
+    #if canImport(UIKit)
+    return Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .light ? UIColor(light) : UIColor(dark)
+    })
+    #elseif canImport(AppKit)
+    return Color(nsColor: NSColor(name: nil) { appearance in
+        let isDark = appearance.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
+        return isDark ? NSColor(dark) : NSColor(light)
+    })
+    #else
+    // Fallback for platforms without UIKit/AppKit (watchOS, visionOS, Linux):
+    // no dynamic provider is available, so collapse to the dark value.
+    return dark
+    #endif
 }

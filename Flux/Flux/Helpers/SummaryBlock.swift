@@ -2,7 +2,9 @@ import FluxCore
 import SwiftUI
 
 /// Universal summary block. Used on Dashboard ("Today so far") and Today
-/// ("Summary"). The order, labels, and accent colours are fixed.
+/// ("Power"). The order, labels, and accent colours are fixed. The Day
+/// Detail / History "Power" block hides the battery cycle row — that row
+/// moves to the dedicated `BatteryBlock` on those screens.
 struct SummaryBlock: View {
     var title: String?
     var trailing: String?
@@ -12,12 +14,18 @@ struct SummaryBlock: View {
     let offpeakGridImport: Double?
     let batteryCharge: Double?
     let batteryDischarge: Double?
+    var showsBatteryCycle: Bool = true
+    var avgLoadWatts: Double?
 
     var body: some View {
         FluxPanel {
             VStack(spacing: 0) {
                 if let title {
                     FluxPanelHeader(label: title, right: trailing)
+                }
+
+                if let avgLoadWatts {
+                    FluxStatRow(label: "15m avg load", value: PowerFormatting.format(avgLoadWatts))
                 }
 
                 FluxStatRow(
@@ -52,9 +60,12 @@ struct SummaryBlock: View {
                 FluxStatRow(
                     label: "Grid out",
                     value: kwh(gridExport),
-                    accent: FluxTheme.Palette.gridExport
+                    accent: FluxTheme.Palette.gridExport,
+                    last: !showsBatteryCycle
                 )
-                FluxStatRow(label: "Battery cycle", value: batteryCycleText, last: true)
+                if showsBatteryCycle {
+                    FluxStatRow(label: "Battery cycle", value: batteryCycleText, last: true)
+                }
             }
         }
     }
@@ -85,7 +96,14 @@ struct SummaryBlock: View {
 }
 
 extension SummaryBlock {
-    init(title: String? = nil, trailing: String? = nil, todayEnergy: TodayEnergy?, offpeakGridImport: Double?) {
+    init(
+        title: String? = nil,
+        trailing: String? = nil,
+        todayEnergy: TodayEnergy?,
+        offpeakGridImport: Double?,
+        showsBatteryCycle: Bool = true,
+        avgLoadWatts: Double? = nil
+    ) {
         self.init(
             title: title,
             trailing: trailing,
@@ -94,11 +112,19 @@ extension SummaryBlock {
             gridExport: todayEnergy?.eOutput,
             offpeakGridImport: offpeakGridImport,
             batteryCharge: todayEnergy?.eCharge,
-            batteryDischarge: todayEnergy?.eDischarge
+            batteryDischarge: todayEnergy?.eDischarge,
+            showsBatteryCycle: showsBatteryCycle,
+            avgLoadWatts: avgLoadWatts
         )
     }
 
-    init(title: String? = nil, trailing: String? = nil, summary: DaySummary?, offpeakGridImport: Double?) {
+    init(
+        title: String? = nil,
+        trailing: String? = nil,
+        summary: DaySummary?,
+        offpeakGridImport: Double?,
+        showsBatteryCycle: Bool = true
+    ) {
         self.init(
             title: title,
             trailing: trailing,
@@ -107,11 +133,17 @@ extension SummaryBlock {
             gridExport: summary?.eOutput,
             offpeakGridImport: offpeakGridImport,
             batteryCharge: summary?.eCharge,
-            batteryDischarge: summary?.eDischarge
+            batteryDischarge: summary?.eDischarge,
+            showsBatteryCycle: showsBatteryCycle
         )
     }
 
-    init(title: String? = nil, trailing: String? = nil, day: DayEnergy) {
+    init(
+        title: String? = nil,
+        trailing: String? = nil,
+        day: DayEnergy,
+        showsBatteryCycle: Bool = true
+    ) {
         self.init(
             title: title,
             trailing: trailing,
@@ -120,7 +152,8 @@ extension SummaryBlock {
             gridExport: day.eOutput,
             offpeakGridImport: day.offpeakGridImportKwh,
             batteryCharge: day.eCharge,
-            batteryDischarge: day.eDischarge
+            batteryDischarge: day.eDischarge,
+            showsBatteryCycle: showsBatteryCycle
         )
     }
 }

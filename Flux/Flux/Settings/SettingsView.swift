@@ -73,6 +73,12 @@ struct SettingsView: View {
                         Text(choice.displayName).tag(choice)
                     }
                 }
+
+                Picker("Appearance", selection: $viewModel.theme) {
+                    ForEach(ThemeChoice.allCases) { choice in
+                        Text(choice.displayName).tag(choice)
+                    }
+                }
             }
 
             Section {
@@ -148,6 +154,14 @@ struct SettingsView: View {
                         FormRow("Hero font", labelWidth: Self.labelWidth) {
                             Picker("", selection: $viewModel.heroFont) {
                                 ForEach(HeroFontChoice.allCases) { choice in
+                                    Text(choice.displayName).tag(choice)
+                                }
+                            }
+                            .labelsHidden()
+                        }
+                        FormRow("Appearance", labelWidth: Self.labelWidth) {
+                            Picker("", selection: $viewModel.theme) {
+                                ForEach(ThemeChoice.allCases) { choice in
                                     Text(choice.displayName).tag(choice)
                                 }
                             }

@@ -16,6 +16,13 @@ struct FluxApp: App {
     @State private var refreshCoordinator = FluxRefreshCoordinator()
     #endif
 
+    @AppStorage(UserDefaults.themeIdentifierKey, store: UserDefaults.fluxAppGroup)
+    private var themeRaw: String = ""
+
+    private var preferredScheme: ColorScheme? {
+        (ThemeChoice(rawValue: themeRaw) ?? .default).colorScheme
+    }
+
     init() {
         SettingsSuiteMigrator.run()
         KeychainAccessibilityMigrator.run()
@@ -27,6 +34,7 @@ struct FluxApp: App {
         WindowGroup {
             AppNavigationView()
                 .environment(refreshCoordinator)
+                .preferredColorScheme(preferredScheme)
         }
         .modelContainer(for: CachedDayEnergy.self)
         .commands {
@@ -36,10 +44,12 @@ struct FluxApp: App {
         Settings {
             SettingsView()
                 .frame(minWidth: 480, minHeight: 360)
+                .preferredColorScheme(preferredScheme)
         }
         #else
         WindowGroup {
             AppNavigationView()
+                .preferredColorScheme(preferredScheme)
         }
         .modelContainer(for: CachedDayEnergy.self)
         #endif
