@@ -120,7 +120,7 @@ func (h *Handler) handleStatus(ctx context.Context, _ events.LambdaFunctionURLRe
 	// specs/low-since-offpeak/decision_log.md. Field is left nil only when no
 	// readings fall on or after Sydney midnight (briefly after midnight, before
 	// the first reading of the new day). The 24h DynamoDB read window above
-	// (line 38) always covers Sydney midnight, regardless of where now sits.
+	// always covers Sydney midnight, regardless of where now sits.
 	sinceMidnight := startOfDaySydney(now).Unix()
 	sinceReadings := filterReadings(allReadings, sinceMidnight, nowUnix)
 	if soc, ts, found := derivedstats.MinSOC(toDerivedReadings(sinceReadings)); found {
