@@ -116,19 +116,17 @@ func (h *Handler) handleStatus(ctx context.Context, _ events.LambdaFunctionURLRe
 		}
 	}
 
-	// Lowest SOC since the most recent off-peak window end. If the off-peak
-	// configuration is unparseable or no readings fall inside the resolved
-	// window, the field is left nil — see specs/low-since-offpeak/smolspec.md.
-	// Relies on allReadings spanning the full 24h DynamoDB read window above
-	// (line 38); the most recent off-peak end is at most ~24h ago for any
-	// valid daily window, so it always falls inside that span.
-	if lastOpEnd, ok := lastOffpeakEnd(now, h.offpeakStart, h.offpeakEnd); ok {
-		sinceReadings := filterReadings(allReadings, lastOpEnd.Unix(), nowUnix)
-		if soc, ts, found := derivedstats.MinSOC(toDerivedReadings(sinceReadings)); found {
-			battery.Low24h = &Low24h{
-				Soc:       roundPower(soc),
-				Timestamp: time.Unix(ts, 0).UTC().Format(time.RFC3339),
-			}
+	// Lowest SOC since 00:00 Sydney local on now's date — see Decision 4 in
+	// specs/low-since-offpeak/decision_log.md. Field is left nil only when no
+	// readings fall on or after Sydney midnight (briefly after midnight, before
+	// the first reading of the new day). The 24h DynamoDB read window above
+	// (line 38) always covers Sydney midnight, regardless of where now sits.
+	sinceMidnight := startOfDaySydney(now).Unix()
+	sinceReadings := filterReadings(allReadings, sinceMidnight, nowUnix)
+	if soc, ts, found := derivedstats.MinSOC(toDerivedReadings(sinceReadings)); found {
+		battery.Low24h = &Low24h{
+			Soc:       roundPower(soc),
+			Timestamp: time.Unix(ts, 0).UTC().Format(time.RFC3339),
 		}
 	}
 	resp.Battery = battery

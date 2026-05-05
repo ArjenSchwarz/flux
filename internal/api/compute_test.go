@@ -228,61 +228,44 @@ func TestNextOffpeakStart(t *testing.T) {
 	}
 }
 
-func TestLastOffpeakEnd(t *testing.T) {
-	const opStart = "11:00"
-	const opEnd = "14:00"
-
-	syd := func(h, m int) time.Time {
-		return time.Date(2026, 4, 15, h, m, 0, 0, sydneyTZ)
+func TestStartOfDaySydney(t *testing.T) {
+	syd := func(y, m, d, h, mi int) time.Time {
+		return time.Date(y, time.Month(m), d, h, mi, 0, 0, sydneyTZ)
 	}
 
 	tests := map[string]struct {
-		now          time.Time
-		offpeakStart string
-		offpeakEnd   string
-		wantValid    bool
-		wantEnd      time.Time
+		now  time.Time
+		want time.Time
 	}{
-		"morning before window returns yesterday end": {
-			now:          syd(9, 0),
-			offpeakStart: opStart, offpeakEnd: opEnd,
-			wantValid: true,
-			wantEnd:   syd(14, 0).AddDate(0, 0, -1),
+		"morning weekday returns midnight same date": {
+			now:  syd(2026, 4, 15, 6, 0),
+			want: syd(2026, 4, 15, 0, 0),
 		},
-		"inside window returns yesterday end": {
-			now:          syd(12, 30),
-			offpeakStart: opStart, offpeakEnd: opEnd,
-			wantValid: true,
-			wantEnd:   syd(14, 0).AddDate(0, 0, -1),
+		"just past midnight returns midnight same date": {
+			now:  syd(2026, 4, 15, 0, 0).Add(time.Second),
+			want: syd(2026, 4, 15, 0, 0),
 		},
-		"exactly at window end returns today end": {
-			now:          syd(14, 0),
-			offpeakStart: opStart, offpeakEnd: opEnd,
-			wantValid: true,
-			wantEnd:   syd(14, 0),
+		"near end of day returns midnight same date": {
+			now:  syd(2026, 4, 15, 23, 59),
+			want: syd(2026, 4, 15, 0, 0),
 		},
-		"after window same day returns today end": {
-			now:          syd(18, 0),
-			offpeakStart: opStart, offpeakEnd: opEnd,
-			wantValid: true,
-			wantEnd:   syd(14, 0),
+		"utc instant on next sydney day returns sydney tomorrow midnight": {
+			// 2026-04-14 23:00 UTC = 2026-04-15 09:00 AEST → midnight same Sydney date.
+			now:  time.Date(2026, 4, 14, 23, 0, 0, 0, time.UTC),
+			want: syd(2026, 4, 15, 0, 0),
 		},
-		"invalid window returns false": {
-			now:          syd(9, 0),
-			offpeakStart: "bad", offpeakEnd: "also-bad",
-			wantValid: false,
+		"utc instant late on previous sydney day returns sydney same midnight": {
+			// 2026-04-15 13:30 UTC = 2026-04-15 23:30 AEST → midnight same Sydney date.
+			now:  time.Date(2026, 4, 15, 13, 30, 0, 0, time.UTC),
+			want: syd(2026, 4, 15, 0, 0),
 		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got, ok := lastOffpeakEnd(tc.now, tc.offpeakStart, tc.offpeakEnd)
-			assert.Equal(t, tc.wantValid, ok)
-			if tc.wantValid {
-				assert.True(t, got.Equal(tc.wantEnd),
-					"lastOffpeakEnd(%s, %s, %s) = %s, want %s",
-					tc.now, tc.offpeakStart, tc.offpeakEnd, got, tc.wantEnd)
-			}
+			got := startOfDaySydney(tc.now)
+			assert.True(t, got.Equal(tc.want),
+				"startOfDaySydney(%s) = %s, want %s", tc.now, got, tc.want)
 		})
 	}
 }

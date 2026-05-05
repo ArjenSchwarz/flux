@@ -1,100 +1,110 @@
-# Low SoC Since Last Off-Peak End
+# Lowest SoC Since Midnight (Today)
 
-Transit ticket: **T-1084**
+Transit ticket: **T-1084** (initial off-peak-end implementation, shipped).
+Follow-up redirect ticket: TBD.
+
+> Note: the spec folder is still named `low-since-offpeak` for history. The
+> behaviour has been redirected — see Decision 4. Folder rename is out of
+> scope for this change.
 
 ## Overview
 
-The Lambda `/status` endpoint currently exposes the lowest battery SoC over the
-past 24 hours as `battery.low24h`. The 24-hour rolling window can surface stale
-lows from before the most recent off-peak charge, which is misleading once the
-battery has been topped up. This change keeps the JSON field name `low24h` but
-redefines its window to "lowest SoC since the most recent off-peak window end",
-so the value resets after each off-peak charge.
+The Lambda `/status` endpoint exposes the lowest battery SoC under the JSON
+field `battery.low24h`. The value was originally a 24-hour rolling minimum,
+then redefined (T-1084, shipped) as the lowest since the most recent
+off-peak window end. This change redefines it again as **the lowest SoC
+since 00:00 Sydney local time on `now`'s date** — i.e., "lowest today".
+The JSON field name `low24h` and Go/Swift type name `Low24h` are unchanged;
+only the underlying computation shifts.
 
 ## Requirements
 
-- The system MUST compute `battery.low24h` from readings whose timestamp is at
-  or after the most recent off-peak window end (in Sydney local time).
-- The system MUST resolve "most recent off-peak window end" as today's window
-  end when `now` is at or after it, otherwise yesterday's window end at the
-  same time-of-day. When `now` falls *inside* today's window, yesterday's end
-  is the correct boundary (the value tracks the dip during the current
-  charge period, then resets once today's window closes).
-- The system MUST return `battery.low24h` as `null` when no readings exist in
-  the resolved window, including the case where readings exist but all
-  predate the boundary. This is a deliberate semantic change from today's
-  "any reading in the past 24h" behavior.
-- The system MUST return `battery.low24h` as `null` when the off-peak window
-  configuration is unparseable.
-- The system MUST NOT change the JSON wire field name (`low24h`), the Go type
-  name (`Low24h`), or the Swift type name (`Low24h`); only the underlying
-  computation changes.
-- The system SHOULD update the dashboard and large widget UI labels from
-  "24h low" to "Lowest" so the displayed text no longer pins the value to
-  a 24-hour window.
+- The system MUST compute `battery.low24h` from readings whose timestamp is
+  at or after midnight (00:00) Sydney local time on the current day.
+- The system MUST resolve "midnight today" using `Australia/Sydney`, not
+  UTC, so the metric resets at the user's local midnight regardless of
+  where the Lambda runs.
+- The system MUST return `battery.low24h` as `null` when no readings exist
+  in the resolved window (only expected briefly between midnight and the
+  first reading of the new day).
+- The system MUST NOT depend on off-peak configuration. Off-peak SSM
+  parameters can be missing, malformed, or changed without affecting this
+  field.
+- The system MUST NOT change the JSON wire field name (`low24h`), the Go
+  type name (`Low24h`), or the Swift type name (`Low24h`); only the
+  underlying computation changes (Decision 2 still applies).
+- The dashboard and large-widget UI label "Lowest" stays as-is — it remains
+  accurate under the new semantics (no specific timeframe asserted in the
+  label).
 
 ## Implementation Approach
 
 **Backend (Go):**
 
-- Add a `lastOffpeakEnd(now, offpeakStart, offpeakEnd) (time.Time, bool)`
-  helper in `internal/api/compute.go`, mirroring the structure of the existing
-  `nextOffpeakStart` helper at `internal/api/compute.go:255`. Reuses
-  `derivedstats.ParseOffpeakWindow` for HH:MM parsing. DST handling matches
-  `nextOffpeakStart` (relies on `time.Date` + `AddDate` against `sydneyTZ`,
-  same accepted behavior as the existing helper — no new DST handling).
-  Acknowledged duplication: `nextOffpeakStart` and `lastOffpeakEnd` share
-  parsing and tz logic; if off-peak config grows beyond a single daily
-  window, fold both into a shared helper.
-- In `internal/api/status.go:119-124`, replace the unconditional
-  `derivedstats.MinSOC(toDerivedReadings(allReadings))` call with one that
-  first filters via `filterReadings(allReadings, lastEnd.Unix(), nowUnix)`.
-  When `lastOffpeakEnd` returns `false`, leave `battery.Low24h` nil.
-- The Go struct `Low24h` and JSON tag `low24h` in `internal/api/response.go:32-39`
-  stay unchanged. Update the doc comment to describe the new semantics.
+- Replace the `lastOffpeakEnd` helper in `internal/api/compute.go:270` with
+  `startOfDaySydney(now time.Time) time.Time`. One-line body:
+  `local := now.In(sydneyTZ); return time.Date(local.Year(), local.Month(),
+  local.Day(), 0, 0, 0, 0, sydneyTZ)`. No off-peak parsing, no second
+  return value (cannot fail).
+- In `internal/api/status.go:125-130`, drop the `lastOffpeakEnd` call and
+  the off-peak field reads. Compute `start := startOfDaySydney(now).Unix()`,
+  then `filterReadings(allReadings, start, nowUnix)`, then `MinSOC`.
+  `battery.Low24h` stays nil only when `MinSOC` returns `found=false`.
+- Update the `Low24h` doc comment at `internal/api/response.go:36` to
+  describe the new "since midnight Sydney today" semantics.
 
 **Tests (Go):**
 
-- Add a table-driven test for `lastOffpeakEnd` in
-  `internal/api/compute_test.go` next to the existing `nextOffpeakStart`
-  test (covers: now before today's end → yesterday; now at/after today's end
-  → today; invalid config → false).
-- Update `TestHandleStatusAllDataPresent` in
-  `internal/api/status_test.go:35-116`: the current test asserts
-  `Low24h.Soc == 20` from a reading 24h before "now" (which is 06:00 AEST,
-  before today's 14:00 off-peak end → last end is yesterday 14:00, and the
-  20-SoC reading at ~04:53 yesterday lies before that boundary, so it's
-  excluded). The assertion must change to the lowest SoC inside the new
-  window. Either retime the old reading to lie inside the window or assert
-  against the lowest of the remaining readings.
-- Update or add a test confirming `low24h` is omitted when off-peak parsing
-  fails.
+- Replace `TestLastOffpeakEnd` in `internal/api/compute_test.go` with
+  `TestStartOfDaySydney` covering: a Sydney 06:00 weekday → midnight same
+  date; just past midnight Sydney → midnight same date; near 23:59
+  Sydney → midnight same date; a UTC instant that lands on the next
+  Sydney day → returns Sydney's tomorrow midnight (proves timezone
+  conversion is right).
+- Update `TestHandleStatusAllDataPresent` so its asserted `Low24h.Soc`
+  reflects the lowest SoC at or after Sydney midnight on the test's `now`.
+  The current pre-window SoC=15 fixture remains the regression guard:
+  retime it (or another fixture point) to sit *before* the new midnight
+  boundary so the filter must exclude it.
+- Remove `TestHandleStatusLow24hUnparseableOffpeak` — there is no longer
+  an off-peak failure mode for this field.
+- Add `TestHandleStatusLow24hNoReadingsToday` confirming the field is nil
+  when readings exist but all predate Sydney midnight.
 
-**UI labels (Swift, no wire changes):**
+**UI labels (Swift):**
 
-- `Flux/Flux/Dashboard/SecondaryStatsView.swift:24` — change the label
-  string `"24h low"` to `"Lowest"`.
-- `Flux/FluxWidgets/Views/SystemLargeView.swift:39` — same label change.
+- No changes. `"Lowest"` already reads correctly for "lowest today" at
+  `Flux/Flux/Helpers/OffPeakBlock.swift:24` and
+  `Flux/FluxWidgets/Views/SystemLargeView.swift:39`.
 
 **Out of Scope:**
 
-- Renaming the JSON field, Go struct, or Swift struct (`Low24h`).
-- Changing the Day Detail "24h low" row at `DayDetailView.swift:172-185`,
-  which reads from a separate per-day `socLow` field, not `battery.low24h`.
-- Backend-side fixtures, mocks, and tests for clients (e.g., `MockFluxAPIClient`,
-  `WidgetFixtures`, `APIModelsTests`) — they reference the unchanged field
-  name and stay valid.
+- Renaming the JSON field, Go struct, or Swift struct (`Low24h`). The name
+  is now doubly stale (neither 24h nor since-off-peak). Per Decision 2 the
+  legacy wire name is acceptable.
+- Renaming the spec folder. Acknowledged misnomer; not worth the churn.
+- Changing the Day Detail "24h low" row at `DayDetailView.swift` — it
+  reads from the per-day `socLow` field on a separate pipeline and is
+  independent of this change.
+- Touching `nextOffpeakStart` (still used for cutoff suppression at
+  `internal/api/status.go:107` and `:138`). Only `lastOffpeakEnd` and its
+  test go.
 
 ## Risks and Assumptions
 
-- Risk: the existing `TestHandleStatusAllDataPresent` asserts a SoC value
-  from a reading that lies before the new boundary, so it breaks under the
-  new semantics. Mitigation: the implementation task updates the fixture or
-  assertion together with the code change.
-- Assumption: the off-peak window is configured and parseable in production
-  (currently `11:00`–`14:00` per CLAUDE.md). When it isn't, returning `null`
-  is consistent with how the field is omitted today (no readings).
-- Assumption: the Lambda's reading query window of 24 hours
-  (`internal/api/status.go:38`) is sufficient — the most recent off-peak end
-  is at most ~24h ago for any valid daily window, so filtering inside that
-  window will always include readings if any exist.
+- Risk: `low24h` is `null` for the brief interval each day between Sydney
+  midnight and the first reading after it. With 10s polling this is at
+  most ~10s; the dashboard already renders `—` for nil. No mitigation
+  required.
+- Risk: a reader sees the field name `low24h` and assumes 24-hour rolling.
+  Mitigation: the Go struct doc comment is updated to state the new
+  semantics; per Decision 2 the wire rename remains out of scope.
+- Assumption: the user's mental model of "today" is the Sydney calendar
+  day. Matches the off-peak window's timezone and the Day Detail date
+  selector.
+- Assumption: DST transitions (02:00/03:00 Sydney) don't materially affect
+  the metric — they're far from midnight, and `time.Date` against
+  `sydneyTZ` produces a well-defined instant on either side.
+- Assumption: the Lambda's reading query window (24h) trivially covers
+  the new bound — at any moment Sydney midnight is at most ~24h behind
+  `now`, regardless of the Lambda's own timezone.

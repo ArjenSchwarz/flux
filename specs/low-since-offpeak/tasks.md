@@ -3,7 +3,9 @@ references:
     - specs/low-since-offpeak/smolspec.md
     - specs/low-since-offpeak/decision_log.md
 ---
-# Low SoC Since Last Off-Peak End
+# Lowest SoC Since Midnight (Today)
+
+## Completed: T-1084 (off-peak-end boundary, shipped)
 
 - [x] 1. lastOffpeakEnd helper exists with passing tests <!-- id:9hnhhep -->
   - Add lastOffpeakEnd(now, offpeakStart, offpeakEnd) (time.Time, bool) in internal/api/compute.go alongside nextOffpeakStart.
@@ -27,3 +29,32 @@ references:
   - Change the row label string "24h low" to "Lowest" in Flux/Flux/Dashboard/SecondaryStatsView.swift:24 and Flux/FluxWidgets/Views/SystemLargeView.swift:39.
   - Success: make macos-lint passes; the SwiftUI preview in SecondaryStatsView shows the new label without truncation.
   - Blocked-by: 9hnhher (Status handler tests reflect the new boundary)
+
+## Follow-up: redirect to Sydney-midnight boundary
+
+(IDs to be assigned when added to rune.)
+
+- [ ] 5. startOfDaySydney helper replaces lastOffpeakEnd
+  - Delete lastOffpeakEnd from internal/api/compute.go.
+  - Add startOfDaySydney(now time.Time) time.Time returning time.Date(year, month, day, 0, 0, 0, 0, sydneyTZ) for now.In(sydneyTZ).
+  - Replace TestLastOffpeakEnd in internal/api/compute_test.go with TestStartOfDaySydney covering: 06:00 Sydney weekday -> midnight same date; just past midnight Sydney -> midnight same date; near 23:59 Sydney -> midnight same date; UTC instant that lands on the next Sydney day -> Sydney's tomorrow midnight (timezone conversion proof).
+  - Success: go test ./internal/api/... is green; lastOffpeakEnd no longer appears anywhere in the codebase.
+
+- [ ] 6. /status computes low24h since Sydney midnight today
+  - In internal/api/status.go, drop the lastOffpeakEnd call and the off-peak field reads in the low24h block. Compute start := startOfDaySydney(now).Unix(), then filterReadings(allReadings, start, nowUnix), then MinSOC. Leave battery.Low24h nil only when MinSOC returns found=false.
+  - Update the Low24h doc comment in internal/api/response.go to describe the new "since midnight Sydney today" semantics.
+  - Success: go build ./... and go test ./internal/api/... pass; nextOffpeakStart still used for cutoff suppression at status.go:107 and :138 (verify by grep).
+  - Blocked-by: 5
+
+- [ ] 7. Status handler tests reflect the midnight boundary
+  - Update TestHandleStatusAllDataPresent: ensure at least one fixture reading sits before Sydney midnight so the filter must exclude it; assert Low24h.Soc against the lowest reading inside the new window.
+  - Remove TestHandleStatusLow24hUnparseableOffpeak — there is no longer an off-peak failure mode for this field.
+  - Add TestHandleStatusLow24hNoReadingsToday: readings exist but all predate Sydney midnight; assert battery.Low24h is nil.
+  - Success: go test ./internal/api/... is green; the new no-readings-today test would fail against a return-everything implementation.
+  - Blocked-by: 6
+
+- [ ] 8. Documentation reflects the redirect
+  - Update docs/agent-notes/api-layer.md to state that low24h is now "lowest SoC since midnight Sydney today" and no longer reads off-peak config.
+  - Add a CHANGELOG.md entry under Unreleased > Changed describing the redirect (one line).
+  - Success: rg -n "off-peak end\|lastOffpeakEnd" docs/ CHANGELOG.md returns no stale references for low24h semantics.
+  - Blocked-by: 7
