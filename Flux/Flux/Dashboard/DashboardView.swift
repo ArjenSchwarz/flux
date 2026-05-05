@@ -119,20 +119,24 @@ struct DashboardView: View {
 
             LiveTrioPanel(live: viewModel.status?.live)
 
-            // `low24h` tracks the lowest SoC since the last off-peak end
-            // (per T-1084) — the existing "lowest since charged" signal
-            // the V4 dashboard surfaced. Reuse it here.
-            OffPeakBlock(
-                offpeak: viewModel.status?.offpeak,
-                lowestSOC: viewModel.status?.battery?.low24h?.soc,
-                lowestSOCTimestamp: (viewModel.status?.battery?.low24h?.timestamp)
-                    .flatMap(DateFormatting.parseTimestamp),
+            SummaryBlock(
+                todayEnergy: viewModel.status?.todayEnergy,
+                offpeakGridImport: viewModel.status?.offpeak?.gridUsageKwh,
+                showsBatteryCycle: false,
                 avgLoadWatts: viewModel.status?.rolling15min?.avgLoad
             )
 
-            SummaryBlock(
-                todayEnergy: viewModel.status?.todayEnergy,
-                offpeakGridImport: viewModel.status?.offpeak?.gridUsageKwh
+            // `low24h` tracks the lowest SoC since the last off-peak end
+            // (per T-1084) — the existing "lowest since charged" signal
+            // the V4 dashboard surfaced.
+            BatteryBlock(
+                title: nil,
+                batteryCharge: viewModel.status?.todayEnergy?.eCharge,
+                batteryDischarge: viewModel.status?.todayEnergy?.eDischarge,
+                lowestSOC: viewModel.status?.battery?.low24h?.soc,
+                lowestSOCTimestamp: (viewModel.status?.battery?.low24h?.timestamp)
+                    .flatMap(DateFormatting.parseTimestamp),
+                offpeakBatteryDeltaPercent: viewModel.status?.offpeak?.batteryDeltaPercent
             )
         }
         .padding(.horizontal, FluxTheme.Metrics.screenHorizontalPadding)

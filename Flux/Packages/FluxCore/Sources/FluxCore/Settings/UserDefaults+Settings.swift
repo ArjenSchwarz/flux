@@ -6,12 +6,14 @@ extension UserDefaults {
     public static let fluxAppGroup: UserDefaults = UserDefaults(suiteName: fluxAppGroupSuiteName) ?? .standard
 
     public static let apiURLKey = "apiURL"
+    public static let themeIdentifierKey = "themeIdentifier"
 
     private enum Keys {
         static let apiURL = UserDefaults.apiURLKey
         static let loadAlertThreshold = "loadAlertThreshold"
         static let widgetUsesSymbols = "widgetUsesSymbols"
         static let heroFontIdentifier = "heroFontIdentifier"
+        static let themeIdentifier = UserDefaults.themeIdentifierKey
     }
 
     public static let loadAlertThresholdDefault: Double = 3000
@@ -56,5 +58,12 @@ extension UserDefaults {
     public var heroFontIdentifier: String {
         get { string(forKey: Keys.heroFontIdentifier) ?? "" }
         set { set(newValue, forKey: Keys.heroFontIdentifier) }
+    }
+
+    /// Identifier of the chosen appearance ("system", "light", "dark").
+    /// Empty string means "use the default".
+    public var themeIdentifier: String {
+        get { string(forKey: Keys.themeIdentifier) ?? "" }
+        set { set(newValue, forKey: Keys.themeIdentifier) }
     }
 }

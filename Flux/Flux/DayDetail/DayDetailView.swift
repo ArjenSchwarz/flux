@@ -52,22 +52,21 @@ struct DayDetailView: View {
                 contentSection
 
                 SummaryBlock(
-                    title: "Summary",
+                    title: "Power",
                     trailing: trailingSummaryDate,
                     summary: viewModel.summary,
                     // Prefer the canonical server value (DaySummary now carries
                     // it for any date with an off-peak record); fall back to
                     // the readings-derived approximation when the server
                     // hasn't returned a split.
-                    offpeakGridImport: viewModel.summary?.offpeakGridImportKwh ?? viewModel.offpeakStats.gridImportKwh
+                    offpeakGridImport: viewModel.summary?.offpeakGridImportKwh ?? viewModel.offpeakStats.gridImportKwh,
+                    showsBatteryCycle: false
                 )
-                OffPeakBlock(
-                    offpeak: nil,
+                BatteryBlock(
+                    batteryCharge: viewModel.summary?.eCharge,
+                    batteryDischarge: viewModel.summary?.eDischarge,
                     lowestSOC: viewModel.offpeakStats.lowestSOC,
-                    lowestSOCTimestamp: viewModel.offpeakStats.lowestSOCTimestamp,
-                    avgLoadWatts: viewModel.offpeakStats.avgLoadWatts,
-                    showsBatteryCharged: false,
-                    showsAvgLoad: false
+                    lowestSOCTimestamp: viewModel.offpeakStats.lowestSOCTimestamp
                 )
             }
             .padding(.horizontal, FluxTheme.Metrics.screenHorizontalPadding)

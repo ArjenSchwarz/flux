@@ -16,21 +16,28 @@ struct OffpeakReadingStats: Equatable {
         gridImportKwh: nil
     )
 
-    /// Computes the lowest SOC and its timestamp inside the off-peak window
-    /// for the given day, the average load over the final 15 minutes of the
-    /// window, and the grid import energy across the window (trapezoidal
-    /// integration of the positive `pgrid` samples). This is an approximation
-    /// — the API's `OffpeakData.gridUsageKwh` is the source of truth when
-    /// available — but it's sufficient for the Day Detail summary split.
+    /// Computes the lowest SOC and its timestamp across the entire day so
+    /// the Day Detail "Lowest" row matches the Dashboard's lowest-of-day
+    /// signal. Average load (final 15 minutes of the off-peak window) and
+    /// grid import energy stay scoped to the off-peak window — those remain
+    /// window-specific stats. The API's `OffpeakData.gridUsageKwh` is the
+    /// source of truth when available; the integrated value here is a
+    /// fallback for the Day Detail summary split.
     static func compute(date: String, readings: [ParsedReading]) -> OffpeakReadingStats {
-        guard let range = DayChartDomain.offpeakRange(for: date), !readings.isEmpty else {
-            return .empty
+        guard !readings.isEmpty else { return .empty }
+
+        let lowest = readings.min { $0.point.soc < $1.point.soc }
+
+        guard let range = DayChartDomain.offpeakRange(for: date) else {
+            return OffpeakReadingStats(
+                lowestSOC: lowest?.point.soc,
+                lowestSOCTimestamp: lowest?.date,
+                avgLoadWatts: nil,
+                gridImportKwh: nil
+            )
         }
 
         let inWindow = readings.filter { $0.date >= range.start && $0.date < range.end }
-        guard !inWindow.isEmpty else { return .empty }
-
-        let lowest = inWindow.min { $0.point.soc < $1.point.soc }
         let avgWindow = max(range.start, range.end.addingTimeInterval(-15 * 60))
         let avgPoints = readings.filter { $0.date >= avgWindow && $0.date <= range.end }
         let avgLoad = avgPoints.isEmpty ? nil : avgPoints.map(\.point.pload).reduce(0, +) / Double(avgPoints.count)

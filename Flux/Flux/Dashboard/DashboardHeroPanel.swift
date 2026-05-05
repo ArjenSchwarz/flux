@@ -38,11 +38,13 @@ struct DashboardHeroPanel: View {
 
     private var heroNumber: String {
         guard let soc = live?.soc else { return "—" }
+        if soc >= 99.95 { return "100" }
         return String(format: "%.1f", soc)
     }
 
     private var accessibilityValue: String {
         guard let soc = live?.soc else { return "Battery percentage unavailable" }
+        if soc >= 99.95 { return "100 percent" }
         return String(format: "%.1f percent", soc)
     }
 
@@ -51,16 +53,16 @@ struct DashboardHeroPanel: View {
         switch mode {
         case .discharging(let watts, let cutoff):
             HStack(spacing: 4) {
-                Text("Discharging · \(PowerFormatting.format(watts)) · ")
-                    .foregroundStyle(FluxTheme.Palette.secondaryText)
                 if let cutoff {
+                    Text("Discharging · \(PowerFormatting.format(watts)) · ")
+                        .foregroundStyle(FluxTheme.Palette.secondaryText)
                     Text("empty by ")
                         .foregroundStyle(FluxTheme.Palette.secondaryText)
                     Text(DateFormatting.clockTime(from: cutoff))
                         .foregroundStyle(FluxTheme.Palette.amber)
                         .monospacedDigit()
                 } else {
-                    Text("empty by —")
+                    Text("Discharging · \(PowerFormatting.format(watts))")
                         .foregroundStyle(FluxTheme.Palette.secondaryText)
                 }
             }
