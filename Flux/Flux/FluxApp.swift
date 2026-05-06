@@ -26,10 +26,6 @@ struct FluxApp: App {
         (ThemeChoice(rawValue: themeRaw) ?? .default).colorScheme
     }
 
-    private var resolvedFontFamily: String? {
-        appFontFamily.isEmpty ? nil : appFontFamily
-    }
-
     init() {
         SettingsSuiteMigrator.run()
         KeychainAccessibilityMigrator.run()
@@ -57,7 +53,7 @@ struct FluxApp: App {
             SettingsView()
                 .frame(minWidth: 480, minHeight: 360)
                 .preferredColorScheme(preferredScheme)
-                .environment(\.appFontFamily, resolvedFontFamily)
+                .environment(\.appFontFamily, appFontFamily.appFontFamilyEnvironmentValue)
         }
         #else
         WindowGroup {

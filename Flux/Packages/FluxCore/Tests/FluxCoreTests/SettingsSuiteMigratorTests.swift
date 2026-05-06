@@ -30,7 +30,7 @@ struct SettingsSuiteMigratorTests {
         #expect(copied == true)
         #expect(suite.string(forKey: "apiURL") == "https://api.example.com")
         #expect(suite.double(forKey: "loadAlertThreshold") == 4500.0)
-        #expect(suite.integer(forKey: "settingsMigrationVersion") == 1)
+        #expect(suite.integer(forKey: "settingsMigrationVersion") == 2)
     }
 
     @Test
@@ -70,9 +70,33 @@ struct SettingsSuiteMigratorTests {
         let copied = SettingsSuiteMigrator.run(standard: standard, suite: suite)
 
         #expect(copied == false)
-        #expect(suite.integer(forKey: "settingsMigrationVersion") == 1)
+        #expect(suite.integer(forKey: "settingsMigrationVersion") == 2)
         #expect(suite.string(forKey: "apiURL") == nil)
         #expect(suite.object(forKey: "loadAlertThreshold") == nil)
+    }
+
+    @Test
+    func clearsLegacyHeroFontKeyOnUpgradeFromV1() throws {
+        let standardName = makeSuiteName()
+        let suiteName = makeSuiteName()
+        defer {
+            clearSuite(standardName)
+            clearSuite(suiteName)
+        }
+        let standard = try #require(UserDefaults(suiteName: standardName))
+        let suite = try #require(UserDefaults(suiteName: suiteName))
+        // Simulate a user who upgraded from the V1 migrator: version 1
+        // already written, with the legacy hero-font key still set.
+        suite.set(1, forKey: "settingsMigrationVersion")
+        suite.set("geist", forKey: "heroFontIdentifier")
+        standard.set("geist", forKey: "heroFontIdentifier")
+
+        let changed = SettingsSuiteMigrator.run(standard: standard, suite: suite)
+
+        #expect(changed == true)
+        #expect(suite.object(forKey: "heroFontIdentifier") == nil)
+        #expect(standard.object(forKey: "heroFontIdentifier") == nil)
+        #expect(suite.integer(forKey: "settingsMigrationVersion") == 2)
     }
 
     @Test

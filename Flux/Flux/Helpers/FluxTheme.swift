@@ -80,6 +80,11 @@ enum FluxTheme {
         nonisolated static func pageTitle(family: String?) -> Font {
             AppFontResolver.resolve(size: 30, weight: .semibold, family: family)
         }
+        /// `.monospacedDigit()` selects an alternate glyph variant on the
+        /// system font; on custom families that don't ship a tabular-figures
+        /// variant the modifier is a no-op. Acceptable here because the
+        /// eyebrow shows a colon-separated `HH:mm · MMM d` line where minor
+        /// digit-width drift isn't visible.
         nonisolated static func eyebrow(family: String?) -> Font {
             AppFontResolver.resolve(size: 10, weight: .semibold, family: family).monospacedDigit()
         }
@@ -91,6 +96,12 @@ enum FluxTheme {
         nonisolated static func panelHeaderRight(family _: String?) -> Font {
             .system(size: 11, design: .monospaced).monospacedDigit()
         }
+        /// `.monospacedDigit()` is honoured by the system font; custom
+        /// families without a tabular-figures variant render proportional
+        /// digits, which can cause minor horizontal drift between the three
+        /// trio columns (Solar / House / Grid) as values change. Accepted
+        /// trade-off — falling back to the system font here would defeat the
+        /// purpose of the picker.
         nonisolated static func trioValue(family: String?) -> Font {
             AppFontResolver.resolve(size: 26, weight: .medium, family: family).monospacedDigit()
         }

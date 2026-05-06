@@ -23,7 +23,7 @@ struct AppNavigationView: View {
 
     var body: some View {
         rootView
-            .environment(\.appFontFamily, appFontFamily.isEmpty ? nil : appFontFamily)
+            .environment(\.appFontFamily, appFontFamily.appFontFamilyEnvironmentValue)
             .onAppear {
                 #if os(macOS)
                 if let restored = Screen(rawValue: storedSelection), restored != .settings {

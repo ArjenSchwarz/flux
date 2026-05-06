@@ -101,8 +101,10 @@ final class SettingsViewModel {
 
     /// Loads the installed font family list off the main actor so opening
     /// Settings stays responsive on macOS. The list is memoised inside
-    /// `AppFont`, so the second invocation returns instantly.
-    func loadFontFamilies() async {
+    /// `AppFont`, so the second invocation returns instantly. Marked
+    /// `@MainActor` to make the assignment after the `await` explicit —
+    /// callers must invoke from the main actor.
+    @MainActor func loadFontFamilies() async {
         guard installedFontFamilies.isEmpty else { return }
         let families = await Task.detached(priority: .userInitiated) {
             AppFont.installedFamilies()

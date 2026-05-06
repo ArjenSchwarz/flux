@@ -86,6 +86,16 @@ extension EnvironmentValues {
     }
 }
 
+extension String {
+    /// Converts the raw `appFontFamily` string from `@AppStorage` /
+    /// `UserDefaults` (where empty = system font) into the optional form
+    /// the SwiftUI environment expects (`nil` = system font). Use this at
+    /// every injection point so the `""`/`nil` duality lives in one place.
+    var appFontFamilyEnvironmentValue: String? {
+        isEmpty ? nil : self
+    }
+}
+
 /// Resolves a built-in `Font.TextStyle` to a concrete `Font`, honouring the
 /// chosen family and optional weight while preserving Dynamic Type scaling.
 enum AppFontResolver {
