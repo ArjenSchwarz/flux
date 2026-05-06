@@ -106,6 +106,9 @@ struct FluxTabBar: View {
                         }
                     }
                 } label: {
+                    // Pre-compute the weight outside the @Sendable closure so
+                    // the closure captures a Sendable value instead of `tab`
+                    // / `selection` directly. Don't inline this back.
                     let tabWeight: Font.Weight = selection == tab ? .semibold : .medium
                     Text(tab.title)
                         .appFont { FluxTheme.Typography.tabItem(family: $0).weight(tabWeight) }

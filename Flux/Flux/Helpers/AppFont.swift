@@ -35,6 +35,12 @@ enum AppFont {
 
 private enum FontAvailability {
     nonisolated(unsafe) private static var cache: [String: Bool] = [:]
+    /// On macOS the entire family list is fetched once and reused. On iOS the
+    /// per-family `UIFont.fontNames(forFamilyName:)` lookup is cheap, so we
+    /// don't bother caching the full list there.
+    #if canImport(AppKit)
+    nonisolated(unsafe) private static var familySet: Set<String>?
+    #endif
     nonisolated private static let cacheLock = NSLock()
 
     nonisolated static func isInstalled(_ family: String) -> Bool {
@@ -44,7 +50,10 @@ private enum FontAvailability {
         #if canImport(UIKit)
         let installed = !UIFont.fontNames(forFamilyName: family).isEmpty
         #elseif canImport(AppKit)
-        let installed = NSFontManager.shared.availableFontFamilies.contains(family)
+        if familySet == nil {
+            familySet = Set(NSFontManager.shared.availableFontFamilies)
+        }
+        let installed = familySet?.contains(family) ?? false
         #else
         let installed = false
         #endif
@@ -137,7 +146,11 @@ extension View {
         appFont { AppFontResolver.resolve(textStyle: style, weight: weight, family: $0) }
     }
 
-    /// Applies a fixed-size system font with the user's chosen family.
+    /// Applies a fixed-size font (does not scale with Dynamic Type). Use this
+    /// for chart annotations, axis labels, glyph-anchored controls, and other
+    /// designed-pixel positions where Dynamic Type scaling would break the
+    /// layout. For body text and headings prefer `appFont(_:weight:)` with a
+    /// `Font.TextStyle`, which scales via `Font.custom(_:size:relativeTo:)`.
     func appFontSystem(
         size: CGFloat,
         weight: Font.Weight = .regular,
