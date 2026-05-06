@@ -53,14 +53,14 @@ struct DayInFiveBlocksPanel: View {
                     .opacity(opacity(for: block.kind))
                     .frame(width: 3, height: 18)
                 Text(label(for: block.kind))
-                    .font(FluxTheme.Typography.touName.weight(isHighlighted ? .semibold : .regular))
+                    .appFont { FluxTheme.Typography.touName(family: $0).weight(isHighlighted ? .semibold : .regular) }
                     .foregroundStyle(isHighlighted ? FluxTheme.Palette.offpeak : FluxTheme.Palette.primaryText)
                 Spacer(minLength: 8)
                 Text(timeRange(block))
-                    .font(FluxTheme.Typography.touTime)
+                    .appFont(FluxTheme.Typography.touTime)
                     .foregroundStyle(FluxTheme.Palette.tertiaryText)
                 Text(EnergyFormatting.format(block.totalKwh))
-                    .font(FluxTheme.Typography.touValue)
+                    .appFont(FluxTheme.Typography.touValue)
                     .foregroundStyle(FluxTheme.Palette.primaryText)
                     .frame(minWidth: 50, alignment: .trailing)
             }

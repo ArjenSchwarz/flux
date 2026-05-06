@@ -1,26 +1,25 @@
 import FluxCore
 import SwiftUI
 
-/// Hero battery numeral on the Dashboard. The numeral is rendered in the
-/// user-selected hero font (Settings → Hero font); body and subline stay on
-/// San Francisco.
+/// Hero battery numeral on the Dashboard. The numeral and the rest of the
+/// panel are rendered in the user-selected app font (Settings → App font),
+/// resolved via `\.appFontFamily` in the environment.
 struct DashboardHeroPanel: View {
     let live: LiveData?
     let rolling15min: RollingAvg?
-    let heroFont: HeroFontChoice
 
     var body: some View {
         FluxPanel(padding: FluxTheme.Metrics.panelHeroPadding) {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(heroNumber)
-                        .font(heroFont.font(size: 108, weight: .light))
+                        .appFont(FluxTheme.Typography.heroNumber)
                         .tracking(-4)
                         .foregroundStyle(FluxTheme.Palette.amber)
                         .monospacedDigit()
                         .accessibilityLabel(accessibilityValue)
                     Text("%")
-                        .font(heroFont.font(size: 32, weight: .light))
+                        .appFont(FluxTheme.Typography.heroUnit)
                         .foregroundStyle(FluxTheme.Palette.tertiaryText)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -66,18 +65,18 @@ struct DashboardHeroPanel: View {
                         .foregroundStyle(FluxTheme.Palette.secondaryText)
                 }
             }
-            .font(FluxTheme.Typography.heroSubline)
+            .appFont(FluxTheme.Typography.heroSubline)
         case .charging(let watts):
             Text("Charging · \(PowerFormatting.format(watts))")
-                .font(FluxTheme.Typography.heroSubline)
+                .appFont(FluxTheme.Typography.heroSubline)
                 .foregroundStyle(FluxTheme.Palette.secondaryText)
         case .idle:
             Text("Idle · battery holding")
-                .font(FluxTheme.Typography.heroSubline)
+                .appFont(FluxTheme.Typography.heroSubline)
                 .foregroundStyle(FluxTheme.Palette.secondaryText)
         case .unknown:
             Text("Awaiting live data")
-                .font(FluxTheme.Typography.heroSubline)
+                .appFont(FluxTheme.Typography.heroSubline)
                 .foregroundStyle(FluxTheme.Palette.secondaryText)
         }
     }
@@ -108,8 +107,7 @@ struct DashboardHeroPanel: View {
         FluxTheme.Palette.background.ignoresSafeArea()
         DashboardHeroPanel(
             live: MockFluxAPIClient.statusResponse.live,
-            rolling15min: MockFluxAPIClient.statusResponse.rolling15min,
-            heroFont: .default
+            rolling15min: MockFluxAPIClient.statusResponse.rolling15min
         )
         .padding()
     }

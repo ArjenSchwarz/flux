@@ -34,13 +34,13 @@ struct FluxPanelHeader: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
             Text(label.uppercased())
-                .font(FluxTheme.Typography.panelHeader)
+                .appFont(FluxTheme.Typography.panelHeader)
                 .tracking(1.2)
                 .foregroundStyle(FluxTheme.Palette.tertiaryText)
             Spacer()
             if let right {
                 Text(right)
-                    .font(FluxTheme.Typography.panelHeaderRight)
+                    .appFont(FluxTheme.Typography.panelHeaderRight)
                     .foregroundStyle(FluxTheme.Palette.tertiaryText)
             }
         }
@@ -63,17 +63,17 @@ struct FluxStatRow: View {
             HStack(alignment: .firstTextBaseline) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(label)
-                        .font(FluxTheme.Typography.statRowLabel)
+                        .appFont(FluxTheme.Typography.statRowLabel)
                         .foregroundStyle(FluxTheme.Palette.secondaryText)
                     if let sub {
                         Text(sub)
-                            .font(FluxTheme.Typography.statRowSub)
+                            .appFont(FluxTheme.Typography.statRowSub)
                             .foregroundStyle(FluxTheme.Palette.tertiaryText)
                     }
                 }
                 Spacer()
                 Text(value)
-                    .font(FluxTheme.Typography.statRowValue)
+                    .appFont(FluxTheme.Typography.statRowValue)
                     .foregroundStyle(accent ?? FluxTheme.Palette.primaryText)
             }
             .padding(.vertical, FluxTheme.Metrics.statRowVerticalPadding)
@@ -106,8 +106,9 @@ struct FluxTabBar: View {
                         }
                     }
                 } label: {
+                    let tabWeight: Font.Weight = selection == tab ? .semibold : .medium
                     Text(tab.title)
-                        .font(FluxTheme.Typography.tabItem.weight(selection == tab ? .semibold : .medium))
+                        .appFont { FluxTheme.Typography.tabItem(family: $0).weight(tabWeight) }
                         .tracking(0.1)
                         .foregroundStyle(
                             selection == tab ? FluxTheme.Palette.primaryText : FluxTheme.Palette.secondaryText
@@ -145,7 +146,7 @@ struct FluxTabBarSettingsButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: "gearshape")
-                .font(.system(size: 13, weight: .medium))
+                .appFontSystem(size: 13, weight: .medium)
                 .foregroundStyle(FluxTheme.Palette.secondaryText)
                 .frame(width: 36)
                 .padding(.vertical, 7)
@@ -188,13 +189,13 @@ struct FluxScreenHeader: View {
                 VStack(alignment: .leading, spacing: 2) {
                     if let eyebrow {
                         Text(eyebrow.uppercased())
-                            .font(FluxTheme.Typography.eyebrow)
+                            .appFont(FluxTheme.Typography.eyebrow)
                             .tracking(1.6)
                             .foregroundStyle(FluxTheme.Palette.tertiaryText)
                     }
                     if let title {
                         Text(title)
-                            .font(FluxTheme.Typography.pageTitle)
+                            .appFont(FluxTheme.Typography.pageTitle)
                             .tracking(-0.6)
                             .foregroundStyle(FluxTheme.Palette.primaryText)
                     }

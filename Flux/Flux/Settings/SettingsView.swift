@@ -68,9 +68,10 @@ struct SettingsView: View {
 
                 Toggle("Widget icons instead of labels", isOn: $viewModel.widgetUsesSymbols)
 
-                Picker("Hero font", selection: $viewModel.heroFont) {
-                    ForEach(HeroFontChoice.allCases) { choice in
-                        Text(choice.displayName).tag(choice)
+                Picker("App font", selection: $viewModel.appFontFamily) {
+                    Text("System").tag("")
+                    ForEach(viewModel.installedFontFamilies, id: \.self) { family in
+                        Text(family).tag(family)
                     }
                 }
 
@@ -151,10 +152,11 @@ struct SettingsView: View {
                         FormRow("", labelWidth: Self.labelWidth) {
                             Toggle("Widget icons instead of labels", isOn: $viewModel.widgetUsesSymbols)
                         }
-                        FormRow("Hero font", labelWidth: Self.labelWidth) {
-                            Picker("", selection: $viewModel.heroFont) {
-                                ForEach(HeroFontChoice.allCases) { choice in
-                                    Text(choice.displayName).tag(choice)
+                        FormRow("App font", labelWidth: Self.labelWidth) {
+                            Picker("", selection: $viewModel.appFontFamily) {
+                                Text("System").tag("")
+                                ForEach(viewModel.installedFontFamilies, id: \.self) { family in
+                                    Text(family).tag(family)
                                 }
                             }
                             .labelsHidden()
@@ -172,7 +174,7 @@ struct SettingsView: View {
 
                 if let validationError = viewModel.validationError {
                     Text(validationError)
-                        .font(.callout)
+                        .appFont(.callout)
                         .foregroundStyle(.red)
                 }
 
@@ -242,7 +244,7 @@ private struct LiquidGlassSection<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(title).font(.headline)
+            Text(title).appFont(.headline)
             content
                 .padding(18)
                 .frame(maxWidth: .infinity, alignment: .leading)

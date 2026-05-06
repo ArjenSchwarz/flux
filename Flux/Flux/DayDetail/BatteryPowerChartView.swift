@@ -16,11 +16,11 @@ struct BatteryPowerChartView: View {
                 let time = DateFormatting.clockTime(from: selected.date)
                 let power = PowerFormatting.format(selected.point.pbat)
                 Text("\(time): \(power) (\(label))")
-                    .font(.caption)
+                    .appFont(.caption)
                     .foregroundStyle(.secondary)
             } else {
                 Text("Above zero = charging, below = discharging")
-                    .font(.caption)
+                    .appFont(.caption)
                     .foregroundStyle(.secondary)
             }
 

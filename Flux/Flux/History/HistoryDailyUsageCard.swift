@@ -46,7 +46,7 @@ struct HistoryDailyUsageCard: View {
 
     private var placeholder: some View {
         Text(Self.placeholderCopy)
-            .font(.subheadline)
+            .appFont(.subheadline)
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 24)

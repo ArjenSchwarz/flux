@@ -11,6 +11,11 @@ struct BatteryBlock: View {
     let lowestSOC: Double?
     let lowestSOCTimestamp: Date?
     var offpeakBatteryDeltaPercent: Double?
+    /// When true, the "Charged during off-peak" row is always rendered —
+    /// showing "—" if `offpeakBatteryDeltaPercent` is nil. Matches the V4
+    /// off-peak block's behaviour so the row stays visible before today's
+    /// off-peak window has produced data.
+    var showsOffpeakDelta: Bool = false
 
     var body: some View {
         FluxPanel {
@@ -23,17 +28,26 @@ struct BatteryBlock: View {
                     label: "Lowest",
                     value: lowestValue,
                     sub: lowestSubtitle,
-                    last: offpeakBatteryDeltaPercent == nil
+                    last: !rendersOffpeakDelta
                 )
-                if let offpeakBatteryDeltaPercent {
+                if rendersOffpeakDelta {
                     FluxStatRow(
                         label: "Charged during off-peak",
-                        value: String(format: "%+.0f%%", offpeakBatteryDeltaPercent),
+                        value: offpeakDeltaText,
                         last: true
                     )
                 }
             }
         }
+    }
+
+    private var rendersOffpeakDelta: Bool {
+        showsOffpeakDelta || offpeakBatteryDeltaPercent != nil
+    }
+
+    private var offpeakDeltaText: String {
+        guard let value = offpeakBatteryDeltaPercent else { return "—" }
+        return String(format: "%+.0f%%", value)
     }
 
     private var cycleText: String {

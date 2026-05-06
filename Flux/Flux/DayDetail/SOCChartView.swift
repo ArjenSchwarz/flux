@@ -13,7 +13,7 @@ struct SOCChartView: View {
         VStack(alignment: .leading, spacing: 8) {
             if let selected = selectedReading {
                 Text("\(DateFormatting.clockTime(from: selected.date)): \(SOCFormatting.format(selected.point.soc))")
-                    .font(.caption)
+                    .appFont(.caption)
                     .foregroundStyle(.secondary)
             }
 
@@ -61,7 +61,7 @@ struct SOCChartView: View {
                     .foregroundStyle(.purple)
                     .annotation(position: .top) {
                         Text("\(SOCFormatting.format(socLow)) at \(DateFormatting.clockTime(from: socLowTime))")
-                            .font(.caption2)
+                            .appFont(.caption2)
                             .padding(4)
                             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                     }

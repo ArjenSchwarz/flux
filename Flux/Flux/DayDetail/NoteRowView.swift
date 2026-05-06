@@ -10,10 +10,10 @@ struct NoteRowView: View {
         if let text, !text.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
                 Label("Note", systemImage: "note.text")
-                    .font(.subheadline)
+                    .appFont(.subheadline)
                     .foregroundStyle(.secondary)
                 Text(text)
-                    .font(.body)
+                    .appFont(.body)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)
             }

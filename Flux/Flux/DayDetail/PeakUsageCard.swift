@@ -7,7 +7,7 @@ struct PeakUsageCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Peak Usage")
-                .font(.headline)
+                .appFont(.headline)
 
             headerRow
 
@@ -26,7 +26,7 @@ struct PeakUsageCard: View {
             Spacer()
             Text("Average · Total")
         }
-        .font(.caption)
+        .appFont(.caption)
         .foregroundStyle(.secondary)
     }
 
@@ -39,7 +39,7 @@ struct PeakUsageCard: View {
             Spacer()
             Text("\(avgKW) kW · \(totalKWh) kWh")
         }
-        .font(.subheadline)
+        .appFont(.subheadline)
     }
 
     private func timeRange(_ period: PeakPeriod) -> String {

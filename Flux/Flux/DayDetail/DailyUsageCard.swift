@@ -7,7 +7,7 @@ struct DailyUsageCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Daily Usage")
-                .font(.headline)
+                .appFont(.headline)
 
             ForEach(dailyUsage.blocks) { block in
                 row(block)
@@ -22,25 +22,25 @@ struct DailyUsageCard: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack {
                 Text(block.kind.displayLabel)
-                    .font(.subheadline)
+                    .appFont(.subheadline)
                 Spacer()
                 timeRangeView(block)
             }
             HStack {
                 Spacer()
                 Text(totals(block))
-                    .font(.subheadline)
+                    .appFont(.subheadline)
                     .foregroundStyle(.secondary)
             }
             HStack {
                 if block.status == .inProgress {
                     Text("(so far)")
-                        .font(.caption)
+                        .appFont(.caption)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
                 Text("\(block.percentOfDay)%")
-                    .font(.caption)
+                    .appFont(.caption)
                     .foregroundStyle(.secondary)
             }
         }
@@ -55,14 +55,14 @@ struct DailyUsageCard: View {
         HStack(spacing: 4) {
             if showCaption && leads {
                 Text(cap)
-                    .font(.caption)
+                    .appFont(.caption)
                     .foregroundStyle(.secondary)
             }
             Text(times)
-                .font(.subheadline)
+                .appFont(.subheadline)
             if showCaption && !leads {
                 Text(cap)
-                    .font(.caption)
+                    .appFont(.caption)
                     .foregroundStyle(.secondary)
             }
         }

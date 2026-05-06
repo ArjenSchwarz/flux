@@ -175,11 +175,11 @@ struct HistoryView: View {
                 FluxPanel {
                     HStack {
                         Text("View day detail")
-                            .font(FluxTheme.Typography.statRowLabel.weight(.semibold))
+                            .appFont { FluxTheme.Typography.statRowLabel(family: $0).weight(.semibold) }
                             .foregroundStyle(FluxTheme.Palette.primaryText)
                         Spacer()
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 13, weight: .semibold))
+                            .appFontSystem(size: 13, weight: .semibold)
                             .foregroundStyle(FluxTheme.Palette.tertiaryText)
                     }
                 }
@@ -196,12 +196,12 @@ struct HistoryView: View {
     private var emptyState: some View {
         VStack(alignment: .center, spacing: 8) {
             Image(systemName: "chart.bar.xaxis")
-                .font(.title2)
+                .appFont(.title2)
                 .foregroundStyle(.secondary)
             Text("No data available")
-                .font(.headline)
+                .appFont(.headline)
             Text("History data will appear once the backend has daily totals.")
-                .font(.subheadline)
+                .appFont(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }
@@ -213,9 +213,9 @@ struct HistoryView: View {
     private func errorState(_ error: FluxAPIError) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Label("Unable to load history", systemImage: "wifi.exclamationmark")
-                .font(.headline)
+                .appFont(.headline)
             Text(error.message)
-                .font(.subheadline)
+                .appFont(.subheadline)
                 .foregroundStyle(.secondary)
             HStack {
                 Button("Retry") {

@@ -8,8 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- App font picker in Settings (iOS + macOS) that lists every font family installed on the device and applies the chosen family to every text element in the app — Dashboard, Day Detail, History, Settings, navigation chrome. Replaces the previous "Hero font" picker that was scoped to the Dashboard battery numeral and offered a hard-coded list of eight names (only one of which — San Francisco — was actually bundled). New `Flux/Flux/Helpers/AppFont.swift` exposes `\.appFontFamily` as a SwiftUI environment value, an `AppFontResolver` that maps system fonts to family-aware variants while preserving Dynamic Type via `Font.custom(_:size:relativeTo:)`, and `.appFont(...)` view modifiers. Persisted via `UserDefaults.appFontFamily` in the app group; an empty string means "use the system font". `AppNavigationView` reads the value via `@AppStorage` and writes it into the SwiftUI environment so descendants pick it up. `FluxTheme.Typography` converted from `static let Font` to `nonisolated static func(family:) -> Font`; tabular tokens (`panelHeaderRight`, `statRowSub`, `touTime`) deliberately stay on the system monospaced font even with a custom family selected so digits and time ranges stay aligned. Removes the legacy `HeroFontChoice` enum and its `UserDefaults.heroFontIdentifier` key.
 - Light/Dark/Follow System appearance picker in Settings (iOS + macOS). New `ThemeChoice` enum (`Flux/Flux/Helpers/ThemeChoice.swift`) drives `.preferredColorScheme(...)` applied at the `FluxApp` root for both `WindowGroup` and the macOS `Settings` scene; persisted via `UserDefaults.themeIdentifier` in the app group and read with `@AppStorage`. The hardcoded `.preferredColorScheme(.dark)` on `FluxiOSRoot` is removed so the app-level setting wins.
 - New `BatteryBlock` panel (`Flux/Flux/Helpers/BatteryBlock.swift`) showing battery cycle, lowest SOC with timestamp, and optionally "Charged during off-peak" delta. Convenience initializer accepts a `DayEnergy` for History reuse.
+
+### Fixed
+
+- Dashboard "Charged during off-peak" row is reserved even when `offpeak.batteryDeltaPercent` is nil (e.g. before today's off-peak window has produced data), rendering "—" instead of vanishing. Regression from the V5 dashboard restructure (`943bfea`) which replaced the always-visible `OffPeakBlock` row with a conditionally-rendered `BatteryBlock` row. `BatteryBlock` gains a `showsOffpeakDelta: Bool = false` flag — Dashboard sets it to true; Day Detail keeps the existing hide-when-nil behaviour.
 
 ### Changed
 

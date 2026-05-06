@@ -9,8 +9,12 @@ final class SettingsViewModel {
     var apiToken = ""
     var loadAlertThreshold: Double = 3000
     var widgetUsesSymbols = false
-    var heroFont: HeroFontChoice = .default
+    /// Empty string means "use the system font"; any other value is a
+    /// PostScript family name returned by `AppFont.installedFamilies()`.
+    var appFontFamily: String = ""
     var theme: ThemeChoice = .default
+
+    let installedFontFamilies: [String] = AppFont.installedFamilies()
 
     private(set) var isValidating = false
     private(set) var validationError: String?
@@ -71,7 +75,7 @@ final class SettingsViewModel {
             writeURL(capturedURLString)
             userDefaults.loadAlertThreshold = capturedThreshold
             userDefaults.widgetUsesSymbols = capturedUsesSymbols
-            userDefaults.heroFontIdentifier = heroFont.rawValue
+            userDefaults.appFontFamily = appFontFamily
             userDefaults.themeIdentifier = theme.rawValue
             WidgetCenter.shared.reloadAllTimelines()
             notificationCenter.post(name: .fluxCredentialsChanged, object: nil)
@@ -88,7 +92,7 @@ final class SettingsViewModel {
         apiToken = keychainService.loadToken() ?? ""
         loadAlertThreshold = userDefaults.loadAlertThreshold
         widgetUsesSymbols = userDefaults.widgetUsesSymbols
-        heroFont = HeroFontChoice(rawValue: userDefaults.heroFontIdentifier) ?? .default
+        appFontFamily = userDefaults.appFontFamily
         theme = ThemeChoice(rawValue: userDefaults.themeIdentifier) ?? .default
     }
 
