@@ -133,11 +133,11 @@ struct DayDetailView: View {
             // macOS keeps the eyebrow + title since the sidebar handles tabs.
             VStack(alignment: .leading, spacing: 2) {
                 Text(eyebrow.uppercased())
-                    .font(FluxTheme.Typography.eyebrow)
+                    .appFont(FluxTheme.Typography.eyebrow)
                     .tracking(1.6)
                     .foregroundStyle(FluxTheme.Palette.tertiaryText)
                 Text(pageTitle)
-                    .font(FluxTheme.Typography.pageTitle)
+                    .appFont(FluxTheme.Typography.pageTitle)
                     .tracking(-0.6)
                     .foregroundStyle(FluxTheme.Palette.primaryText)
             }

@@ -12,7 +12,7 @@ enum DayDetailPanels {
                     legendChip(color: FluxTheme.Palette.load, text: "House")
                     legendChip(color: FluxTheme.Palette.grid, text: "Grid")
                 }
-                .font(.system(size: 10))
+                .appFontSystem(size: 10)
                 .foregroundStyle(FluxTheme.Palette.secondaryText)
                 .padding(.top, 6)
             }
@@ -48,7 +48,7 @@ struct DayNavigationHeader: View {
             }
             Spacer()
             Text(formattedDate)
-                .font(.system(size: 22, weight: .semibold))
+                .appFontSystem(size: 22, weight: .semibold)
                 .tracking(-0.4)
                 .foregroundStyle(FluxTheme.Palette.primaryText)
             Spacer()
@@ -100,7 +100,7 @@ struct DayDetailNoteSection: View {
                             .multilineTextAlignment(.leading)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .font(.system(size: 13))
+                    .appFontSystem(size: 13)
                 }
             }
             .buttonStyle(.plain)
@@ -110,7 +110,7 @@ struct DayDetailNoteSection: View {
             } label: {
                 FluxPanel {
                     Label("Add note", systemImage: "plus")
-                        .font(.system(size: 13))
+                        .appFontSystem(size: 13)
                         .foregroundStyle(FluxTheme.Palette.secondaryText)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -132,10 +132,10 @@ struct DayDetailMessagePanel: View {
         FluxPanel {
             VStack(alignment: .leading, spacing: 8) {
                 Text(title)
-                    .font(.headline)
+                    .appFont(.headline)
                     .foregroundStyle(FluxTheme.Palette.primaryText)
                 Text(detail)
-                    .font(.subheadline)
+                    .appFont(.subheadline)
                     .foregroundStyle(FluxTheme.Palette.secondaryText)
             }
         }
@@ -151,9 +151,9 @@ struct DayDetailErrorPanel: View {
         FluxPanel {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Unable to load day data")
-                    .font(.headline)
+                    .appFont(.headline)
                 Text(error.message)
-                    .font(.subheadline)
+                    .appFont(.subheadline)
                     .foregroundStyle(FluxTheme.Palette.secondaryText)
                 HStack {
                     Button("Retry", action: onRetry)

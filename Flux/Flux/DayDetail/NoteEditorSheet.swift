@@ -21,12 +21,12 @@ struct NoteEditorSheet: View {
                 HStack {
                     if let error = viewModel.error {
                         Text(error.message)
-                            .font(.caption)
+                            .appFont(.caption)
                             .foregroundStyle(.red)
                     }
                     Spacer()
                     Text("\(remainingCharacters) left")
-                        .font(.caption)
+                        .appFont(.caption)
                         .foregroundStyle(remainingCharacters < 0 ? .red : .secondary)
                         .monospacedDigit()
                 }

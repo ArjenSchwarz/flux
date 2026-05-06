@@ -66,19 +66,19 @@ struct LiveTrioPanel: View {
             }
             VStack(alignment: .leading, spacing: 4) {
                 Text(label.uppercased())
-                    .font(FluxTheme.Typography.trioLabel)
+                    .appFont(FluxTheme.Typography.trioLabel)
                     .tracking(1)
                     .foregroundStyle(FluxTheme.Palette.tertiaryText)
                 HStack(alignment: .firstTextBaseline, spacing: 2) {
                     Text(parts?.value ?? "—")
-                        .font(FluxTheme.Typography.trioValue)
+                        .appFont(FluxTheme.Typography.trioValue)
                         .foregroundStyle(valueColor)
                     Text(parts?.unit ?? "kW")
-                        .font(FluxTheme.Typography.trioUnit)
+                        .appFont(FluxTheme.Typography.trioUnit)
                         .foregroundStyle(FluxTheme.Palette.tertiaryText)
                 }
                 Text(sub)
-                    .font(FluxTheme.Typography.trioSub)
+                    .appFont(FluxTheme.Typography.trioSub)
                     .foregroundStyle(FluxTheme.Palette.secondaryText)
             }
             .padding(16)

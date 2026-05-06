@@ -38,7 +38,7 @@ struct HistoryGridUsageCard: View {
 
     private var placeholder: some View {
         Text("No off-peak split available for this range.")
-            .font(.subheadline)
+            .appFont(.subheadline)
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 24)

@@ -71,25 +71,83 @@ enum FluxTheme {
         static let tabBarPadding: CGFloat = 3
     }
 
+    /// V5 typography tokens. Each entry is a function that takes the optional
+    /// chosen font family — pulled from `\.appFontFamily` in the environment —
+    /// and returns a concrete `Font`. Monospaced-digit / design-specific
+    /// entries keep the system font when a custom family is active so digits
+    /// stay aligned in charts and stat rows.
     enum Typography {
-        static let pageTitle: Font = .system(size: 30, weight: .semibold)
-        static let eyebrow: Font = .system(size: 10, weight: .semibold).monospacedDigit()
-        static let panelHeader: Font = .system(size: 11, weight: .bold)
-        static let panelHeaderRight: Font = .system(size: 11, design: .monospaced).monospacedDigit()
-        static let trioValue: Font = .system(size: 26, weight: .medium).monospacedDigit()
-        static let trioUnit: Font = .system(size: 11)
-        static let trioLabel: Font = .system(size: 11, weight: .bold)
-        static let trioSub: Font = .system(size: 11)
-        static let statRowLabel: Font = .system(size: 15).monospacedDigit()
-        static let statRowValue: Font = .system(size: 15).monospacedDigit()
-        static let statRowSub: Font = .system(size: 10, design: .monospaced)
-        static let touName: Font = .system(size: 15)
-        static let touTime: Font = .system(size: 12, design: .monospaced)
-        static let touValue: Font = .system(size: 15).monospacedDigit()
-        static let tabItem: Font = .system(size: 12, weight: .medium)
-        static let heroNumber: Font = .system(size: 108, weight: .light)
-        static let heroUnit: Font = .system(size: 32, weight: .light)
-        static let heroSubline: Font = .system(size: 15)
+        nonisolated static func pageTitle(family: String?) -> Font {
+            AppFontResolver.resolve(size: 30, weight: .semibold, family: family)
+        }
+        /// `.monospacedDigit()` selects an alternate glyph variant on the
+        /// system font; on custom families that don't ship a tabular-figures
+        /// variant the modifier is a no-op. Acceptable here because the
+        /// eyebrow shows a colon-separated `HH:mm · MMM d` line where minor
+        /// digit-width drift isn't visible.
+        nonisolated static func eyebrow(family: String?) -> Font {
+            AppFontResolver.resolve(size: 10, weight: .semibold, family: family).monospacedDigit()
+        }
+        nonisolated static func panelHeader(family: String?) -> Font {
+            AppFontResolver.resolve(size: 11, weight: .bold, family: family)
+        }
+        /// Right-side header label — kept on monospaced digits regardless of
+        /// the chosen body family so unit captions stay tabular.
+        nonisolated static func panelHeaderRight(family _: String?) -> Font {
+            .system(size: 11, design: .monospaced).monospacedDigit()
+        }
+        /// `.monospacedDigit()` is honoured by the system font; custom
+        /// families without a tabular-figures variant render proportional
+        /// digits, which can cause minor horizontal drift between the three
+        /// trio columns (Solar / House / Grid) as values change. Accepted
+        /// trade-off — falling back to the system font here would defeat the
+        /// purpose of the picker.
+        nonisolated static func trioValue(family: String?) -> Font {
+            AppFontResolver.resolve(size: 26, weight: .medium, family: family).monospacedDigit()
+        }
+        nonisolated static func trioUnit(family: String?) -> Font {
+            AppFontResolver.resolve(size: 11, weight: .regular, family: family)
+        }
+        nonisolated static func trioLabel(family: String?) -> Font {
+            AppFontResolver.resolve(size: 11, weight: .bold, family: family)
+        }
+        nonisolated static func trioSub(family: String?) -> Font {
+            AppFontResolver.resolve(size: 11, weight: .regular, family: family)
+        }
+        nonisolated static func statRowLabel(family: String?) -> Font {
+            AppFontResolver.resolve(size: 15, weight: .regular, family: family).monospacedDigit()
+        }
+        nonisolated static func statRowValue(family: String?) -> Font {
+            AppFontResolver.resolve(size: 15, weight: .regular, family: family).monospacedDigit()
+        }
+        /// Sub-caption next to stat row labels stays on the monospaced system
+        /// font so trailing units like "kWh" align across rows.
+        nonisolated static func statRowSub(family _: String?) -> Font {
+            .system(size: 10, design: .monospaced)
+        }
+        nonisolated static func touName(family: String?) -> Font {
+            AppFontResolver.resolve(size: 15, weight: .regular, family: family)
+        }
+        /// Time-of-use timestamps stay on the monospaced system font so the
+        /// `HH:mm` ranges stay tabular.
+        nonisolated static func touTime(family _: String?) -> Font {
+            .system(size: 12, design: .monospaced)
+        }
+        nonisolated static func touValue(family: String?) -> Font {
+            AppFontResolver.resolve(size: 15, weight: .regular, family: family).monospacedDigit()
+        }
+        nonisolated static func tabItem(family: String?) -> Font {
+            AppFontResolver.resolve(size: 12, weight: .medium, family: family)
+        }
+        nonisolated static func heroNumber(family: String?) -> Font {
+            AppFontResolver.resolve(size: 108, weight: .light, family: family)
+        }
+        nonisolated static func heroUnit(family: String?) -> Font {
+            AppFontResolver.resolve(size: 32, weight: .light, family: family)
+        }
+        nonisolated static func heroSubline(family: String?) -> Font {
+            AppFontResolver.resolve(size: 15, weight: .regular, family: family)
+        }
     }
 }
 

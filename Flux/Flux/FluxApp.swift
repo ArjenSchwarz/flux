@@ -19,6 +19,9 @@ struct FluxApp: App {
     @AppStorage(UserDefaults.themeIdentifierKey, store: UserDefaults.fluxAppGroup)
     private var themeRaw: String = ""
 
+    @AppStorage(UserDefaults.appFontFamilyKey, store: UserDefaults.fluxAppGroup)
+    private var appFontFamily: String = ""
+
     private var preferredScheme: ColorScheme? {
         (ThemeChoice(rawValue: themeRaw) ?? .default).colorScheme
     }
@@ -42,9 +45,15 @@ struct FluxApp: App {
         }
 
         Settings {
+            // The Settings scene is a top-level SwiftUI Scene — not a
+            // descendant of AppNavigationView — so it does NOT inherit the
+            // \.appFontFamily environment value injected there. Inject it
+            // explicitly so the Settings form itself honours the user's
+            // chosen font on macOS.
             SettingsView()
                 .frame(minWidth: 480, minHeight: 360)
                 .preferredColorScheme(preferredScheme)
+                .environment(\.appFontFamily, appFontFamily.appFontFamilyEnvironmentValue)
         }
         #else
         WindowGroup {

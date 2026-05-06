@@ -7,12 +7,13 @@ extension UserDefaults {
 
     public static let apiURLKey = "apiURL"
     public static let themeIdentifierKey = "themeIdentifier"
+    public static let appFontFamilyKey = "appFontFamily"
 
     private enum Keys {
         static let apiURL = UserDefaults.apiURLKey
         static let loadAlertThreshold = "loadAlertThreshold"
         static let widgetUsesSymbols = "widgetUsesSymbols"
-        static let heroFontIdentifier = "heroFontIdentifier"
+        static let appFontFamily = UserDefaults.appFontFamilyKey
         static let themeIdentifier = UserDefaults.themeIdentifierKey
     }
 
@@ -52,12 +53,11 @@ extension UserDefaults {
         set { set(newValue, forKey: Keys.widgetUsesSymbols) }
     }
 
-    /// Identifier of the font used for the Dashboard hero numeral. Body and
-    /// values stay on San Francisco regardless. Persisted as a raw string so
-    /// the app group can mirror the value into widgets if needed later.
-    public var heroFontIdentifier: String {
-        get { string(forKey: Keys.heroFontIdentifier) ?? "" }
-        set { set(newValue, forKey: Keys.heroFontIdentifier) }
+    /// PostScript family name applied to all text in the app. Empty string
+    /// means "use the system font" (San Francisco).
+    public var appFontFamily: String {
+        get { string(forKey: Keys.appFontFamily) ?? "" }
+        set { set(newValue, forKey: Keys.appFontFamily) }
     }
 
     /// Identifier of the chosen appearance ("system", "light", "dark").

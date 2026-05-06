@@ -61,7 +61,7 @@ struct BatteryCombinedChartView: View {
                     .foregroundStyle(FluxTheme.Palette.battery)
                     .annotation(position: .top) {
                         Text("\(SOCFormatting.format(socLow)) at \(DateFormatting.clockTime(from: socLowTime))")
-                            .font(.caption2)
+                            .appFont(.caption2)
                             .padding(4)
                             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                     }
@@ -124,11 +124,11 @@ struct BatteryCombinedChartView: View {
                 "SOC \(SOCFormatting.format(selected.point.soc)) · " +
                 "\(PowerFormatting.format(selected.point.pbat)) \(direction(for: selected.point.pbat))"
             )
-            .font(.caption)
+            .appFont(.caption)
             .foregroundStyle(.secondary)
         } else {
             Text("State of charge with charge/discharge overlay")
-                .font(.caption)
+                .appFont(.caption)
                 .foregroundStyle(.secondary)
         }
     }

@@ -19,7 +19,7 @@ struct PowerChartView: View {
                     Text("Grid: \(PowerFormatting.format(selected.point.pgrid))")
                         .foregroundStyle(.red)
                 }
-                .font(.caption)
+                .appFont(.caption)
                 .foregroundStyle(.secondary)
             }
 

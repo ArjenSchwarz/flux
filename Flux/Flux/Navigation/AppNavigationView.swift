@@ -14,12 +14,16 @@ struct AppNavigationView: View {
     @State private var apiClient: (any FluxAPIClient)?
     @State private var iosTab: FluxTab = .dashboard
 
+    @AppStorage(UserDefaults.appFontFamilyKey, store: .fluxAppGroup)
+    private var appFontFamily: String = ""
+
     #if os(macOS)
     @SceneStorage("flux.sidebar.selectedScreen") private var storedSelection: String = Screen.dashboard.rawValue
     #endif
 
     var body: some View {
         rootView
+            .environment(\.appFontFamily, appFontFamily.appFontFamilyEnvironmentValue)
             .onAppear {
                 #if os(macOS)
                 if let restored = Screen(rawValue: storedSelection), restored != .settings {
@@ -161,12 +165,12 @@ private struct MacUnconfiguredView: View {
     var body: some View {
         VStack(spacing: 16) {
             Image(systemName: "gearshape")
-                .font(.largeTitle)
+                .appFont(.largeTitle)
                 .foregroundStyle(.secondary)
             Text("Flux is not configured")
-                .font(.headline)
+                .appFont(.headline)
             Text("Open Settings to enter your API URL and token.")
-                .font(.subheadline)
+                .appFont(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             // ⌘, is registered globally by the Settings scene; no explicit

@@ -27,9 +27,9 @@ struct WidgetDiagnosticsView: View {
                 Image(systemName: line.passed ? "checkmark.circle.fill" : "xmark.octagon.fill")
                     .foregroundStyle(line.passed ? .green : .red)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(line.title).font(.subheadline)
+                    Text(line.title).appFont(.subheadline)
                     Text(line.detail)
-                        .font(.caption)
+                        .appFont(.caption)
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                 }

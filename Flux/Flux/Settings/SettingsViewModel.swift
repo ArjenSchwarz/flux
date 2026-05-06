@@ -9,8 +9,15 @@ final class SettingsViewModel {
     var apiToken = ""
     var loadAlertThreshold: Double = 3000
     var widgetUsesSymbols = false
-    var heroFont: HeroFontChoice = .default
+    /// Empty string means "use the system font"; any other value is a
+    /// PostScript family name returned by `AppFont.installedFamilies()`.
+    var appFontFamily: String = ""
     var theme: ThemeChoice = .default
+
+    /// Populated by `loadFontFamilies()` so opening Settings on macOS doesn't
+    /// block the main thread on the initial `NSFontManager.availableFontFamilies`
+    /// call (~100–300 ms cold). Empty until the background task completes.
+    private(set) var installedFontFamilies: [String] = []
 
     private(set) var isValidating = false
     private(set) var validationError: String?
@@ -71,7 +78,7 @@ final class SettingsViewModel {
             writeURL(capturedURLString)
             userDefaults.loadAlertThreshold = capturedThreshold
             userDefaults.widgetUsesSymbols = capturedUsesSymbols
-            userDefaults.heroFontIdentifier = heroFont.rawValue
+            userDefaults.appFontFamily = appFontFamily
             userDefaults.themeIdentifier = theme.rawValue
             WidgetCenter.shared.reloadAllTimelines()
             notificationCenter.post(name: .fluxCredentialsChanged, object: nil)
@@ -88,8 +95,22 @@ final class SettingsViewModel {
         apiToken = keychainService.loadToken() ?? ""
         loadAlertThreshold = userDefaults.loadAlertThreshold
         widgetUsesSymbols = userDefaults.widgetUsesSymbols
-        heroFont = HeroFontChoice(rawValue: userDefaults.heroFontIdentifier) ?? .default
+        appFontFamily = userDefaults.appFontFamily
         theme = ThemeChoice(rawValue: userDefaults.themeIdentifier) ?? .default
+    }
+
+    /// Populates the installed font family list. AppKit's `NSFontManager` is
+    /// not documented as thread-safe, so the underlying enumeration must run
+    /// on the main actor — but we yield first so the Settings sheet has a
+    /// chance to render before the (one-time, ~100–300 ms cold) call to
+    /// `availableFontFamilies` on macOS. The list is memoised inside
+    /// `AppFont`, so subsequent invocations return instantly.
+    @MainActor func loadFontFamilies() async {
+        guard installedFontFamilies.isEmpty else { return }
+        // Let the sheet draw a frame before potentially blocking the main
+        // thread on the first NSFontManager call.
+        await Task.yield()
+        installedFontFamilies = AppFont.installedFamilies()
     }
 
     private func message(for error: FluxAPIError) -> String {

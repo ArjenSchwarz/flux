@@ -24,16 +24,16 @@ struct HistoryCardChrome<Content: View>: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
                 Text(title)
-                    .font(.subheadline)
+                    .appFont(.subheadline)
                     .foregroundStyle(.secondary)
                 Spacer()
                 Text(kpi)
-                    .font(.headline)
+                    .appFont(.headline)
                     .monospacedDigit()
             }
             if let subtitle {
                 Text(subtitle)
-                    .font(.caption)
+                    .appFont(.caption)
                     .foregroundStyle(.secondary)
             }
             content()

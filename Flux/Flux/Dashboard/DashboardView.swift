@@ -9,7 +9,6 @@ struct DashboardView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var viewModel: DashboardViewModel
     @State private var showingSettings = false
-    @AppStorage("heroFontIdentifier", store: .fluxAppGroup) private var heroFontIdentifier: String = ""
 
     private var tabBinding: Binding<FluxTab>?
     private var onSettingsTap: (() -> Void)?
@@ -113,8 +112,7 @@ struct DashboardView: View {
 
             DashboardHeroPanel(
                 live: viewModel.status?.live,
-                rolling15min: viewModel.status?.rolling15min,
-                heroFont: heroFont
+                rolling15min: viewModel.status?.rolling15min
             )
 
             LiveTrioPanel(live: viewModel.status?.live)
@@ -136,15 +134,12 @@ struct DashboardView: View {
                 lowestSOC: viewModel.status?.battery?.low24h?.soc,
                 lowestSOCTimestamp: (viewModel.status?.battery?.low24h?.timestamp)
                     .flatMap(DateFormatting.parseTimestamp),
-                offpeakBatteryDeltaPercent: viewModel.status?.offpeak?.batteryDeltaPercent
+                offpeakBatteryDeltaPercent: viewModel.status?.offpeak?.batteryDeltaPercent,
+                showsOffpeakDelta: true
             )
         }
         .padding(.horizontal, FluxTheme.Metrics.screenHorizontalPadding)
         .padding(.bottom, FluxTheme.Metrics.screenBottomPadding)
-    }
-
-    private var heroFont: HeroFontChoice {
-        HeroFontChoice(rawValue: heroFontIdentifier) ?? .default
     }
 
     private var eyebrow: String {
@@ -162,11 +157,11 @@ struct DashboardView: View {
     private var legacyHeader: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(eyebrow.uppercased())
-                .font(FluxTheme.Typography.eyebrow)
+                .appFont(FluxTheme.Typography.eyebrow)
                 .tracking(1.6)
                 .foregroundStyle(FluxTheme.Palette.tertiaryText)
             Text("Battery")
-                .font(FluxTheme.Typography.pageTitle)
+                .appFont(FluxTheme.Typography.pageTitle)
                 .tracking(-0.6)
                 .foregroundStyle(FluxTheme.Palette.primaryText)
         }
@@ -178,18 +173,18 @@ struct DashboardView: View {
         FluxPanel {
             VStack(alignment: .leading, spacing: 8) {
                 Label(stalenessTitle, systemImage: "exclamationmark.triangle.fill")
-                    .font(.subheadline.weight(.semibold))
+                    .appFont(.subheadline, weight: .semibold)
                     .foregroundStyle(.orange)
 
                 if let error = viewModel.error {
                     Text(error.message)
-                        .font(.caption)
+                        .appFont(.caption)
                         .foregroundStyle(FluxTheme.Palette.secondaryText)
                 }
 
                 if let lastSuccessfulFetch = viewModel.lastSuccessfulFetch {
                     Text("Last updated \(lastSuccessfulFetch, style: .relative) ago")
-                        .font(.caption)
+                        .appFont(.caption)
                         .foregroundStyle(FluxTheme.Palette.secondaryText)
                 }
 
