@@ -11,11 +11,19 @@ import AppKit
 /// the system font. Stored under the `appFontFamily` UserDefaults key so the
 /// app and macOS Settings scene share it.
 enum AppFont {
+    nonisolated(unsafe) private static var cachedFamilies: [String]?
+    nonisolated private static let familiesLock = NSLock()
+
     /// Returns the alphabetised list of font families installed on the device.
     /// Filters out families whose names start with `.` (Apple's private/system
     /// faces like `.AppleSystemUIFont`) since they don't render predictably
-    /// when invoked by name.
+    /// when invoked by name. Memoised after the first call — on macOS the
+    /// underlying `NSFontManager.availableFontFamilies` is non-trivial, so
+    /// subsequent opens of Settings reuse the cached list.
     nonisolated static func installedFamilies() -> [String] {
+        familiesLock.lock()
+        defer { familiesLock.unlock() }
+        if let cached = cachedFamilies { return cached }
         let raw: [String]
         #if canImport(UIKit)
         raw = UIFont.familyNames
@@ -24,7 +32,9 @@ enum AppFont {
         #else
         raw = []
         #endif
-        return raw.filter { !$0.hasPrefix(".") }.sorted()
+        let result = raw.filter { !$0.hasPrefix(".") }.sorted()
+        cachedFamilies = result
+        return result
     }
 
     nonisolated static func isInstalled(_ family: String) -> Bool {
@@ -79,6 +89,10 @@ extension EnvironmentValues {
 /// Resolves a built-in `Font.TextStyle` to a concrete `Font`, honouring the
 /// chosen family and optional weight while preserving Dynamic Type scaling.
 enum AppFontResolver {
+    /// Returns a fixed-size font in the chosen family — does not scale with
+    /// Dynamic Type. Used for chart annotations and pixel-precise UI; for
+    /// body / heading text use the `textStyle:` overload, which preserves
+    /// Dynamic Type via `Font.custom(_:size:relativeTo:)`.
     nonisolated static func resolve(
         size: CGFloat,
         weight: Font.Weight,

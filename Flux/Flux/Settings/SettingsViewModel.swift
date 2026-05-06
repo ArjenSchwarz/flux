@@ -14,7 +14,10 @@ final class SettingsViewModel {
     var appFontFamily: String = ""
     var theme: ThemeChoice = .default
 
-    let installedFontFamilies: [String] = AppFont.installedFamilies()
+    /// Populated by `loadFontFamilies()` so opening Settings on macOS doesn't
+    /// block the main thread on the initial `NSFontManager.availableFontFamilies`
+    /// call (~100–300 ms cold). Empty until the background task completes.
+    private(set) var installedFontFamilies: [String] = []
 
     private(set) var isValidating = false
     private(set) var validationError: String?
@@ -94,6 +97,17 @@ final class SettingsViewModel {
         widgetUsesSymbols = userDefaults.widgetUsesSymbols
         appFontFamily = userDefaults.appFontFamily
         theme = ThemeChoice(rawValue: userDefaults.themeIdentifier) ?? .default
+    }
+
+    /// Loads the installed font family list off the main actor so opening
+    /// Settings stays responsive on macOS. The list is memoised inside
+    /// `AppFont`, so the second invocation returns instantly.
+    func loadFontFamilies() async {
+        guard installedFontFamilies.isEmpty else { return }
+        let families = await Task.detached(priority: .userInitiated) {
+            AppFont.installedFamilies()
+        }.value
+        installedFontFamilies = families
     }
 
     private func message(for error: FluxAPIError) -> String {

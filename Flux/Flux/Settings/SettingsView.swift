@@ -25,6 +25,7 @@ struct SettingsView: View {
             #endif
         }
         .onAppear { viewModel.loadExisting() }
+        .task { await viewModel.loadFontFamilies() }
         .onChange(of: viewModel.shouldDismiss) { _, shouldDismiss in
             if shouldDismiss {
                 onSaved()
