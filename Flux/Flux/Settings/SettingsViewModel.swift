@@ -99,17 +99,18 @@ final class SettingsViewModel {
         theme = ThemeChoice(rawValue: userDefaults.themeIdentifier) ?? .default
     }
 
-    /// Loads the installed font family list off the main actor so opening
-    /// Settings stays responsive on macOS. The list is memoised inside
-    /// `AppFont`, so the second invocation returns instantly. Marked
-    /// `@MainActor` to make the assignment after the `await` explicit —
-    /// callers must invoke from the main actor.
+    /// Populates the installed font family list. AppKit's `NSFontManager` is
+    /// not documented as thread-safe, so the underlying enumeration must run
+    /// on the main actor — but we yield first so the Settings sheet has a
+    /// chance to render before the (one-time, ~100–300 ms cold) call to
+    /// `availableFontFamilies` on macOS. The list is memoised inside
+    /// `AppFont`, so subsequent invocations return instantly.
     @MainActor func loadFontFamilies() async {
         guard installedFontFamilies.isEmpty else { return }
-        let families = await Task.detached(priority: .userInitiated) {
-            AppFont.installedFamilies()
-        }.value
-        installedFontFamilies = families
+        // Let the sheet draw a frame before potentially blocking the main
+        // thread on the first NSFontManager call.
+        await Task.yield()
+        installedFontFamilies = AppFont.installedFamilies()
     }
 
     private func message(for error: FluxAPIError) -> String {
