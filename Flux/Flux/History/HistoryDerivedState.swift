@@ -64,6 +64,21 @@ extension HistoryViewModel {
         }
     }
 
+    struct DayKwhRecord: Equatable {
+        let dayID: String
+        let date: Date
+        let kwh: Double
+    }
+
+    struct LowestSocRecord: Equatable {
+        let dayID: String
+        let date: Date
+        /// Raw `Double` so display rounding can't perturb the tie-break (Decision 10).
+        let soc: Double
+        /// `"HH:mm:ss"` Sydney; nil when the payload had no time.
+        let socLowTime: String?
+    }
+
     struct PeriodSummary: Equatable {
         let solarTotalKwh: Double
         /// Excludes today (today is partial; including it would skew daily
@@ -91,6 +106,18 @@ extension HistoryViewModel {
         /// `dailyUsageLargestKind`. Used by the card's subtitle to express
         /// the per-day average of the leading block kind.
         let dailyUsageLargestKindTotalKwh: Double
+        /// Sum of post-clamp `night`-block kWh across complete days that
+        /// contributed a night block. Divisor for `nightAvgKwh` is
+        /// `nightBlockDayCount`.
+        let nightTotalKwh: Double
+        let nightBlockDayCount: Int
+        /// Best day-with-blocks (max stacked kWh, ties broken by most recent).
+        let mostUsageDay: DayKwhRecord?
+        /// Best complete day by `epv`. Ties broken by most recent.
+        let mostSolarDay: DayKwhRecord?
+        /// Day-with-low whose raw `socLow` is the minimum; ties broken by
+        /// most recent. Today included.
+        let lowestSocDay: LowestSocRecord?
 
         static let empty = PeriodSummary(
             solarTotalKwh: 0,
@@ -105,7 +132,12 @@ extension HistoryViewModel {
             dailyUsageTotalKwh: 0,
             dailyUsageDayCount: 0,
             dailyUsageLargestKind: nil,
-            dailyUsageLargestKindTotalKwh: 0
+            dailyUsageLargestKindTotalKwh: 0,
+            nightTotalKwh: 0,
+            nightBlockDayCount: 0,
+            mostUsageDay: nil,
+            mostSolarDay: nil,
+            lowestSocDay: nil
         )
 
         var solarPerDayKwh: Double? {
@@ -126,6 +158,10 @@ extension HistoryViewModel {
         /// KPI: both averages are over the same cohort.
         var dailyUsageLargestKindAvgKwh: Double? {
             dailyUsageDayCount > 0 ? dailyUsageLargestKindTotalKwh / Double(dailyUsageDayCount) : nil
+        }
+
+        var nightAvgKwh: Double? {
+            nightBlockDayCount > 0 ? nightTotalKwh / Double(nightBlockDayCount) : nil
         }
     }
 
@@ -168,15 +204,18 @@ extension HistoryViewModel {
                     grid.append(entry)
                     totals.addGrid(entry)
                 }
+                let usageEntry = Self.dailyUsageEntry(day: day, parsedDate: parsedDate, isToday: isToday)
+                if let usageEntry {
+                    dailyUsage.append(usageEntry)
+                }
                 if !isToday {
-                    totals.addCompleteDay(day)
+                    totals.addCompleteDay(
+                        day,
+                        parsedDate: parsedDate,
+                        dailyUsageEntry: usageEntry
+                    )
                 }
-                if let entry = Self.dailyUsageEntry(day: day, parsedDate: parsedDate, isToday: isToday) {
-                    dailyUsage.append(entry)
-                    if !isToday {
-                        totals.addDailyUsage(entry)
-                    }
-                }
+                totals.considerSocLow(day: day, parsedDate: parsedDate)
             }
 
             self.solar = solar
@@ -220,6 +259,19 @@ extension HistoryViewModel {
     }
 }
 
+private protocol DayRecordValue {
+    var comparableValue: Double { get }
+    var date: Date { get }
+}
+
+extension HistoryViewModel.DayKwhRecord: DayRecordValue {
+    fileprivate var comparableValue: Double { kwh }
+}
+
+extension HistoryViewModel.LowestSocRecord: DayRecordValue {
+    fileprivate var comparableValue: Double { soc }
+}
+
 extension HistoryViewModel {
     fileprivate struct Totals {
         var solarTotal = 0.0
@@ -233,6 +285,11 @@ extension HistoryViewModel {
         var dailyUsageStackTotal = 0.0
         var dailyUsageDayCount = 0
         var dailyUsageKindSums: [DailyUsageBlock.Kind: Double] = [:]
+        var nightTotal = 0.0
+        var nightBlockDayCount = 0
+        var mostUsage: DayKwhRecord?
+        var mostSolar: DayKwhRecord?
+        var lowestSoc: LowestSocRecord?
 
         mutating func addGrid(_ entry: GridEntry) {
             peakImportTotal += entry.peakImportKwh
@@ -241,18 +298,70 @@ extension HistoryViewModel {
             gridDayCount += 1
         }
 
-        mutating func addCompleteDay(_ day: DayEnergy) {
+        mutating func addCompleteDay(
+            _ day: DayEnergy,
+            parsedDate: Date,
+            dailyUsageEntry: DailyUsageEntry?
+        ) {
             solarTotal += day.epv
             chargeTotal += day.eCharge
             dischargeTotal += day.eDischarge
             completeDayCount += 1
-        }
 
-        mutating func addDailyUsage(_ entry: DailyUsageEntry) {
+            Self.consider(
+                &mostSolar,
+                candidate: DayKwhRecord(dayID: day.date, date: parsedDate, kwh: day.epv),
+                prefersLarger: true
+            )
+
+            guard let entry = dailyUsageEntry else { return }
+
             dailyUsageStackTotal += entry.stackedTotalKwh
             dailyUsageDayCount += 1
             for block in entry.blocks {
                 dailyUsageKindSums[block.kind, default: 0] += block.totalKwh
+            }
+
+            Self.consider(
+                &mostUsage,
+                candidate: DayKwhRecord(dayID: day.date, date: parsedDate, kwh: entry.stackedTotalKwh),
+                prefersLarger: true
+            )
+
+            if let night = entry.blocks.first(where: { $0.kind == .night }) {
+                nightTotal += night.totalKwh
+                nightBlockDayCount += 1
+            }
+        }
+
+        /// Lowest SoC includes today, so it has its own entry point called
+        /// from the main loop unconditionally.
+        mutating func considerSocLow(day: DayEnergy, parsedDate: Date) {
+            guard let soc = day.socLow, soc.isFinite else { return }
+            Self.consider(
+                &lowestSoc,
+                candidate: LowestSocRecord(
+                    dayID: day.date, date: parsedDate, soc: soc, socLowTime: day.socLowTime
+                ),
+                prefersLarger: false
+            )
+        }
+
+        private static func consider<T: DayRecordValue>(
+            _ current: inout T?,
+            candidate: T,
+            prefersLarger: Bool
+        ) {
+            guard let existing = current else { current = candidate; return }
+            let strictlyBeats = prefersLarger
+                ? candidate.comparableValue > existing.comparableValue
+                : candidate.comparableValue < existing.comparableValue
+            // Raw `Double` `==` is intentional here: `comparableValue` reflects
+            // wire values with no arithmetic applied between storage and tie-break,
+            // so an epsilon tolerance would mask real ties (Decision 10).
+            let equal = candidate.comparableValue == existing.comparableValue
+            if strictlyBeats || (equal && candidate.date > existing.date) {
+                current = candidate
             }
         }
 
@@ -271,7 +380,12 @@ extension HistoryViewModel {
                 dailyUsageTotalKwh: dailyUsageStackTotal,
                 dailyUsageDayCount: dailyUsageDayCount,
                 dailyUsageLargestKind: largest,
-                dailyUsageLargestKindTotalKwh: largest.flatMap { dailyUsageKindSums[$0] } ?? 0
+                dailyUsageLargestKindTotalKwh: largest.flatMap { dailyUsageKindSums[$0] } ?? 0,
+                nightTotalKwh: nightTotal,
+                nightBlockDayCount: nightBlockDayCount,
+                mostUsageDay: mostUsage,
+                mostSolarDay: mostSolar,
+                lowestSocDay: lowestSoc
             )
         }
 

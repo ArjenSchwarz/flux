@@ -16,6 +16,7 @@
 | [Daily Derived Stats](#daily-derived-stats) | 2026-04-29 | Done | Pre-compute three reading-derived per-day stats (`findDailyUsage`, `findMinSOC`, `findPeakPeriods`) in the poller hourly against yesterday; persist on `flux-daily-energy` via UpdateItem; `/day` and `/history` read storage for past dates, live-compute for today. Unblocks history-daily-usage (T-1022). |
 | [History Daily Usage](#history-daily-usage) | 2026-04-30 | Done | New History card rendering one stacked bar per day across the five chronological blocks (Night, Morning Peak, Off-Peak, Afternoon Peak, Evening) over the 7/14/30-day range, plus a fix to the cache upsert path so derived fields backfill on already-cached rows with observability on unexpected nil-overwrites. UI-only consumer of the data shipped by Daily Derived Stats. |
 | [macOS App](#macos-app) | 2026-05-01 | Done | Native macOS 26+ build of Flux (no Catalyst, no Designed-for-iPad). Adds dedicated Settings scene, menu commands (⌘R, ←/→), single main window that quits on close, refresh tiers via `appearsActive`, iCloud Keychain + `NSUbiquitousKeyValueStore` credential sync (no migrator), and a macOS Control Center widget alongside the existing home-screen widgets. iOS scenePhase pause preserved unchanged. T-1081. |
+| [History Usage Stats](#history-usage-stats) | 2026-05-07 | Done | New "Period overview" card on the History screen with eight tiles for the active 7/14/30-day range: Total usage, Total solar, Exported, Peak imports, Avg night, Most usage, Most solar, Lowest SoC. Day-record tiles tap-select the day across the existing chart cards. UI-only; reuses existing `/history` data. T-896. |
 
 ---
 
@@ -153,3 +154,12 @@ Native macOS 26+ build of Flux that reuses FluxCore, the existing widget extensi
 - [prerequisites.md](macos-app/prerequisites.md)
 - [requirements.md](macos-app/requirements.md)
 - [tasks.md](macos-app/tasks.md)
+
+## History Usage Stats
+
+New "Period overview" card on the History screen rendering eight stat tiles for the active 7/14/30-day range: Total usage, Total solar, Exported, Peak imports, Avg night, Most usage, Most solar, Lowest SoC. The three day-record tiles tap-select the day across the existing chart cards via the existing `onSelect` plumbing. UI-only feature: every value is derived from the existing `/history` response — `solarTotalKwh`, `exportTotalKwh`, `peakImportTotalKwh`, and `dailyUsageTotalKwh` are reused; four new aggregates (Avg night, Most usage, Most solar, Lowest SoC) are added to `PeriodSummary` in the same single-pass `Totals` accumulator. `HistoryCardChrome.kpi` becomes optional so the card's KPI slot shows the inclusive date range covered. T-896.
+
+- [decision_log.md](history-usage-stats/decision_log.md)
+- [design.md](history-usage-stats/design.md)
+- [requirements.md](history-usage-stats/requirements.md)
+- [tasks.md](history-usage-stats/tasks.md)

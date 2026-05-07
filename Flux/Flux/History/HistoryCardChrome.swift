@@ -4,13 +4,13 @@ import SwiftUI
 /// header row, optional subtitle, then the chart-shaped content.
 struct HistoryCardChrome<Content: View>: View {
     let title: String
-    let kpi: String
+    let kpi: String?
     let subtitle: String?
     @ViewBuilder let content: () -> Content
 
     init(
         title: String,
-        kpi: String,
+        kpi: String? = nil,
         subtitle: String? = nil,
         @ViewBuilder content: @escaping () -> Content
     ) {
@@ -27,9 +27,11 @@ struct HistoryCardChrome<Content: View>: View {
                     .appFont(.subheadline)
                     .foregroundStyle(.secondary)
                 Spacer()
-                Text(kpi)
-                    .appFont(.headline)
-                    .monospacedDigit()
+                if let kpi {
+                    Text(kpi)
+                        .appFont(.headline)
+                        .monospacedDigit()
+                }
             }
             if let subtitle {
                 Text(subtitle)

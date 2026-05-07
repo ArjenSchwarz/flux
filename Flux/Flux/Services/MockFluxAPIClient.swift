@@ -70,16 +70,24 @@ final actor MockFluxAPIClient: FluxAPIClient {
             }
             let dateString = DateFormatting.dayDateString(from: date)
             let trend = Double(dayOffset)
+            let eInput = max(0.2, 2.3 - trend * 0.03)
+            let offpeakImport = min(eInput * 0.6, max(0.1, 1.4 - trend * 0.02))
+            let hour = String(format: "%02d", dayOffset % 24)
+            let minute = String(format: "%02d", (dayOffset * 7) % 60)
             days.append(
                 DayEnergy(
                     date: dateString,
                     epv: max(0, 14.2 - trend * 0.17),
-                    eInput: max(0.2, 2.3 - trend * 0.03),
+                    eInput: eInput,
                     eOutput: max(0.5, 5.1 - trend * 0.09),
                     eCharge: max(0.8, 5.4 - trend * 0.08),
                     eDischarge: max(1.0, 6.2 - trend * 0.10),
+                    offpeakGridImportKwh: offpeakImport,
+                    offpeakGridExportKwh: max(0.1, 0.6 - trend * 0.01),
                     note: dayOffset == 0 ? previewNote : nil,
-                    dailyUsage: dayDailyUsage(for: dateString)
+                    dailyUsage: dayDailyUsage(for: dateString),
+                    socLow: max(8.0, 38.0 - trend * 0.6),
+                    socLowTime: "\(dateString)T\(hour):\(minute):00Z"
                 )
             )
         }

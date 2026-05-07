@@ -140,12 +140,8 @@ enum AppFontResolver {
 
     /// Apple's default Dynamic Type sizes at the `.large` content size,
     /// used as the reference size for `Font.custom(_:size:relativeTo:)` so
-    /// custom fonts still scale with accessibility settings. Includes the
-    /// iOS 17 / macOS 14 `extraLargeTitle{,2}` styles even though the app
-    /// doesn't currently use them — `baseSize(for:)`'s `17` fallback would
-    /// be visibly wrong if a future call site adopted them.
+    /// custom fonts still scale with accessibility settings.
     nonisolated private static let textStyleBaseSizes: [Font.TextStyle: CGFloat] = [
-        .extraLargeTitle: 36, .extraLargeTitle2: 28,
         .largeTitle: 34, .title: 28, .title2: 22, .title3: 20,
         .headline: 17, .body: 17, .callout: 16, .subheadline: 15,
         .footnote: 13, .caption: 12, .caption2: 11
