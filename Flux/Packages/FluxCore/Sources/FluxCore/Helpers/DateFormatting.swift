@@ -55,6 +55,18 @@ public enum DateFormatting {
         clock24hFormatter.string(from: date)
     }
 
+    private static let shortMonthDayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d"
+        formatter.timeZone = sydneyTimeZone
+        return formatter
+    }()
+
+    /// `"MMM d"` Sydney time (e.g. `"Apr 28"`).
+    public static func shortMonthDay(from date: Date) -> String {
+        shortMonthDayFormatter.string(from: date)
+    }
+
     public static func todayDateString(now: Date = .now) -> String {
         dayFormatter.string(from: now)
     }

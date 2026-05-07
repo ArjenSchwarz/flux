@@ -212,7 +212,7 @@ extension HistoryViewModel {
                     totals.addCompleteDay(
                         day,
                         parsedDate: parsedDate,
-                        dailyUsageEntry: isToday ? nil : usageEntry
+                        dailyUsageEntry: usageEntry
                     )
                 }
                 totals.considerSocLow(day: day, parsedDate: parsedDate)

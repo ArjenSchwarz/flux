@@ -14,7 +14,7 @@ enum HistoryStatsFormatters {
 
     /// "Apr 28" Sydney time.
     static func shortDate(from date: Date) -> String {
-        shortDateFormatter.string(from: date)
+        DateFormatting.shortMonthDay(from: date)
     }
 
     /// "Apr 26 at 06:14" Sydney time. `time` is the full ISO timestamp the
@@ -49,11 +49,4 @@ enum HistoryStatsFormatters {
         guard soc.isFinite else { return "no data" }
         return "\(Int(soc.rounded(.toNearestOrAwayFromZero))) percent"
     }
-
-    private static let shortDateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.timeZone = DateFormatting.sydneyTimeZone
-        formatter.dateFormat = "MMM d"
-        return formatter
-    }()
 }

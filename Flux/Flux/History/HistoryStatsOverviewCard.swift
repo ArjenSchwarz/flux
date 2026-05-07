@@ -126,7 +126,7 @@ extension HistoryStatsOverviewCard {
             return summary.lowestSocDay.map {
                 HistoryStatsFormatters.dateWithTime(from: $0.date, time: $0.socLowTime)
             }
-        default:
+        case .totalUsage, .totalSolar, .exported, .peakImports, .avgNight:
             return nil
         }
     }
@@ -136,7 +136,8 @@ extension HistoryStatsOverviewCard {
         case .mostUsage: return summary.mostUsageDay != nil
         case .mostSolar: return summary.mostSolarDay != nil
         case .lowestSoc: return summary.lowestSocDay != nil
-        default: return false
+        case .totalUsage, .totalSolar, .exported, .peakImports, .avgNight:
+            return false
         }
     }
 
@@ -150,7 +151,8 @@ extension HistoryStatsOverviewCard {
         case .mostUsage: dayID = summary.mostUsageDay?.dayID
         case .mostSolar: dayID = summary.mostSolarDay?.dayID
         case .lowestSoc: dayID = summary.lowestSocDay?.dayID
-        default: dayID = nil
+        case .totalUsage, .totalSolar, .exported, .peakImports, .avgNight:
+            dayID = nil
         }
         guard let dayID else { return nil }
         return { onSelect(dayID) }
@@ -200,7 +202,7 @@ extension HistoryStatsOverviewCard {
     private static func isRecordTile(_ tile: TileKey) -> Bool {
         switch tile {
         case .mostUsage, .mostSolar, .lowestSoc: return true
-        default: return false
+        case .totalUsage, .totalSolar, .exported, .peakImports, .avgNight: return false
         }
     }
 
