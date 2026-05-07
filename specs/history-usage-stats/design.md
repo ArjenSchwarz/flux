@@ -257,15 +257,14 @@ private struct StatTile: View {
 
 private struct DayRecordTile: View {
     let label: String
-    let value: String          // either a formatted value or "—"
-    let dateLine: String?      // "Apr 28" or "Apr 26 at 06:14" — nil when em-dash
-    let dayID: String?         // nil when em-dash → non-tappable
-    let onSelect: ((String) -> Void)?
-    var accessibilityValueOverride: String? = nil
+    let value: String                  // either a formatted value or "—"
+    let dateLine: String?              // "Apr 28" or "Apr 26 at 06:14" — nil when em-dash
+    let accessibilityLabelText: String
+    let tapAction: (() -> Void)?       // nil when em-dash → non-tappable
 }
 ```
 
-`DayRecordTile` wraps its content in a `Button` with `.buttonStyle(.plain)` only when `dayID != nil && onSelect != nil`. When em-dash, it renders the same content without a button wrapper, so VoiceOver does not expose the `.isButton` trait per AC 6.3 / 3.2.
+`HistoryStatsOverviewCard` composes `tapAction` from `dayID` + `onSelect` before passing it to the tile (`tapAction(for:summary:onSelect:)` static helper, returning nil when the record is missing). `DayRecordTile` wraps its content in a `Button` with `.buttonStyle(.plain)` only when `tapAction != nil`. When em-dash, it renders the same content without a button wrapper, so VoiceOver does not expose the `.isButton` trait per AC 6.3 / 3.2.
 
 #### Tile content layout
 

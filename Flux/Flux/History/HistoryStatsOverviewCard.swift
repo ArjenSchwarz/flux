@@ -194,8 +194,12 @@ extension HistoryStatsOverviewCard {
             return "\(label), \(HistoryStatsFormatters.accessibleKwh(record.kwh)), \(longDate(record.date))"
         case .lowestSoc:
             guard let record = summary.lowestSocDay else { return "\(label), no data" }
-            return "\(label), \(HistoryStatsFormatters.accessibleSocPercent(record.soc)), "
-                + longDateWithTime(date: record.date, time: record.socLowTime)
+            let parts = [
+                label,
+                HistoryStatsFormatters.accessibleSocPercent(record.soc),
+                longDateWithTime(date: record.date, time: record.socLowTime)
+            ].filter { !$0.isEmpty }
+            return parts.joined(separator: ", ")
         }
     }
 
