@@ -308,7 +308,7 @@ extension HistoryViewModel {
             dischargeTotal += day.eDischarge
             completeDayCount += 1
 
-            consider(
+            Self.consider(
                 &mostSolar,
                 candidate: DayKwhRecord(dayID: day.date, date: parsedDate, kwh: day.epv),
                 prefersLarger: true
@@ -322,7 +322,7 @@ extension HistoryViewModel {
                 dailyUsageKindSums[block.kind, default: 0] += block.totalKwh
             }
 
-            consider(
+            Self.consider(
                 &mostUsage,
                 candidate: DayKwhRecord(dayID: day.date, date: parsedDate, kwh: entry.stackedTotalKwh),
                 prefersLarger: true
@@ -338,7 +338,7 @@ extension HistoryViewModel {
         /// from the main loop unconditionally.
         mutating func considerSocLow(day: DayEnergy, parsedDate: Date) {
             guard let soc = day.socLow, soc.isFinite else { return }
-            consider(
+            Self.consider(
                 &lowestSoc,
                 candidate: LowestSocRecord(
                     dayID: day.date, date: parsedDate, soc: soc, socLowTime: day.socLowTime
@@ -347,7 +347,7 @@ extension HistoryViewModel {
             )
         }
 
-        private mutating func consider<T: DayRecordValue>(
+        private static func consider<T: DayRecordValue>(
             _ current: inout T?,
             candidate: T,
             prefersLarger: Bool

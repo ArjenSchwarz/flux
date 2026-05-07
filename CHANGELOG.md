@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- T-896 follow-up: `HistoryViewModel.Totals.consider(_:candidate:prefersLarger:)` is now a `static` helper instead of a `mutating` method on `Totals` — it never read or mutated `self`, so the mutation marker was misleading. Call sites updated to `Self.consider(...)`. `AppFontResolver.textStyleBaseSizes` drops the unused `.extraLargeTitle` / `.extraLargeTitle2` entries (and the comment justifying them); the app doesn't adopt those styles anywhere, so the speculative future-proofing was dead weight.
+
 ### Added
 
 - History Usage Stats (T-896): new "Period overview" card on the History screen renders eight stat tiles for the active 7/14/30-day range — Total usage, Total solar, Exported, Peak imports, Avg night, Most usage, Most solar, Lowest SoC. Day-record tiles (Most usage / Most solar / Lowest SoC) are tappable when populated and call `HistoryViewModel.selectDay` via the existing `(String) -> Void` plumbing; em-dash tiles are non-tappable. Layout is a `LazyVGrid` (2 columns on iOS compact, 4 on regular and macOS). Card chrome KPI shows the inclusive Sydney date range covered. Reuses existing `solarTotalKwh` / `exportTotalKwh` / `peakImportTotalKwh` / `dailyUsageTotalKwh` aggregates; four new aggregates (`nightTotalKwh` / `nightBlockDayCount` plus computed `nightAvgKwh`, `mostUsageDay`, `mostSolarDay`, `lowestSocDay`) are added to `PeriodSummary` in the same single-pass `Totals` accumulator with day-record tie-breaks selecting the most recent date. `HistoryCardChrome.kpi` becomes `String?` so the new card can hide the KPI when the response is empty. SoC display rounds half-up via `Int(soc.rounded(.toNearestOrAwayFromZero))` with a finiteness guard at both the aggregate boundary (`considerSocLow` skips non-finite payloads) and the formatter. New files: `Flux/Flux/History/HistoryStatsOverviewCard.swift`, `Flux/Flux/History/HistoryStatsFormatters.swift`, plus three test files. Mock fixtures extended to populate `offpeakGridImportKwh` / `offpeakGridExportKwh` / `socLow` / `socLowTime` so previews demonstrate every tile.
