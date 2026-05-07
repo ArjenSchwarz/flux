@@ -38,8 +38,10 @@ enum HistoryStatsFormatters {
     }
 
     /// "kilowatt hours" expansion of a kWh string for accessibility labels.
+    /// Threshold is `>= 99.95` (not `>= 100`) so values that `%.1f` would round
+    /// up to "100.0" — e.g. 99.95 — go through the integer path and read as "100".
     static func accessibleKwh(_ kwh: Double) -> String {
-        let format = kwh >= 100 ? "%.0f kilowatt hours" : "%.1f kilowatt hours"
+        let format = kwh >= 99.95 ? "%.0f kilowatt hours" : "%.1f kilowatt hours"
         return String(format: format, kwh)
     }
 

@@ -356,6 +356,9 @@ extension HistoryViewModel {
             let strictlyBeats = prefersLarger
                 ? candidate.comparableValue > existing.comparableValue
                 : candidate.comparableValue < existing.comparableValue
+            // Raw `Double` `==` is intentional here: `comparableValue` reflects
+            // wire values with no arithmetic applied between storage and tie-break,
+            // so an epsilon tolerance would mask real ties (Decision 10).
             let equal = candidate.comparableValue == existing.comparableValue
             if strictlyBeats || (equal && candidate.date > existing.date) {
                 current = candidate

@@ -6,6 +6,8 @@ struct HistoryStatsOverviewCard: View {
     let entries: [HistoryViewModel.SolarEntry]
     let onSelect: (String) -> Void
 
+    /// Case order is load-bearing: `ForEach(TileKey.allCases, …)` renders tiles
+    /// in declaration order. Reordering cases reorders the grid.
     enum TileKey: CaseIterable {
         case totalUsage
         case totalSolar
@@ -259,7 +261,6 @@ private struct DayRecordTile: View {
                 .buttonStyle(.plain)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(accessibilityLabelText)
-                .accessibilityAddTraits(.isButton)
                 .accessibilityHint(HistoryStatsOverviewCard.accessibilityHint)
         } else {
             content
@@ -284,7 +285,6 @@ private struct DayRecordTile: View {
                 .opacity(dateLine == nil ? 0 : 1)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .contentShape(Rectangle())
     }
 }
 

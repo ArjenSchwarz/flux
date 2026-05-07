@@ -282,6 +282,10 @@ struct HistoryViewModelOverviewTests {
 
     // MARK: - SoC fixtures
 
+    // Cohort (n) — `socPercent` half-up rounding boundaries — lives in
+    // `HistoryStatsFormattersTests` since it's a formatter concern, not a Totals
+    // accumulator concern. The (a)…(o) sequence intentionally skips (n) here.
+
     @Test("(o) socLow = NaN → lowestSocDay nil (isFinite guard)")
     func nanSocLowSkipped() {
         let nan = day(
