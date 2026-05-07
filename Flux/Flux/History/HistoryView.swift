@@ -73,6 +73,12 @@ struct HistoryView: View {
                         .flatMap { DateFormatting.parseDayDate($0.date) }
 
                     VStack(alignment: .leading, spacing: 16) {
+                        HistoryStatsOverviewCard(
+                            summary: derived.summary,
+                            entries: derived.solar,
+                            onSelect: selectDay
+                        )
+
                         HistorySolarCard(
                             entries: derived.solar,
                             summary: derived.summary,
