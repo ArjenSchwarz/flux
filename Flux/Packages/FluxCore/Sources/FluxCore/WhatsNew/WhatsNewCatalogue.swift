@@ -3,7 +3,7 @@ import Foundation
 public enum WhatsNewCatalogue {
     public static let releases: [WhatsNewRelease] = [
         WhatsNewRelease(
-            version: "1.1",
+            version: "1.0",
             date: dateOf(year: 2026, month: 5),
             highlights: [
                 Highlight(
