@@ -135,7 +135,10 @@ struct DashboardView: View {
                 lowestSOCTimestamp: (viewModel.status?.battery?.low24h?.timestamp)
                     .flatMap(DateFormatting.parseTimestamp),
                 offpeakBatteryDeltaPercent: viewModel.status?.offpeak?.batteryDeltaPercent,
-                showsOffpeakDelta: true
+                showsOffpeakDelta: true,
+                currentSOC: viewModel.status?.live?.soc,
+                capacityKwh: viewModel.status?.battery?.capacityKwh,
+                cutoffPercent: viewModel.status?.battery?.cutoffPercent
             )
         }
         .padding(.horizontal, FluxTheme.Metrics.screenHorizontalPadding)

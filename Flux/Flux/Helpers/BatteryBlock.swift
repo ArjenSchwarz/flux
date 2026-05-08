@@ -16,12 +16,22 @@ struct BatteryBlock: View {
     /// off-peak block's behaviour so the row stays visible before today's
     /// off-peak window has produced data.
     var showsOffpeakDelta: Bool = false
+    /// Live SOC, pack capacity, and cutoff threshold. When all three are
+    /// supplied (Dashboard only), a top "Energy left" row is rendered
+    /// showing usable kWh: `(soc − cutoff) / 100 × capacity`, clamped at 0.
+    /// Day Detail / History callsites omit these and the row is hidden.
+    var currentSOC: Double?
+    var capacityKwh: Double?
+    var cutoffPercent: Int?
 
     var body: some View {
         FluxPanel {
             VStack(spacing: 0) {
                 if let title {
                     FluxPanelHeader(label: title, right: trailing)
+                }
+                if let energyLeft = energyLeftKwh {
+                    FluxStatRow(label: "Energy left", value: EnergyFormatting.format(energyLeft))
                 }
                 FluxStatRow(label: "Battery cycle", value: cycleText)
                 FluxStatRow(
@@ -43,6 +53,14 @@ struct BatteryBlock: View {
 
     private var rendersOffpeakDelta: Bool {
         showsOffpeakDelta || offpeakBatteryDeltaPercent != nil
+    }
+
+    private var energyLeftKwh: Double? {
+        guard let soc = currentSOC,
+              let capacity = capacityKwh,
+              let cutoff = cutoffPercent,
+              capacity > 0 else { return nil }
+        return max(0, (soc - Double(cutoff)) / 100 * capacity)
     }
 
     private var offpeakDeltaText: String {

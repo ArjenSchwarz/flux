@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Dashboard "Energy left" row** (T-1163). The Dashboard's `BatteryBlock` now shows the usable kWh remaining at the current SOC: `(soc − cutoffPercent) / 100 × capacityKwh`, clamped at 0. The figure hits 0 at the same point as the existing "empty by HH:MM" hero subline. Day Detail / History callsites omit the new inputs so the row stays hidden where there is no live SOC.
+
 ### Changed
 
 - **Battery cutoff threshold lowered from 10% to 5%** to match a hardware-side change to the AlphaESS minimum discharge setting. The Lambda API's `cutoffPercent` constant and `battery.cutoffPercent` response field now report 5; the dashed cutoff line on the SOC and combined battery charts in Day Detail shifts down accordingly. The V1 product spec is updated to match.
