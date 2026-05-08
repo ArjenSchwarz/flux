@@ -8,14 +8,14 @@ references:
 
 ## Backend — derivedstats core
 
-- [ ] 1. Write tests for integratePpv returning (kwh, sampleCount) <!-- id:967mk7j -->
+- [x] 1. Write tests for integratePpv returning (kwh, sampleCount) <!-- id:967mk7j -->
   - File: internal/derivedstats/integrate_ppv_test.go (new)
   - Cases: empty readings; single reading inside window; >=2 readings inside window; gap >60s skipped; left-edge synthesis; right-edge synthesis; negative ppv clamped to zero
   - Each case asserts both kwh and sampleCount returns
   - Stream: 1
   - Requirements: [1.3](requirements.md#1.3)
 
-- [ ] 2. Implement integratePpv <!-- id:967mk7k -->
+- [x] 2. Implement integratePpv <!-- id:967mk7k -->
   - File: internal/derivedstats/integrate.go (or sibling integrate_ppv.go)
   - Signature: func integratePpv(readings []Reading, startUnix, endUnix int64) (kwh float64, sampleCount int)
   - Algorithm mirrors integratePload exactly — 60s pair-gap rule, edge synthesis, half-open [start, end), max(ppv, 0) clamping
@@ -24,7 +24,7 @@ references:
   - Stream: 1
   - Requirements: [1.3](requirements.md#1.3)
 
-- [ ] 3. Add property-based test for integratePpv split-additivity <!-- id:967mk7l -->
+- [x] 3. Add property-based test for integratePpv split-additivity <!-- id:967mk7l -->
   - File: internal/derivedstats/integrate_ppv_property_test.go (new)
   - pgregory.net/rapid generator: sorted readings with bounded inter-sample gap and a random split point b
   - Property: when no >60s gap straddles b and the integration domain is gap-free, integratePpv([a,c)) ~= integratePpv([a,b)) + integratePpv([b,c)) within float epsilon
@@ -32,13 +32,13 @@ references:
   - Stream: 1
   - Requirements: [1.3](requirements.md#1.3)
 
-- [ ] 4. Write tests for Blocks() SolarKwh emission per AC 4.1 cases <!-- id:967mk7m -->
+- [x] 4. Write tests for Blocks() SolarKwh emission per AC 4.1 cases <!-- id:967mk7m -->
   - File: internal/derivedstats/blocks_test.go (extend)
   - Cases: sunny day full readings; winter low-solar; reading gap inside daylight block; morning peak collapsed (no entry produced); in-progress today daylight block straddling now (clamped to elapsed portion); daylight block with no readings (nil); daylight block all-zero ppv readings >=1 sample (=> &0.0); daylight block single reading (sampleCount=1 + integration=0 => &0.0); night and evening always nil
   - Stream: 1
   - Requirements: [1.1](requirements.md#1.1), [1.2](requirements.md#1.2), [1.3](requirements.md#1.3), [1.4](requirements.md#1.4), [1.5](requirements.md#1.5)
 
-- [ ] 5. Extend pendingBlock and Blocks() to emit SolarKwh <!-- id:967mk7n -->
+- [x] 5. Extend pendingBlock and Blocks() to emit SolarKwh <!-- id:967mk7n -->
   - Files: internal/derivedstats/types.go, internal/derivedstats/blocks.go
   - Add SolarKwh *float64 with json tag solarKwh,omitempty to DailyUsageBlock
   - Add unroundedSolarKwh float64, solarSampled bool to pendingBlock

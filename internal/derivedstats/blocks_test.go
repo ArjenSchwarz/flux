@@ -830,6 +830,230 @@ func TestBuildDailyUsageBlock(t *testing.T) {
 
 func floatPtrTest(v float64) *float64 { return &v }
 
+func TestBlocks_SolarKwh(t *testing.T) {
+	const offpeakStart = "11:00"
+	const offpeakEnd = "14:00"
+	const pastDate = "2026-04-12"
+	const todayDate = "2026-04-15"
+
+	denseReadings := func(date string, sStart, sEnd int64, ppvFn func(modMin int) float64) []Reading {
+		dayStart, _ := time.ParseInLocation("2006-01-02", date, sydneyTZ)
+		var out []Reading
+		for s := sStart; s < sEnd; s += 30 {
+			ts := dayStart.Unix() + s
+			tt := time.Unix(ts, 0).In(sydneyTZ)
+			mod := tt.Hour()*60 + tt.Minute()
+			out = append(out, Reading{Timestamp: ts, Ppv: ppvFn(mod), Pload: 1000})
+		}
+		return out
+	}
+
+	sunnyDayReadings := denseReadings(pastDate, 0, 24*3600, func(mod int) float64 {
+		if mod >= 6*60+45 && mod < 18*60 {
+			return 1000
+		}
+		return 0
+	})
+
+	winterLowSolarReadings := denseReadings(pastDate, 0, 24*3600, func(mod int) float64 {
+		if mod >= 9*60 && mod < 15*60 {
+			return 200
+		}
+		return 0
+	})
+
+	gapInOffPeakReadings := func() []Reading {
+		dayStart, _ := time.ParseInLocation("2006-01-02", pastDate, sydneyTZ)
+		var out []Reading
+		gapStart := int64(12 * 3600)
+		gapEnd := int64(12*3600 + 5*60)
+		for s := int64(0); s < 24*3600; s += 30 {
+			if s >= gapStart && s < gapEnd {
+				continue
+			}
+			ts := dayStart.Unix() + s
+			tt := time.Unix(ts, 0).In(sydneyTZ)
+			mod := tt.Hour()*60 + tt.Minute()
+			ppv := 0.0
+			if mod >= 6*60+45 && mod < 18*60 {
+				ppv = 1000
+			}
+			out = append(out, Reading{Timestamp: ts, Ppv: ppv, Pload: 1000})
+		}
+		return out
+	}()
+
+	heavyFogReadings := denseReadings(pastDate, 0, 24*3600, func(mod int) float64 { return 0 })
+
+	todayMidMorningPeakReadings := denseReadings(todayDate, 0, 9*3600+30*60+1, func(mod int) float64 {
+		if mod >= 6*60+45 && mod < 18*60 {
+			return 800
+		}
+		return 0
+	})
+
+	overcastSparseReadings := []Reading{
+		readingPpv(pastDate, 0, 30, 0, 0, 800),
+		readingPpv(pastDate, 6, 0, 0, 0, 800),
+		readingPpv(pastDate, 12, 0, 0, 0, 800),
+		readingPpv(pastDate, 14, 30, 0, 0, 800),
+		readingPpv(pastDate, 18, 0, 0, 0, 800),
+		readingPpv(pastDate, 23, 0, 0, 0, 800),
+	}
+
+	tests := map[string]struct {
+		readings     []Reading
+		offpeakStart string
+		offpeakEnd   string
+		date         string
+		today        string
+		now          time.Time
+		check        func(t *testing.T, du *DailyUsage)
+	}{
+		"sunny day full readings: daylight non-nil with non-zero, night/evening nil": {
+			readings:     sunnyDayReadings,
+			offpeakStart: offpeakStart,
+			offpeakEnd:   offpeakEnd,
+			date:         pastDate,
+			today:        todayDate,
+			now:          time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ),
+			check: func(t *testing.T, du *DailyUsage) {
+				require.NotNil(t, du)
+				require.Len(t, du.Blocks, 5)
+				blocks := dailyUsageBlocksByKind(du)
+				for _, kind := range []string{
+					DailyUsageKindMorningPeak,
+					DailyUsageKindOffPeak,
+					DailyUsageKindAfternoonPeak,
+				} {
+					require.NotNil(t, blocks[kind].SolarKwh, "kind=%s SolarKwh should be non-nil", kind)
+					assert.Greater(t, *blocks[kind].SolarKwh, 0.0, "kind=%s SolarKwh should be positive", kind)
+				}
+				op := blocks[DailyUsageKindOffPeak]
+				require.NotNil(t, op.SolarKwh)
+				assert.InDelta(t, 3.0, *op.SolarKwh, 0.01, "off-peak ppv=1000W * 3h = 3 kWh")
+				assert.Nil(t, blocks[DailyUsageKindNight].SolarKwh)
+				assert.Nil(t, blocks[DailyUsageKindEvening].SolarKwh)
+			},
+		},
+		"winter low-solar day: daylight blocks emit small but non-nil values": {
+			readings:     winterLowSolarReadings,
+			offpeakStart: offpeakStart,
+			offpeakEnd:   offpeakEnd,
+			date:         pastDate,
+			today:        todayDate,
+			now:          time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ),
+			check: func(t *testing.T, du *DailyUsage) {
+				require.NotNil(t, du)
+				blocks := dailyUsageBlocksByKind(du)
+				op := blocks[DailyUsageKindOffPeak]
+				require.NotNil(t, op.SolarKwh)
+				assert.InDelta(t, 0.6, *op.SolarKwh, 0.01, "off-peak ppv=200W * 3h = 0.6 kWh")
+			},
+		},
+		"reading gap inside off-peak: integral skips gap, block still emits non-nil": {
+			readings:     gapInOffPeakReadings,
+			offpeakStart: offpeakStart,
+			offpeakEnd:   offpeakEnd,
+			date:         pastDate,
+			today:        todayDate,
+			now:          time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ),
+			check: func(t *testing.T, du *DailyUsage) {
+				require.NotNil(t, du)
+				blocks := dailyUsageBlocksByKind(du)
+				op := blocks[DailyUsageKindOffPeak]
+				require.NotNil(t, op.SolarKwh, "samples present so non-nil")
+				assert.Less(t, *op.SolarKwh, 3.0, "5-min gap reduces total below the no-gap 3 kWh")
+				assert.Greater(t, *op.SolarKwh, 2.5)
+			},
+		},
+		"in-progress today daylight straddling now: clamped, SolarKwh reflects elapsed portion": {
+			readings:     todayMidMorningPeakReadings,
+			offpeakStart: offpeakStart,
+			offpeakEnd:   offpeakEnd,
+			date:         todayDate,
+			today:        todayDate,
+			now:          time.Date(2026, 4, 15, 9, 30, 0, 0, sydneyTZ),
+			check: func(t *testing.T, du *DailyUsage) {
+				require.NotNil(t, du)
+				blocks := dailyUsageBlocksByKind(du)
+				mp, ok := blocks[DailyUsageKindMorningPeak]
+				require.True(t, ok)
+				require.NotNil(t, mp.SolarKwh, "in-progress block with samples should emit non-nil")
+				assert.InDelta(t, 2.2, *mp.SolarKwh, 0.05, "06:45→09:30 with ppv=800W = 2.2 kWh")
+			},
+		},
+		"no readings at all: daylight blocks SolarKwh nil": {
+			readings:     nil,
+			offpeakStart: offpeakStart,
+			offpeakEnd:   offpeakEnd,
+			date:         "2099-01-01",
+			today:        todayDate,
+			now:          time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ),
+			check: func(t *testing.T, du *DailyUsage) {
+				require.NotNil(t, du)
+				require.Len(t, du.Blocks, 5)
+				blocks := dailyUsageBlocksByKind(du)
+				assert.Nil(t, blocks[DailyUsageKindMorningPeak].SolarKwh)
+				assert.Nil(t, blocks[DailyUsageKindOffPeak].SolarKwh)
+				assert.Nil(t, blocks[DailyUsageKindAfternoonPeak].SolarKwh)
+			},
+		},
+		"all-zero ppv dense readings: SolarKwh is &0.0 on daylight blocks": {
+			readings:     heavyFogReadings,
+			offpeakStart: offpeakStart,
+			offpeakEnd:   offpeakEnd,
+			date:         pastDate,
+			today:        todayDate,
+			now:          time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ),
+			check: func(t *testing.T, du *DailyUsage) {
+				require.NotNil(t, du)
+				require.Len(t, du.Blocks, 5)
+				blocks := dailyUsageBlocksByKind(du)
+				for _, kind := range []string{
+					DailyUsageKindMorningPeak,
+					DailyUsageKindOffPeak,
+					DailyUsageKindAfternoonPeak,
+				} {
+					require.NotNil(t, blocks[kind].SolarKwh, "kind=%s should be &0.0 not nil", kind)
+					assert.InDelta(t, 0.0, *blocks[kind].SolarKwh, 1e-9, "kind=%s should be 0.0", kind)
+				}
+				assert.Nil(t, blocks[DailyUsageKindNight].SolarKwh)
+				assert.Nil(t, blocks[DailyUsageKindEvening].SolarKwh)
+			},
+		},
+		"single sparse reading inside off-peak: SolarKwh is &0.0 (sampleCount=1, integration=0)": {
+			readings:     overcastSparseReadings,
+			offpeakStart: offpeakStart,
+			offpeakEnd:   offpeakEnd,
+			date:         pastDate,
+			today:        todayDate,
+			now:          time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ),
+			check: func(t *testing.T, du *DailyUsage) {
+				require.NotNil(t, du)
+				require.Len(t, du.Blocks, 5)
+				blocks := dailyUsageBlocksByKind(du)
+				assert.Nil(t, blocks[DailyUsageKindMorningPeak].SolarKwh, "no readings inside [sunrise, 11:00)")
+				op := blocks[DailyUsageKindOffPeak]
+				require.NotNil(t, op.SolarKwh, "single reading at 12:00 inside off-peak → &0.0")
+				assert.InDelta(t, 0.0, *op.SolarKwh, 1e-9)
+				ap := blocks[DailyUsageKindAfternoonPeak]
+				require.NotNil(t, ap.SolarKwh, "single reading at 14:30 inside afternoonPeak → &0.0")
+				assert.InDelta(t, 0.0, *ap.SolarKwh, 1e-9)
+				assert.Nil(t, blocks[DailyUsageKindNight].SolarKwh)
+				assert.Nil(t, blocks[DailyUsageKindEvening].SolarKwh)
+			},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := Blocks(tc.readings, tc.offpeakStart, tc.offpeakEnd, tc.date, tc.today, tc.now)
+			tc.check(t, got)
+		})
+	}
+}
+
 func BenchmarkBlocks(b *testing.B) {
 	dayStart := time.Date(2026, 4, 15, 0, 0, 0, 0, sydneyTZ)
 	readings := make([]Reading, 0, 8640)

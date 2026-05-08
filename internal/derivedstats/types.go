@@ -55,6 +55,7 @@ type DailyUsageBlock struct {
 	Start             string   `json:"start"`
 	End               string   `json:"end"`
 	TotalKwh          float64  `json:"totalKwh"`
+	SolarKwh          *float64 `json:"solarKwh,omitempty"`
 	AverageKwhPerHour *float64 `json:"averageKwhPerHour,omitempty"`
 	PercentOfDay      int      `json:"percentOfDay"`
 	Status            string   `json:"status"`
