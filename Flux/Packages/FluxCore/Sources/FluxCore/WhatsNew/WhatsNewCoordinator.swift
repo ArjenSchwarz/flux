@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 public struct WhatsNewCoordinator: Sendable {
     public enum AutoDecision: Equatable, Sendable {
@@ -41,14 +42,26 @@ public struct WhatsNewCoordinator: Sendable {
     public var canonicalInstalledVersion: String { installedString }
 
     /// Build a coordinator from the running app's bundle and shared defaults.
-    /// Returns nil if `CFBundleShortVersionString` is missing or unparseable.
+    ///
+    /// Returns `nil` if `CFBundleShortVersionString` is missing or unparseable.
+    /// Call sites should treat `nil` as "skip the What's New flow this launch"
+    /// — a misconfigured bundle is the only way to hit it, and there is no
+    /// recovery path the caller can take. A debug log line is emitted so a
+    /// silent skip in the field can be traced via Console.app rather than
+    /// looking like the feature stopped working.
     public static func forCurrentInstall(
         bundle: Bundle = .main,
         defaults: UserDefaults = .fluxAppGroup,
         catalogue: [WhatsNewRelease] = WhatsNewCatalogue.releases
     ) -> WhatsNewCoordinator? {
-        guard let raw = bundle.infoDictionary?["CFBundleShortVersionString"] as? String,
-              let installed = WhatsNewVersion(raw) else { return nil }
+        guard let raw = bundle.infoDictionary?["CFBundleShortVersionString"] as? String else {
+            Self.logger.debug("forCurrentInstall: CFBundleShortVersionString missing — skipping")
+            return nil
+        }
+        guard let installed = WhatsNewVersion(raw) else {
+            Self.logger.debug("forCurrentInstall: CFBundleShortVersionString \(raw, privacy: .public) unparseable — skipping")
+            return nil
+        }
         return WhatsNewCoordinator(
             catalogue: catalogue,
             installed: installed,
@@ -56,6 +69,8 @@ public struct WhatsNewCoordinator: Sendable {
             hasAnyFluxPref: defaults.hasAnyFluxPreferenceWritten
         )
     }
+
+    private static let logger = Logger(subsystem: "eu.arjen.flux", category: "whats-new")
 
     public func autoDecision() -> AutoDecision {
         let effective: WhatsNewVersion

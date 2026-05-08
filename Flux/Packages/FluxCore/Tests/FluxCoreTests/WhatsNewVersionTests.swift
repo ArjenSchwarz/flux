@@ -20,6 +20,14 @@ struct WhatsNewVersionTests {
     }
 
     @Test
+    func singleComponentEqualsTwoComponentWhenTrailingZero() throws {
+        let v1 = try #require(WhatsNewVersion("1"))
+        let v10 = try #require(WhatsNewVersion("1.0"))
+        #expect(v1 == v10)
+        #expect(v10 == v1)
+    }
+
+    @Test
     func majorBumpBeatsLargeMinor() throws {
         let v20 = try #require(WhatsNewVersion("2.0"))
         let v199 = try #require(WhatsNewVersion("1.99"))

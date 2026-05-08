@@ -90,6 +90,22 @@ struct WhatsNewCoordinatorTests {
     }
 
     @Test
+    func downgradeWithInRangeEntryStillSkips() {
+        // installed=1.1 < lastSeen=1.2. The 1.1 entry would otherwise satisfy
+        // version > effective(1.0) and version <= installed, but the
+        // installed > effective guard exits early before the range filter runs.
+        let r10 = release("1.0")
+        let r11 = release("1.1")
+        let coord = WhatsNewCoordinator(
+            catalogue: [r10, r11],
+            installed: installed("1.1"),
+            lastSeen: "1.2",
+            hasAnyFluxPref: true
+        )
+        #expect(coord.autoDecision() == .skip)
+    }
+
+    @Test
     func downgradeReturnsSkip() {
         let coord = WhatsNewCoordinator(
             catalogue: [release("1.1")],
