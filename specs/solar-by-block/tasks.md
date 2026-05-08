@@ -155,7 +155,7 @@ references:
 
 ## Cross-cutting
 
-- [ ] 18. Document UpdateDailyEnergyDerived as the sole writer for dailyUsage outside the backfill CLI <!-- id:967mk80 -->
+- [x] 18. Document UpdateDailyEnergyDerived as the sole writer for dailyUsage outside the backfill CLI <!-- id:967mk80 -->
   - File: internal/dynamo/dynamostore.go
   - One-line invariant comment near UpdateDailyEnergyDerived noting it is the only write path for the dailyUsage attribute outside the cmd/backfill-solar CLI
   - Blocked-by: 967mk7p (Add SolarKwh field to DailyUsageBlockAttr and copy in both converters)
