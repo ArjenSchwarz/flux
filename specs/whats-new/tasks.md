@@ -6,7 +6,7 @@ references:
 ---
 # What's New (T-1112) — Implementation Tasks
 
-- [ ] 1. Add WhatsNew module skeleton — types and empty catalogue <!-- id:3sn0opc -->
+- [x] 1. Add WhatsNew module skeleton — types and empty catalogue <!-- id:3sn0opc -->
   - Create directory Flux/Packages/FluxCore/Sources/FluxCore/WhatsNew/
   - Create WhatsNewRelease.swift containing WhatsNewRelease (Identifiable + Hashable + Sendable) and Highlight (Hashable + Sendable, with nested Category enum exposing a label property: New / Improved / Fixed)
   - Create WhatsNewCatalogue.swift with public enum WhatsNewCatalogue { public static let releases: [WhatsNewRelease] = [] }
@@ -15,7 +15,7 @@ references:
   - Requirements: [1.1](requirements.md#1.1), [1.2](requirements.md#1.2)
   - References: design.md
 
-- [ ] 2. Write WhatsNewVersion tests (red) <!-- id:3sn0opd -->
+- [x] 2. Write WhatsNewVersion tests (red) <!-- id:3sn0opd -->
   - Create FluxCoreTests/WhatsNewVersionTests.swift using Swift Testing
   - Cover: 1.10 > 1.9; 1.2 == 1.2.0 and 1.2.0 == 1.2; 2.0 > 1.99
   - WhatsNewVersion("1.x") and WhatsNewVersion("") return nil
@@ -25,7 +25,7 @@ references:
   - Requirements: [1.3](requirements.md#1.3)
   - References: design.md
 
-- [ ] 3. Implement WhatsNewVersion (green) <!-- id:3sn0ope -->
+- [x] 3. Implement WhatsNewVersion (green) <!-- id:3sn0ope -->
   - Create Flux/Packages/FluxCore/Sources/FluxCore/WhatsNew/WhatsNewVersion.swift
   - Failable init from String parses dot-separated integer components; returns nil if any component fails Int parsing
   - Comparable: right-pad shorter component array with zeros for both equality and ordering, so 1.2 == 1.2.0
@@ -35,7 +35,7 @@ references:
   - Requirements: [1.3](requirements.md#1.3)
   - References: design.md
 
-- [ ] 4. Write WhatsNewCoordinator tests (red) <!-- id:3sn0opf -->
+- [x] 4. Write WhatsNewCoordinator tests (red) <!-- id:3sn0opf -->
   - Create FluxCoreTests/WhatsNewCoordinatorTests.swift
   - Parameterised tests covering every row of the design.md decision table
   - Fresh install (lastSeen=nil, hasAnyFluxPref=false) → silentSet(installed)
@@ -55,7 +55,7 @@ references:
   - Requirements: [1.4](requirements.md#1.4), [2.2](requirements.md#2.2), [2.4](requirements.md#2.4), [2.5](requirements.md#2.5), [2.6](requirements.md#2.6), [2.7](requirements.md#2.7), [2.8](requirements.md#2.8), [3.2](requirements.md#3.2), [3.3](requirements.md#3.3)
   - References: design.md, decision_log.md
 
-- [ ] 5. Implement WhatsNewCoordinator (green) <!-- id:3sn0opg -->
+- [x] 5. Implement WhatsNewCoordinator (green) <!-- id:3sn0opg -->
   - Create Flux/Packages/FluxCore/Sources/FluxCore/WhatsNew/WhatsNewCoordinator.swift
   - Pure value type, Sendable, no I/O
   - Init takes catalogue: [WhatsNewRelease], installed: WhatsNewVersion, lastSeen: String?, hasAnyFluxPref: Bool
@@ -68,7 +68,7 @@ references:
   - Requirements: [1.4](requirements.md#1.4), [2.2](requirements.md#2.2), [2.4](requirements.md#2.4), [2.5](requirements.md#2.5), [2.6](requirements.md#2.6), [2.7](requirements.md#2.7), [2.8](requirements.md#2.8), [3.2](requirements.md#3.2)
   - References: design.md, decision_log.md
 
-- [ ] 6. Write UserDefaults+Settings tests for new properties (red) <!-- id:3sn0oph -->
+- [x] 6. Write UserDefaults+Settings tests for new properties (red) <!-- id:3sn0oph -->
   - Use a transient UserDefaults instance via init(suiteName:) per test with a unique suite name; removePersistentDomain at teardown
   - Test lastSeenWhatsNewVersion getter returns nil by default and round-trips a written value
   - Test hasAnyFluxPreferenceWritten returns false on a clean instance, true after writing any one of the five known keys (apiURLKey, themeIdentifierKey, appFontFamilyKey, loadAlertThresholdKey, widgetUsesSymbolsKey)
@@ -77,7 +77,7 @@ references:
   - Requirements: [2.4](requirements.md#2.4), [2.5](requirements.md#2.5), [5.2](requirements.md#5.2)
   - References: design.md
 
-- [ ] 7. Extend UserDefaults+Settings.swift (green) <!-- id:3sn0opi -->
+- [x] 7. Extend UserDefaults+Settings.swift (green) <!-- id:3sn0opi -->
   - Edit Flux/Packages/FluxCore/Sources/FluxCore/Settings/UserDefaults+Settings.swift
   - Promote loadAlertThreshold and widgetUsesSymbols from the private Keys enum to public static let constants (loadAlertThresholdKey, widgetUsesSymbolsKey) alongside the existing apiURLKey/themeIdentifierKey/appFontFamilyKey
   - Update existing computed properties that previously used Keys.loadAlertThreshold / Keys.widgetUsesSymbols to reference the new public constants
@@ -88,7 +88,7 @@ references:
   - Requirements: [2.4](requirements.md#2.4), [2.5](requirements.md#2.5), [5.2](requirements.md#5.2)
   - References: design.md, decision_log.md
 
-- [ ] 8. Write WhatsNewSheet smoke test (red) <!-- id:3sn0opj -->
+- [x] 8. Write WhatsNewSheet smoke test (red) <!-- id:3sn0opj -->
   - Create FluxCoreTests/WhatsNewSheetTests.swift using Swift Testing
   - Construct WhatsNewSheet with three fixtures: multi-release stacked, single-release, single-release with no detail strings
   - Wrap in UIHostingController on iOS / NSHostingController on macOS to assert the body evaluates without crashing
@@ -98,7 +98,7 @@ references:
   - Requirements: [4.1](requirements.md#4.1), [4.2](requirements.md#4.2), [4.6](requirements.md#4.6)
   - References: design.md
 
-- [ ] 9. Implement WhatsNewSheet view (green) <!-- id:3sn0opk -->
+- [x] 9. Implement WhatsNewSheet view (green) <!-- id:3sn0opk -->
   - Create Flux/Packages/FluxCore/Sources/FluxCore/WhatsNew/WhatsNewSheet.swift
   - NavigationStack { ScrollView { ForEach release ReleaseSection } } with Done ToolbarItem(.confirmationAction)
   - Group highlights per release by Category in fixed order: new → improved → fixed
@@ -113,7 +113,7 @@ references:
   - Requirements: [4.1](requirements.md#4.1), [4.2](requirements.md#4.2), [4.3](requirements.md#4.3), [4.4](requirements.md#4.4), [4.5](requirements.md#4.5), [4.6](requirements.md#4.6), [6.1](requirements.md#6.1), [6.2](requirements.md#6.2), [6.3](requirements.md#6.3)
   - References: design.md
 
-- [ ] 10. Wire AppNavigationView auto-presentation <!-- id:3sn0opl -->
+- [x] 10. Wire AppNavigationView auto-presentation <!-- id:3sn0opl -->
   - Edit Flux/Flux/Navigation/AppNavigationView.swift
   - Add @State private var pendingAuto: PendingAutoPresentation? = nil and @State private var didEvaluateAutoPresentation = false
   - Add .task { ... } that early-returns when didEvaluateAutoPresentation is true; otherwise sets it true and runs the auto-decision flow
@@ -126,7 +126,7 @@ references:
   - Requirements: [2.1](requirements.md#2.1), [2.2](requirements.md#2.2), [2.3](requirements.md#2.3), [2.4](requirements.md#2.4), [2.5](requirements.md#2.5), [2.6](requirements.md#2.6), [2.7](requirements.md#2.7), [2.8](requirements.md#2.8), [2.9](requirements.md#2.9), [5.1](requirements.md#5.1)
   - References: design.md
 
-- [ ] 11. Wire SettingsView manual access row <!-- id:3sn0opm -->
+- [x] 11. Wire SettingsView manual access row <!-- id:3sn0opm -->
   - Edit Flux/Flux/Settings/SettingsView.swift
   - Compute let manualLatest = WhatsNewCoordinator(...).manualLatest() once in the body or via a helper; hide the row when nil (Decision 14)
   - iOS branch: add Section(About) containing Button(Whats New) that flips @State private var showingManualWhatsNew = false
@@ -138,7 +138,7 @@ references:
   - Requirements: [3.1](requirements.md#3.1), [3.2](requirements.md#3.2), [3.3](requirements.md#3.3), [5.3](requirements.md#5.3)
   - References: design.md, decision_log.md
 
-- [ ] 12. Author the initial release entry in WhatsNewCatalogue <!-- id:3sn0opn -->
+- [x] 12. Author the initial release entry in WhatsNewCatalogue <!-- id:3sn0opn -->
   - Edit Flux/Packages/FluxCore/Sources/FluxCore/WhatsNew/WhatsNewCatalogue.swift
   - Add at least one WhatsNewRelease entry for the version that ships this feature (e.g. 1.1)
   - Each highlight has Category, title, optional detail; symbol may stay nil to use the default mapping

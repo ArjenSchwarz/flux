@@ -13,6 +13,9 @@ struct AppNavigationView: View {
     @State private var keychainService = KeychainService()
     @State private var apiClient: (any FluxAPIClient)?
     @State private var iosTab: FluxTab = .dashboard
+    @State private var pendingAuto: PendingAutoPresentation?
+    @State private var didEvaluateAutoPresentation = false
+    @State private var installedVersionString: String = ""
 
     @AppStorage(UserDefaults.appFontFamilyKey, store: .fluxAppGroup)
     private var appFontFamily: String = ""
@@ -58,6 +61,42 @@ struct AppNavigationView: View {
             .onReceive(NotificationCenter.default.publisher(for: .fluxCredentialsChanged)) { _ in
                 reloadDependencies()
             }
+            .task { evaluateWhatsNewAutoPresentation() }
+            .sheet(item: $pendingAuto, onDismiss: handleWhatsNewDismiss) { item in
+                WhatsNewSheet(releases: item.releases)
+            }
+    }
+
+    private func evaluateWhatsNewAutoPresentation() {
+        guard !didEvaluateAutoPresentation else { return }
+        didEvaluateAutoPresentation = true
+
+        guard let raw = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
+              let installed = WhatsNewVersion(raw) else { return }
+
+        installedVersionString = raw
+
+        let defaults = UserDefaults.fluxAppGroup
+        let coordinator = WhatsNewCoordinator(
+            catalogue: WhatsNewCatalogue.releases,
+            installed: installed,
+            lastSeen: defaults.lastSeenWhatsNewVersion,
+            hasAnyFluxPref: defaults.hasAnyFluxPreferenceWritten
+        )
+
+        switch coordinator.autoDecision() {
+        case .skip:
+            break
+        case .silentSet(let version):
+            defaults.lastSeenWhatsNewVersion = version
+        case .present(let releases):
+            pendingAuto = PendingAutoPresentation(releases: releases)
+        }
+    }
+
+    private func handleWhatsNewDismiss() {
+        guard !installedVersionString.isEmpty else { return }
+        UserDefaults.fluxAppGroup.lastSeenWhatsNewVersion = installedVersionString
     }
 
     @ViewBuilder
