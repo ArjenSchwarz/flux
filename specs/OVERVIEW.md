@@ -17,6 +17,7 @@
 | [History Daily Usage](#history-daily-usage) | 2026-04-30 | Done | New History card rendering one stacked bar per day across the five chronological blocks (Night, Morning Peak, Off-Peak, Afternoon Peak, Evening) over the 7/14/30-day range, plus a fix to the cache upsert path so derived fields backfill on already-cached rows with observability on unexpected nil-overwrites. UI-only consumer of the data shipped by Daily Derived Stats. |
 | [macOS App](#macos-app) | 2026-05-01 | Done | Native macOS 26+ build of Flux (no Catalyst, no Designed-for-iPad). Adds dedicated Settings scene, menu commands (⌘R, ←/→), single main window that quits on close, refresh tiers via `appearsActive`, iCloud Keychain + `NSUbiquitousKeyValueStore` credential sync (no migrator), and a macOS Control Center widget alongside the existing home-screen widgets. iOS scenePhase pause preserved unchanged. T-1081. |
 | [History Usage Stats](#history-usage-stats) | 2026-05-07 | Done | New "Period overview" card on the History screen with eight tiles for the active 7/14/30-day range: Total usage, Total solar, Exported, Peak imports, Avg night, Most usage, Most solar, Lowest SoC. Day-record tiles tap-select the day across the existing chart cards. UI-only; reuses existing `/history` data. T-896. |
+| [What's New](#whats-new) | 2026-05-08 | Done | User-friendly "What's New" sheet auto-presented after a `MARKETING_VERSION` bump and reachable from Settings, distinct from the engineering `CHANGELOG.md`. Hand-authored Swift catalogue in `FluxCore`, per-device app-group `UserDefaults` last-seen tracking with a `"1.0"` seed for pre-feature upgrades. iOS + macOS. T-1112. |
 
 ---
 
@@ -163,3 +164,13 @@ New "Period overview" card on the History screen rendering eight stat tiles for 
 - [design.md](history-usage-stats/design.md)
 - [requirements.md](history-usage-stats/requirements.md)
 - [tasks.md](history-usage-stats/tasks.md)
+
+## What's New
+
+User-friendly "What's New" sheet shown to non-technical users after an app update, distinct from the engineering `CHANGELOG.md`. Auto-presents on first launch after a `CFBundleShortVersionString` bump and is reachable from Settings on both iOS and macOS. Release entries are hand-authored as a typed Swift catalogue in `FluxCore` (`WhatsNew/`); a pure `WhatsNewCoordinator` value type maps inputs (catalogue, installed version, last-seen, has-other-prefs) to one of `present`/`silentSet`/`skip`. Per-device app-group `UserDefaults` stores `lastSeenWhatsNewVersion`; pre-feature v1.0 upgrades are seeded with `"1.0"` so existing users see the v1.1 entry on first launch. Skip-version stacks newest-first; downgrade is a no-op; future-version entries are filtered. Optional per release. English-only; no localization wrapping. T-1112.
+
+- [decision_log.md](whats-new/decision_log.md)
+- [design.md](whats-new/design.md)
+- [prerequisites.md](whats-new/prerequisites.md)
+- [requirements.md](whats-new/requirements.md)
+- [tasks.md](whats-new/tasks.md)

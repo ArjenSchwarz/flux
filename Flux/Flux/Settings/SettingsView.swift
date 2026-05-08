@@ -1,9 +1,12 @@
+import FluxCore
 import SwiftUI
 
 @MainActor
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var viewModel: SettingsViewModel
+    @State private var showingManualWhatsNew = false
+    @State private var manualWhatsNewRelease: WhatsNewRelease?
     private let onSaved: @MainActor () -> Void
 
     init(viewModel: SettingsViewModel, onSaved: @escaping @MainActor () -> Void = {}) {
@@ -24,12 +27,20 @@ struct SettingsView: View {
             iOSForm
             #endif
         }
-        .onAppear { viewModel.loadExisting() }
+        .onAppear {
+            viewModel.loadExisting()
+            manualWhatsNewRelease = WhatsNewCoordinator.forCurrentInstall()?.manualLatest()
+        }
         .task { await viewModel.loadFontFamilies() }
         .onChange(of: viewModel.shouldDismiss) { _, shouldDismiss in
             if shouldDismiss {
                 onSaved()
                 dismiss()
+            }
+        }
+        .sheet(isPresented: $showingManualWhatsNew) {
+            if let release = manualWhatsNewRelease {
+                WhatsNewSheet(releases: [release])
             }
         }
     }
@@ -102,6 +113,12 @@ struct SettingsView: View {
                 Section {
                     Text(validationError)
                         .foregroundStyle(.red)
+                }
+            }
+
+            if manualWhatsNewRelease != nil {
+                Section("About") {
+                    Button("What's New") { showingManualWhatsNew = true }
                 }
             }
 
@@ -194,6 +211,17 @@ struct SettingsView: View {
                     .keyboardShortcut(.defaultAction)
                     .buttonStyle(.borderedProminent)
                     .disabled(viewModel.isValidating || hasMissingRequiredFields)
+                }
+
+                if manualWhatsNewRelease != nil {
+                    LiquidGlassSection(title: "About") {
+                        Grid(alignment: .leadingFirstTextBaseline,
+                             horizontalSpacing: 16, verticalSpacing: 14) {
+                            FormRow("", labelWidth: Self.labelWidth) {
+                                Button("What's New") { showingManualWhatsNew = true }
+                            }
+                        }
+                    }
                 }
 
                 #if DEBUG

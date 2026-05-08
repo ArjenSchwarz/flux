@@ -4,8 +4,6 @@ public enum SettingsSuiteMigrator {
     public static let currentVersion: Int = 2
 
     private static let versionKey = "settingsMigrationVersion"
-    private static let apiURLKey = "apiURL"
-    private static let thresholdKey = "loadAlertThreshold"
     /// Removed in version 2 — replaced by `appFontFamily`. The old enum
     /// rawValues (e.g. "geist") were not valid PostScript family names, so
     /// they couldn't be mapped to the new key — just clear them.
@@ -24,16 +22,16 @@ public enum SettingsSuiteMigrator {
         var changed = false
 
         if storedVersion < 1 {
-            if let apiURL = standard.string(forKey: apiURLKey),
-               suite.string(forKey: apiURLKey) == nil {
-                suite.set(apiURL, forKey: apiURLKey)
+            if let apiURL = standard.string(forKey: UserDefaults.apiURLKey),
+               suite.string(forKey: UserDefaults.apiURLKey) == nil {
+                suite.set(apiURL, forKey: UserDefaults.apiURLKey)
                 changed = true
             }
 
-            let standardThreshold = standard.double(forKey: thresholdKey)
+            let standardThreshold = standard.double(forKey: UserDefaults.loadAlertThresholdKey)
             if standardThreshold > 0,
-               suite.object(forKey: thresholdKey) == nil {
-                suite.set(standardThreshold, forKey: thresholdKey)
+               suite.object(forKey: UserDefaults.loadAlertThresholdKey) == nil {
+                suite.set(standardThreshold, forKey: UserDefaults.loadAlertThresholdKey)
                 changed = true
             }
         }

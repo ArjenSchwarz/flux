@@ -13,6 +13,9 @@ struct AppNavigationView: View {
     @State private var keychainService = KeychainService()
     @State private var apiClient: (any FluxAPIClient)?
     @State private var iosTab: FluxTab = .dashboard
+    @State private var pendingAuto: PendingAutoPresentation?
+    @State private var didEvaluateAutoPresentation = false
+    @State private var canonicalInstalledVersion: String = ""
 
     @AppStorage(UserDefaults.appFontFamilyKey, store: .fluxAppGroup)
     private var appFontFamily: String = ""
@@ -58,6 +61,32 @@ struct AppNavigationView: View {
             .onReceive(NotificationCenter.default.publisher(for: .fluxCredentialsChanged)) { _ in
                 reloadDependencies()
             }
+            .task { evaluateWhatsNewAutoPresentation() }
+            .sheet(item: $pendingAuto, onDismiss: handleWhatsNewDismiss) { item in
+                WhatsNewSheet(releases: item.releases)
+            }
+    }
+
+    private func evaluateWhatsNewAutoPresentation() {
+        guard !didEvaluateAutoPresentation else { return }
+        didEvaluateAutoPresentation = true
+
+        guard let coordinator = WhatsNewCoordinator.forCurrentInstall() else { return }
+        canonicalInstalledVersion = coordinator.canonicalInstalledVersion
+
+        switch coordinator.autoDecision() {
+        case .skip:
+            break
+        case .silentSet(let version):
+            UserDefaults.fluxAppGroup.lastSeenWhatsNewVersion = version
+        case .present(let releases):
+            pendingAuto = PendingAutoPresentation(releases: releases)
+        }
+    }
+
+    private func handleWhatsNewDismiss() {
+        guard !canonicalInstalledVersion.isEmpty else { return }
+        UserDefaults.fluxAppGroup.lastSeenWhatsNewVersion = canonicalInstalledVersion
     }
 
     @ViewBuilder
