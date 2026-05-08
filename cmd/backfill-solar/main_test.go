@@ -358,6 +358,17 @@ func TestBackfill_SkipsRowWithoutReadings(t *testing.T) {
 	assert.Equal(t, 1, res.RowsSkipped)
 }
 
+func TestValidateOpts_RejectsReversedDateRange(t *testing.T) {
+	loc := sydney(t)
+	opts := backfillOptsForTest(loc)
+	opts.from = "2026-04-20"
+	opts.to = "2026-04-10"
+
+	err := validateOpts(opts)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "after")
+}
+
 func TestBackfill_DailyEnergyQueryError_PropagatedAsFatal(t *testing.T) {
 	loc := sydney(t)
 	f := &fakeDynamo{

@@ -59,9 +59,13 @@ struct DayInFiveBlocksPanel: View {
                 Text(timeRange(block))
                     .appFont(FluxTheme.Typography.touTime)
                     .foregroundStyle(FluxTheme.Palette.tertiaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
                 Text(EnergyFormatting.format(block.totalKwh))
                     .appFont(FluxTheme.Typography.touValue)
                     .foregroundStyle(FluxTheme.Palette.primaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
                     .frame(minWidth: 50, alignment: .trailing)
                 if isDaylight(block.kind), let solar = block.solarKwh {
                     Image(systemName: "sun.max.fill")
@@ -69,6 +73,8 @@ struct DayInFiveBlocksPanel: View {
                     Text(EnergyFormatting.format(solar))
                         .appFont(FluxTheme.Typography.touValue)
                         .foregroundStyle(FluxTheme.Palette.primaryText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
                         .frame(minWidth: 50, alignment: .trailing)
                 }
             }

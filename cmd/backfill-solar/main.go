@@ -130,11 +130,16 @@ func validateOpts(o backfillOpts) error {
 	if o.offpeakStart == "" || o.offpeakEnd == "" {
 		return fmt.Errorf("--offpeak-start and --offpeak-end are required")
 	}
-	if _, err := time.ParseInLocation("2006-01-02", o.from, o.location); err != nil {
+	from, err := time.ParseInLocation("2006-01-02", o.from, o.location)
+	if err != nil {
 		return fmt.Errorf("invalid --from %q: %w", o.from, err)
 	}
-	if _, err := time.ParseInLocation("2006-01-02", o.to, o.location); err != nil {
+	to, err := time.ParseInLocation("2006-01-02", o.to, o.location)
+	if err != nil {
 		return fmt.Errorf("invalid --to %q: %w", o.to, err)
+	}
+	if from.After(to) {
+		return fmt.Errorf("--from %s is after --to %s", o.from, o.to)
 	}
 	return nil
 }
