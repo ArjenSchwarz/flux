@@ -50,7 +50,7 @@ references:
 
 ## Backend — DynamoDB persistence and converters
 
-- [ ] 6. Write tests for DailyUsageToAttr/FromAttr round-tripping SolarKwh <!-- id:967mk7o -->
+- [x] 6. Write tests for DailyUsageToAttr/FromAttr round-tripping SolarKwh <!-- id:967mk7o -->
   - Files: internal/dynamo/derived_conv_test.go (extend), internal/dynamo/derived_conv_property_test.go (extend)
   - Cases: nil SolarKwh round-trips to nil; non-nil round-trips to same value
   - Property generator emits SolarKwh as Maybe[float64]
@@ -58,7 +58,7 @@ references:
   - Stream: 1
   - Requirements: [2.1](requirements.md#2.1), [2.6](requirements.md#2.6)
 
-- [ ] 7. Add SolarKwh field to DailyUsageBlockAttr and copy in both converters <!-- id:967mk7p -->
+- [x] 7. Add SolarKwh field to DailyUsageBlockAttr and copy in both converters <!-- id:967mk7p -->
   - Files: internal/dynamo/models.go, internal/dynamo/derived_conv.go
   - Tag: dynamodbav:"solarKwh,omitempty"
   - DailyUsageFromAttr and DailyUsageToAttr each gain an explicit SolarKwh: b.SolarKwh, line in the loop body
@@ -66,7 +66,7 @@ references:
   - Stream: 1
   - Requirements: [2.1](requirements.md#2.1), [2.6](requirements.md#2.6)
 
-- [ ] 8. Update sizing test fixture to include SolarKwh on daylight blocks <!-- id:967mk7q -->
+- [x] 8. Update sizing test fixture to include SolarKwh on daylight blocks <!-- id:967mk7q -->
   - File: internal/dynamo/sizing_test.go
   - Populate SolarKwh on the three daylight blocks of the post-feature fixture
   - Re-assert size stays <4 KB

@@ -22,11 +22,17 @@ func genDailyUsage(t *rapid.T) *derivedstats.DailyUsage {
 			a := rapid.Float64Range(0.0, 100.0).Draw(t, fmt.Sprintf("avg%d", i))
 			avg = &a
 		}
+		var solar *float64
+		if rapid.Bool().Draw(t, fmt.Sprintf("hasSolar%d", i)) {
+			s := rapid.Float64Range(0.0, 50.0).Draw(t, fmt.Sprintf("solar%d", i))
+			solar = &s
+		}
 		blocks[i] = derivedstats.DailyUsageBlock{
 			Kind:              rapid.SampledFrom([]string{"night", "morningPeak", "offPeak", "afternoonPeak", "evening"}).Draw(t, fmt.Sprintf("kind%d", i)),
 			Start:             time.Date(2026, 4, 12, 0, 0, 0, 0, time.UTC).Format(time.RFC3339),
 			End:               time.Date(2026, 4, 12, 6, 0, 0, 0, time.UTC).Format(time.RFC3339),
 			TotalKwh:          rapid.Float64Range(0, 50).Draw(t, fmt.Sprintf("kwh%d", i)),
+			SolarKwh:          solar,
 			AverageKwhPerHour: avg,
 			PercentOfDay:      rapid.IntRange(0, 100).Draw(t, fmt.Sprintf("pct%d", i)),
 			Status:            rapid.SampledFrom([]string{"complete", "in-progress"}).Draw(t, fmt.Sprintf("status%d", i)),
@@ -68,6 +74,13 @@ func TestPropertyDailyUsageRoundTrip(t *testing.T) {
 			assert.Equal(t, d.Blocks[i].PercentOfDay, out.Blocks[i].PercentOfDay)
 			assert.Equal(t, d.Blocks[i].Status, out.Blocks[i].Status)
 			assert.Equal(t, d.Blocks[i].BoundarySource, out.Blocks[i].BoundarySource)
+			if d.Blocks[i].SolarKwh == nil {
+				assert.Nil(t, out.Blocks[i].SolarKwh)
+			} else {
+				if assert.NotNil(t, out.Blocks[i].SolarKwh) {
+					assert.InDelta(t, *d.Blocks[i].SolarKwh, *out.Blocks[i].SolarKwh, 1e-9)
+				}
+			}
 		}
 	})
 }
