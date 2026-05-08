@@ -107,7 +107,7 @@ references:
 
 ## Backfill CLI
 
-- [ ] 13. Write tests for backfill CLI (cmd/backfill-solar) <!-- id:967mk7v -->
+- [x] 13. Write tests for backfill CLI (cmd/backfill-solar) <!-- id:967mk7v -->
   - File: cmd/backfill-solar/main_test.go (new)
   - Dry-run prints intended writes without invoking UpdateItem
   - Live run writes once per row needing update; rows already populated are skipped (idempotency)
@@ -116,7 +116,7 @@ references:
   - Stream: 2
   - Requirements: [2.4](requirements.md#2.4), [2.5](requirements.md#2.5)
 
-- [ ] 14. Implement backfill CLI <!-- id:967mk7w -->
+- [x] 14. Implement backfill CLI <!-- id:967mk7w -->
   - File: cmd/backfill-solar/main.go (new)
   - Standalone main package; flags: --dry-run, --from, --to, --serial (or env)
   - Date parsing via time.ParseInLocation in sydneyTZ
