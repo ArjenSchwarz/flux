@@ -77,10 +77,10 @@ The formula and the cutoff value live in `FluxCore.BatteryEnergy` so:
   - Backend cutoff value — single change, asserted in `TestHandleStatusAllDataPresent`.
   - "Energy left" row on Dashboard — visible whenever `viewModel.status?.live?.soc` and `viewModel.status?.battery` are both non-nil; hidden otherwise.
   - Cutoff reference line on Day Detail SOC and combined battery charts — pulls from `BatteryEnergy.cutoffPercent`.
+  - `BatteryEnergyTests` covers the happy path, sub-cutoff clamp, zero capacity, negative capacity, and the exact-cutoff boundary.
   - V1 product spec updated to reflect the new threshold.
   - CHANGELOG entries (Changed for cutoff, Added for energy-left).
 - **Partially / not implemented (and intentionally so)**
-  - No new unit tests added for `BatteryEnergy.usableKwh`. The formula is a one-liner, the inputs are typed, and the clamp is the only branch — adding a test was judged disproportionate for the size of the change.
   - The `/day` response still does not include `BatteryInfo`. The Day Detail charts therefore can't show a per-day cutoff (which is fine — the cutoff doesn't change per-day). Documented above so a future change considering a per-day cutoff knows where to start.
   - Mock and widget-placeholder fixtures still reference `cutoffPercent: 10`. They're inputs to scoring or rendering tests, not assertions about production behaviour — left as-is.
 - **Missing**
