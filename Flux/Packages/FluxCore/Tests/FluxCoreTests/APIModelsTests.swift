@@ -471,6 +471,89 @@ struct APIModelsTests {
     }
 
     @Test
+    func decodeDailyUsageBlockWithSolarKwhPresent() throws {
+        let json = """
+        {
+          "kind": "offPeak",
+          "start": "2026-04-14T01:00:00Z",
+          "end": "2026-04-14T04:00:00Z",
+          "totalKwh": 5.0,
+          "solarKwh": 1.23,
+          "averageKwhPerHour": 1.67,
+          "percentOfDay": 30,
+          "status": "complete",
+          "boundarySource": "readings"
+        }
+        """
+
+        let block = try decoder.decode(DailyUsageBlock.self, from: Data(json.utf8))
+
+        #expect(block.solarKwh == 1.23)
+    }
+
+    @Test
+    func decodeDailyUsageBlockWithSolarKwhZero() throws {
+        let json = """
+        {
+          "kind": "offPeak",
+          "start": "2026-04-14T01:00:00Z",
+          "end": "2026-04-14T04:00:00Z",
+          "totalKwh": 5.0,
+          "solarKwh": 0.0,
+          "averageKwhPerHour": 1.67,
+          "percentOfDay": 30,
+          "status": "complete",
+          "boundarySource": "readings"
+        }
+        """
+
+        let block = try decoder.decode(DailyUsageBlock.self, from: Data(json.utf8))
+
+        #expect(block.solarKwh == 0.0)
+    }
+
+    @Test
+    func decodeDailyUsageBlockWithSolarKwhNull() throws {
+        let json = """
+        {
+          "kind": "offPeak",
+          "start": "2026-04-14T01:00:00Z",
+          "end": "2026-04-14T04:00:00Z",
+          "totalKwh": 5.0,
+          "solarKwh": null,
+          "averageKwhPerHour": 1.67,
+          "percentOfDay": 30,
+          "status": "complete",
+          "boundarySource": "readings"
+        }
+        """
+
+        let block = try decoder.decode(DailyUsageBlock.self, from: Data(json.utf8))
+
+        #expect(block.solarKwh == nil)
+    }
+
+    @Test
+    func decodeDailyUsageBlockWithSolarKwhAbsent() throws {
+        let json = """
+        {
+          "kind": "offPeak",
+          "start": "2026-04-14T01:00:00Z",
+          "end": "2026-04-14T04:00:00Z",
+          "totalKwh": 5.0,
+          "averageKwhPerHour": 1.67,
+          "percentOfDay": 30,
+          "status": "complete",
+          "boundarySource": "readings"
+        }
+        """
+
+        let block = try decoder.decode(DailyUsageBlock.self, from: Data(json.utf8))
+
+        #expect(block.solarKwh == nil)
+    }
+
+    @Test
     func timeSeriesPointIdentifiable() throws {
         let json = """
         {

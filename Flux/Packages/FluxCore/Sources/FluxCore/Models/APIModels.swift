@@ -312,6 +312,7 @@ public struct DailyUsageBlock: Codable, Sendable, Identifiable {
     public let start: String
     public let end: String
     public let totalKwh: Double
+    public let solarKwh: Double?
     public let averageKwhPerHour: Double?
     public let percentOfDay: Int
     public let status: Status
@@ -326,6 +327,7 @@ public struct DailyUsageBlock: Codable, Sendable, Identifiable {
         start: String,
         end: String,
         totalKwh: Double,
+        solarKwh: Double? = nil,
         averageKwhPerHour: Double?,
         percentOfDay: Int,
         status: Status,
@@ -335,6 +337,7 @@ public struct DailyUsageBlock: Codable, Sendable, Identifiable {
         self.start = start
         self.end = end
         self.totalKwh = totalKwh
+        self.solarKwh = solarKwh
         self.averageKwhPerHour = averageKwhPerHour
         self.percentOfDay = percentOfDay
         self.status = status

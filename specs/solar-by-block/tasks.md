@@ -128,7 +128,7 @@ references:
 
 ## iOS
 
-- [ ] 15. Add solarKwh: Double? to iOS DailyUsageBlock with default nil in init <!-- id:967mk7x -->
+- [x] 15. Add solarKwh: Double? to iOS DailyUsageBlock with default nil in init <!-- id:967mk7x -->
   - File: Flux/Packages/FluxCore/Sources/FluxCore/Models/APIModels.swift
   - Property declared after totalKwh, before averageKwhPerHour
   - Init signature adds solarKwh: Double? = nil parameter at the matching position so existing call sites compile unchanged
@@ -136,14 +136,14 @@ references:
   - Stream: 3
   - Requirements: [1.1](requirements.md#1.1), [2.6](requirements.md#2.6)
 
-- [ ] 16. Write decoder tests for solarKwh covering present, zero, null, absent <!-- id:967mk7y -->
+- [x] 16. Write decoder tests for solarKwh covering present, zero, null, absent <!-- id:967mk7y -->
   - File: Flux/Packages/FluxCore/Tests/FluxCoreTests/APIModelsTests.swift (extend)
   - Fixtures: solarKwh: 1.23 decodes to 1.23; solarKwh: 0.0 decodes to 0.0; solarKwh: null decodes to nil; key absent decodes to nil
   - Blocked-by: 967mk7x (Add solarKwh: Double? to iOS DailyUsageBlock with default nil in init)
   - Stream: 3
   - Requirements: [2.6](requirements.md#2.6), [3.4](requirements.md#3.4), [3.5](requirements.md#3.5)
 
-- [ ] 17. Update DayInFiveBlocksPanel to render solar inline on daylight rows <!-- id:967mk7z -->
+- [x] 17. Update DayInFiveBlocksPanel to render solar inline on daylight rows <!-- id:967mk7z -->
   - File: Flux/Flux/DayDetail/DayInFiveBlocksPanel.swift
   - In row(), on .morningPeak/.offPeak/.afternoonPeak only, append a sun icon (SF symbol sun.max.fill) tinted FluxTheme.Palette.amber + EnergyFormatting.format(block.solarKwh!) when solarKwh is non-nil
   - When solarKwh is nil, render no icon and no value (per 3.4)
