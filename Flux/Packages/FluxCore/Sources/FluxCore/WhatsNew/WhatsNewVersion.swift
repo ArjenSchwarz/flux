@@ -26,21 +26,21 @@ public struct WhatsNewVersion: Comparable, Hashable, Sendable {
         return false
     }
 
+    // Equality and hashing both treat trailing zeros as missing components, so
+    // `1.2 == 1.2.0` and they hash to the same bucket.
     public static func == (lhs: Self, rhs: Self) -> Bool {
-        let count = max(lhs.components.count, rhs.components.count)
-        for index in 0..<count {
-            let lhsValue = index < lhs.components.count ? lhs.components[index] : 0
-            let rhsValue = index < rhs.components.count ? rhs.components[index] : 0
-            if lhsValue != rhsValue { return false }
-        }
-        return true
+        Self.trim(lhs.components) == Self.trim(rhs.components)
     }
 
     public func hash(into hasher: inout Hasher) {
-        var trimmed = components
-        while trimmed.count > 1, trimmed.last == 0 {
-            trimmed.removeLast()
+        hasher.combine(Self.trim(components))
+    }
+
+    private static func trim(_ components: [Int]) -> [Int] {
+        var result = components
+        while result.count > 1, result.last == 0 {
+            result.removeLast()
         }
-        hasher.combine(trimmed)
+        return result
     }
 }

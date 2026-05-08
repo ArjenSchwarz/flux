@@ -35,6 +35,28 @@ public struct WhatsNewCoordinator: Sendable {
         self.hasAnyFluxPref = hasAnyFluxPref
     }
 
+    /// The canonical version string that `silentSet` will return and that the
+    /// dismiss-write site should persist. Single source of truth so auto and
+    /// manual call sites do not disagree on `1.1` vs `1.1.0` spelling.
+    public var canonicalInstalledVersion: String { installedString }
+
+    /// Build a coordinator from the running app's bundle and shared defaults.
+    /// Returns nil if `CFBundleShortVersionString` is missing or unparseable.
+    public static func forCurrentInstall(
+        bundle: Bundle = .main,
+        defaults: UserDefaults = .fluxAppGroup,
+        catalogue: [WhatsNewRelease] = WhatsNewCatalogue.releases
+    ) -> WhatsNewCoordinator? {
+        guard let raw = bundle.infoDictionary?["CFBundleShortVersionString"] as? String,
+              let installed = WhatsNewVersion(raw) else { return nil }
+        return WhatsNewCoordinator(
+            catalogue: catalogue,
+            installed: installed,
+            lastSeen: defaults.lastSeenWhatsNewVersion,
+            hasAnyFluxPref: defaults.hasAnyFluxPreferenceWritten
+        )
+    }
+
     public func autoDecision() -> AutoDecision {
         let effective: WhatsNewVersion
         if let lastSeen {

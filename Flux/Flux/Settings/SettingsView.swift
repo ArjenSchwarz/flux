@@ -6,6 +6,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var viewModel: SettingsViewModel
     @State private var showingManualWhatsNew = false
+    @State private var manualWhatsNewRelease: WhatsNewRelease?
     private let onSaved: @MainActor () -> Void
 
     init(viewModel: SettingsViewModel, onSaved: @escaping @MainActor () -> Void = {}) {
@@ -26,7 +27,10 @@ struct SettingsView: View {
             iOSForm
             #endif
         }
-        .onAppear { viewModel.loadExisting() }
+        .onAppear {
+            viewModel.loadExisting()
+            manualWhatsNewRelease = WhatsNewCoordinator.forCurrentInstall()?.manualLatest()
+        }
         .task { await viewModel.loadFontFamilies() }
         .onChange(of: viewModel.shouldDismiss) { _, shouldDismiss in
             if shouldDismiss {
@@ -44,18 +48,6 @@ struct SettingsView: View {
     private var hasMissingRequiredFields: Bool {
         viewModel.apiURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
             viewModel.apiToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    private var manualWhatsNewRelease: WhatsNewRelease? {
-        guard let raw = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
-              let installed = WhatsNewVersion(raw) else { return nil }
-        let defaults = UserDefaults.fluxAppGroup
-        return WhatsNewCoordinator(
-            catalogue: WhatsNewCatalogue.releases,
-            installed: installed,
-            lastSeen: defaults.lastSeenWhatsNewVersion,
-            hasAnyFluxPref: defaults.hasAnyFluxPreferenceWritten
-        ).manualLatest()
     }
 
     #if os(iOS)

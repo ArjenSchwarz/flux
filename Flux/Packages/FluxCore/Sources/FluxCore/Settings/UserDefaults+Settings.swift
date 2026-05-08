@@ -72,7 +72,7 @@ extension UserDefaults {
     /// True if any pre-existing Flux preference key has ever been written on
     /// this device. Used to distinguish a fresh install from a pre-feature
     /// upgrade in the What's New auto-presentation flow.
-    public var hasAnyFluxPreferenceWritten: Bool {
+    var hasAnyFluxPreferenceWritten: Bool {
         let known: [String] = [
             Self.apiURLKey,
             Self.themeIdentifierKey,

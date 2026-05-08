@@ -45,7 +45,9 @@ public enum WhatsNewCatalogue {
         components.year = year
         components.month = month
         components.day = 1
-        components.timeZone = TimeZone(identifier: "Australia/Sydney")
-        return Calendar(identifier: .gregorian).date(from: components) ?? Date(timeIntervalSince1970: 0)
+        guard let date = DateFormatting.sydneyCalendar.date(from: components) else {
+            fatalError("WhatsNewCatalogue: invalid date components year=\(year) month=\(month)")
+        }
+        return date
     }
 }

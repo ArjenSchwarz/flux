@@ -15,7 +15,7 @@ struct AppNavigationView: View {
     @State private var iosTab: FluxTab = .dashboard
     @State private var pendingAuto: PendingAutoPresentation?
     @State private var didEvaluateAutoPresentation = false
-    @State private var installedVersionString: String = ""
+    @State private var canonicalInstalledVersion: String = ""
 
     @AppStorage(UserDefaults.appFontFamilyKey, store: .fluxAppGroup)
     private var appFontFamily: String = ""
@@ -71,32 +71,22 @@ struct AppNavigationView: View {
         guard !didEvaluateAutoPresentation else { return }
         didEvaluateAutoPresentation = true
 
-        guard let raw = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
-              let installed = WhatsNewVersion(raw) else { return }
-
-        installedVersionString = raw
-
-        let defaults = UserDefaults.fluxAppGroup
-        let coordinator = WhatsNewCoordinator(
-            catalogue: WhatsNewCatalogue.releases,
-            installed: installed,
-            lastSeen: defaults.lastSeenWhatsNewVersion,
-            hasAnyFluxPref: defaults.hasAnyFluxPreferenceWritten
-        )
+        guard let coordinator = WhatsNewCoordinator.forCurrentInstall() else { return }
+        canonicalInstalledVersion = coordinator.canonicalInstalledVersion
 
         switch coordinator.autoDecision() {
         case .skip:
             break
         case .silentSet(let version):
-            defaults.lastSeenWhatsNewVersion = version
+            UserDefaults.fluxAppGroup.lastSeenWhatsNewVersion = version
         case .present(let releases):
             pendingAuto = PendingAutoPresentation(releases: releases)
         }
     }
 
     private func handleWhatsNewDismiss() {
-        guard !installedVersionString.isEmpty else { return }
-        UserDefaults.fluxAppGroup.lastSeenWhatsNewVersion = installedVersionString
+        guard !canonicalInstalledVersion.isEmpty else { return }
+        UserDefaults.fluxAppGroup.lastSeenWhatsNewVersion = canonicalInstalledVersion
     }
 
     @ViewBuilder
