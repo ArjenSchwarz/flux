@@ -30,4 +30,11 @@ struct BatteryEnergyTests {
     func usableKwhAtExactCutoffReturnsZero() {
         #expect(BatteryEnergy.usableKwh(soc: 5, capacityKwh: 13.34, cutoffPercent: 5) == 0)
     }
+
+    @Test
+    func usableKwhAtFullCharge() {
+        // (100 - 5) / 100 * 13.34 = 12.673
+        let result = BatteryEnergy.usableKwh(soc: 100, capacityKwh: 13.34, cutoffPercent: 5)
+        #expect(abs(result - 12.673) < 0.001)
+    }
 }

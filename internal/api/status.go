@@ -15,6 +15,7 @@ const (
 	// fallbackCapacityKwh is used when the system record is missing or cobat is 0.
 	fallbackCapacityKwh = 13.34
 	// cutoffPercent is the fixed battery cutoff threshold.
+	// Mirrored in iOS FluxCore/BatteryEnergy.swift — update both on hardware changes.
 	cutoffPercent = 5
 )
 
