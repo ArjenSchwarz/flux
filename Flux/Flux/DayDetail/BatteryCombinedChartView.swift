@@ -38,7 +38,7 @@ struct BatteryCombinedChartView: View {
                     .foregroundStyle(FluxTheme.Palette.tertiaryText)
                     .lineStyle(StrokeStyle(lineWidth: 0.5, dash: [3, 3]))
 
-                RuleMark(y: .value("Cutoff", 5))
+                RuleMark(y: .value("Cutoff", BatteryEnergy.cutoffPercent))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 3]))
                     .foregroundStyle(FluxTheme.Palette.grid.opacity(0.6))
 

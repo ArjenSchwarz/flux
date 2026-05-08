@@ -34,7 +34,7 @@ struct SOCChartView: View {
                     .foregroundStyle(.blue.opacity(0.3))
                 }
 
-                RuleMark(y: .value("Cutoff", 5))
+                RuleMark(y: .value("Cutoff", BatteryEnergy.cutoffPercent))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 3]))
                     .foregroundStyle(.red.opacity(0.6))
 

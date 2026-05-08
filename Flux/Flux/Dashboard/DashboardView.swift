@@ -136,13 +136,21 @@ struct DashboardView: View {
                     .flatMap(DateFormatting.parseTimestamp),
                 offpeakBatteryDeltaPercent: viewModel.status?.offpeak?.batteryDeltaPercent,
                 showsOffpeakDelta: true,
-                currentSOC: viewModel.status?.live?.soc,
-                capacityKwh: viewModel.status?.battery?.capacityKwh,
-                cutoffPercent: viewModel.status?.battery?.cutoffPercent
+                energyLeftKwh: energyLeftKwh
             )
         }
         .padding(.horizontal, FluxTheme.Metrics.screenHorizontalPadding)
         .padding(.bottom, FluxTheme.Metrics.screenBottomPadding)
+    }
+
+    private var energyLeftKwh: Double? {
+        guard let soc = viewModel.status?.live?.soc,
+              let battery = viewModel.status?.battery else { return nil }
+        return BatteryEnergy.usableKwh(
+            soc: soc,
+            capacityKwh: battery.capacityKwh,
+            cutoffPercent: battery.cutoffPercent
+        )
     }
 
     private var eyebrow: String {
