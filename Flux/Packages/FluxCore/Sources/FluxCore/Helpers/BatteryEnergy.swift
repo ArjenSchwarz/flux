@@ -8,9 +8,11 @@ public enum BatteryEnergy {
     /// discharging. Mirrors `cutoffPercent` in `internal/api/status.go`.
     public static let cutoffPercent: Int = 5
 
-    /// Usable kWh remaining at the given SOC, clamped at 0.
+    /// Usable kWh remaining at the given SOC, clamped at 0. The clamp also
+    /// covers a zero or negative `capacityKwh` — a missing system record on
+    /// the backend falls back to a sentinel; we just return 0 rather than
+    /// guarding it as a separate branch.
     public static func usableKwh(soc: Double, capacityKwh: Double, cutoffPercent: Int) -> Double {
-        guard capacityKwh > 0 else { return 0 }
-        return max(0, (soc - Double(cutoffPercent)) / 100 * capacityKwh)
+        max(0, (soc - Double(cutoffPercent)) / 100 * capacityKwh)
     }
 }

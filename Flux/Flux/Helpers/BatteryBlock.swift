@@ -16,9 +16,7 @@ struct BatteryBlock: View {
     /// off-peak block's behaviour so the row stays visible before today's
     /// off-peak window has produced data.
     var showsOffpeakDelta: Bool = false
-    /// Usable kWh remaining at the current SOC. Dashboard precomputes via
-    /// `BatteryEnergy.usableKwh(...)` and passes it here; Day Detail / History
-    /// callsites omit it and the row is hidden.
+    /// When non-nil, renders an "Energy left" row above "Battery cycle".
     var energyLeftKwh: Double?
 
     var body: some View {
