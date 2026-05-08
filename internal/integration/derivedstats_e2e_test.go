@@ -31,6 +31,7 @@ import (
 
 	"github.com/ArjenSchwarz/flux/internal/api"
 	"github.com/ArjenSchwarz/flux/internal/config"
+	"github.com/ArjenSchwarz/flux/internal/derivedstats"
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
 	"github.com/ArjenSchwarz/flux/internal/poller"
 )
@@ -154,6 +155,33 @@ func TestEndToEnd_DerivedStatsRoundTrip(t *testing.T) {
 	require.NotNil(t, row.SocLow, "SocLow must round-trip")
 	require.NotEmpty(t, row.DerivedStatsComputedAt, "sentinel must be written")
 
+	// SolarKwh round-trip: the synthetic readings carry Ppv=1500W all day, so
+	// every daylight block must persist a non-nil SolarKwh that survives
+	// MarshalMap→DynamoDB Local→Unmarshal. Night/evening must remain nil per
+	// Decision 1.
+	storedByKind := map[string]dynamo.DailyUsageBlockAttr{}
+	for _, b := range row.DailyUsage.Blocks {
+		storedByKind[b.Kind] = b
+	}
+	for _, kind := range []string{
+		derivedstats.DailyUsageKindMorningPeak,
+		derivedstats.DailyUsageKindOffPeak,
+		derivedstats.DailyUsageKindAfternoonPeak,
+	} {
+		b, ok := storedByKind[kind]
+		require.True(t, ok, "%s block must be in stored row", kind)
+		require.NotNil(t, b.SolarKwh, "%s SolarKwh must round-trip via DynamoDB Local", kind)
+		require.Greater(t, *b.SolarKwh, 0.0)
+	}
+	for _, kind := range []string{
+		derivedstats.DailyUsageKindNight,
+		derivedstats.DailyUsageKindEvening,
+	} {
+		if b, ok := storedByKind[kind]; ok {
+			require.Nil(t, b.SolarKwh, "%s block must not carry SolarKwh", kind)
+		}
+	}
+
 	// Verify the Lambda /day handler reads the row and surfaces the
 	// derivedStats sections to clients (read side of the AC 6.7 contract).
 	const apiToken = "test-token"
@@ -180,6 +208,21 @@ func TestEndToEnd_DerivedStatsRoundTrip(t *testing.T) {
 	require.NotNil(t, dayBody.Summary, "/day summary must include socLow")
 	require.NotNil(t, dayBody.Summary.SocLow, "summary.socLow must be populated from storage")
 
+	dayByKind := map[string]derivedstats.DailyUsageBlock{}
+	for _, b := range dayBody.DailyUsage.Blocks {
+		dayByKind[b.Kind] = b
+	}
+	for _, kind := range []string{
+		derivedstats.DailyUsageKindMorningPeak,
+		derivedstats.DailyUsageKindOffPeak,
+		derivedstats.DailyUsageKindAfternoonPeak,
+	} {
+		b, ok := dayByKind[kind]
+		require.True(t, ok, "/day must include %s block", kind)
+		require.NotNil(t, b.SolarKwh, "/day must surface SolarKwh on %s", kind)
+		require.InDelta(t, *storedByKind[kind].SolarKwh, *b.SolarKwh, 1e-9, "/day SolarKwh must match storage for %s", kind)
+	}
+
 	// Verify /history surfaces derivedStats per row.
 	historyResp, err := h.Handle(ctx, events.LambdaFunctionURLRequest{
 		QueryStringParameters: map[string]string{"days": "2"},
@@ -205,4 +248,19 @@ func TestEndToEnd_DerivedStatsRoundTrip(t *testing.T) {
 	require.NotNil(t, fixtureDay.DailyUsage, "/history past-date row must surface dailyUsage from storage")
 	require.NotEmpty(t, fixtureDay.DailyUsage.Blocks)
 	require.NotNil(t, fixtureDay.SocLow, "/history past-date row must surface flat socLow from storage")
+
+	historyByKind := map[string]derivedstats.DailyUsageBlock{}
+	for _, b := range fixtureDay.DailyUsage.Blocks {
+		historyByKind[b.Kind] = b
+	}
+	for _, kind := range []string{
+		derivedstats.DailyUsageKindMorningPeak,
+		derivedstats.DailyUsageKindOffPeak,
+		derivedstats.DailyUsageKindAfternoonPeak,
+	} {
+		b, ok := historyByKind[kind]
+		require.True(t, ok, "/history must include %s block", kind)
+		require.NotNil(t, b.SolarKwh, "/history must surface SolarKwh on %s", kind)
+		require.InDelta(t, *storedByKind[kind].SolarKwh, *b.SolarKwh, 1e-9, "/history SolarKwh must match storage for %s", kind)
+	}
 }

@@ -76,7 +76,7 @@ references:
 
 ## Backend — API and poller test coverage
 
-- [ ] 9. Extend day_derivedstats_test for solarKwh on daylight blocks <!-- id:967mk7r -->
+- [x] 9. Extend day_derivedstats_test for solarKwh on daylight blocks <!-- id:967mk7r -->
   - File: internal/api/day_derivedstats_test.go
   - Today path and past-day path both assert daylight blocks carry solarKwh
   - Night and evening blocks assert solarKwh is absent
@@ -84,21 +84,21 @@ references:
   - Stream: 1
   - Requirements: [1.1](requirements.md#1.1), [1.2](requirements.md#1.2), [2.6](requirements.md#2.6)
 
-- [ ] 10. Extend history test fixtures with SolarKwh <!-- id:967mk7s -->
+- [x] 10. Extend history test fixtures with SolarKwh <!-- id:967mk7s -->
   - Files: internal/api/history_bench_test.go, internal/api/history_derivedstats_test.go
   - Populate SolarKwh on daylight blocks in fixtures so coverage stays current
   - Blocked-by: 967mk7p (Add SolarKwh field to DailyUsageBlockAttr and copy in both converters)
   - Stream: 1
   - Requirements: [2.6](requirements.md#2.6)
 
-- [ ] 11. Extend poller summarisation test for SolarKwh persistence <!-- id:967mk7t -->
+- [x] 11. Extend poller summarisation test for SolarKwh persistence <!-- id:967mk7t -->
   - File: internal/poller/dailysummary_test.go
   - With synthetic ppv readings, assert daylight blocks in the resulting DailyUsageAttr carry SolarKwh values written via the existing UpdateDailyEnergyDerived path
   - Blocked-by: 967mk7p (Add SolarKwh field to DailyUsageBlockAttr and copy in both converters)
   - Stream: 1
   - Requirements: [2.2](requirements.md#2.2)
 
-- [ ] 12. Extend e2e integration test to assert SolarKwh round-trips through DynamoDB Local <!-- id:967mk7u -->
+- [x] 12. Extend e2e integration test to assert SolarKwh round-trips through DynamoDB Local <!-- id:967mk7u -->
   - File: internal/integration/derivedstats_e2e_test.go
   - Synthetic readings produce SolarKwh; after MarshalMap into DynamoDB Local and a real read, the value is preserved
   - Blocked-by: 967mk7p (Add SolarKwh field to DailyUsageBlockAttr and copy in both converters)
