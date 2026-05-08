@@ -99,7 +99,7 @@ func TestHandleStatusAllDataPresent(t *testing.T) {
 	// Battery.
 	require.NotNil(t, sr.Battery)
 	assert.Equal(t, 13.34, sr.Battery.CapacityKwh)
-	assert.Equal(t, 10, sr.Battery.CutoffPercent)
+	assert.Equal(t, 5, sr.Battery.CutoffPercent)
 	require.NotNil(t, sr.Battery.EstimatedCutoff, "should have cutoff since discharging")
 	require.NotNil(t, sr.Battery.Low24h)
 	assert.Equal(t, roundPower(25), sr.Battery.Low24h.Soc)

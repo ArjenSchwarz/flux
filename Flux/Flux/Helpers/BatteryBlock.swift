@@ -16,12 +16,17 @@ struct BatteryBlock: View {
     /// off-peak block's behaviour so the row stays visible before today's
     /// off-peak window has produced data.
     var showsOffpeakDelta: Bool = false
+    /// When non-nil, renders an "Energy left" row above "Battery cycle".
+    var energyLeftKwh: Double?
 
     var body: some View {
         FluxPanel {
             VStack(spacing: 0) {
                 if let title {
                     FluxPanelHeader(label: title, right: trailing)
+                }
+                if let energyLeftKwh {
+                    FluxStatRow(label: "Energy left", value: EnergyFormatting.format(energyLeftKwh))
                 }
                 FluxStatRow(label: "Battery cycle", value: cycleText)
                 FluxStatRow(

@@ -167,7 +167,7 @@ Returns:
   },
   "battery": {
     "capacityKwh": 13.34,
-    "cutoffPercent": 10,
+    "cutoffPercent": 5,
     "estimatedCutoffTime": "2026-04-12T04:03:00Z",
     "low24h": {
       "soc": 38.2,
@@ -288,7 +288,7 @@ The default screen. Displays data from the `/status` endpoint.
 
 The today section uses default text colour only — no conditional colouring on these values.
 
-**Estimated cutoff times** are displayed as clock times (e.g. “~4:03 AM”), not countdowns. The 10% cutoff is the actual threshold where the AlphaESS battery stops discharging.
+**Estimated cutoff times** are displayed as clock times (e.g. “~4:03 AM”), not countdowns. The 5% cutoff is the actual threshold where the AlphaESS battery stops discharging.
 
 ### Conditional Colouring
 
@@ -296,7 +296,7 @@ The today section uses default text colour only — no conditional colouring on 
 - **Grid**: green when exporting (pgrid < 0). Red only when importing above 500W during peak hours AND sustained (i.e. not a brief blip from battery settling — the backend flags this via `pgridSustained` by checking if grid import has been >500W for multiple consecutive readings). Default otherwise, including off-peak import.
 - **Load**: red above configurable threshold, default otherwise
 - **Solar**: green when generating, muted/tertiary when 0
-- **Cutoff time**: red when less than 2 hours away. Amber when cutoff is estimated to occur before the off-peak window starts (i.e. battery will hit 10% before 11:00 AM, meaning no free charging will rescue it).
+- **Cutoff time**: red when less than 2 hours away. Amber when cutoff is estimated to occur before the off-peak window starts (i.e. battery will hit 5% before 11:00 AM, meaning no free charging will rescue it).
 
 ### Refresh Behaviour
 
@@ -350,7 +350,7 @@ Accessed by tapping “View day detail” from the history screen. Shows three s
 
 - Filled area chart showing state of charge (%) throughout the day
 - Y-axis: 0–100%
-- 10% cutoff threshold shown as a dashed line
+- 5% cutoff threshold shown as a dashed line
 - 24h low point annotated with a dot and label showing the percentage and time
 
 **Chart 2 — Power:**
