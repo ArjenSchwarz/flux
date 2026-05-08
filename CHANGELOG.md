@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Battery cutoff threshold lowered from 10% to 5%** to match a hardware-side change to the AlphaESS minimum discharge setting. The Lambda API's `cutoffPercent` constant and `battery.cutoffPercent` response field now report 5; the dashed cutoff line on the SOC and combined battery charts in Day Detail shifts down accordingly. The V1 product spec is updated to match.
+
 ### Added
 
 - **What's New sheet** (T-1112). New `WhatsNew` module in `FluxCore` with a typed catalogue, a `Comparable` `WhatsNewVersion` parser (`1.10 > 1.9`, `1.2 == 1.2.0`), a pure `WhatsNewCoordinator` mapping `(catalogue, installed, lastSeen, hasAnyFluxPref)` to `present | silentSet | skip`, and a SwiftUI `WhatsNewSheet` grouping highlights into New / Improved / Fixed. `AppNavigationView` auto-presents the sheet once per cold launch on a version bump; `SettingsView` exposes a "What's New" row that re-opens the latest entry. `lastSeenWhatsNewVersion` and `hasAnyFluxPreferenceWritten` added to `UserDefaults+Settings`. Coordinator/sheet tests cover every row of the design's decision table; sheet tests smoke three fixtures via `UIHostingController` / `NSHostingController`. `specs/whats-new/implementation.md` documents the design at three levels.
