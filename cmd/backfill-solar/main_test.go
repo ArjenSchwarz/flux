@@ -383,6 +383,29 @@ func TestBackfill_DailyEnergyQueryError_PropagatedAsFatal(t *testing.T) {
 	assert.Empty(t, f.updates)
 }
 
+// TestBackfill_LiveRun_AppliesAttributeExistsCondition pins the
+// ConditionExpression on writePatchedDailyUsage. Without it, an UpdateItem
+// against a vanished or wrong-table key would silently create a fresh row
+// containing only `dailyUsage` and no energy totals — a corrupted item that
+// no other write path produces. The condition turns that into a clean error.
+func TestBackfill_LiveRun_AppliesAttributeExistsCondition(t *testing.T) {
+	loc := sydney(t)
+	row := storedRowAllDaylightMissingSolar("2026-04-14")
+	f := &fakeDynamo{
+		location:        loc,
+		dailyEnergyRows: map[string][]dynamo.DailyEnergyItem{"*": {row}},
+		readingsByDate:  map[string][]dynamo.ReadingItem{"2026-04-14": minuteReadingsWithSolar(t, "2026-04-14", loc)},
+	}
+	opts := backfillOptsForTest(loc)
+
+	_, err := runBackfill(context.Background(), f, opts)
+	require.NoError(t, err)
+	require.Len(t, f.updates, 1)
+	cond := f.updates[0].ConditionExpression
+	require.NotNil(t, cond, "writePatchedDailyUsage must guard with a ConditionExpression")
+	assert.Contains(t, *cond, "attribute_exists(sysSn)")
+}
+
 func decodeDailyUsageFromUpdate(t *testing.T, up *dynamodb.UpdateItemInput) *dynamo.DailyUsageAttr {
 	t.Helper()
 	require.Contains(t, *up.UpdateExpression, "dailyUsage")

@@ -204,6 +204,7 @@ func runBackfill(ctx context.Context, client dynamoAPI, opts backfillOpts) (*bac
 		}
 
 		patched := patchSolar(row.DailyUsage, recomputed)
+		populated, totalDaylight := countDaylightPopulated(patched)
 
 		if opts.dryRun {
 			res.RowsDryRun++
@@ -215,6 +216,10 @@ func runBackfill(ctx context.Context, client dynamoAPI, opts backfillOpts) (*bac
 				res.IntentLog = append(res.IntentLog, entry)
 				slog.Info("dry-run patch", "date", row.Date, "kind", b.Kind, "solarKwh", *b.SolarKwh)
 			}
+			if populated < totalDaylight {
+				slog.Warn("dry-run partial backfill — re-runs will keep rewriting this row until readings TTL prunes it",
+					"date", row.Date, "populated", populated, "ofDaylight", totalDaylight)
+			}
 			continue
 		}
 
@@ -222,10 +227,36 @@ func runBackfill(ctx context.Context, client dynamoAPI, opts backfillOpts) (*bac
 			return res, fmt.Errorf("update dailyUsage (date=%s): %w", row.Date, err)
 		}
 		res.RowsWritten++
-		slog.Info("patched solarKwh", "date", row.Date)
+		if populated < totalDaylight {
+			slog.Warn("partial backfill — re-runs will keep rewriting this row until readings TTL prunes it",
+				"date", row.Date, "populated", populated, "ofDaylight", totalDaylight)
+		} else {
+			slog.Info("patched solarKwh", "date", row.Date, "daylightBlocks", populated)
+		}
 	}
 
 	return res, nil
+}
+
+// countDaylightPopulated reports how many daylight blocks (morning peak,
+// off-peak, afternoon peak) carry a non-nil SolarKwh, and the total number
+// of daylight blocks present on the row. Used to surface partial-backfill
+// state — a row whose readings were partially TTL-pruned will keep
+// re-triggering needsBackfill on every run, so operators benefit from
+// seeing "2 of 3" rather than a silent-looking "patched" log line.
+func countDaylightPopulated(d *dynamo.DailyUsageAttr) (populated, total int) {
+	for _, b := range d.Blocks {
+		switch b.Kind {
+		case derivedstats.DailyUsageKindMorningPeak,
+			derivedstats.DailyUsageKindOffPeak,
+			derivedstats.DailyUsageKindAfternoonPeak:
+			total++
+			if b.SolarKwh != nil {
+				populated++
+			}
+		}
+	}
+	return populated, total
 }
 
 // needsBackfill reports whether at least one daylight block is missing
@@ -278,14 +309,21 @@ func writePatchedDailyUsage(ctx context.Context, client dynamoAPI, table, serial
 	if err != nil {
 		return fmt.Errorf("marshal dailyUsage: %w", err)
 	}
-	expr := "SET dailyUsage = :du"
+	updateExpr := "SET dailyUsage = :du"
+	// Guard against a vanished row: without this condition, an UpdateItem
+	// against a deleted (or wrong-table) key silently creates a fresh row
+	// containing only `dailyUsage` and no energy totals — a corrupted item
+	// that no other write path would ever produce. ConditionalCheckFailed
+	// surfaces the operational anomaly as an error instead.
+	condExpr := "attribute_exists(sysSn)"
 	_, err = client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
 		TableName: &table,
 		Key: map[string]types.AttributeValue{
 			"sysSn": &types.AttributeValueMemberS{Value: serial},
 			"date":  &types.AttributeValueMemberS{Value: date},
 		},
-		UpdateExpression: &expr,
+		UpdateExpression:    &updateExpr,
+		ConditionExpression: &condExpr,
 		ExpressionAttributeValues: map[string]types.AttributeValue{
 			":du": av,
 		},
