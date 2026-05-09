@@ -51,32 +51,33 @@ struct DayInFiveBlocksPanel: View {
                 RoundedRectangle(cornerRadius: 2, style: .continuous)
                     .fill(color(for: block.kind))
                     .opacity(opacity(for: block.kind))
-                    .frame(width: 3, height: 18)
-                Text(label(for: block.kind))
-                    .appFont { FluxTheme.Typography.touName(family: $0).weight(isHighlighted ? .semibold : .regular) }
-                    .foregroundStyle(isHighlighted ? FluxTheme.Palette.offpeak : FluxTheme.Palette.primaryText)
+                    .frame(width: 3)
+                    .frame(maxHeight: .infinity)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(label(for: block.kind))
+                        .appFont { FluxTheme.Typography.touName(family: $0).weight(isHighlighted ? .semibold : .regular) }
+                        .foregroundStyle(isHighlighted ? FluxTheme.Palette.offpeak : FluxTheme.Palette.primaryText)
+                    Text(timeRange(block))
+                        .appFont(FluxTheme.Typography.touTime)
+                        .foregroundStyle(FluxTheme.Palette.tertiaryText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                }
                 Spacer(minLength: 8)
-                Text(timeRange(block))
-                    .appFont(FluxTheme.Typography.touTime)
-                    .foregroundStyle(FluxTheme.Palette.tertiaryText)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
+                if isDaylight(block.kind), let solar = block.solarKwh {
+                    Text(EnergyFormatting.format(solar))
+                        .appFont(FluxTheme.Typography.touValue)
+                        .foregroundStyle(FluxTheme.Palette.amber)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                        .frame(width: 76, alignment: .trailing)
+                }
                 Text(EnergyFormatting.format(block.totalKwh))
                     .appFont(FluxTheme.Typography.touValue)
                     .foregroundStyle(FluxTheme.Palette.primaryText)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
-                    .frame(minWidth: 50, alignment: .trailing)
-                if isDaylight(block.kind), let solar = block.solarKwh {
-                    Image(systemName: "sun.max.fill")
-                        .foregroundStyle(FluxTheme.Palette.amber)
-                    Text(EnergyFormatting.format(solar))
-                        .appFont(FluxTheme.Typography.touValue)
-                        .foregroundStyle(FluxTheme.Palette.primaryText)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
-                        .frame(minWidth: 50, alignment: .trailing)
-                }
+                    .frame(width: 76, alignment: .trailing)
             }
             .padding(.vertical, FluxTheme.Metrics.statRowVerticalPadding)
 

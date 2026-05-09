@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Solar by Block — Day Detail row layout polish** (T-1162). `DayInFiveBlocksPanel` rows now stack the time range underneath the block name (`touTime` font / tertiary text colour preserved) instead of sitting between name and value, and the colour bar stretches to match the taller row. The `sun.max.fill` glyph is dropped: solar kWh is now distinguished by `FluxTheme.Palette.amber` text alone, sitting before the load value. Both solar and load values use a fixed 76 pt trailing column so they align across rows and four-digit values like `11.12 kWh` no longer truncate.
 - **Battery cutoff threshold lowered from 10% to 5%** to match a hardware-side change to the AlphaESS minimum discharge setting. The Lambda API's `cutoffPercent` constant and `battery.cutoffPercent` response field now report 5; the dashed cutoff line on the SOC and combined battery charts in Day Detail shifts down accordingly. The V1 product spec is updated to match.
 
 ### Added
