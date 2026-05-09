@@ -3,6 +3,32 @@ import Foundation
 public enum WhatsNewCatalogue {
     public static let releases: [WhatsNewRelease] = [
         WhatsNewRelease(
+            version: "1.1",
+            date: dateOf(year: 2026, month: 5),
+            highlights: [
+                Highlight(
+                    category: .new,
+                    title: "Solar by block",
+                    detail: "Day Detail now shows how much solar you generated during morning peak, off-peak, and afternoon peak."
+                ),
+                Highlight(
+                    category: .new,
+                    title: "Energy left",
+                    detail: "Dashboard shows the usable kWh remaining at the current battery level, next to the empty-by time."
+                ),
+                Highlight(
+                    category: .new,
+                    title: "What's New sheet",
+                    detail: "Flux shows a summary of what's changed after each app update. Reopen it any time from Settings."
+                ),
+                Highlight(
+                    category: .improved,
+                    title: "Lower cutoff threshold",
+                    detail: "Battery is treated as empty at 5% instead of 10%, matching the new minimum discharge setting. Predictions and the empty-by time use the new floor."
+                )
+            ]
+        ),
+        WhatsNewRelease(
             version: "1.0",
             date: dateOf(year: 2026, month: 5),
             highlights: [
