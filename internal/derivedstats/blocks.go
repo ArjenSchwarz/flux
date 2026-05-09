@@ -234,11 +234,20 @@ func Blocks(
 	}
 
 	// Two-pass integration: per-block integratePload, then sum, then per-block
-	// percentOfDay.
+	// percentOfDay. Daylight blocks additionally accumulate solar via
+	// integratePpv; the sampleCount return distinguishes "no readings in the
+	// window" (emit nil) from "samples present but integral is zero" (emit
+	// &0.0). Night and evening blocks are skipped (decision 1).
 	var unroundedSum float64
 	for i := range withDuration {
 		withDuration[i].unroundedKwh = integratePload(readings, withDuration[i].start.Unix(), withDuration[i].end.Unix())
 		unroundedSum += withDuration[i].unroundedKwh
+		switch withDuration[i].kind {
+		case DailyUsageKindMorningPeak, DailyUsageKindOffPeak, DailyUsageKindAfternoonPeak:
+			kwh, samples := integratePpv(readings, withDuration[i].start.Unix(), withDuration[i].end.Unix())
+			withDuration[i].unroundedSolarKwh = kwh
+			withDuration[i].solarSampled = samples > 0
+		}
 	}
 
 	blocks := make([]DailyUsageBlock, 0, len(withDuration))
@@ -252,13 +261,15 @@ func Blocks(
 // pipeline steps and the two-pass integration. It is a local sentinel struct
 // for Blocks and never escapes the function.
 type pendingBlock struct {
-	kind           string
-	start, end     time.Time
-	startEstimated bool
-	endEstimated   bool
-	statusOverride string
-	status         string
-	unroundedKwh   float64
+	kind              string
+	start, end        time.Time
+	startEstimated    bool
+	endEstimated      bool
+	statusOverride    string
+	status            string
+	unroundedKwh      float64
+	unroundedSolarKwh float64
+	solarSampled      bool
 }
 
 // buildDailyUsageBlock is a pure formatter: it computes boundarySource,
@@ -282,6 +293,10 @@ func buildDailyUsageBlock(p pendingBlock, unroundedSum float64) DailyUsageBlock 
 		TotalKwh:       roundEnergy(p.unroundedKwh),
 		Status:         p.status,
 		BoundarySource: boundarySource,
+	}
+	if p.solarSampled {
+		solar := roundEnergy(p.unroundedSolarKwh)
+		block.SolarKwh = &solar
 	}
 	if elapsed >= 60 {
 		avg := roundEnergy(p.unroundedKwh / (float64(elapsed) / 3600.0))

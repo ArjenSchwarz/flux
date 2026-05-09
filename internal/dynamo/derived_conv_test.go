@@ -18,6 +18,7 @@ func TestDailyUsageToAttr_Nil(t *testing.T) {
 
 func TestDailyUsageRoundTrip(t *testing.T) {
 	avg := 1.5
+	solar := 3.21
 	d := &derivedstats.DailyUsage{
 		Blocks: []derivedstats.DailyUsageBlock{
 			{
@@ -35,6 +36,7 @@ func TestDailyUsageRoundTrip(t *testing.T) {
 				Start:          "2026-04-12T20:30:00Z",
 				End:            "2026-04-13T01:00:00Z",
 				TotalKwh:       2.4,
+				SolarKwh:       &solar,
 				PercentOfDay:   18,
 				Status:         derivedstats.DailyUsageStatusComplete,
 				BoundarySource: derivedstats.DailyUsageBoundaryEstimated,
@@ -59,7 +61,37 @@ func TestDailyUsageRoundTrip(t *testing.T) {
 			require.NotNil(t, b.AverageKwhPerHour)
 			assert.InDelta(t, *d.Blocks[i].AverageKwhPerHour, *b.AverageKwhPerHour, 1e-9)
 		}
+		if d.Blocks[i].SolarKwh == nil {
+			assert.Nil(t, b.SolarKwh)
+		} else {
+			require.NotNil(t, b.SolarKwh)
+			assert.InDelta(t, *d.Blocks[i].SolarKwh, *b.SolarKwh, 1e-9)
+		}
 	}
+}
+
+func TestDailyUsageRoundTrip_SolarKwhZero(t *testing.T) {
+	zero := 0.0
+	d := &derivedstats.DailyUsage{
+		Blocks: []derivedstats.DailyUsageBlock{
+			{
+				Kind:           derivedstats.DailyUsageKindOffPeak,
+				Start:          "2026-04-12T01:00:00Z",
+				End:            "2026-04-12T04:00:00Z",
+				TotalKwh:       0.5,
+				SolarKwh:       &zero,
+				PercentOfDay:   12,
+				Status:         derivedstats.DailyUsageStatusComplete,
+				BoundarySource: derivedstats.DailyUsageBoundaryReadings,
+			},
+		},
+	}
+
+	got := DailyUsageFromAttr(DailyUsageToAttr(d))
+	require.NotNil(t, got)
+	require.Len(t, got.Blocks, 1)
+	require.NotNil(t, got.Blocks[0].SolarKwh, "&0.0 must round-trip to non-nil &0.0, not nil")
+	assert.InDelta(t, 0.0, *got.Blocks[0].SolarKwh, 1e-9)
 }
 
 func TestPeakPeriodsRoundTrip(t *testing.T) {

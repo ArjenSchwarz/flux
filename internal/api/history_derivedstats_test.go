@@ -13,9 +13,14 @@ import (
 )
 
 // dailyEnergyWithDerived builds a DailyEnergyItem for the given past date
-// carrying all three derivedStats fields.
+// carrying all three derivedStats fields. Daylight blocks (morning peak,
+// off-peak, afternoon peak) populate SolarKwh so /history coverage exercises
+// the new field; night and evening leave it nil per Decision 1.
 func dailyEnergyWithDerived(date string, percent int) dynamo.DailyEnergyItem {
 	avg := 1.0
+	morningSolar := 1.1
+	offPeakSolar := 4.5
+	afternoonSolar := 2.4
 	return dynamo.DailyEnergyItem{
 		SysSn: testSerial, Date: date,
 		Epv: 12.0, EInput: 3.0, EOutput: 1.5, ECharge: 7.0, EDischarge: 5.0,
@@ -28,6 +33,39 @@ func dailyEnergyWithDerived(date string, percent int) dynamo.DailyEnergyItem {
 					TotalKwh:          1.5,
 					AverageKwhPerHour: &avg,
 					PercentOfDay:      percent,
+					Status:            derivedstats.DailyUsageStatusComplete,
+					BoundarySource:    derivedstats.DailyUsageBoundaryReadings,
+				},
+				{
+					Kind:              derivedstats.DailyUsageKindMorningPeak,
+					Start:             date + "T20:30:00Z",
+					End:               date + "T01:00:00Z",
+					TotalKwh:          2.0,
+					SolarKwh:          &morningSolar,
+					AverageKwhPerHour: &avg,
+					PercentOfDay:      18,
+					Status:            derivedstats.DailyUsageStatusComplete,
+					BoundarySource:    derivedstats.DailyUsageBoundaryReadings,
+				},
+				{
+					Kind:              derivedstats.DailyUsageKindOffPeak,
+					Start:             date + "T01:00:00Z",
+					End:               date + "T04:00:00Z",
+					TotalKwh:          1.4,
+					SolarKwh:          &offPeakSolar,
+					AverageKwhPerHour: &avg,
+					PercentOfDay:      14,
+					Status:            derivedstats.DailyUsageStatusComplete,
+					BoundarySource:    derivedstats.DailyUsageBoundaryReadings,
+				},
+				{
+					Kind:              derivedstats.DailyUsageKindAfternoonPeak,
+					Start:             date + "T04:00:00Z",
+					End:               date + "T07:30:00Z",
+					TotalKwh:          2.6,
+					SolarKwh:          &afternoonSolar,
+					AverageKwhPerHour: &avg,
+					PercentOfDay:      24,
 					Status:            derivedstats.DailyUsageStatusComplete,
 					BoundarySource:    derivedstats.DailyUsageBoundaryReadings,
 				},

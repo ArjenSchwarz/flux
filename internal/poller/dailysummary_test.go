@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ArjenSchwarz/flux/internal/config"
+	"github.com/ArjenSchwarz/flux/internal/derivedstats"
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -243,6 +244,48 @@ func TestSummarisation_Idempotence(t *testing.T) {
 		assert.Equal(t, first.SocLow.Timestamp, second.SocLow.Timestamp)
 	}
 	require.Equal(t, len(first.PeakPeriods), len(second.PeakPeriods))
+}
+
+// TestSummarisation_PersistsSolarKwhOnDaylightBlocks verifies that the
+// summarisation pass propagates SolarKwh from derivedstats.Blocks() through
+// DailyUsageToAttr into the UpdateDailyEnergyDerived payload. The fixture
+// readings carry Ppv=1500W from 06:45 to 17:30 Sydney, so all three daylight
+// blocks see >=1 sample and must emit a non-nil, non-negative SolarKwh.
+// Night and evening blocks must not carry SolarKwh per Decision 1.
+func TestSummarisation_PersistsSolarKwhOnDaylightBlocks(t *testing.T) {
+	loc, _ := time.LoadLocation("Australia/Sydney")
+	ms := &mockStore{
+		getDailyEnergyResult: &dynamo.DailyEnergyItem{SysSn: "TEST123", Date: "2026-04-14", Epv: 12.0},
+		queryReadingsResult:  makeReadings("2026-04-14", loc),
+	}
+	p, _ := summarisationFixturePoller(t, ms)
+
+	require.Equal(t, PassResultSuccess, p.runSummarisationPass(context.Background(), "2026-04-14"))
+	require.NotNil(t, ms.lastDerived)
+	require.NotNil(t, ms.lastDerived.DailyUsage)
+
+	byKind := map[string]dynamo.DailyUsageBlockAttr{}
+	for _, b := range ms.lastDerived.DailyUsage.Blocks {
+		byKind[b.Kind] = b
+	}
+	for _, kind := range []string{
+		derivedstats.DailyUsageKindMorningPeak,
+		derivedstats.DailyUsageKindOffPeak,
+		derivedstats.DailyUsageKindAfternoonPeak,
+	} {
+		b, ok := byKind[kind]
+		require.True(t, ok, "%s block must be present", kind)
+		require.NotNil(t, b.SolarKwh, "%s SolarKwh must be persisted when ppv samples exist", kind)
+		assert.GreaterOrEqual(t, *b.SolarKwh, 0.0)
+	}
+	for _, kind := range []string{
+		derivedstats.DailyUsageKindNight,
+		derivedstats.DailyUsageKindEvening,
+	} {
+		if b, ok := byKind[kind]; ok {
+			assert.Nil(t, b.SolarKwh, "%s block must not carry SolarKwh", kind)
+		}
+	}
 }
 
 func TestSummarisation_PrecheckShortCircuits_NoReadingsQuery(t *testing.T) {

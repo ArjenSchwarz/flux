@@ -24,6 +24,7 @@ func BenchmarkHandleHistory_30Days(b *testing.B) {
 	// Build 30 days of fixture rows, every row carrying derivedStats.
 	rows := make([]dynamo.DailyEnergyItem, 30)
 	avg := 1.2
+	morningSolar := 1.4
 	for i := range 30 {
 		date := now.AddDate(0, 0, -29+i).Format("2006-01-02")
 		rows[i] = dynamo.DailyEnergyItem{
@@ -32,7 +33,7 @@ func BenchmarkHandleHistory_30Days(b *testing.B) {
 			DailyUsage: &dynamo.DailyUsageAttr{
 				Blocks: []dynamo.DailyUsageBlockAttr{
 					{Kind: derivedstats.DailyUsageKindNight, Start: date + "T14:00:00Z", End: date + "T20:30:00Z", TotalKwh: 1.8, AverageKwhPerHour: &avg, PercentOfDay: 12, Status: derivedstats.DailyUsageStatusComplete, BoundarySource: derivedstats.DailyUsageBoundaryReadings},
-					{Kind: derivedstats.DailyUsageKindMorningPeak, Start: date + "T20:30:00Z", End: date + "T01:00:00Z", TotalKwh: 2.4, AverageKwhPerHour: &avg, PercentOfDay: 16, Status: derivedstats.DailyUsageStatusComplete, BoundarySource: derivedstats.DailyUsageBoundaryReadings},
+					{Kind: derivedstats.DailyUsageKindMorningPeak, Start: date + "T20:30:00Z", End: date + "T01:00:00Z", TotalKwh: 2.4, SolarKwh: &morningSolar, AverageKwhPerHour: &avg, PercentOfDay: 16, Status: derivedstats.DailyUsageStatusComplete, BoundarySource: derivedstats.DailyUsageBoundaryReadings},
 				},
 			},
 			SocLow:                 &dynamo.SocLowAttr{Soc: float64(18 + i), Timestamp: date + "T19:45:00Z"},

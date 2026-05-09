@@ -51,18 +51,33 @@ struct DayInFiveBlocksPanel: View {
                 RoundedRectangle(cornerRadius: 2, style: .continuous)
                     .fill(color(for: block.kind))
                     .opacity(opacity(for: block.kind))
-                    .frame(width: 3, height: 18)
-                Text(label(for: block.kind))
-                    .appFont { FluxTheme.Typography.touName(family: $0).weight(isHighlighted ? .semibold : .regular) }
-                    .foregroundStyle(isHighlighted ? FluxTheme.Palette.offpeak : FluxTheme.Palette.primaryText)
+                    .frame(width: 3)
+                    .frame(maxHeight: .infinity)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(label(for: block.kind))
+                        .appFont { FluxTheme.Typography.touName(family: $0).weight(isHighlighted ? .semibold : .regular) }
+                        .foregroundStyle(isHighlighted ? FluxTheme.Palette.offpeak : FluxTheme.Palette.primaryText)
+                    Text(timeRange(block))
+                        .appFont(FluxTheme.Typography.touTime)
+                        .foregroundStyle(FluxTheme.Palette.tertiaryText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                }
                 Spacer(minLength: 8)
-                Text(timeRange(block))
-                    .appFont(FluxTheme.Typography.touTime)
-                    .foregroundStyle(FluxTheme.Palette.tertiaryText)
+                if isDaylight(block.kind), let solar = block.solarKwh {
+                    Text(EnergyFormatting.format(solar))
+                        .appFont(FluxTheme.Typography.touValue)
+                        .foregroundStyle(FluxTheme.Palette.amber)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                        .frame(width: 76, alignment: .trailing)
+                }
                 Text(EnergyFormatting.format(block.totalKwh))
                     .appFont(FluxTheme.Typography.touValue)
                     .foregroundStyle(FluxTheme.Palette.primaryText)
-                    .frame(minWidth: 50, alignment: .trailing)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                    .frame(width: 76, alignment: .trailing)
             }
             .padding(.vertical, FluxTheme.Metrics.statRowVerticalPadding)
 
@@ -71,6 +86,13 @@ struct DayInFiveBlocksPanel: View {
                     .fill(FluxTheme.Palette.border)
                     .frame(height: FluxTheme.Metrics.hairline)
             }
+        }
+    }
+
+    private func isDaylight(_ kind: DailyUsageBlock.Kind) -> Bool {
+        switch kind {
+        case .morningPeak, .offPeak, .afternoonPeak: true
+        case .night, .evening: false
         }
     }
 
@@ -113,13 +135,13 @@ struct DayInFiveBlocksPanel: View {
                         totalKwh: 3.1, averageKwhPerHour: 0.48, percentOfDay: 18,
                         status: .complete, boundarySource: .readings),
         DailyUsageBlock(kind: .morningPeak, start: "2026-05-03T20:30:00Z", end: "2026-05-04T01:00:00Z",
-                        totalKwh: 2.1, averageKwhPerHour: 0.47, percentOfDay: 12,
+                        totalKwh: 2.1, solarKwh: 0.6, averageKwhPerHour: 0.47, percentOfDay: 12,
                         status: .complete, boundarySource: .estimated),
         DailyUsageBlock(kind: .offPeak, start: "2026-05-04T01:00:00Z", end: "2026-05-04T04:00:00Z",
-                        totalKwh: 5.0, averageKwhPerHour: 1.67, percentOfDay: 30,
+                        totalKwh: 5.0, solarKwh: 2.4, averageKwhPerHour: 1.67, percentOfDay: 30,
                         status: .complete, boundarySource: .readings),
         DailyUsageBlock(kind: .afternoonPeak, start: "2026-05-04T04:00:00Z", end: "2026-05-04T08:42:00Z",
-                        totalKwh: 4.5, averageKwhPerHour: 0.96, percentOfDay: 27,
+                        totalKwh: 4.5, solarKwh: 1.8, averageKwhPerHour: 0.96, percentOfDay: 27,
                         status: .complete, boundarySource: .estimated),
         DailyUsageBlock(kind: .evening, start: "2026-05-04T08:42:00Z", end: "2026-05-04T14:00:00Z",
                         totalKwh: 2.2, averageKwhPerHour: 0.41, percentOfDay: 13,

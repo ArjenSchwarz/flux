@@ -21,6 +21,9 @@ import (
 // overhead JSON adds).
 func TestSizing_DailyEnergyRow_BelowReadUnitBoundary(t *testing.T) {
 	avg := 1.2
+	solarMP := 4.234567
+	solarOP := 9.876543
+	solarAP := 6.543210
 	row := DailyEnergyItem{
 		SysSn:       "ALPHATEST123456789012345",
 		Date:        "2026-04-14",
@@ -33,9 +36,9 @@ func TestSizing_DailyEnergyRow_BelowReadUnitBoundary(t *testing.T) {
 		DailyUsage: &DailyUsageAttr{
 			Blocks: []DailyUsageBlockAttr{
 				{Kind: derivedstats.DailyUsageKindNight, Start: "2026-04-13T14:00:00Z", End: "2026-04-13T20:30:00Z", TotalKwh: 1.812345, AverageKwhPerHour: &avg, PercentOfDay: 12, Status: derivedstats.DailyUsageStatusComplete, BoundarySource: derivedstats.DailyUsageBoundaryReadings},
-				{Kind: derivedstats.DailyUsageKindMorningPeak, Start: "2026-04-13T20:30:00Z", End: "2026-04-14T01:00:00Z", TotalKwh: 2.412345, AverageKwhPerHour: &avg, PercentOfDay: 16, Status: derivedstats.DailyUsageStatusComplete, BoundarySource: derivedstats.DailyUsageBoundaryEstimated},
-				{Kind: derivedstats.DailyUsageKindOffPeak, Start: "2026-04-14T01:00:00Z", End: "2026-04-14T04:00:00Z", TotalKwh: 4.567891, AverageKwhPerHour: &avg, PercentOfDay: 31, Status: derivedstats.DailyUsageStatusComplete, BoundarySource: derivedstats.DailyUsageBoundaryReadings},
-				{Kind: derivedstats.DailyUsageKindAfternoonPeak, Start: "2026-04-14T04:00:00Z", End: "2026-04-14T08:00:00Z", TotalKwh: 3.123456, AverageKwhPerHour: &avg, PercentOfDay: 22, Status: derivedstats.DailyUsageStatusComplete, BoundarySource: derivedstats.DailyUsageBoundaryReadings},
+				{Kind: derivedstats.DailyUsageKindMorningPeak, Start: "2026-04-13T20:30:00Z", End: "2026-04-14T01:00:00Z", TotalKwh: 2.412345, SolarKwh: &solarMP, AverageKwhPerHour: &avg, PercentOfDay: 16, Status: derivedstats.DailyUsageStatusComplete, BoundarySource: derivedstats.DailyUsageBoundaryEstimated},
+				{Kind: derivedstats.DailyUsageKindOffPeak, Start: "2026-04-14T01:00:00Z", End: "2026-04-14T04:00:00Z", TotalKwh: 4.567891, SolarKwh: &solarOP, AverageKwhPerHour: &avg, PercentOfDay: 31, Status: derivedstats.DailyUsageStatusComplete, BoundarySource: derivedstats.DailyUsageBoundaryReadings},
+				{Kind: derivedstats.DailyUsageKindAfternoonPeak, Start: "2026-04-14T04:00:00Z", End: "2026-04-14T08:00:00Z", TotalKwh: 3.123456, SolarKwh: &solarAP, AverageKwhPerHour: &avg, PercentOfDay: 22, Status: derivedstats.DailyUsageStatusComplete, BoundarySource: derivedstats.DailyUsageBoundaryReadings},
 				{Kind: derivedstats.DailyUsageKindEvening, Start: "2026-04-14T08:00:00Z", End: "2026-04-14T14:00:00Z", TotalKwh: 2.789012, AverageKwhPerHour: &avg, PercentOfDay: 19, Status: derivedstats.DailyUsageStatusComplete, BoundarySource: derivedstats.DailyUsageBoundaryReadings},
 			},
 		},

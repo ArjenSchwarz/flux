@@ -60,6 +60,7 @@ type DailyUsageBlockAttr struct {
 	Start             string   `dynamodbav:"start"`
 	End               string   `dynamodbav:"end"`
 	TotalKwh          float64  `dynamodbav:"totalKwh"`
+	SolarKwh          *float64 `dynamodbav:"solarKwh,omitempty"`
 	AverageKwhPerHour *float64 `dynamodbav:"averageKwhPerHour,omitempty"`
 	PercentOfDay      int      `dynamodbav:"percentOfDay"`
 	Status            string   `dynamodbav:"status"`

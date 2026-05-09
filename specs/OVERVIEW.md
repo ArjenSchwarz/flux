@@ -18,6 +18,7 @@
 | [macOS App](#macos-app) | 2026-05-01 | Done | Native macOS 26+ build of Flux (no Catalyst, no Designed-for-iPad). Adds dedicated Settings scene, menu commands (⌘R, ←/→), single main window that quits on close, refresh tiers via `appearsActive`, iCloud Keychain + `NSUbiquitousKeyValueStore` credential sync (no migrator), and a macOS Control Center widget alongside the existing home-screen widgets. iOS scenePhase pause preserved unchanged. T-1081. |
 | [History Usage Stats](#history-usage-stats) | 2026-05-07 | Done | New "Period overview" card on the History screen with eight tiles for the active 7/14/30-day range: Total usage, Total solar, Exported, Peak imports, Avg night, Most usage, Most solar, Lowest SoC. Day-record tiles tap-select the day across the existing chart cards. UI-only; reuses existing `/history` data. T-896. |
 | [What's New](#whats-new) | 2026-05-08 | Done | User-friendly "What's New" sheet auto-presented after a `MARKETING_VERSION` bump and reachable from Settings, distinct from the engineering `CHANGELOG.md`. Hand-authored Swift catalogue in `FluxCore`, per-device app-group `UserDefaults` last-seen tracking with a `"1.0"` seed for pre-feature upgrades. iOS + macOS. T-1112. |
+| [Solar by Block](#solar-by-block) | 2026-05-09 | Done | Adds solar production (kWh) per daylight block (morning peak, off-peak, afternoon peak) on the Day Detail five-block panel. Backend integrates `ppv` per block in `derivedstats.Blocks()`, persists via the existing poller summarisation, and ships a one-shot backfill CLI (`cmd/backfill-solar`) that patches `solarKwh` in place without altering historic `totalKwh`. iOS renders the per-block kWh value in amber next to the existing usage figure on daylight rows. T-1162. |
 
 ---
 
@@ -174,3 +175,12 @@ User-friendly "What's New" sheet shown to non-technical users after an app updat
 - [prerequisites.md](whats-new/prerequisites.md)
 - [requirements.md](whats-new/requirements.md)
 - [tasks.md](whats-new/tasks.md)
+
+## Solar by Block
+
+Adds solar production (kWh) per daylight block (morning peak, off-peak, afternoon peak) on the Day Detail five-block panel. Backend extends `derivedstats.DailyUsageBlock` with an optional `SolarKwh *float64`, computed via a sibling `integratePpv` (mirrors the existing `integratePload` algorithm — half-open `[start, end)`, 60s pair-gap rule, negative-clamp). Persistence rides through the existing once-per-day poller summarisation; no new write paths. A standalone `cmd/backfill-solar` CLI patches `solarKwh` in place on existing rows by `Kind`, preserving historic `totalKwh` and boundary metadata even when readings have been partially TTL-pruned. iOS extends the model with `solarKwh: Double?` (default-`nil` init keeps existing call sites source-compatible) and renders the per-block kWh value in amber next to the existing usage figure on daylight rows; null omits the value entirely. Out of scope: Dashboard / History solar splits. T-1162.
+
+- [decision_log.md](solar-by-block/decision_log.md)
+- [design.md](solar-by-block/design.md)
+- [requirements.md](solar-by-block/requirements.md)
+- [tasks.md](solar-by-block/tasks.md)

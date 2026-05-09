@@ -84,6 +84,10 @@ func (s *DynamoStore) WriteDailyEnergy(ctx context.Context, item DailyEnergyItem
 // that does not yet exist will create the row with only derivedStats and no
 // energy totals — callers must precheck via GetDailyEnergy when that is
 // undesirable (the daily-derived-stats summarisation pass does so per AC 1.4).
+//
+// Invariant: this is the only write path for the dailyUsage attribute outside
+// the cmd/backfill-solar CLI. New writers must not be added without revisiting
+// the backfill's idempotency assumptions (specs/solar-by-block/design.md).
 func (s *DynamoStore) UpdateDailyEnergyDerived(ctx context.Context, sysSn, date string, stats DerivedStats) error {
 	tableName := s.tables.DailyEnergy
 
