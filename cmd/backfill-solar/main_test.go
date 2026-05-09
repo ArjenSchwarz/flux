@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"strconv"
 	"testing"
 	"time"
 
@@ -64,9 +65,9 @@ func (f *fakeDynamo) UpdateItem(_ context.Context, params *dynamodb.UpdateItemIn
 // midnight Unix timestamp.
 func readingsQueryDate(params *dynamodb.QueryInput, loc *time.Location) string {
 	from := params.ExpressionAttributeValues[":from"].(*types.AttributeValueMemberN).Value
-	var ts int64
-	for _, c := range from {
-		ts = ts*10 + int64(c-'0')
+	ts, err := strconv.ParseInt(from, 10, 64)
+	if err != nil {
+		panic("readingsQueryDate: malformed :from value " + from + ": " + err.Error())
 	}
 	return time.Unix(ts, 0).In(loc).Format("2006-01-02")
 }

@@ -258,6 +258,12 @@ func patchSolar(stored *dynamo.DailyUsageAttr, recomputed *derivedstats.DailyUsa
 		}
 	}
 	out := &dynamo.DailyUsageAttr{Blocks: make([]dynamo.DailyUsageBlockAttr, len(stored.Blocks))}
+	// Shallow copy: pointer fields on DailyUsageBlockAttr (currently
+	// AverageKwhPerHour) are shared with `stored`. The patch loop below
+	// only *replaces* the SolarKwh pointer, never dereferences and mutates
+	// through any shared pointer, so this is safe today. If a future writer
+	// is added that mutates other pointer fields on the returned blocks,
+	// switch to a per-field deep copy to keep `stored` untouched.
 	copy(out.Blocks, stored.Blocks)
 	for i := range out.Blocks {
 		if v, ok := byKind[out.Blocks[i].Kind]; ok {

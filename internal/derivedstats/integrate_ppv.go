@@ -14,6 +14,12 @@ package derivedstats
 // Precondition: readings must be sorted by Timestamp ascending. The bracket
 // searches use first-match early-break and produce silently-wrong results on
 // unsorted input. DynamoDB queries on the sort key satisfy this in production.
+//
+// Sibling: integratePload in integrate.go is a near-duplicate that reads
+// Pload instead of Ppv and does not return sampleCount. Decision 6 in
+// specs/solar-by-block/decision_log.md keeps them as siblings rather than
+// folding them behind a closure-based generic. Any change to the integration
+// algorithm here must be mirrored in integratePload.
 func integratePpv(readings []Reading, startUnix, endUnix int64) (kwh float64, sampleCount int) {
 	if startUnix >= endUnix || len(readings) == 0 {
 		return 0, 0
