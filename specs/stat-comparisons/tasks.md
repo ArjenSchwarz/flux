@@ -66,7 +66,7 @@ references:
 
 ## Row primitive & view model
 
-- [ ] 7. Write tests for FluxStatRow valueSub and accessibilityOverride <!-- id:khmt97p -->
+- [x] 7. Write tests for FluxStatRow valueSub and accessibilityOverride <!-- id:khmt97p -->
   - File: Flux/FluxTests/FluxStatRowCompareTests.swift (new)
   - Default (no valueSub passed) preserves pre-feature row body — height assertion against a fixture
   - valueSub=.hidden equivalent to default
@@ -78,7 +78,7 @@ references:
   - Stream: 1
   - Requirements: [1.4](requirements.md#1.4), [3.1](requirements.md#3.1), [3.3](requirements.md#3.3), [7.1](requirements.md#7.1)
 
-- [ ] 8. Modify FluxStatRow to support sub-line slot and accessibility override <!-- id:khmt97q -->
+- [x] 8. Modify FluxStatRow to support sub-line slot and accessibility override <!-- id:khmt97q -->
   - File: Flux/Flux/Helpers/FluxV5Components.swift (modify FluxStatRow)
   - Add valueSub: SublineContent = .hidden and accessibilityOverride: String? = nil
   - Wrap value HStack and ValueSubline in VStack(alignment: .trailing, spacing: 2)
@@ -88,7 +88,7 @@ references:
   - Stream: 1
   - Requirements: [1.4](requirements.md#1.4), [3.1](requirements.md#3.1), [3.3](requirements.md#3.3), [7.1](requirements.md#7.1)
 
-- [ ] 9. Write tests for DayDetailViewModel.updateCompare lifecycle <!-- id:khmt97r -->
+- [x] 9. Write tests for DayDetailViewModel.updateCompare lifecycle <!-- id:khmt97r -->
   - File: Flux/FluxTests/DayDetailViewModelCompareTests.swift (new)
   - Toggle on triggers fetch and resolves to .ready on success
   - fetchDay throwing → .unavailable
@@ -102,7 +102,7 @@ references:
   - Stream: 1
   - Requirements: [1.5](requirements.md#1.5), [2.4](requirements.md#2.4), [5.3](requirements.md#5.3), [5.4](requirements.md#5.4), [5.5](requirements.md#5.5), [5.6](requirements.md#5.6)
 
-- [ ] 10. Implement updateCompare on DayDetailViewModel <!-- id:khmt97s -->
+- [x] 10. Implement updateCompare on DayDetailViewModel <!-- id:khmt97s -->
   - File: Flux/Flux/DayDetail/DayDetailViewModel.swift (modify)
   - Add comparisonState: ComparisonState property (private(set))
   - Add private comparisonTask: Task<Void, Never>?
@@ -112,7 +112,7 @@ references:
   - Stream: 1
   - Requirements: [1.5](requirements.md#1.5), [2.4](requirements.md#2.4), [5.1](requirements.md#5.1), [5.2](requirements.md#5.2), [5.3](requirements.md#5.3), [5.4](requirements.md#5.4), [5.5](requirements.md#5.5), [5.6](requirements.md#5.6)
 
-- [ ] 11. Write tests for CompareControl visibility logic <!-- id:khmt97t -->
+- [x] 11. Write tests for CompareControl visibility logic <!-- id:khmt97t -->
   - File: Flux/FluxTests/CompareControlTests.swift (new)
   - enabled=false: period chip not in the body; failure caption not shown
   - enabled=true, unavailable=false: period chip shown with selected period; no caption
@@ -122,7 +122,7 @@ references:
   - Stream: 1
   - Requirements: [1.1](requirements.md#1.1), [1.4](requirements.md#1.4), [2.1](requirements.md#2.1), [2.5](requirements.md#2.5), [5.5](requirements.md#5.5)
 
-- [ ] 12. Implement CompareControl <!-- id:khmt97u -->
+- [x] 12. Implement CompareControl <!-- id:khmt97u -->
   - File: Flux/Flux/DayDetail/Compare/CompareControl.swift (new)
   - VStack(alignment: .leading, spacing: 4) with Toggle("Compare", isOn:) plus a period chip View when enabled, and a subdued caption Text below when enabled && unavailable
   - Caption uses FluxTheme.Typography.touTime and FluxTheme.Palette.tertiaryText, leading-aligned to the chip
