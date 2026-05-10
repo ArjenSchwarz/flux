@@ -93,7 +93,10 @@ struct FluxStatRow: View {
     }
 }
 
-private struct RowAccessibilityModifier: ViewModifier {
+/// Applies an `.accessibilityElement(children: .ignore)` + `.accessibilityLabel`
+/// override when `label` is non-nil; passthrough when nil. Shared between
+/// `FluxStatRow` and the hand-rolled rows in `DayInFiveBlocksPanel`.
+struct RowAccessibilityModifier: ViewModifier {
     let label: String?
 
     func body(content: Content) -> some View {

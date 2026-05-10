@@ -87,7 +87,7 @@ struct DayInFiveBlocksPanel: View {
                 .frame(width: 76, alignment: .trailing)
             }
             .padding(.vertical, FluxTheme.Metrics.statRowVerticalPadding)
-            .modifier(BlockRowAccessibilityModifier(label: rowAccessibilityOverride(for: block)))
+            .modifier(RowAccessibilityModifier(label: rowAccessibilityOverride(for: block)))
 
             if !isLast {
                 Rectangle()
@@ -153,52 +153,21 @@ struct DayInFiveBlocksPanel: View {
     }
 }
 
-private struct BlockRowAccessibilityModifier: ViewModifier {
-    let label: String?
-
-    func body(content: Content) -> some View {
-        if let label {
-            content
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(label)
-        } else {
-            content
-        }
-    }
-}
-
 /// Per-block compare-state mapping used by `DayInFiveBlocksPanel`.
 /// Factored out so the per-block logic is unit-testable without
 /// rendering the SwiftUI view.
 enum DayInFiveBlocksPanelCompareMapping {
     static func solarValueSub(for block: DailyUsageBlock, compare: ComparisonState) -> SublineContent {
-        switch compare {
-        case .off:
-            return .hidden
-        case .loading, .unavailable:
-            return .reserved
-        case .ready(let snapshot, _):
-            let comparisonBlock = snapshot.dailyUsage?.blocks.first { $0.kind == block.kind }
-            return DeltaFormatter.sublineContent(
-                current: block.solarKwh,
-                comparison: comparisonBlock?.solarKwh
-            )
-        }
+        compare.subline(current: block.solarKwh, comparison: comparisonBlock(for: block, compare: compare)?.solarKwh)
     }
 
     static func totalValueSub(for block: DailyUsageBlock, compare: ComparisonState) -> SublineContent {
-        switch compare {
-        case .off:
-            return .hidden
-        case .loading, .unavailable:
-            return .reserved
-        case .ready(let snapshot, _):
-            let comparisonBlock = snapshot.dailyUsage?.blocks.first { $0.kind == block.kind }
-            return DeltaFormatter.sublineContent(
-                current: block.totalKwh,
-                comparison: comparisonBlock?.totalKwh
-            )
-        }
+        compare.subline(current: block.totalKwh, comparison: comparisonBlock(for: block, compare: compare)?.totalKwh)
+    }
+
+    private static func comparisonBlock(for block: DailyUsageBlock, compare: ComparisonState) -> DailyUsageBlock? {
+        guard case .ready(let snapshot, _) = compare else { return nil }
+        return snapshot.dailyUsage?.blocks.first { $0.kind == block.kind }
     }
 
     /// Composed accessibility label exposing both the total and (on
@@ -248,7 +217,7 @@ enum DayInFiveBlocksPanelCompareMapping {
     ) -> String {
         let comparisonBlock = snapshot.dailyUsage?.blocks.first { $0.kind == block.kind }
         let total = EnergyFormatting.format(block.totalKwh)
-        let totalClause = comparisonClause(
+        let totalClause = DeltaFormatter.voiceOverComparisonClause(
             current: block.totalKwh,
             comparison: comparisonBlock?.totalKwh,
             period: period
@@ -256,7 +225,7 @@ enum DayInFiveBlocksPanelCompareMapping {
 
         if isDaylight(block.kind), let solar = block.solarKwh {
             let solarText = EnergyFormatting.format(solar)
-            let solarClause = comparisonClause(
+            let solarClause = DeltaFormatter.voiceOverComparisonClause(
                 current: solar,
                 comparison: comparisonBlock?.solarKwh,
                 period: period
@@ -264,32 +233,6 @@ enum DayInFiveBlocksPanelCompareMapping {
             return "\(rowLabel), \(timeRange): \(total) total\(totalClause), \(solarText) solar\(solarClause)"
         }
         return "\(rowLabel), \(timeRange): \(total)\(totalClause)"
-    }
-
-    private static func comparisonClause(
-        current: Double?,
-        comparison: Double?,
-        period: ComparePeriod
-    ) -> String {
-        guard let current, let comparison else { return "" }
-        let rounded = roundedOneDecimal(current - comparison)
-        let direction: String
-        if rounded > 0 {
-            direction = "up"
-        } else if rounded < 0 {
-            direction = "down"
-        } else {
-            direction = "unchanged"
-        }
-        if rounded == 0 {
-            return ", \(direction) versus \(period.displayName.lowercased())"
-        }
-        let magnitude = String(format: "%.1f", abs(rounded))
-        return ", \(direction) \(magnitude) kilowatt-hours versus \(period.displayName.lowercased())"
-    }
-
-    private static func roundedOneDecimal(_ value: Double) -> Double {
-        Double(String(format: "%.1f", value)) ?? 0
     }
 
     private static func isDaylight(_ kind: DailyUsageBlock.Kind) -> Bool {

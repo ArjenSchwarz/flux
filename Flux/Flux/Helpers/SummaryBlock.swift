@@ -190,14 +190,7 @@ struct SummaryBlock: View {
 /// the per-row logic is unit-testable without rendering the SwiftUI view.
 enum SummaryBlockCompareMapping {
     static func valueSub(current: Double?, comparison: Double?, compare: ComparisonState) -> SublineContent {
-        switch compare {
-        case .off:
-            return .hidden
-        case .loading, .unavailable:
-            return .reserved
-        case .ready:
-            return DeltaFormatter.sublineContent(current: current, comparison: comparison)
-        }
+        compare.subline(current: current, comparison: comparison)
     }
 
     // swiftlint:disable function_parameter_count

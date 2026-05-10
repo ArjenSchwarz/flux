@@ -28,14 +28,7 @@ enum DeltaFormatter {
         period: ComparePeriod
     ) -> String {
         let prefix = composeLabelPrefix(rowLabel: rowLabel, labelSub: labelSub, primaryValue: primaryValue)
-        guard let current, let comparison else { return prefix }
-        let rounded = roundedOneDecimal(current - comparison)
-        let direction = directionWord(forRounded: rounded)
-        if rounded == 0 {
-            return "\(prefix), \(direction) versus \(period.displayName.lowercased())"
-        }
-        let magnitude = String(format: "%.1f", abs(rounded))
-        return "\(prefix), \(direction) \(magnitude) kilowatt-hours versus \(period.displayName.lowercased())"
+        return prefix + voiceOverComparisonClause(current: current, comparison: comparison, period: period)
     }
     // swiftlint:enable function_parameter_count
 
@@ -48,6 +41,29 @@ enum DeltaFormatter {
         primaryValue: String
     ) -> String {
         composeLabelPrefix(rowLabel: rowLabel, labelSub: labelSub, primaryValue: primaryValue)
+    }
+
+    /// Returns the trailing comparison clause used inside a larger
+    /// VoiceOver label, e.g. ", up 0.6 kilowatt-hours versus yesterday".
+    /// Returns "" when either input is nil so callers can append
+    /// unconditionally — the clause is the only text that differs between
+    /// the present and fallback paths. Used by `voiceOverLabel` and by
+    /// `DayInFiveBlocksPanel`'s composed daylight-row label, which needs
+    /// to splice two clauses into one sentence.
+    static func voiceOverComparisonClause(
+        current: Double?,
+        comparison: Double?,
+        period: ComparePeriod
+    ) -> String {
+        guard let current, let comparison else { return "" }
+        let rounded = roundedOneDecimal(current - comparison)
+        let direction = directionWord(forRounded: rounded)
+        let periodName = period.displayName.lowercased()
+        if rounded == 0 {
+            return ", \(direction) versus \(periodName)"
+        }
+        let magnitude = String(format: "%.1f", abs(rounded))
+        return ", \(direction) \(magnitude) kilowatt-hours versus \(periodName)"
     }
 
     // MARK: - Helpers

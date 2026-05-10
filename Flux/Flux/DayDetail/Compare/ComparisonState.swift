@@ -15,4 +15,18 @@ enum ComparisonState: Sendable, Equatable {
         if case .unavailable = self { return true }
         return false
     }
+
+    /// Maps the compare lifecycle to the row-level sub-line slot. Single
+    /// source of truth for the off → hidden, loading|unavailable →
+    /// reserved, ready → delta dispatch used by every supported row.
+    func subline(current: Double?, comparison: Double?) -> SublineContent {
+        switch self {
+        case .off:
+            return .hidden
+        case .loading, .unavailable:
+            return .reserved
+        case .ready:
+            return DeltaFormatter.sublineContent(current: current, comparison: comparison)
+        }
+    }
 }

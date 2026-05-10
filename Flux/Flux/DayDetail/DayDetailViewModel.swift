@@ -48,6 +48,14 @@ final class DayDetailViewModel {
         self.nowProvider = nowProvider
     }
 
+    deinit {
+        // The comparison Task captures `self` strongly so it can write
+        // back to `comparisonState` on completion. If the view is
+        // dismissed mid-fetch, cancel the in-flight task so the awaited
+        // network request is not left running.
+        comparisonTask?.cancel()
+    }
+
     var isToday: Bool {
         DateFormatting.isToday(date, now: nowProvider())
     }
