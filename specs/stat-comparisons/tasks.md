@@ -179,7 +179,7 @@ references:
 
 ## Wiring
 
-- [ ] 17. Wire DayDetailView: persistence, control hosting, and onChange reactions <!-- id:khmt97z -->
+- [x] 17. Wire DayDetailView: persistence, control hosting, and onChange reactions <!-- id:khmt97z -->
   - Files: Flux/Flux/DayDetail/DayDetailView.swift (modify), Flux/Flux/Helpers/UserDefaults+Flux.swift or equivalent (add static keys compareEnabledKey, comparePeriodKey)
   - Declare @AppStorage(UserDefaults.compareEnabledKey, store: UserDefaults.fluxAppGroup) private var compareEnabled: Bool = false
   - Declare @AppStorage(UserDefaults.comparePeriodKey, store: UserDefaults.fluxAppGroup) private var comparePeriodRaw: String = ComparePeriod.yesterday.rawValue

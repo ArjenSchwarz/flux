@@ -260,7 +260,8 @@ extension SummaryBlock {
         trailing: String? = nil,
         summary: DaySummary?,
         offpeakGridImport: Double?,
-        showsBatteryCycle: Bool = true
+        showsBatteryCycle: Bool = true,
+        compare: ComparisonState = .off
     ) {
         self.init(
             title: title,
@@ -271,7 +272,8 @@ extension SummaryBlock {
             offpeakGridImport: offpeakGridImport,
             batteryCharge: summary?.eCharge,
             batteryDischarge: summary?.eDischarge,
-            showsBatteryCycle: showsBatteryCycle
+            showsBatteryCycle: showsBatteryCycle,
+            compare: compare
         )
     }
 
