@@ -19,6 +19,7 @@
 | [History Usage Stats](#history-usage-stats) | 2026-05-07 | Done | New "Period overview" card on the History screen with eight tiles for the active 7/14/30-day range: Total usage, Total solar, Exported, Peak imports, Avg night, Most usage, Most solar, Lowest SoC. Day-record tiles tap-select the day across the existing chart cards. UI-only; reuses existing `/history` data. T-896. |
 | [What's New](#whats-new) | 2026-05-08 | Done | User-friendly "What's New" sheet auto-presented after a `MARKETING_VERSION` bump and reachable from Settings, distinct from the engineering `CHANGELOG.md`. Hand-authored Swift catalogue in `FluxCore`, per-device app-group `UserDefaults` last-seen tracking with a `"1.0"` seed for pre-feature upgrades. iOS + macOS. T-1112. |
 | [Solar by Block](#solar-by-block) | 2026-05-09 | Done | Adds solar production (kWh) per daylight block (morning peak, off-peak, afternoon peak) on the Day Detail five-block panel. Backend integrates `ppv` per block in `derivedstats.Blocks()`, persists via the existing poller summarisation, and ships a one-shot backfill CLI (`cmd/backfill-solar`) that patches `solarKwh` in place without altering historic `totalKwh`. iOS renders the per-block kWh value in amber next to the existing usage figure on daylight rows. T-1162. |
+| [Stat Comparisons](#stat-comparisons) | 2026-05-10 | Planned | Opt-in Compare toggle on Day Detail with a period chip (Yesterday / 7 days ago) that renders an absolute-kWh delta as a sub-line under each SummaryBlock row and DayInFiveBlocksPanel value, in the same lighter/smaller treatment as the five-block time-range captions. Client-only — comparison day fetched via the existing `/day` endpoint; backend untouched. T-1161. |
 
 ---
 
@@ -184,3 +185,12 @@ Adds solar production (kWh) per daylight block (morning peak, off-peak, afternoo
 - [design.md](solar-by-block/design.md)
 - [requirements.md](solar-by-block/requirements.md)
 - [tasks.md](solar-by-block/tasks.md)
+
+## Stat Comparisons
+
+Opt-in Compare toggle on Day Detail with a period chip (Yesterday / 7 days ago) that renders a signed absolute-kWh delta as a right-aligned sub-line directly beneath each SummaryBlock row primary value and beneath each value column on the DayInFiveBlocksPanel rows. Sub-line uses the same `touTime` + `tertiaryText` treatment already used for the five-block time-range captions; chevrons (▲ / ▼ / —) encode direction only — no good/bad colouring. Client-only feature: comparison day data is fetched via a second call to the existing `/day` endpoint (past-date `/day` is a cheap point-read on `flux-daily-energy`), so the backend is unchanged. State machine has four cases (`.off / .loading / .ready / .unavailable`) with three `Task.isCancelled` guards in `loadComparison` to prevent stale writes on rapid period or day-nav changes. Slot height is reserved on every supported row when Compare is on so the card stays jitter-free across loading transitions; off-state rows revert to their pre-feature layout exactly. New `SublineContent` enum makes the three-state slot semantics (hidden / reserved / text) unrepresentable as anything else. Toggle and period preferences persist per-device via `UserDefaults.fluxAppGroup` (`@AppStorage`); no iCloud sync. Out of scope: comparisons on Battery / Peak Usage cards, the three Day Detail charts, percentage deltas, per-stat semantic colouring, same-time-of-day cutoff for Today, last-month / last-year periods, localization, and explicit Dynamic Type / RTL / iPad column-variant ACs (deferred per Decision 14). T-1161.
+
+- [decision_log.md](stat-comparisons/decision_log.md)
+- [design.md](stat-comparisons/design.md)
+- [requirements.md](stat-comparisons/requirements.md)
+- [tasks.md](stat-comparisons/tasks.md)
