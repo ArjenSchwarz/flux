@@ -281,7 +281,7 @@ public struct DayDetailResponse: Codable, Sendable {
     }
 }
 
-public struct DailyUsage: Codable, Sendable {
+public struct DailyUsage: Codable, Sendable, Equatable {
     public let blocks: [DailyUsageBlock]
 
     public init(blocks: [DailyUsageBlock]) {
@@ -289,7 +289,7 @@ public struct DailyUsage: Codable, Sendable {
     }
 }
 
-public struct DailyUsageBlock: Codable, Sendable, Identifiable {
+public struct DailyUsageBlock: Codable, Sendable, Equatable, Identifiable {
     public enum Kind: String, Codable, Sendable, CaseIterable {
         case night
         case morningPeak

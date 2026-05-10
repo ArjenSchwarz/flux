@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - **Stat Comparisons spec** (T-1161). Requirements, design, decision log, and 17-task implementation plan for an opt-in Compare toggle on Day Detail. Sub-line absolute-kWh deltas (▲ / ▼ / —) appear beneath each `SummaryBlock` row and each `DayInFiveBlocksPanel` value column when the toggle is on, period-pickable between Yesterday and 7 days ago. Client-only — no backend changes per Decision 17; comparison day fetched via the existing `/day` endpoint. Specs registered in `specs/OVERVIEW.md`.
+- **Stat Comparisons — Compare types & formatting** (T-1161, phase 1 of the implementation). New `Flux/Flux/DayDetail/Compare/` module with the value types and formatting helpers that the rest of the feature builds on: `ComparePeriod` enum (with `parseOrDefault` fallback for forward-compat with future periods), three-state `SublineContent` enum (hidden / reserved / text), `ComparisonState` lifecycle enum, `ComparisonSnapshot` projection of `DayDetailResponse` with derived `houseUsed` and `peakGridImport`, `DeltaFormatter` (sub-line strings + VoiceOver labels per AC 7.1), and `ValueSubline` SwiftUI view. `DailyUsage` and `DailyUsageBlock` in `FluxCore` gain `Equatable` conformance so `ComparisonSnapshot` can be `Equatable`. No UI wiring yet — that lands in later phases.
 
 ## [1.1] - 2026-05-09
 

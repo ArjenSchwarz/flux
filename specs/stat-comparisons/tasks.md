@@ -8,7 +8,7 @@ references:
 
 ## Compare types & formatting
 
-- [ ] 1. Write tests for Compare value types <!-- id:khmt97j -->
+- [x] 1. Write tests for Compare value types <!-- id:khmt97j -->
   - File: Flux/FluxTests/CompareValueTypesTests.swift (new)
   - ComparePeriod: rawValue, dayOffset (-1 / -7), displayName ("Yesterday" / "7 days ago"), parseOrDefault for nil / "" / unknown rawValue
   - ComparisonState.isUnavailable for each case
@@ -18,7 +18,7 @@ references:
   - Stream: 1
   - Requirements: [2.1](requirements.md#2.1), [2.2](requirements.md#2.2), [5.1](requirements.md#5.1), [5.2](requirements.md#5.2)
 
-- [ ] 2. Implement Compare value types <!-- id:khmt97k -->
+- [x] 2. Implement Compare value types <!-- id:khmt97k -->
   - New files in Flux/Flux/DayDetail/Compare/: ComparePeriod.swift, SublineContent.swift, ComparisonState.swift, ComparisonSnapshot.swift
   - Match the type sketches in design.md "Components and Interfaces"
   - parseOrDefault falls back to .yesterday for unknown / nil rawValue
@@ -26,7 +26,7 @@ references:
   - Stream: 1
   - Requirements: [2.1](requirements.md#2.1), [2.2](requirements.md#2.2), [2.3](requirements.md#2.3), [5.1](requirements.md#5.1), [5.2](requirements.md#5.2)
 
-- [ ] 3. Write tests for DeltaFormatter <!-- id:khmt97l -->
+- [x] 3. Write tests for DeltaFormatter <!-- id:khmt97l -->
   - File: Flux/FluxTests/DeltaFormatterTests.swift (new)
   - sublineContent: returns .reserved when current is nil OR comparison is nil
   - sublineContent rounding: current=10.04 vs comparison=10.0 → .text("— kWh"); current=10.05 vs 10.0 → .text("▲ 0.1 kWh"); current=10.0 vs 10.05 → .text("▼ 0.1 kWh"); zero post-rounding → "—" branch
@@ -37,7 +37,7 @@ references:
   - Stream: 1
   - Requirements: [3.3](requirements.md#3.3), [3.4](requirements.md#3.4), [4.3](requirements.md#4.3), [7.1](requirements.md#7.1), [7.2](requirements.md#7.2)
 
-- [ ] 4. Implement DeltaFormatter <!-- id:khmt97m -->
+- [x] 4. Implement DeltaFormatter <!-- id:khmt97m -->
   - File: Flux/Flux/DayDetail/Compare/DeltaFormatter.swift (new)
   - Use String(format: "%.1f", ...) for rounding; behaviour pinned by tests
   - Indicator selection on the rounded one-decimal display, not the raw difference
@@ -46,7 +46,7 @@ references:
   - Stream: 1
   - Requirements: [3.3](requirements.md#3.3), [3.4](requirements.md#3.4), [3.5](requirements.md#3.5), [4.3](requirements.md#4.3), [7.1](requirements.md#7.1), [7.2](requirements.md#7.2)
 
-- [ ] 5. Write tests for ValueSubline <!-- id:khmt97n -->
+- [x] 5. Write tests for ValueSubline <!-- id:khmt97n -->
   - File: Flux/FluxTests/ValueSublineTests.swift (new)
   - .hidden → body is EmptyView (zero frame)
   - .reserved → renders Text("\u{00A0}") in touTime + tertiaryText + .accessibilityHidden(true)
@@ -56,7 +56,7 @@ references:
   - Stream: 1
   - Requirements: [3.7](requirements.md#3.7), [4.5](requirements.md#4.5)
 
-- [ ] 6. Implement ValueSubline <!-- id:khmt97o -->
+- [x] 6. Implement ValueSubline <!-- id:khmt97o -->
   - File: Flux/Flux/DayDetail/Compare/ValueSubline.swift (new)
   - Single switch on SublineContent producing EmptyView / NBSP-Text / value-Text
   - All non-EmptyView branches apply .accessibilityHidden(true)
