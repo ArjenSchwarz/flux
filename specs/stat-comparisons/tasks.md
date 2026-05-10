@@ -133,7 +133,7 @@ references:
 
 ## Panel integration
 
-- [ ] 13. Write tests for SummaryBlock compare integration <!-- id:khmt97v -->
+- [x] 13. Write tests for SummaryBlock compare integration <!-- id:khmt97v -->
   - File: Flux/FluxTests/SummaryBlockCompareTests.swift (new)
   - compare=.off: each row's body matches pre-feature fixture (off-state row identity)
   - compare=.loading: every SR row passes valueSub=.reserved to its FluxStatRow
@@ -144,7 +144,7 @@ references:
   - Stream: 1
   - Requirements: [3.1](requirements.md#3.1), [3.2](requirements.md#3.2), [3.3](requirements.md#3.3), [7.1](requirements.md#7.1), [7.2](requirements.md#7.2)
 
-- [ ] 14. Modify SummaryBlock to render compare deltas <!-- id:khmt97w -->
+- [x] 14. Modify SummaryBlock to render compare deltas <!-- id:khmt97w -->
   - File: Flux/Flux/Helpers/SummaryBlock.swift (modify)
   - Add var compare: ComparisonState = .off parameter (default .off keeps Dashboard / other callers source-compatible)
   - Add private helpers valueSub(current:comparison:) and accessibilityOverride(rowLabel:labelSub:primary:current:comparison:) per the design's per-row mapping sketch
@@ -154,7 +154,7 @@ references:
   - Stream: 1
   - Requirements: [3.1](requirements.md#3.1), [3.2](requirements.md#3.2), [3.3](requirements.md#3.3), [7.1](requirements.md#7.1), [7.2](requirements.md#7.2)
 
-- [ ] 15. Write tests for DayInFiveBlocksPanel compare integration <!-- id:khmt97x -->
+- [x] 15. Write tests for DayInFiveBlocksPanel compare integration <!-- id:khmt97x -->
   - File: Flux/FluxTests/DayInFiveBlocksPanelCompareTests.swift (new)
   - compare=.off: rendered-height equality vs pre-feature fixture (off-state byte-identity scope from Decision 16)
   - compare=.loading: every row's total column receives ValueSubline(.reserved); daylight rows' solar column also receives ValueSubline(.reserved)
@@ -167,7 +167,7 @@ references:
   - Stream: 1
   - Requirements: [4.1](requirements.md#4.1), [4.2](requirements.md#4.2), [4.3](requirements.md#4.3), [7.1](requirements.md#7.1), [7.2](requirements.md#7.2)
 
-- [ ] 16. Modify DayInFiveBlocksPanel to render compare deltas <!-- id:khmt97y -->
+- [x] 16. Modify DayInFiveBlocksPanel to render compare deltas <!-- id:khmt97y -->
   - File: Flux/Flux/DayDetail/DayInFiveBlocksPanel.swift (modify)
   - Add var compare: ComparisonState = .off parameter
   - Wrap each value column (solar on daylight rows, total on all rows) in a VStack(alignment: .trailing, spacing: 2) containing the existing Text and a new ValueSubline beneath, frame-aligned to the existing 76pt column width

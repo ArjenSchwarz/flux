@@ -64,7 +64,7 @@ struct ValueSublineTests {
         let controller = UIHostingController(rootView: view.frame(width: 200))
         controller.view.setNeedsLayout()
         controller.view.layoutIfNeeded()
-        let size = controller.sizeThatFits(in: CGSize(width: 200, height: .infinity))
+        let size = controller.sizeThatFits(in: CGSize(width: 200, height: CGFloat.infinity))
         return size.height
     }
 }

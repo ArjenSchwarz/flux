@@ -82,7 +82,7 @@ struct FluxStatRowCompareTests {
         controller.view.setNeedsLayout()
         controller.view.layoutIfNeeded()
         // Sanity: rendering didn't crash and the row produced non-zero size.
-        let size = controller.sizeThatFits(in: CGSize(width: 320, height: .infinity))
+        let size = controller.sizeThatFits(in: CGSize(width: 320, height: CGFloat.infinity))
         #expect(size.height > 0)
     }
 
@@ -105,7 +105,7 @@ struct FluxStatRowCompareTests {
         let controller = UIHostingController(rootView: view.frame(width: 320))
         controller.view.setNeedsLayout()
         controller.view.layoutIfNeeded()
-        let size = controller.sizeThatFits(in: CGSize(width: 320, height: .infinity))
+        let size = controller.sizeThatFits(in: CGSize(width: 320, height: CGFloat.infinity))
         return size.height
     }
 }

@@ -6,6 +6,7 @@ import SwiftUI
 /// Off-peak is the highlighted row.
 struct DayInFiveBlocksPanel: View {
     let dailyUsage: DailyUsage
+    var compare: ComparisonState = .off
 
     var body: some View {
         FluxPanel {
@@ -65,21 +66,28 @@ struct DayInFiveBlocksPanel: View {
                 }
                 Spacer(minLength: 8)
                 if isDaylight(block.kind), let solar = block.solarKwh {
-                    Text(EnergyFormatting.format(solar))
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(EnergyFormatting.format(solar))
+                            .appFont(FluxTheme.Typography.touValue)
+                            .foregroundStyle(FluxTheme.Palette.amber)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
+                        ValueSubline(content: solarValueSub(for: block))
+                    }
+                    .frame(width: 76, alignment: .trailing)
+                }
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(EnergyFormatting.format(block.totalKwh))
                         .appFont(FluxTheme.Typography.touValue)
-                        .foregroundStyle(FluxTheme.Palette.amber)
+                        .foregroundStyle(FluxTheme.Palette.primaryText)
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
-                        .frame(width: 76, alignment: .trailing)
+                    ValueSubline(content: totalValueSub(for: block))
                 }
-                Text(EnergyFormatting.format(block.totalKwh))
-                    .appFont(FluxTheme.Typography.touValue)
-                    .foregroundStyle(FluxTheme.Palette.primaryText)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-                    .frame(width: 76, alignment: .trailing)
+                .frame(width: 76, alignment: .trailing)
             }
             .padding(.vertical, FluxTheme.Metrics.statRowVerticalPadding)
+            .modifier(BlockRowAccessibilityModifier(label: rowAccessibilityOverride(for: block)))
 
             if !isLast {
                 Rectangle()
@@ -87,6 +95,23 @@ struct DayInFiveBlocksPanel: View {
                     .frame(height: FluxTheme.Metrics.hairline)
             }
         }
+    }
+
+    private func solarValueSub(for block: DailyUsageBlock) -> SublineContent {
+        DayInFiveBlocksPanelCompareMapping.solarValueSub(for: block, compare: compare)
+    }
+
+    private func totalValueSub(for block: DailyUsageBlock) -> SublineContent {
+        DayInFiveBlocksPanelCompareMapping.totalValueSub(for: block, compare: compare)
+    }
+
+    private func rowAccessibilityOverride(for block: DailyUsageBlock) -> String? {
+        DayInFiveBlocksPanelCompareMapping.rowAccessibilityOverride(
+            for: block,
+            rowLabel: label(for: block.kind),
+            timeRange: timeRange(block),
+            compare: compare
+        )
     }
 
     private func isDaylight(_ kind: DailyUsageBlock.Kind) -> Bool {
@@ -125,6 +150,153 @@ struct DayInFiveBlocksPanel: View {
             return "—"
         }
         return "\(DateFormatting.clockTime24h(from: startDate))–\(DateFormatting.clockTime24h(from: endDate))"
+    }
+}
+
+private struct BlockRowAccessibilityModifier: ViewModifier {
+    let label: String?
+
+    func body(content: Content) -> some View {
+        if let label {
+            content
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(label)
+        } else {
+            content
+        }
+    }
+}
+
+/// Per-block compare-state mapping used by `DayInFiveBlocksPanel`.
+/// Factored out so the per-block logic is unit-testable without
+/// rendering the SwiftUI view.
+enum DayInFiveBlocksPanelCompareMapping {
+    static func solarValueSub(for block: DailyUsageBlock, compare: ComparisonState) -> SublineContent {
+        switch compare {
+        case .off:
+            return .hidden
+        case .loading, .unavailable:
+            return .reserved
+        case .ready(let snapshot, _):
+            let comparisonBlock = snapshot.dailyUsage?.blocks.first { $0.kind == block.kind }
+            return DeltaFormatter.sublineContent(
+                current: block.solarKwh,
+                comparison: comparisonBlock?.solarKwh
+            )
+        }
+    }
+
+    static func totalValueSub(for block: DailyUsageBlock, compare: ComparisonState) -> SublineContent {
+        switch compare {
+        case .off:
+            return .hidden
+        case .loading, .unavailable:
+            return .reserved
+        case .ready(let snapshot, _):
+            let comparisonBlock = snapshot.dailyUsage?.blocks.first { $0.kind == block.kind }
+            return DeltaFormatter.sublineContent(
+                current: block.totalKwh,
+                comparison: comparisonBlock?.totalKwh
+            )
+        }
+    }
+
+    /// Composed accessibility label exposing both the total and (on
+    /// daylight rows) the solar delta. Format mirrors `FluxStatRow`'s
+    /// approach so VoiceOver users hear one element per row.
+    static func rowAccessibilityOverride(
+        for block: DailyUsageBlock,
+        rowLabel: String,
+        timeRange: String,
+        compare: ComparisonState
+    ) -> String? {
+        switch compare {
+        case .off:
+            return nil
+        case .loading, .unavailable:
+            return fallbackLabel(for: block, rowLabel: rowLabel, timeRange: timeRange)
+        case .ready(let snapshot, let period):
+            return readyLabel(
+                for: block,
+                rowLabel: rowLabel,
+                timeRange: timeRange,
+                snapshot: snapshot,
+                period: period
+            )
+        }
+    }
+
+    private static func fallbackLabel(
+        for block: DailyUsageBlock,
+        rowLabel: String,
+        timeRange: String
+    ) -> String {
+        let total = EnergyFormatting.format(block.totalKwh)
+        if isDaylight(block.kind), let solar = block.solarKwh {
+            let solarText = EnergyFormatting.format(solar)
+            return "\(rowLabel), \(timeRange): \(total) total, \(solarText) solar"
+        }
+        return "\(rowLabel), \(timeRange): \(total)"
+    }
+
+    private static func readyLabel(
+        for block: DailyUsageBlock,
+        rowLabel: String,
+        timeRange: String,
+        snapshot: ComparisonSnapshot,
+        period: ComparePeriod
+    ) -> String {
+        let comparisonBlock = snapshot.dailyUsage?.blocks.first { $0.kind == block.kind }
+        let total = EnergyFormatting.format(block.totalKwh)
+        let totalClause = comparisonClause(
+            current: block.totalKwh,
+            comparison: comparisonBlock?.totalKwh,
+            period: period
+        )
+
+        if isDaylight(block.kind), let solar = block.solarKwh {
+            let solarText = EnergyFormatting.format(solar)
+            let solarClause = comparisonClause(
+                current: solar,
+                comparison: comparisonBlock?.solarKwh,
+                period: period
+            )
+            return "\(rowLabel), \(timeRange): \(total) total\(totalClause), \(solarText) solar\(solarClause)"
+        }
+        return "\(rowLabel), \(timeRange): \(total)\(totalClause)"
+    }
+
+    private static func comparisonClause(
+        current: Double?,
+        comparison: Double?,
+        period: ComparePeriod
+    ) -> String {
+        guard let current, let comparison else { return "" }
+        let rounded = roundedOneDecimal(current - comparison)
+        let direction: String
+        if rounded > 0 {
+            direction = "up"
+        } else if rounded < 0 {
+            direction = "down"
+        } else {
+            direction = "unchanged"
+        }
+        if rounded == 0 {
+            return ", \(direction) versus \(period.displayName.lowercased())"
+        }
+        let magnitude = String(format: "%.1f", abs(rounded))
+        return ", \(direction) \(magnitude) kilowatt-hours versus \(period.displayName.lowercased())"
+    }
+
+    private static func roundedOneDecimal(_ value: Double) -> Double {
+        Double(String(format: "%.1f", value)) ?? 0
+    }
+
+    private static func isDaylight(_ kind: DailyUsageBlock.Kind) -> Bool {
+        switch kind {
+        case .morningPeak, .offPeak, .afternoonPeak: true
+        case .night, .evening: false
+        }
     }
 }
 

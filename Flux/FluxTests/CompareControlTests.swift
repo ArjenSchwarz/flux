@@ -95,7 +95,7 @@ struct CompareControlTests {
         let controller = UIHostingController(rootView: harness)
         controller.view.setNeedsLayout()
         controller.view.layoutIfNeeded()
-        _ = controller.sizeThatFits(in: CGSize(width: 360, height: .infinity))
+        _ = controller.sizeThatFits(in: CGSize(width: 360, height: CGFloat.infinity))
         return controller
     }
 }
