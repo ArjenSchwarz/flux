@@ -127,7 +127,10 @@ struct SummaryBlock: View {
             accessibilityOverride: accessibilityOverride(
                 rowLabel: label,
                 labelSub: sub,
-                primary: value,
+                // Spoken primary value uses "kilowatt-hours" rather than
+                // the displayed "kWh" so VoiceOver doesn't read it as the
+                // letters k-W-h. AC 7.1.
+                primary: EnergyFormatting.formatSpoken(current),
                 current: current,
                 comparison: comparison
             )

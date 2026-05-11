@@ -207,9 +207,27 @@ struct DayInFiveBlocksPanelCompareTests {
             compare: .loading(date: "2026-05-08")
         )
         // Fallback label includes row label, time range, and total only.
+        // Spoken "kilowatt-hours" so VoiceOver doesn't read "k-W-h".
         #expect(result?.contains("Night") == true)
-        #expect(result?.contains("3.10 kWh") == true)
+        #expect(result?.contains("3.10 kilowatt-hours") == true)
         #expect(result?.contains("versus") == false)
+    }
+
+    @Test
+    func rowAccessibilityOverrideFallbackOnDaylightRowWithNilSolarOmitsSolar() {
+        // Daylight blocks normally expose both total and solar in the
+        // fallback label, but a daylight block with no solar reading
+        // should drop the solar clause rather than reading "—".
+        let block = makeBlock(kind: .offPeak, totalKwh: 5.0, solarKwh: nil)
+        let result = DayInFiveBlocksPanelCompareMapping.rowAccessibilityOverride(
+            for: block,
+            rowLabel: "Off-peak",
+            timeRange: "10:00–14:00",
+            compare: .loading(date: "2026-05-08")
+        )
+        #expect(result?.contains("Off-peak") == true)
+        #expect(result?.contains("5.00 kilowatt-hours") == true)
+        #expect(result?.contains("solar") == false)
     }
 
     @Test

@@ -94,7 +94,7 @@ struct SummaryBlockCompareTests {
         let result = SummaryBlockCompareMapping.accessibilityOverride(
             rowLabel: "Solar produced",
             labelSub: nil,
-            primary: "14.8 kWh",
+            primary: "14.80 kilowatt-hours",
             current: 14.8,
             comparison: 13.6,
             compare: .off
@@ -108,12 +108,12 @@ struct SummaryBlockCompareTests {
         let result = SummaryBlockCompareMapping.accessibilityOverride(
             rowLabel: "Solar produced",
             labelSub: nil,
-            primary: "14.8 kWh",
+            primary: "14.80 kilowatt-hours",
             current: 14.8,
             comparison: 13.6,
             compare: .loading(date: "2026-05-08")
         )
-        #expect(result == "Solar produced: 14.8 kWh")
+        #expect(result == "Solar produced: 14.80 kilowatt-hours")
     }
 
     @Test
@@ -121,12 +121,12 @@ struct SummaryBlockCompareTests {
         let result = SummaryBlockCompareMapping.accessibilityOverride(
             rowLabel: "Solar produced",
             labelSub: nil,
-            primary: "14.8 kWh",
+            primary: "14.80 kilowatt-hours",
             current: 14.8,
             comparison: 13.6,
             compare: .unavailable(period: .yesterday)
         )
-        #expect(result == "Solar produced: 14.8 kWh")
+        #expect(result == "Solar produced: 14.80 kilowatt-hours")
     }
 
     @Test
@@ -136,12 +136,12 @@ struct SummaryBlockCompareTests {
         let result = SummaryBlockCompareMapping.accessibilityOverride(
             rowLabel: "Solar produced",
             labelSub: nil,
-            primary: "14.8 kWh",
+            primary: "14.80 kilowatt-hours",
             current: 14.8,
             comparison: snapshot.solar,
             compare: .ready(snapshot, period: .yesterday)
         )
-        #expect(result == "Solar produced: 14.8 kWh, up 1.2 kilowatt-hours versus yesterday")
+        #expect(result == "Solar produced: 14.80 kilowatt-hours, up 1.2 kilowatt-hours versus yesterday")
     }
 
     @Test
@@ -151,12 +151,12 @@ struct SummaryBlockCompareTests {
         let result = SummaryBlockCompareMapping.accessibilityOverride(
             rowLabel: "Grid in (peak)",
             labelSub: "paid",
-            primary: "0.84 kWh",
+            primary: "840 watt-hours",
             current: 0.84,
             comparison: snapshot.peakGridImport,
             compare: .ready(snapshot, period: .yesterday)
         )
-        #expect(result?.starts(with: "Grid in (peak), paid: 0.84 kWh,") == true)
+        #expect(result?.starts(with: "Grid in (peak), paid: 840 watt-hours,") == true)
     }
 
     @Test
@@ -165,12 +165,12 @@ struct SummaryBlockCompareTests {
         let result = SummaryBlockCompareMapping.accessibilityOverride(
             rowLabel: "Grid in (off-peak)",
             labelSub: "free",
-            primary: "3.42 kWh",
+            primary: "3.42 kilowatt-hours",
             current: 3.42,
             comparison: snapshot.offpeakGridImport,
             compare: .ready(snapshot, period: .yesterday)
         )
-        #expect(result?.starts(with: "Grid in (off-peak), free: 3.42 kWh,") == true)
+        #expect(result?.starts(with: "Grid in (off-peak), free: 3.42 kilowatt-hours,") == true)
     }
 
     @Test
@@ -179,7 +179,7 @@ struct SummaryBlockCompareTests {
         let result = SummaryBlockCompareMapping.accessibilityOverride(
             rowLabel: "Solar produced",
             labelSub: nil,
-            primary: "14.8 kWh",
+            primary: "14.80 kilowatt-hours",
             current: 14.8,
             comparison: snapshot.solar,
             compare: .ready(snapshot, period: .sevenDaysAgo)

@@ -193,9 +193,11 @@ enum DayInFiveBlocksPanelCompareMapping {
         rowLabel: String,
         timeRange: String
     ) -> String {
-        let total = EnergyFormatting.format(block.totalKwh)
+        // Spoken form ("kilowatt-hours") for VoiceOver; the displayed
+        // "kWh" string would be read as the letters k-W-h. AC 7.1.
+        let total = EnergyFormatting.formatSpoken(block.totalKwh)
         if block.kind.isDaylight, let solar = block.solarKwh {
-            let solarText = EnergyFormatting.format(solar)
+            let solarText = EnergyFormatting.formatSpoken(solar)
             return "\(rowLabel), \(timeRange): \(total) total, \(solarText) solar"
         }
         return "\(rowLabel), \(timeRange): \(total)"
@@ -209,7 +211,9 @@ enum DayInFiveBlocksPanelCompareMapping {
         period: ComparePeriod
     ) -> String {
         let comparisonBlock = snapshot.dailyUsage?.blocks.first { $0.kind == block.kind }
-        let total = EnergyFormatting.format(block.totalKwh)
+        // Spoken form ("kilowatt-hours") for VoiceOver; the displayed
+        // "kWh" string would be read as the letters k-W-h. AC 7.1.
+        let total = EnergyFormatting.formatSpoken(block.totalKwh)
         let totalClause = DeltaFormatter.voiceOverComparisonClause(
             current: block.totalKwh,
             comparison: comparisonBlock?.totalKwh,
@@ -217,7 +221,7 @@ enum DayInFiveBlocksPanelCompareMapping {
         )
 
         if block.kind.isDaylight, let solar = block.solarKwh {
-            let solarText = EnergyFormatting.format(solar)
+            let solarText = EnergyFormatting.formatSpoken(solar)
             let solarClause = DeltaFormatter.voiceOverComparisonClause(
                 current: solar,
                 comparison: comparisonBlock?.solarKwh,

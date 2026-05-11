@@ -229,6 +229,11 @@ struct DayDetailViewModelCompareTests {
             if predicate(viewModel.comparisonState) { return }
             try? await Task.sleep(nanoseconds: 10_000_000) // 10 ms
         }
+        // Record the timeout so CI failures point at the wait, not at the
+        // caller's next assertion against `comparisonState`.
+        Issue.record(
+            "waitFor timed out after \(timeoutSeconds)s; comparisonState = \(viewModel.comparisonState)"
+        )
     }
 }
 
@@ -251,6 +256,13 @@ private final class MockCompareAPIClient: FluxAPIClient, @unchecked Sendable {
         lastFetchDate = date
         let delay = delaySeconds
         if delay > 0 {
+            // `try?` is deliberate: swallowing the CancellationError makes
+            // the mock fall through to the dictionary lookup so the
+            // ViewModel's post-sleep `Task.isCancelled` guard is what
+            // discards the result. Production code path goes through the
+            // bare `catch` in `updateCompare`, which also maps to
+            // `.unavailable` — both routes are correct but the test
+            // exercises the guard explicitly.
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
         }
         guard let result = dayResults[date] else {

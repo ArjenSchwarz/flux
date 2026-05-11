@@ -53,17 +53,23 @@ struct FluxStatRowCompareTests {
 
     @Test
     func accessibilityOverrideNilLeavesRowAsSeparateElements() {
-        // Pre-feature behaviour: row reads as separate Text elements. We
-        // can't directly inspect VoiceOver traversal in unit tests, but
-        // we can assert the row produces a non-empty accessibility tree
-        // when the override is nil. The richer composition test lives in
-        // SummaryBlockCompareTests / DayInFiveBlocksPanelCompareTests.
+        // Pre-feature behaviour: row reads as separate Text elements
+        // (label, value, optional sub-line) rather than one combined
+        // string. Unit tests can't directly inspect VoiceOver traversal —
+        // SwiftUI doesn't always realise its accessibility tree into
+        // UIKit's `accessibilityElementCount` before the view is attached
+        // to a window. The richer composition (override vs. no-override
+        // semantics) is exercised in SummaryBlockCompareTests and
+        // DayInFiveBlocksPanelCompareTests against the mapping enums
+        // directly. Here we only verify that the body builder doesn't
+        // fail when `accessibilityOverride` is nil — i.e. that the
+        // default no-override path renders.
         let view = FluxStatRow(label: "Solar", value: "14.8 kWh", last: true)
         let controller = UIHostingController(rootView: view.frame(width: 320))
         controller.view.setNeedsLayout()
         controller.view.layoutIfNeeded()
-        // Accessibility container must produce children when no override is set.
-        #expect(controller.view.accessibilityElementCount() >= 0)
+        let size = controller.sizeThatFits(in: CGSize(width: 320, height: CGFloat.infinity))
+        #expect(size.height > 0)
     }
 
     @Test

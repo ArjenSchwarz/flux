@@ -42,4 +42,16 @@ public enum EnergyFormatting {
         }
         return String(format: "%.0f Wh", value * 1000)
     }
+
+    /// Spoken form of `format(_:)` for VoiceOver labels. VoiceOver reads
+    /// "kWh" as the letters k-W-h, so accessibility labels that include
+    /// the spoken unit must spell it out. Returns "—" for nil so the
+    /// glyph still reads naturally.
+    public static func formatSpoken(_ kilowattHours: Double?) -> String {
+        guard let value = kilowattHours else { return "—" }
+        if abs(value) >= 1 {
+            return String(format: "%.2f kilowatt-hours", value)
+        }
+        return String(format: "%.0f watt-hours", value * 1000)
+    }
 }
