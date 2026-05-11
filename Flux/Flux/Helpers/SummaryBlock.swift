@@ -87,6 +87,12 @@ struct SummaryBlock: View {
             // Without a peak/off-peak split (DaySummary currently doesn't
             // carry one) showing it all under "peak" would be misleading.
             // Render a single combined row instead.
+            //
+            // No `valueSub` / `accessibilityOverride` here — Decision 10
+            // (`specs/stat-comparisons/decision_log.md`) guarantees the
+            // split is always present in production data, so this branch
+            // never fires when Compare is on. If that guarantee ever
+            // changes, this row needs its own compare wiring.
             FluxStatRow(
                 label: "Grid in",
                 value: kwh(gridImport),

@@ -490,8 +490,8 @@ The `initial: true` flag on the `compareEnabled` `.onChange` triggers the compar
 
 ```swift
 extension UserDefaults {
-    static let compareEnabledKey = "compare.enabled"
-    static let comparePeriodKey  = "compare.period"   // stores ComparePeriod.rawValue
+    static let compareEnabledKey = "compareEnabled"
+    static let comparePeriodKey  = "comparePeriod"   // stores ComparePeriod.rawValue
 }
 ```
 

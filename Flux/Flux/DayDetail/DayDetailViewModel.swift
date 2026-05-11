@@ -40,6 +40,14 @@ final class DayDetailViewModel {
     // without crossing actor isolation. `@ObservationIgnored` opts the
     // task handle out of `@Observable` storage — it's not observable
     // state.
+    //
+    // INVARIANT (compiler no longer enforces this): the only access to
+    // this property from a non-MainActor context must be the
+    // `cancel()` call in `deinit`. All read/write paths from
+    // `updateCompare` and friends run on the main actor. If you add a
+    // new access point, audit it against this rule — `nonisolated(unsafe)`
+    // is the discipline that makes the storage safe; Swift no longer
+    // checks it for you.
     @ObservationIgnored
     nonisolated(unsafe) private var comparisonTask: Task<Void, Never>?
 

@@ -41,7 +41,7 @@ All ViewModels follow `@MainActor @Observable final class` pattern with `private
 - The Task captures `[apiClient]` only (no `[weak self]`) and writes `self.comparisonState = result` at the end. The strong `self` capture is intentional so the result lands; lifetime is bounded by `deinit { comparisonTask?.cancel() }`.
 - `resolveCompareDate(period:)` uses `DateFormatting.parseDayDate` + `sydneyCalendar.date(byAdding: .day, value: period.dayOffset)` so the −1 / −7 day offsets are stable across DST transitions in Sydney.
 - `DayDetailView` triggers `updateCompare` from three `.onChange` reactions — `compareEnabled` (with `initial: true` so a previously-on toggle re-fires the fetch on first appearance), `comparePeriodRaw`, and `viewModel.date`. The `viewModel.date` reaction sits next to `.task(id: viewModel.date)` so the primary `loadDay` and the comparison fetch run in parallel after day-navigation.
-- Compare preferences live in `UserDefaults.fluxAppGroup` under keys `compare.enabled` and `compare.period` (per device, no iCloud sync). `ComparePeriod.parseOrDefault` falls back to `.yesterday` for unknown raw values so a future build's enum case never crashes the current build.
+- Compare preferences live in `UserDefaults.fluxAppGroup` under keys `compareEnabled` and `comparePeriod` (per device, no iCloud sync). `ComparePeriod.parseOrDefault` falls back to `.yesterday` for unknown raw values so a future build's enum case never crashes the current build.
 
 ## NoteEditorViewModel (DayDetail/NoteEditorViewModel.swift)
 

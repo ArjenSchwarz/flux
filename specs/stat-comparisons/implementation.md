@@ -81,14 +81,13 @@ Each `Text` inside a `ValueSubline` is `.accessibilityHidden(true)` — the chev
 - **AC 5.6** — `.loading` maps to `.reserved` (`ComparisonState.swift:26-27`).
 - **AC 6.1** — No `#if os(iOS)` guards on the Compare path; hosted in shared `DayDetailView`.
 - **AC 6.2** — `@AppStorage` writes to `UserDefaults.fluxAppGroup`; no iCloud KVS or Keychain wiring.
-- **AC 7.1, 7.2** — `DeltaFormatter.voiceOverLabel`/`voiceOverFallbackLabel` (`DeltaFormatter.swift:22-44`); applied via `RowAccessibilityModifier`.
+- **AC 7.1, 7.2** — `DeltaFormatter.voiceOverLabel`/`voiceOverFallbackLabel` (`DeltaFormatter.swift:22-44`); applied via `RowAccessibilityModifier`. Primary value is spoken via `EnergyFormatting.formatSpoken(_:)` ("14.80 kilowatt-hours") so VoiceOver doesn't read "kWh" as the letters k-W-h.
 - **AC 7.3** — Native `Toggle` and `Picker` with `.accessibilityLabel("Compare period, …")` (`CompareControl.swift:42-43`).
 - **AC 7.4** — Caption has explicit `.accessibilityLabel` matching its visible string (`CompareControl.swift:31`).
 
 ### Partially implemented
 
 - **AC 5.6 height stability** — Structurally guaranteed because `.loading`, `.reserved`, and `.text` all render through `ValueSubline` with identical font/colour, and `.reserved` uses NBSP to pin the line height. There's no card-level test pinning `loading.height == ready.height` byte-for-byte; `ValueSublineTests` measures the primitive but not the composed assertion.
-- **AC 7.1 example wording** — `voiceOverLabel` matches the AC format. The *primary value* embedded in the label is whatever `EnergyFormatting.format` returns (e.g. `"14.8 kWh"`) rather than the spelt-out *"14.8 kilowatt-hours"* shown in the AC's example; the comparison clause uses the long form, the primary does not. Consistent with the implementation, but a strict reading of the example might expect both halves spelt out.
 
 ### Missing or deferred
 

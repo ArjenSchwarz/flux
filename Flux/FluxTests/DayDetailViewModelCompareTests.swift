@@ -96,6 +96,13 @@ struct DayDetailViewModelCompareTests {
         // Wait long enough for the cancelled in-flight fetch to settle —
         // a stale `.ready` would overwrite `.off` if cancellation guards
         // were missing.
+        //
+        // KNOWN CI FLAKINESS: this is a negative assertion (the stale
+        // task must NOT have written), so we can't use the `waitFor`
+        // polling pattern here — there's no positive state to wait for.
+        // The 700 ms margin is generous on a developer Mac but may need
+        // bumping if a loaded CI runner delays the cooperative
+        // scheduler beyond the mock's 300 ms delay.
         try? await Task.sleep(nanoseconds: 700_000_000)
         #expect(viewModel.comparisonState == .off)
     }
@@ -180,6 +187,12 @@ struct DayDetailViewModelCompareTests {
 
         // Wait long enough that task A's body would resume if it weren't
         // cancellation-guarded.
+        //
+        // KNOWN CI FLAKINESS: same constraint as
+        // `togglingOffCancelsInFlightFetchAndResetsToOff` — negative
+        // assertion, so no polling alternative. 500 ms exceeds the
+        // mock's 300 ms delay with margin on a developer Mac but may
+        // need bumping on a loaded CI runner.
         try? await Task.sleep(nanoseconds: 500_000_000)
 
         guard case .ready(let snapshot, let period) = viewModel.comparisonState else {
