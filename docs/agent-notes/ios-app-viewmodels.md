@@ -26,12 +26,22 @@ All ViewModels follow `@MainActor @Observable final class` pattern with `private
 ## DayDetailViewModel (DayDetail/DayDetailViewModel.swift)
 
 - **Dependencies:** `apiClient`, `nowProvider`.
-- **State:** `date` (private(set)), `readings`, `summary`, `isLoading`, `error`, `hasPowerData`, `note`.
+- **State:** `date` (private(set)), `readings`, `summary`, `isLoading`, `error`, `hasPowerData`, `note`, `comparisonState`.
 - Uses centralised `DateFormatting.parseDayDate` and `dayDateString` (cached formatters, not created per call).
 - `navigatePrevious()`/`navigateNext()` methods with `navigateNext` blocking advancement past today.
 - Load guard prevents duplicate requests.
 - `isFallbackData()` checks if readings are synthetic (backend returns synthetic data for days without real readings).
 - `saveNote(_:)` applies client-side `NoteText.normalised + graphemeCount` cap (throws `FluxAPIError.badRequest` if over 200) before calling `apiClient.saveNote`. On success: sets `note = response.text` (or nil if empty — server confirms delete by returning empty text).
+
+### Compare lifecycle
+
+- `comparisonState: ComparisonState` is `.off | .loading(date:) | .ready(snapshot, period:) | .unavailable(period:)`. Drives the Day Detail Compare feature (T-1161). The view subscribes to it through `SummaryBlock(compare:)` and `DayInFiveBlocksPanel(compare:)`.
+- `updateCompare(enabled:period:)` is the single entry point. It cancels any in-flight `comparisonTask`, then either resets to `.off`, short-circuits to synchronous `.unavailable` on date-resolution failure, or kicks off a fetch whose outcome maps to `.ready` / `.unavailable`.
+- **Three `Task.isCancelled` guards inside the spawned task are load-bearing.** Cancellation is cooperative — an awaited `fetchDay` whose body has already produced bytes will resume even after the task is cancelled. Without the guards a slow Task A whose cancellation completes after Task B has already written `.ready` could overwrite Task B's outcome.
+- The Task captures `[apiClient]` only (no `[weak self]`) and writes `self.comparisonState = result` at the end. The strong `self` capture is intentional so the result lands; lifetime is bounded by `deinit { comparisonTask?.cancel() }`.
+- `resolveCompareDate(period:)` uses `DateFormatting.parseDayDate` + `sydneyCalendar.date(byAdding: .day, value: period.dayOffset)` so the −1 / −7 day offsets are stable across DST transitions in Sydney.
+- `DayDetailView` triggers `updateCompare` from three `.onChange` reactions — `compareEnabled` (with `initial: true` so a previously-on toggle re-fires the fetch on first appearance), `comparePeriodRaw`, and `viewModel.date`. The `viewModel.date` reaction sits next to `.task(id: viewModel.date)` so the primary `loadDay` and the comparison fetch run in parallel after day-navigation.
+- Compare preferences live in `UserDefaults.fluxAppGroup` under keys `compareEnabled` and `comparePeriod` (per device, no iCloud sync). `ComparePeriod.parseOrDefault` falls back to `.yesterday` for unknown raw values so a future build's enum case never crashes the current build.
 
 ## NoteEditorViewModel (DayDetail/NoteEditorViewModel.swift)
 

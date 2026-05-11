@@ -16,6 +16,7 @@ struct SummaryBlock: View {
     let batteryDischarge: Double?
     var showsBatteryCycle: Bool = true
     var avgLoadWatts: Double?
+    var compare: ComparisonState = .off
 
     var body: some View {
         FluxPanel {
@@ -23,51 +24,150 @@ struct SummaryBlock: View {
                 if let title {
                     FluxPanelHeader(label: title, right: trailing)
                 }
-
                 if let avgLoadWatts {
                     FluxStatRow(label: "15m avg load", value: PowerFormatting.format(avgLoadWatts))
                 }
-
-                FluxStatRow(
-                    label: "Solar produced",
-                    value: kwh(solar),
-                    accent: FluxTheme.Palette.amber
-                )
-                FluxStatRow(label: "House used", value: kwh(houseUsed))
-                if offpeakGridImport != nil {
-                    FluxStatRow(
-                        label: "Grid in (peak)",
-                        value: kwh(peakGridImport),
-                        sub: "paid",
-                        accent: FluxTheme.Palette.grid
-                    )
-                    FluxStatRow(
-                        label: "Grid in (off-peak)",
-                        value: kwh(offpeakGridImport),
-                        sub: "free",
-                        accent: FluxTheme.Palette.offpeak
-                    )
-                } else {
-                    // Without a peak/off-peak split (DaySummary currently
-                    // doesn't carry one) showing it all under "peak" would be
-                    // misleading. Render a single combined row instead.
-                    FluxStatRow(
-                        label: "Grid in",
-                        value: kwh(gridImport),
-                        accent: FluxTheme.Palette.grid
-                    )
-                }
-                FluxStatRow(
-                    label: "Grid out",
-                    value: kwh(gridExport),
-                    accent: FluxTheme.Palette.gridExport,
-                    last: !showsBatteryCycle
-                )
+                solarRow
+                houseUsedRow
+                gridInRows
+                gridOutRow
                 if showsBatteryCycle {
                     FluxStatRow(label: "Battery cycle", value: batteryCycleText, last: true)
                 }
             }
         }
+    }
+
+    private var solarRow: some View {
+        compareRow(
+            label: "Solar produced",
+            value: kwh(solar),
+            sub: nil,
+            accent: FluxTheme.Palette.amber,
+            last: false,
+            current: solar,
+            comparison: snapshot?.solar
+        )
+    }
+
+    private var houseUsedRow: some View {
+        compareRow(
+            label: "House used",
+            value: kwh(houseUsed),
+            sub: nil,
+            accent: nil,
+            last: false,
+            current: houseUsed,
+            comparison: snapshot?.houseUsed
+        )
+    }
+
+    @ViewBuilder
+    private var gridInRows: some View {
+        if offpeakGridImport != nil {
+            compareRow(
+                label: "Grid in (peak)",
+                value: kwh(peakGridImport),
+                sub: "paid",
+                accent: FluxTheme.Palette.grid,
+                last: false,
+                current: peakGridImport,
+                comparison: snapshot?.peakGridImport
+            )
+            compareRow(
+                label: "Grid in (off-peak)",
+                value: kwh(offpeakGridImport),
+                sub: "free",
+                accent: FluxTheme.Palette.offpeak,
+                last: false,
+                current: offpeakGridImport,
+                comparison: snapshot?.offpeakGridImport
+            )
+        } else {
+            // Without a peak/off-peak split (DaySummary currently doesn't
+            // carry one) showing it all under "peak" would be misleading.
+            // Render a single combined row instead.
+            //
+            // No `valueSub` / `accessibilityOverride` here — Decision 10
+            // (`specs/stat-comparisons/decision_log.md`) guarantees the
+            // split is always present in production data, so this branch
+            // never fires when Compare is on. If that guarantee ever
+            // changes, this row needs its own compare wiring.
+            FluxStatRow(
+                label: "Grid in",
+                value: kwh(gridImport),
+                accent: FluxTheme.Palette.grid
+            )
+        }
+    }
+
+    private var gridOutRow: some View {
+        compareRow(
+            label: "Grid out",
+            value: kwh(gridExport),
+            sub: nil,
+            accent: FluxTheme.Palette.gridExport,
+            last: !showsBatteryCycle,
+            current: gridExport,
+            comparison: snapshot?.gridExport
+        )
+    }
+
+    // swiftlint:disable function_parameter_count
+    private func compareRow(
+        label: String,
+        value: String,
+        sub: String?,
+        accent: Color?,
+        last: Bool,
+        current: Double?,
+        comparison: Double?
+    ) -> FluxStatRow {
+        FluxStatRow(
+            label: label,
+            value: value,
+            sub: sub,
+            accent: accent,
+            last: last,
+            valueSub: valueSub(current: current, comparison: comparison),
+            accessibilityOverride: accessibilityOverride(
+                rowLabel: label,
+                labelSub: sub,
+                // Spoken primary value uses "kilowatt-hours" rather than
+                // the displayed "kWh" so VoiceOver doesn't read it as the
+                // letters k-W-h. AC 7.1.
+                primary: EnergyFormatting.formatSpoken(current),
+                current: current,
+                comparison: comparison
+            )
+        )
+    }
+    // swiftlint:enable function_parameter_count
+
+    private var snapshot: ComparisonSnapshot? {
+        if case .ready(let snapshot, _) = compare { return snapshot }
+        return nil
+    }
+
+    private func valueSub(current: Double?, comparison: Double?) -> SublineContent {
+        SummaryBlockCompareMapping.valueSub(current: current, comparison: comparison, compare: compare)
+    }
+
+    private func accessibilityOverride(
+        rowLabel: String,
+        labelSub: String?,
+        primary: String,
+        current: Double?,
+        comparison: Double?
+    ) -> String? {
+        SummaryBlockCompareMapping.accessibilityOverride(
+            rowLabel: rowLabel,
+            labelSub: labelSub,
+            primary: primary,
+            current: current,
+            comparison: comparison,
+            compare: compare
+        )
     }
 
     private var peakGridImport: Double? {
@@ -93,6 +193,45 @@ struct SummaryBlock: View {
     private func kwh(_ value: Double?) -> String {
         EnergyFormatting.format(value)
     }
+}
+
+/// Per-row compare-state mapping used by `SummaryBlock`. Factored out so
+/// the per-row logic is unit-testable without rendering the SwiftUI view.
+enum SummaryBlockCompareMapping {
+    static func valueSub(current: Double?, comparison: Double?, compare: ComparisonState) -> SublineContent {
+        compare.subline(current: current, comparison: comparison)
+    }
+
+    // swiftlint:disable function_parameter_count
+    static func accessibilityOverride(
+        rowLabel: String,
+        labelSub: String?,
+        primary: String,
+        current: Double?,
+        comparison: Double?,
+        compare: ComparisonState
+    ) -> String? {
+        switch compare {
+        case .off:
+            return nil
+        case .loading, .unavailable:
+            return DeltaFormatter.voiceOverFallbackLabel(
+                rowLabel: rowLabel,
+                labelSub: labelSub,
+                primaryValue: primary
+            )
+        case .ready(_, let period):
+            return DeltaFormatter.voiceOverLabel(
+                rowLabel: rowLabel,
+                labelSub: labelSub,
+                primaryValue: primary,
+                current: current,
+                comparison: comparison,
+                period: period
+            )
+        }
+    }
+    // swiftlint:enable function_parameter_count
 }
 
 extension SummaryBlock {
@@ -123,7 +262,8 @@ extension SummaryBlock {
         trailing: String? = nil,
         summary: DaySummary?,
         offpeakGridImport: Double?,
-        showsBatteryCycle: Bool = true
+        showsBatteryCycle: Bool = true,
+        compare: ComparisonState = .off
     ) {
         self.init(
             title: title,
@@ -134,7 +274,8 @@ extension SummaryBlock {
             offpeakGridImport: offpeakGridImport,
             batteryCharge: summary?.eCharge,
             batteryDischarge: summary?.eDischarge,
-            showsBatteryCycle: showsBatteryCycle
+            showsBatteryCycle: showsBatteryCycle,
+            compare: compare
         )
     }
 

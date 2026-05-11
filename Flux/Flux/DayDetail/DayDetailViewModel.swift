@@ -32,9 +32,24 @@ final class DayDetailViewModel {
     /// O(n) over `parsedReadings`, so caching it here saves work on
     /// frequent re-renders (selection cursor, scroll, etc.).
     private(set) var offpeakStats: OffpeakReadingStats = .empty
+    private(set) var comparisonState: ComparisonState = .off
 
     private let apiClient: any FluxAPIClient
     private let nowProvider: @Sendable () -> Date
+    // `nonisolated(unsafe)` so `deinit` can cancel the in-flight task
+    // without crossing actor isolation. `@ObservationIgnored` opts the
+    // task handle out of `@Observable` storage — it's not observable
+    // state.
+    //
+    // INVARIANT (compiler no longer enforces this): the only access to
+    // this property from a non-MainActor context must be the
+    // `cancel()` call in `deinit`. All read/write paths from
+    // `updateCompare` and friends run on the main actor. If you add a
+    // new access point, audit it against this rule — `nonisolated(unsafe)`
+    // is the discipline that makes the storage safe; Swift no longer
+    // checks it for you.
+    @ObservationIgnored
+    nonisolated(unsafe) private var comparisonTask: Task<Void, Never>?
 
     init(
         date: String,
@@ -44,6 +59,14 @@ final class DayDetailViewModel {
         self.date = date
         self.apiClient = apiClient
         self.nowProvider = nowProvider
+    }
+
+    deinit {
+        // The comparison Task captures `self` strongly so it can write
+        // back to `comparisonState` on completion. If the view is
+        // dismissed mid-fetch, cancel the in-flight task so the awaited
+        // network request is not left running.
+        comparisonTask?.cancel()
     }
 
     var isToday: Bool {
@@ -78,6 +101,53 @@ final class DayDetailViewModel {
             offpeakStats = .empty
             self.error = FluxAPIError.from(error)
         }
+    }
+
+    /// Drives the Compare lifecycle. Cancels any in-flight comparison
+    /// fetch, then either resets to `.off`, short-circuits to
+    /// `.unavailable` on date-resolution failure, or kicks off a new
+    /// fetch whose outcome maps to `.ready` / `.unavailable`. The
+    /// `Task.isCancelled` guards before each state mutation are
+    /// load-bearing — without them a slow fetch could overwrite a
+    /// newer state after the period chip or selected day changed.
+    func updateCompare(enabled: Bool, period: ComparePeriod) {
+        comparisonTask?.cancel()
+        guard enabled else {
+            comparisonState = .off
+            return
+        }
+        guard let target = resolveCompareDate(period: period) else {
+            comparisonState = .unavailable(period: period)
+            return
+        }
+        comparisonState = .loading(date: target)
+        comparisonTask = Task { [apiClient] in
+            let result: ComparisonState
+            do {
+                let response = try await apiClient.fetchDay(date: target)
+                if Task.isCancelled { return }
+                if let snapshot = ComparisonSnapshot.from(date: target, response: response) {
+                    result = .ready(snapshot, period: period)
+                } else {
+                    result = .unavailable(period: period)
+                }
+            } catch {
+                if Task.isCancelled { return }
+                result = .unavailable(period: period)
+            }
+            if Task.isCancelled { return }
+            self.comparisonState = result
+        }
+    }
+
+    private func resolveCompareDate(period: ComparePeriod) -> String? {
+        guard let parsed = DateFormatting.parseDayDate(date),
+              let target = DateFormatting.sydneyCalendar
+                  .date(byAdding: .day, value: period.dayOffset, to: parsed)
+        else {
+            return nil
+        }
+        return DateFormatting.dayDateString(from: target)
     }
 
     func saveNote(_ rawText: String) async throws {

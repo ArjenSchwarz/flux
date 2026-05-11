@@ -9,6 +9,19 @@ struct DayDetailView: View {
     @State private var showingSettings = false
     @State private var editingNote = false
 
+    @AppStorage(UserDefaults.compareEnabledKey, store: UserDefaults.fluxAppGroup)
+    private var compareEnabled: Bool = false
+
+    @AppStorage(UserDefaults.comparePeriodKey, store: UserDefaults.fluxAppGroup)
+    private var comparePeriodRaw: String = ComparePeriod.yesterday.rawValue
+
+    private var comparePeriod: Binding<ComparePeriod> {
+        Binding(
+            get: { ComparePeriod.parseOrDefault(comparePeriodRaw) },
+            set: { comparePeriodRaw = $0.rawValue }
+        )
+    }
+
     private var tabBinding: Binding<FluxTab>?
     private var onSettingsTap: (() -> Void)?
     private var onTabActivate: ((FluxTab) -> Void)?
@@ -45,8 +58,15 @@ struct DayDetailView: View {
                 DayNavigationHeader(viewModel: viewModel)
                 DayDetailNoteSection(viewModel: viewModel, editingNote: $editingNote)
 
+                CompareControl(
+                    enabled: $compareEnabled,
+                    period: comparePeriod,
+                    unavailable: viewModel.comparisonState.isUnavailable
+                )
+
                 if let dailyUsage = viewModel.dailyUsage, !dailyUsage.blocks.isEmpty {
-                    DayInFiveBlocksPanel(dailyUsage: dailyUsage)
+                    DayInFiveBlocksPanel(dailyUsage: dailyUsage,
+                                         compare: viewModel.comparisonState)
                 }
 
                 contentSection
@@ -60,7 +80,8 @@ struct DayDetailView: View {
                     // the readings-derived approximation when the server
                     // hasn't returned a split.
                     offpeakGridImport: viewModel.summary?.offpeakGridImportKwh ?? viewModel.offpeakStats.gridImportKwh,
-                    showsBatteryCycle: false
+                    showsBatteryCycle: false,
+                    compare: viewModel.comparisonState
                 )
                 BatteryBlock(
                     batteryCharge: viewModel.summary?.eCharge,
@@ -80,6 +101,13 @@ struct DayDetailView: View {
         .task(id: viewModel.date) {
             await viewModel.loadDay()
         }
+        // All three reactions call the same updateCompare with the same args;
+        // the `.onChange(of: viewModel.date)` reaction fires unconditionally
+        // on day navigation, and the early-`.off` short-circuit inside
+        // `updateCompare` is what makes it safe when Compare is disabled.
+        .onChange(of: compareEnabled, initial: true) { _, _ in triggerCompareUpdate() }
+        .onChange(of: comparePeriodRaw) { _, _ in triggerCompareUpdate() }
+        .onChange(of: viewModel.date) { _, _ in triggerCompareUpdate() }
         #if os(macOS)
         .macRefreshAction { [viewModel] in
             await viewModel.loadDay()
@@ -197,6 +225,10 @@ struct DayDetailView: View {
             return viewModel.date
         }
         return DayDetailEyebrow.summaryDate.string(from: parsedDate)
+    }
+
+    private func triggerCompareUpdate() {
+        viewModel.updateCompare(enabled: compareEnabled, period: comparePeriod.wrappedValue)
     }
 
 }

@@ -290,7 +290,12 @@ macos-lint:
 	cd Flux && swiftlint lint --strict
 
 .PHONY: macos-build
+# Strip any stale FluxTests.xctest left in the app's PlugIns dir from a prior
+# `macos-test` run. xcodebuild's incremental build won't refresh the test
+# bundle, but CodeSign still walks it and fails with "bundle format
+# unrecognized" when re-signing Flux.app.
 macos-build:
+	@rm -rf $(IOS_DERIVED_DATA)/Build/Products/$(IOS_CONFIG)/Flux.app/Contents/PlugIns/FluxTests.xctest
 	xcodebuild build \
 		-project $(IOS_PROJECT) \
 		-scheme $(IOS_SCHEME) \

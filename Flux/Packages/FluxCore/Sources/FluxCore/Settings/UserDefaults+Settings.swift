@@ -11,6 +11,8 @@ extension UserDefaults {
     public static let loadAlertThresholdKey = "loadAlertThreshold"
     public static let widgetUsesSymbolsKey = "widgetUsesSymbols"
     public static let lastSeenWhatsNewVersionKey = "lastSeenWhatsNewVersion"
+    public static let compareEnabledKey = "compareEnabled"
+    public static let comparePeriodKey = "comparePeriod"
 
     public static let loadAlertThresholdDefault: Double = 3000
 

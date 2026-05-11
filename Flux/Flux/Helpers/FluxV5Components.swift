@@ -57,32 +57,55 @@ struct FluxStatRow: View {
     var sub: String?
     var accent: Color?
     var last: Bool = false
+    var valueSub: SublineContent = .hidden
+    var accessibilityOverride: String?
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(alignment: .firstTextBaseline) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(label)
-                        .appFont(FluxTheme.Typography.statRowLabel)
-                        .foregroundStyle(FluxTheme.Palette.secondaryText)
-                    if let sub {
-                        Text(sub)
-                            .appFont(FluxTheme.Typography.statRowSub)
-                            .foregroundStyle(FluxTheme.Palette.tertiaryText)
+            VStack(alignment: .trailing, spacing: 2) {
+                HStack(alignment: .firstTextBaseline) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(label)
+                            .appFont(FluxTheme.Typography.statRowLabel)
+                            .foregroundStyle(FluxTheme.Palette.secondaryText)
+                        if let sub {
+                            Text(sub)
+                                .appFont(FluxTheme.Typography.statRowSub)
+                                .foregroundStyle(FluxTheme.Palette.tertiaryText)
+                        }
                     }
+                    Spacer()
+                    Text(value)
+                        .appFont(FluxTheme.Typography.statRowValue)
+                        .foregroundStyle(accent ?? FluxTheme.Palette.primaryText)
                 }
-                Spacer()
-                Text(value)
-                    .appFont(FluxTheme.Typography.statRowValue)
-                    .foregroundStyle(accent ?? FluxTheme.Palette.primaryText)
+                ValueSubline(content: valueSub)
             }
             .padding(.vertical, FluxTheme.Metrics.statRowVerticalPadding)
+            .modifier(RowAccessibilityModifier(label: accessibilityOverride))
 
             if !last {
                 Rectangle()
                     .fill(FluxTheme.Palette.border)
                     .frame(height: FluxTheme.Metrics.hairline)
             }
+        }
+    }
+}
+
+/// Applies an `.accessibilityElement(children: .ignore)` + `.accessibilityLabel`
+/// override when `label` is non-nil; passthrough when nil. Shared between
+/// `FluxStatRow` and the hand-rolled rows in `DayInFiveBlocksPanel`.
+struct RowAccessibilityModifier: ViewModifier {
+    let label: String?
+
+    func body(content: Content) -> some View {
+        if let label {
+            content
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(label)
+        } else {
+            content
         }
     }
 }

@@ -99,7 +99,12 @@ struct HistoryDailyUsageCardTests {
             dailyUsageTotalKwh: totalKwh,
             dailyUsageDayCount: dayCount,
             dailyUsageLargestKind: largest,
-            dailyUsageLargestKindTotalKwh: eveningSum
+            dailyUsageLargestKindTotalKwh: eveningSum,
+            nightTotalKwh: 0,
+            nightBlockDayCount: 0,
+            mostUsageDay: nil,
+            mostSolarDay: nil,
+            lowestSocDay: nil
         )
     }
 }
