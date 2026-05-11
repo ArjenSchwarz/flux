@@ -34,13 +34,17 @@ struct CompareControl: View {
     }
 
     private var periodChip: some View {
+        // No explicit `.accessibilityLabel` — `.menu`-style Picker synthesises
+        // a label that combines the picker's title, the current selection,
+        // and the Pop-up Button role (VoiceOver reads "Compare period,
+        // Yesterday, Pop-up Button"). An override would replace that string
+        // and may suppress the role announcement on some platform versions.
         Picker("Compare period", selection: $period) {
             ForEach(ComparePeriod.allCases) { option in
                 Text(option.displayName).tag(option)
             }
         }
         .pickerStyle(.menu)
-        .accessibilityLabel("Compare period, \(period.displayName)")
     }
 }
 

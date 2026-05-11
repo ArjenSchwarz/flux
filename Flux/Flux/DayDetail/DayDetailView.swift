@@ -101,15 +101,13 @@ struct DayDetailView: View {
         .task(id: viewModel.date) {
             await viewModel.loadDay()
         }
-        .onChange(of: compareEnabled, initial: true) { _, _ in
-            viewModel.updateCompare(enabled: compareEnabled, period: comparePeriod.wrappedValue)
-        }
-        .onChange(of: comparePeriodRaw) { _, _ in
-            viewModel.updateCompare(enabled: compareEnabled, period: comparePeriod.wrappedValue)
-        }
-        .onChange(of: viewModel.date) { _, _ in
-            viewModel.updateCompare(enabled: compareEnabled, period: comparePeriod.wrappedValue)
-        }
+        // All three reactions call the same updateCompare with the same args;
+        // the `.onChange(of: viewModel.date)` reaction fires unconditionally
+        // on day navigation, and the early-`.off` short-circuit inside
+        // `updateCompare` is what makes it safe when Compare is disabled.
+        .onChange(of: compareEnabled, initial: true) { _, _ in triggerCompareUpdate() }
+        .onChange(of: comparePeriodRaw) { _, _ in triggerCompareUpdate() }
+        .onChange(of: viewModel.date) { _, _ in triggerCompareUpdate() }
         #if os(macOS)
         .macRefreshAction { [viewModel] in
             await viewModel.loadDay()
@@ -227,6 +225,10 @@ struct DayDetailView: View {
             return viewModel.date
         }
         return DayDetailEyebrow.summaryDate.string(from: parsedDate)
+    }
+
+    private func triggerCompareUpdate() {
+        viewModel.updateCompare(enabled: compareEnabled, period: comparePeriod.wrappedValue)
     }
 
 }

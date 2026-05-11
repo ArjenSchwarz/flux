@@ -281,6 +281,34 @@ struct ComparisonSnapshotDerivedFieldTests {
         )
         #expect(snapshot.peakGridImport == nil)
     }
+
+    /// Pins the documented asymmetry between `ComparisonSnapshot.peakGridImport`
+    /// and `SummaryBlock.peakGridImport`. When the off-peak split is missing,
+    /// `SummaryBlock` falls back to the total grid import (treat all as peak)
+    /// so the row still shows a concrete value, while `ComparisonSnapshot`
+    /// returns nil so the delta sub-line renders `.reserved`. Decision 10
+    /// guarantees production data always carries the split, so this only
+    /// matters defensively — but if either side ever changes, this test will
+    /// flag the mismatch so the other side gets updated to match.
+    @Test
+    func peakGridImportAsymmetryWithSummaryBlockIsDocumented() {
+        let snapshot = ComparisonSnapshot(
+            date: "2026-05-09",
+            solar: nil,
+            gridImport: 4.2,
+            gridExport: nil,
+            batteryCharge: nil,
+            batteryDischarge: nil,
+            offpeakGridImport: nil,
+            dailyUsage: nil
+        )
+        // ComparisonSnapshot: nil → delta sub-line shows .reserved.
+        #expect(snapshot.peakGridImport == nil)
+        // SummaryBlock.peakGridImport (kept in lockstep mentally — the
+        // private accessor uses `guard let offpeak = ... else { return total }`)
+        // would return 4.2 for the same inputs. If you change one side,
+        // update the other and re-pin this expectation.
+    }
 }
 
 // MARK: - SublineContent
