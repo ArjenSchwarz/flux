@@ -108,7 +108,11 @@ func main() {
 	}
 
 	var totalWritten, totalDays, totalSkipped int
+	const perCallDelay = 500 * time.Millisecond
 	for d := from; !d.After(to); d = d.AddDate(0, 0, 1) {
+		if d != from {
+			time.Sleep(perCallDelay)
+		}
 		date := d.Format("2006-01-02")
 		snapshots, err := client.GetOneDayPower(ctx, o.serial, date)
 		if err != nil {

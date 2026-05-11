@@ -524,6 +524,16 @@ func TestNextLocalMidnight(t *testing.T) {
 			now:  time.Date(2026, 5, 31, 12, 0, 0, 0, sydney),
 			want: time.Date(2026, 6, 1, 0, 0, 0, 0, sydney),
 		},
+		// Sydney DST end: 5 April 2026 at 03:00 AEDT clocks go back to 02:00 AEST.
+		"DST end day": {
+			now:  time.Date(2026, 4, 5, 23, 59, 59, 0, sydney),
+			want: time.Date(2026, 4, 6, 0, 0, 0, 0, sydney),
+		},
+		// Sydney DST start: 4 October 2026 at 02:00 AEST clocks jump to 03:00 AEDT.
+		"DST start day": {
+			now:  time.Date(2026, 10, 4, 23, 59, 59, 0, sydney),
+			want: time.Date(2026, 10, 5, 0, 0, 0, 0, sydney),
+		},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
