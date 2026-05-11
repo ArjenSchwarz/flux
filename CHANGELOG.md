@@ -17,6 +17,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 - Test target build failures at HEAD: `CGSize(... height: .infinity)` ambiguity in `ValueSublineTests`, `FluxStatRowCompareTests`, and `CompareControlTests` (now `CGFloat.infinity`); `HistoryDailyUsageCardTests.makeSummary` updated for the new `PeriodSummary` fields (`nightTotalKwh`, `nightBlockDayCount`, `mostUsageDay`, `mostSolarDay`, `lowestSocDay`).
+- iOS build failure on `DayDetailViewModel.deinit`: the non-isolated `deinit` couldn't reference the `@MainActor`-isolated `comparisonTask`. The task handle is now `@ObservationIgnored` and `nonisolated(unsafe)` so `deinit` can cancel the in-flight task without crossing actor isolation (the property isn't observable state and `Task` is `Sendable`).
+- `make macos-build` failing under CodeSign with `bundle format unrecognized, invalid, or unsuitable` for `Flux.app/Contents/PlugIns/FluxTests.xctest` after a prior `make macos-test`. `macos-build` now strips any stale embedded test bundle before invoking xcodebuild. Release builds and Xcode-driven builds were unaffected because they use different output paths / DerivedData locations.
 
 ## [1.1] - 2026-05-09
 

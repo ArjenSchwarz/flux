@@ -36,7 +36,12 @@ final class DayDetailViewModel {
 
     private let apiClient: any FluxAPIClient
     private let nowProvider: @Sendable () -> Date
-    private var comparisonTask: Task<Void, Never>?
+    // `nonisolated(unsafe)` so `deinit` can cancel the in-flight task
+    // without crossing actor isolation. `@ObservationIgnored` opts the
+    // task handle out of `@Observable` storage — it's not observable
+    // state.
+    @ObservationIgnored
+    nonisolated(unsafe) private var comparisonTask: Task<Void, Never>?
 
     init(
         date: String,
