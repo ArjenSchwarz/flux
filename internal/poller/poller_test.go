@@ -13,6 +13,7 @@ import (
 	"github.com/ArjenSchwarz/flux/internal/config"
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // --- Mock client ---
@@ -35,6 +36,7 @@ type mockClient struct {
 	lastEnergyDate     string
 	energyDates        []string
 	lastPowerDate      string
+	powerDates         []string
 }
 
 func (m *mockClient) GetLastPowerData(_ context.Context, _ string) (*alphaess.PowerData, error) {
@@ -45,6 +47,7 @@ func (m *mockClient) GetLastPowerData(_ context.Context, _ string) (*alphaess.Po
 func (m *mockClient) GetOneDayPower(_ context.Context, _ string, date string) ([]alphaess.PowerSnapshot, error) {
 	m.oneDayPowerCalls++
 	m.lastPowerDate = date
+	m.powerDates = append(m.powerDates, date)
 	return m.oneDayPower, m.oneDayPowerErr
 }
 
@@ -226,13 +229,24 @@ func TestFetchAndStoreDailyPower_Success(t *testing.T) {
 	ms := &mockStore{}
 	p := testPoller(mc, ms)
 
-	p.fetchAndStoreDailyPower(context.Background())
+	p.fetchAndStoreDailyPower(context.Background(), "")
 
 	assert.Equal(t, 1, mc.oneDayPowerCalls)
 	assert.Equal(t, 1, ms.dailyPowerWritten)
 	// Verify today's date was used (in configured timezone).
 	today := time.Now().In(p.cfg.Location).Format("2006-01-02")
 	assert.Equal(t, today, mc.lastPowerDate)
+}
+
+func TestFetchAndStoreDailyPower_ExplicitDate(t *testing.T) {
+	mc := &mockClient{oneDayPower: []alphaess.PowerSnapshot{{Ppv: 1.0}}}
+	ms := &mockStore{}
+	p := testPoller(mc, ms)
+
+	p.fetchAndStoreDailyPower(context.Background(), "2026-04-12")
+
+	assert.Equal(t, "2026-04-12", mc.lastPowerDate)
+	assert.Equal(t, 1, ms.dailyPowerWritten)
 }
 
 func TestFetchAndStoreDailyPower_APIError_LogsAndSkips(t *testing.T) {
@@ -243,7 +257,7 @@ func TestFetchAndStoreDailyPower_APIError_LogsAndSkips(t *testing.T) {
 	ms := &mockStore{}
 	p := testPoller(mc, ms)
 
-	p.fetchAndStoreDailyPower(context.Background())
+	p.fetchAndStoreDailyPower(context.Background(), "")
 
 	assert.Equal(t, 0, ms.dailyPowerWritten)
 	assert.True(t, logContains(buf, "power api fail"))
@@ -257,7 +271,7 @@ func TestFetchAndStoreDailyPower_StoreError_LogsAndSkips(t *testing.T) {
 	ms := &mockStore{writeDailyPowerErr: errors.New("batch write fail")}
 	p := testPoller(mc, ms)
 
-	p.fetchAndStoreDailyPower(context.Background())
+	p.fetchAndStoreDailyPower(context.Background(), "")
 
 	assert.True(t, logContains(buf, "batch write fail"))
 }
@@ -270,9 +284,30 @@ func TestFetchAndStoreDailyPower_DryRun_LogsPayload(t *testing.T) {
 	ms := &mockStore{}
 	p := testPoller(mc, ms, withDryRun)
 
-	p.fetchAndStoreDailyPower(context.Background())
+	p.fetchAndStoreDailyPower(context.Background(), "")
 
 	assert.True(t, logContains(buf, "dry-run api response"))
+}
+
+// Hourly daily-power poll writes both today and yesterday so the final
+// snapshots of the previous day (after the last pre-midnight tick) land in
+// flux-daily-power. Without this, past-date Day Detail charts cut off
+// between 23:05 and 23:55 depending on container start time.
+func TestPollDailyPower_PollsTodayAndYesterday(t *testing.T) {
+	mc := &mockClient{oneDayPower: []alphaess.PowerSnapshot{{Ppv: 2.0, UploadTime: "2026-04-13 10:00:00"}}}
+	ms := &mockStore{}
+	p := testPoller(mc, ms)
+
+	today := time.Now().In(p.cfg.Location).Format(dateLayout)
+	yesterday := time.Now().In(p.cfg.Location).AddDate(0, 0, -1).Format(dateLayout)
+
+	// Invoke the tick body inline — mirrors what pollDailyPower's closure does
+	// and avoids running the full pollLoop goroutine in a test.
+	p.fetchAndStoreDailyPower(context.Background(), "")
+	p.fetchAndStoreDailyPower(context.Background(), yesterday)
+
+	assert.Equal(t, 2, ms.dailyPowerWritten)
+	assert.ElementsMatch(t, []string{today, yesterday}, mc.powerDates)
 }
 
 // --- Tests for fetchAndStoreDailyEnergy ---
@@ -461,6 +496,51 @@ func TestPollDailyEnergy_PollsTodayAndYesterday(t *testing.T) {
 
 	assert.Equal(t, 2, ms.dailyEnergyWritten)
 	assert.ElementsMatch(t, []string{today, yesterday}, mc.energyDates)
+}
+
+// --- Tests for nextLocalMidnight ---
+
+func TestNextLocalMidnight(t *testing.T) {
+	sydney, err := time.LoadLocation("Australia/Sydney")
+	require.NoError(t, err)
+
+	cases := map[string]struct {
+		now  time.Time
+		want time.Time
+	}{
+		"midday": {
+			now:  time.Date(2026, 5, 11, 14, 0, 0, 0, sydney),
+			want: time.Date(2026, 5, 12, 0, 0, 0, 0, sydney),
+		},
+		"just before midnight": {
+			now:  time.Date(2026, 5, 11, 23, 59, 59, 0, sydney),
+			want: time.Date(2026, 5, 12, 0, 0, 0, 0, sydney),
+		},
+		"just after midnight": {
+			now:  time.Date(2026, 5, 11, 0, 0, 1, 0, sydney),
+			want: time.Date(2026, 5, 12, 0, 0, 0, 0, sydney),
+		},
+		"month rollover": {
+			now:  time.Date(2026, 5, 31, 12, 0, 0, 0, sydney),
+			want: time.Date(2026, 6, 1, 0, 0, 0, 0, sydney),
+		},
+		// Sydney DST end: 5 April 2026 at 03:00 AEDT clocks go back to 02:00 AEST.
+		"DST end day": {
+			now:  time.Date(2026, 4, 5, 23, 59, 59, 0, sydney),
+			want: time.Date(2026, 4, 6, 0, 0, 0, 0, sydney),
+		},
+		// Sydney DST start: 4 October 2026 at 02:00 AEST clocks jump to 03:00 AEDT.
+		"DST start day": {
+			now:  time.Date(2026, 10, 4, 23, 59, 59, 0, sydney),
+			want: time.Date(2026, 10, 5, 0, 0, 0, 0, sydney),
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			got := nextLocalMidnight(tc.now)
+			assert.True(t, got.Equal(tc.want), "got %s, want %s", got, tc.want)
+		})
+	}
 }
 
 // --- Test dry-run payload contains JSON ---
