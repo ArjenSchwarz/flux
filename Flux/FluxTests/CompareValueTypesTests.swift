@@ -205,15 +205,17 @@ struct ComparisonSnapshotDerivedFieldTests {
     @Test
     func houseUsedReturnsNilForEachMissingInput() {
         // Drive the same nil-sensitivity check across every input by
-        // replacing each one in turn.
+        // replacing each one in turn. `.some(nil)` is the explicit form
+        // for "set to nil"; bare `nil` would resolve to the outer
+        // `Double??.none` (no change) per Swift's nil-literal rules.
         let basis = ComparisonSnapshot.fixture()
         #expect(basis.houseUsed != nil)
 
-        #expect(basis.with(solar: nil).houseUsed == nil)
-        #expect(basis.with(gridImport: nil).houseUsed == nil)
-        #expect(basis.with(gridExport: nil).houseUsed == nil)
-        #expect(basis.with(batteryCharge: nil).houseUsed == nil)
-        #expect(basis.with(batteryDischarge: nil).houseUsed == nil)
+        #expect(basis.with(solar: .some(nil)).houseUsed == nil)
+        #expect(basis.with(gridImport: .some(nil)).houseUsed == nil)
+        #expect(basis.with(gridExport: .some(nil)).houseUsed == nil)
+        #expect(basis.with(batteryCharge: .some(nil)).houseUsed == nil)
+        #expect(basis.with(batteryDischarge: .some(nil)).houseUsed == nil)
     }
 
     @Test

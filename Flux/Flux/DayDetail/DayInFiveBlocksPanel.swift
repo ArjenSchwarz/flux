@@ -65,7 +65,7 @@ struct DayInFiveBlocksPanel: View {
                         .minimumScaleFactor(0.85)
                 }
                 Spacer(minLength: 8)
-                if isDaylight(block.kind), let solar = block.solarKwh {
+                if block.kind.isDaylight, let solar = block.solarKwh {
                     VStack(alignment: .trailing, spacing: 2) {
                         Text(EnergyFormatting.format(solar))
                             .appFont(FluxTheme.Typography.touValue)
@@ -112,13 +112,6 @@ struct DayInFiveBlocksPanel: View {
             timeRange: timeRange(block),
             compare: compare
         )
-    }
-
-    private func isDaylight(_ kind: DailyUsageBlock.Kind) -> Bool {
-        switch kind {
-        case .morningPeak, .offPeak, .afternoonPeak: true
-        case .night, .evening: false
-        }
     }
 
     private func label(for kind: DailyUsageBlock.Kind) -> String {
@@ -201,7 +194,7 @@ enum DayInFiveBlocksPanelCompareMapping {
         timeRange: String
     ) -> String {
         let total = EnergyFormatting.format(block.totalKwh)
-        if isDaylight(block.kind), let solar = block.solarKwh {
+        if block.kind.isDaylight, let solar = block.solarKwh {
             let solarText = EnergyFormatting.format(solar)
             return "\(rowLabel), \(timeRange): \(total) total, \(solarText) solar"
         }
@@ -223,7 +216,7 @@ enum DayInFiveBlocksPanelCompareMapping {
             period: period
         )
 
-        if isDaylight(block.kind), let solar = block.solarKwh {
+        if block.kind.isDaylight, let solar = block.solarKwh {
             let solarText = EnergyFormatting.format(solar)
             let solarClause = DeltaFormatter.voiceOverComparisonClause(
                 current: solar,
@@ -234,9 +227,14 @@ enum DayInFiveBlocksPanelCompareMapping {
         }
         return "\(rowLabel), \(timeRange): \(total)\(totalClause)"
     }
+}
 
-    private static func isDaylight(_ kind: DailyUsageBlock.Kind) -> Bool {
-        switch kind {
+private extension DailyUsageBlock.Kind {
+    /// Daylight blocks (morning peak, off-peak, afternoon peak) display solar
+    /// alongside the total; non-daylight blocks (night, evening) show only the
+    /// total because solar is effectively zero outside daylight hours.
+    var isDaylight: Bool {
+        switch self {
         case .morningPeak, .offPeak, .afternoonPeak: true
         case .night, .evening: false
         }

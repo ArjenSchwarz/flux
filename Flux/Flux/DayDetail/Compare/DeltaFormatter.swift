@@ -87,9 +87,14 @@ enum DeltaFormatter {
         return "unchanged"
     }
 
-    /// Round to one decimal place via String(format:) so the test cases
-    /// reading "current=10.05, comparison=10.0 → 0.1" stay pinned to the
-    /// printf rounding rule (banker's rounding does not apply here).
+    /// Round to one decimal place by formatting and re-parsing via `%.1f`.
+    /// This matches the display formatting used elsewhere in `DeltaFormatter`
+    /// (which also goes through `%.1f`), so the rounded value used to decide
+    /// the arrow direction (▲ / ▼ / —) can never disagree with the
+    /// magnitude shown on screen. Switching to `(value * 10).rounded() / 10`
+    /// would use round-half-to-even (`FloatingPointRoundingRule.toNearestOrEven`),
+    /// which differs from printf's behaviour for floating-point halves and
+    /// could produce a non-zero arrow with a "0.0 kWh" magnitude.
     private static func roundedOneDecimal(_ value: Double) -> Double {
         Double(String(format: "%.1f", value)) ?? 0
     }
