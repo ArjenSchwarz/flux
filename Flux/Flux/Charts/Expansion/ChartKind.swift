@@ -6,6 +6,20 @@ enum ChartKind: String, Hashable, Codable, CaseIterable {
     case historyDailyUsage
     case dayPower
     case dayBatteryCombined
+
+    enum HostKind: Hashable {
+        case history
+        case day
+    }
+
+    var hostKind: HostKind {
+        switch self {
+        case .historySolar, .historyGridUsage, .historyDailyUsage:
+            return .history
+        case .dayPower, .dayBatteryCombined:
+            return .day
+        }
+    }
 }
 
 enum ChartScope: Hashable, Codable {
