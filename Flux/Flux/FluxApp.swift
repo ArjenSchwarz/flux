@@ -42,12 +42,17 @@ struct FluxApp: App {
             AppNavigationView()
                 .environment(refreshCoordinator)
                 .environment(chartScopeRegistry)
+                .macOSChartExpansion(registry: chartScopeRegistry)
                 .preferredColorScheme(preferredScheme)
         }
         .modelContainer(for: CachedDayEnergy.self)
         .commands {
             FluxKeyboardCommands(coordinator: refreshCoordinator)
         }
+
+        ChartDetailScene()
+            .environment(chartScopeRegistry)
+            .modelContainer(for: CachedDayEnergy.self)
 
         Settings {
             // The Settings scene is a top-level SwiftUI Scene — not a
