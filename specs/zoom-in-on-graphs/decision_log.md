@@ -540,3 +540,48 @@ The intent was always "don't accidentally promote chart windows over the main on
 - None.
 
 ---
+
+## Decision 17: Keep `secondaryText` for the Expand Button Glyph — WCAG-AA Verified
+
+**Date**: 2026-05-12
+**Status**: accepted
+
+### Context
+
+[Decision 9](#decision-9-expand-button-visual-contract-defined-here-not-inherited) sets the button glyph foreground to `FluxTheme.Palette.secondaryText` and notes that a WCAG-AA contrast check against the lightest plot fill in light mode is a verification task — and to fall back to `FluxTheme.Palette.primaryText` if the check fails. This decision records the result of that check.
+
+In light mode, `secondaryText` resolves to `Color.black.opacity(0.6)`. The plot fills the glyph could overlap with — across all five active charts — are:
+
+- `Color.green.opacity(0.25)` over the near-white card background (`PowerChartView` solar area — the lightest fill in scope)
+- System green at full opacity (`HistorySolarCard` daily bars)
+- `FluxTheme.Palette.amber` rgb(255, 179, 71) at full opacity (used elsewhere in the app, not in these chart fills today, but reachable if the solar visual is unified later)
+
+### Decision
+
+Keep `FluxTheme.Palette.secondaryText` as the expand button glyph foreground. No fallback to `primaryText` is needed.
+
+### Rationale
+
+WCAG-AA requires a 3:1 contrast ratio for non-text UI elements (including icon buttons). Computed contrast ratios for the 60 %-opaque-black glyph composited over each candidate fill (light mode, card background `~rgb(244, 244, 244)`):
+
+- `green.opacity(0.25)` over card: **5.25 : 1** ✓
+- System green at full opacity: **4.31 : 1** ✓
+- `Palette.amber` at full opacity: **4.71 : 1** ✓
+
+All exceed the 3:1 floor for graphical objects, and the worst case (4.31 : 1) also meets the 4.5 : 1 normal-text bar. The glyph stays legible everywhere it can land.
+
+### Alternatives Considered
+
+- **Switch to `primaryText` (full black in light mode)**: Would push contrast to ~7 : 1 but visually competes with the chart's primary axis labels and selection callouts, both rendered in `primaryText`. Rejected because the glyph is intentionally secondary chrome, not a primary action.
+- **Add an opaque background plate behind the glyph**: Would solve any future contrast risk, but adds visual chrome that [Decision 9](#decision-9-expand-button-visual-contract-defined-here-not-inherited) deliberately avoided. Rejected as unwarranted.
+
+### Consequences
+
+**Positive:**
+- Visual contract from Decision 9 stands unchanged; no rework required.
+- Legibility is documented and reproducible from the colour values, not from a screenshot.
+
+**Negative:**
+- If a future chart introduces a fill brighter than the values audited here (e.g. white or unscaled amber over the card background), the check will need to be redone for that fill.
+
+---

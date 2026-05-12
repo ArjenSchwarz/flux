@@ -11,6 +11,9 @@ struct ExpandableChartContainer<Content: View>: View {
 
     @Environment(\.chartExpansion) private var expansion
     @Environment(\.chartExpansionAffordanceVisible) private var affordanceVisible
+    @Environment(\.chartExpansionFocus) private var focusCoordinator
+
+    @AccessibilityFocusState private var isExpandButtonFocused: Bool
 
     var body: some View {
         content()
@@ -26,7 +29,13 @@ struct ExpandableChartContainer<Content: View>: View {
                     .buttonStyle(.plain)
                     .padding(Self.buttonInset)
                     .accessibilityLabel(Self.accessibilityLabel)
+                    .accessibilityFocused($isExpandButtonFocused)
                 }
+            }
+            .onChange(of: focusCoordinator.pendingRequest) { _, newRequest in
+                guard affordanceVisible, let newRequest, newRequest.kind == kind else { return }
+                isExpandButtonFocused = true
+                focusCoordinator.consume(newRequest)
             }
     }
 

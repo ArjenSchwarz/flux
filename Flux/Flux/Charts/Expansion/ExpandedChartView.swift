@@ -1,12 +1,17 @@
 import SwiftUI
 
 struct ExpandedChartView: View {
+    static let crossFadeDuration: TimeInterval = 0.2
+
     let kind: ChartKind
     let history: ExpandedHistoryHostController?
     let day: ExpandedDayHostController?
     let onSelectHistoryDay: ((String) -> Void)?
     let selectedHistoryDate: Binding<Date?>?
     let selectedDayDate: Binding<Date?>?
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var contentVisible = false
 
     init(
         kind: ChartKind,
@@ -25,6 +30,14 @@ struct ExpandedChartView: View {
     }
 
     var body: some View {
+        routedContent
+            .opacity(reduceMotion ? (contentVisible ? 1 : 0) : 1)
+            .animation(reduceMotion ? .easeInOut(duration: Self.crossFadeDuration) : nil, value: contentVisible)
+            .onAppear { contentVisible = true }
+    }
+
+    @ViewBuilder
+    private var routedContent: some View {
         switch kind.hostKind {
         case .history:
             if let history {

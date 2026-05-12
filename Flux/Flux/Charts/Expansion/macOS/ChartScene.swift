@@ -25,20 +25,23 @@ extension View {
     /// Installs the macOS chart-expansion action into the environment.
     /// Tapping an expand button writes the scope to the registry, then
     /// opens (or brings forward) the chart-detail window for the kind.
-    func macOSChartExpansion(registry: ChartScopeRegistry) -> some View {
-        modifier(MacOSChartExpansionModifier(registry: registry))
+    func macOSChartExpansion(registry: ChartScopeRegistry, focus: ChartExpansionFocusCoordinator) -> some View {
+        modifier(MacOSChartExpansionModifier(registry: registry, focus: focus))
     }
 }
 
 private struct MacOSChartExpansionModifier: ViewModifier {
     let registry: ChartScopeRegistry
+    let focus: ChartExpansionFocusCoordinator
     @Environment(\.openWindow) private var openWindow
 
     func body(content: Content) -> some View {
-        content.environment(\.chartExpansion, ChartExpansionAction { kind, scope in
-            registry.current[kind] = scope
-            openWindow(id: ChartDetailScene.id, value: kind)
-        })
+        content
+            .environment(\.chartExpansion, ChartExpansionAction { kind, scope in
+                registry.current[kind] = scope
+                openWindow(id: ChartDetailScene.id, value: kind)
+            })
+            .environment(\.chartExpansionFocus, focus)
     }
 }
 
@@ -47,6 +50,7 @@ private struct ChartDetailContent: View {
     let kind: ChartKind
 
     @Environment(ChartScopeRegistry.self) private var registry
+    @Environment(\.chartExpansionFocus) private var focusCoordinator
     @Environment(\.appearsActive) private var windowAppearsActive
 
     @State private var observer: ChartSceneObserver?
@@ -69,6 +73,7 @@ private struct ChartDetailContent: View {
             }
         }
         .onAppear { ensureObserver() }
+        .onDisappear { focusCoordinator.requestRestore(for: kind) }
         .onChange(of: windowAppearsActive, initial: true) { _, isActive in
             observer?.appearsActive = isActive
         }

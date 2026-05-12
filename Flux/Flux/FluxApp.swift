@@ -19,6 +19,7 @@ struct FluxApp: App {
     #endif
 
     @State private var chartScopeRegistry = ChartScopeRegistry()
+    @State private var chartExpansionFocus = ChartExpansionFocusCoordinator()
 
     @AppStorage(UserDefaults.themeIdentifierKey, store: UserDefaults.fluxAppGroup)
     private var themeRaw: String = ""
@@ -42,7 +43,7 @@ struct FluxApp: App {
             AppNavigationView()
                 .environment(refreshCoordinator)
                 .environment(chartScopeRegistry)
-                .macOSChartExpansion(registry: chartScopeRegistry)
+                .macOSChartExpansion(registry: chartScopeRegistry, focus: chartExpansionFocus)
                 .preferredColorScheme(preferredScheme)
         }
         .modelContainer(for: CachedDayEnergy.self)
@@ -52,6 +53,7 @@ struct FluxApp: App {
 
         ChartDetailScene()
             .environment(chartScopeRegistry)
+            .environment(\.chartExpansionFocus, chartExpansionFocus)
             .modelContainer(for: CachedDayEnergy.self)
 
         Settings {
