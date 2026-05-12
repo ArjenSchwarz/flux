@@ -52,7 +52,7 @@ enum FluxTheme {
         static let grid = Color(red: 1.0, green: 107 / 255, blue: 107 / 255)
         static let gridExport = Color(red: 123 / 255, green: 224 / 255, blue: 163 / 255)
         static let battery = Color(red: 191 / 255, green: 90 / 255, blue: 242 / 255)
-        static let soc = Color(red: 1.0, green: 208 / 255, blue: 137 / 255)
+        static let soc = Color(red: 1.0, green: 168 / 255, blue: 102 / 255)
         static let load = Color(red: 245 / 255, green: 233 / 255, blue: 216 / 255)
         static let night = Color(red: 91 / 255, green: 108 / 255, blue: 1.0)
     }
