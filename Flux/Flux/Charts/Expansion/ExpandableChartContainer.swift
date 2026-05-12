@@ -10,20 +10,23 @@ struct ExpandableChartContainer<Content: View>: View {
     @ViewBuilder var content: () -> Content
 
     @Environment(\.chartExpansion) private var expansion
+    @Environment(\.chartExpansionAffordanceVisible) private var affordanceVisible
 
     var body: some View {
         content()
             .overlay(alignment: .topTrailing) {
-                Button {
-                    invoke(action: expansion)
-                } label: {
-                    Image(systemName: Self.buttonSymbolName)
-                        .font(.title3.weight(.medium))
-                        .foregroundStyle(FluxTheme.Palette.secondaryText)
+                if affordanceVisible {
+                    Button {
+                        invoke(action: expansion)
+                    } label: {
+                        Image(systemName: Self.buttonSymbolName)
+                            .font(.title3.weight(.medium))
+                            .foregroundStyle(FluxTheme.Palette.secondaryText)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(Self.buttonInset)
+                    .accessibilityLabel(Self.accessibilityLabel)
                 }
-                .buttonStyle(.plain)
-                .padding(Self.buttonInset)
-                .accessibilityLabel(Self.accessibilityLabel)
             }
     }
 

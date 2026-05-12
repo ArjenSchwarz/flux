@@ -83,6 +83,7 @@ struct HistoryView: View {
                             entries: derived.solar,
                             summary: derived.summary,
                             selectedDate: selectedDate,
+                            rangeDays: selectedRange,
                             onSelect: selectDay
                         )
 
@@ -90,6 +91,7 @@ struct HistoryView: View {
                             entries: derived.grid,
                             summary: derived.summary,
                             selectedDate: selectedDate,
+                            rangeDays: selectedRange,
                             onSelect: selectDay
                         )
 
@@ -97,6 +99,7 @@ struct HistoryView: View {
                             entries: derived.dailyUsage,
                             summary: derived.summary,
                             selectedDate: selectedDate,
+                            rangeDays: selectedRange,
                             onSelect: selectDay
                         )
 

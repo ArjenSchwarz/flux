@@ -3,10 +3,15 @@ import FluxCore
 import SwiftUI
 
 struct HistoryDailyUsageCard: View {
+    static let chartKind: ChartKind = .historyDailyUsage
+
     let entries: [HistoryViewModel.DailyUsageEntry]
     let summary: HistoryViewModel.PeriodSummary
     let selectedDate: Date?
+    let rangeDays: Int
     let onSelect: (String) -> Void
+
+    var expansionScope: ChartScope { .historyRange(days: rangeDays) }
 
     static let placeholderCopy = "No load breakdown available for this range."
 
@@ -19,7 +24,13 @@ struct HistoryDailyUsageCard: View {
             if Self.shouldShowPlaceholder(summary: summary) {
                 placeholder
             } else {
-                chart.frame(minHeight: 180)
+                ExpandableChartContainer(
+                    kind: Self.chartKind,
+                    scopeProvider: { expansionScope },
+                    content: {
+                        chart.frame(minHeight: 180)
+                    }
+                )
             }
         }
     }

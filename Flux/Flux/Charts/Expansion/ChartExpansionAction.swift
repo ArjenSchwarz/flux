@@ -10,4 +10,5 @@ struct ChartExpansionAction {
 
 extension EnvironmentValues {
     @Entry var chartExpansion: ChartExpansionAction = .init { _, _ in }
+    @Entry var chartExpansionAffordanceVisible: Bool = true
 }

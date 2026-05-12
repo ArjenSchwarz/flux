@@ -56,34 +56,40 @@ struct ExpandedHistoryHost: View {
     let onSelect: (String) -> Void
 
     var body: some View {
-        switch kind {
-        case .historySolar:
-            HistorySolarCard(
-                entries: controller.displayed.solar,
-                summary: controller.displayed.summary,
-                selectedDate: selectedDate,
-                onSelect: handleSelect
-            )
-            .simultaneousGesture(dragLifecycleGesture)
-        case .historyGridUsage:
-            HistoryGridUsageCard(
-                entries: controller.displayed.grid,
-                summary: controller.displayed.summary,
-                selectedDate: selectedDate,
-                onSelect: handleSelect
-            )
-            .simultaneousGesture(dragLifecycleGesture)
-        case .historyDailyUsage:
-            HistoryDailyUsageCard(
-                entries: controller.displayed.dailyUsage,
-                summary: controller.displayed.summary,
-                selectedDate: selectedDate,
-                onSelect: handleSelect
-            )
-            .simultaneousGesture(dragLifecycleGesture)
-        case .dayPower, .dayBatteryCombined:
-            EmptyView()
+        Group {
+            switch kind {
+            case .historySolar:
+                HistorySolarCard(
+                    entries: controller.displayed.solar,
+                    summary: controller.displayed.summary,
+                    selectedDate: selectedDate,
+                    rangeDays: 0,
+                    onSelect: handleSelect
+                )
+                .simultaneousGesture(dragLifecycleGesture)
+            case .historyGridUsage:
+                HistoryGridUsageCard(
+                    entries: controller.displayed.grid,
+                    summary: controller.displayed.summary,
+                    selectedDate: selectedDate,
+                    rangeDays: 0,
+                    onSelect: handleSelect
+                )
+                .simultaneousGesture(dragLifecycleGesture)
+            case .historyDailyUsage:
+                HistoryDailyUsageCard(
+                    entries: controller.displayed.dailyUsage,
+                    summary: controller.displayed.summary,
+                    selectedDate: selectedDate,
+                    rangeDays: 0,
+                    onSelect: handleSelect
+                )
+                .simultaneousGesture(dragLifecycleGesture)
+            case .dayPower, .dayBatteryCombined:
+                EmptyView()
+            }
         }
+        .environment(\.chartExpansionAffordanceVisible, false)
     }
 
     private func handleSelect(_ dayID: String) {

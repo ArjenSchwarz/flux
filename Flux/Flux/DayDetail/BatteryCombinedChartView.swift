@@ -7,112 +7,130 @@ import SwiftUI
 /// SOC area and remaps the battery power into that range so a second
 /// trailing axis can label the power values in ±kW.
 struct BatteryCombinedChartView: View {
+    static let chartKind: ChartKind = .dayBatteryCombined
+
     let date: String
     let readings: [ParsedReading]
     let summary: DaySummary?
     @Binding var selectedDate: Date?
 
+    var expansionScope: ChartScope {
+        .daySpecific(date: DateFormatting.parseDayDate(date) ?? Date())
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             statusLine
 
-            Chart {
-                if let offpeak = DayChartDomain.offpeakRange(for: date) {
-                    RectangleMark(
-                        xStart: .value("Start", offpeak.start),
-                        xEnd: .value("End", offpeak.end)
-                    )
-                    .foregroundStyle(.yellow.opacity(0.1))
-                }
-
-                ForEach(readings) { reading in
-                    AreaMark(
-                        x: .value("Time", reading.date),
-                        y: .value("SOC", reading.point.soc)
-                    )
-                    .foregroundStyle(FluxTheme.Palette.soc.opacity(0.22))
-                }
-
-                RuleMark(y: .value("Zero", powerZeroOnSOCScale))
-                    .foregroundStyle(FluxTheme.Palette.tertiaryText)
-                    .lineStyle(StrokeStyle(lineWidth: 0.5, dash: [3, 3]))
-
-                RuleMark(y: .value("Cutoff", BatteryEnergy.cutoffPercent))
-                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 3]))
-                    .foregroundStyle(FluxTheme.Palette.grid.opacity(0.6))
-
-                ForEach(readings) { reading in
-                    LineMark(
-                        x: .value("Time", reading.date),
-                        y: .value("Power", scaledPower(reading.point.pbat))
-                    )
-                    .foregroundStyle(FluxTheme.Palette.battery)
-                    .interpolationMethod(.monotone)
-                }
-
-                if let socLow = summary?.socLow,
-                   let socLowTime = summary?.socLowTime.flatMap(DateFormatting.parseTimestamp) {
-                    PointMark(
-                        x: .value("Low Time", socLowTime),
-                        y: .value("Low SOC", socLow)
-                    )
-                    .symbolSize(50)
-                    .foregroundStyle(FluxTheme.Palette.battery)
-                    .annotation(position: .top) {
-                        Text("\(SOCFormatting.format(socLow)) at \(DateFormatting.clockTime(from: socLowTime))")
-                            .appFont(.caption2)
-                            .padding(4)
-                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                    }
-                }
-
-                if let selected = selectedReading {
-                    RuleMark(x: .value("Selected", selected.date))
-                        .foregroundStyle(FluxTheme.Palette.secondaryText)
-                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 2]))
-                    PointMark(
-                        x: .value("Selected", selected.date),
-                        y: .value("SOC", selected.point.soc)
-                    )
-                    .symbolSize(40)
-                    .foregroundStyle(FluxTheme.Palette.soc)
-                    PointMark(
-                        x: .value("Selected", selected.date),
-                        y: .value("Power", scaledPower(selected.point.pbat))
-                    )
-                    .symbolSize(40)
-                    .foregroundStyle(FluxTheme.Palette.battery)
-                }
-            }
-            .chartYScale(domain: 0 ... 100)
-            .chartXScale(domain: xDomain)
-            .chartXAxis {
-                AxisMarks(values: .stride(by: .hour, count: 3)) {
-                    AxisGridLine()
-                    AxisValueLabel(format: .dateTime.hour())
-                }
-            }
-            .chartYAxis {
-                AxisMarks(position: .leading, values: [0, 25, 50, 75, 100]) { value in
-                    AxisGridLine()
-                    AxisValueLabel {
-                        if let percent = value.as(Double.self) {
-                            Text("\(Int(percent))%")
-                        }
-                    }
-                }
-                AxisMarks(position: .trailing, values: [0, 25, 50, 75, 100]) { value in
-                    AxisValueLabel {
-                        if let scaled = value.as(Double.self) {
-                            Text(powerLabel(forScaled: scaled))
-                        }
-                    }
-                }
-            }
-            .chartXSelection(value: $selectedDate)
-            .frame(minHeight: 240)
+            ExpandableChartContainer(
+                kind: Self.chartKind,
+                scopeProvider: { expansionScope },
+                content: { chartBody }
+            )
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var chartBody: some View {
+        Chart {
+            if let offpeak = DayChartDomain.offpeakRange(for: date) {
+                RectangleMark(
+                    xStart: .value("Start", offpeak.start),
+                    xEnd: .value("End", offpeak.end)
+                )
+                .foregroundStyle(.yellow.opacity(0.1))
+            }
+
+            ForEach(readings) { reading in
+                AreaMark(
+                    x: .value("Time", reading.date),
+                    y: .value("SOC", reading.point.soc)
+                )
+                .foregroundStyle(FluxTheme.Palette.soc.opacity(0.22))
+            }
+
+            RuleMark(y: .value("Zero", powerZeroOnSOCScale))
+                .foregroundStyle(FluxTheme.Palette.tertiaryText)
+                .lineStyle(StrokeStyle(lineWidth: 0.5, dash: [3, 3]))
+
+            RuleMark(y: .value("Cutoff", BatteryEnergy.cutoffPercent))
+                .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 3]))
+                .foregroundStyle(FluxTheme.Palette.grid.opacity(0.6))
+
+            ForEach(readings) { reading in
+                LineMark(
+                    x: .value("Time", reading.date),
+                    y: .value("Power", scaledPower(reading.point.pbat))
+                )
+                .foregroundStyle(FluxTheme.Palette.battery)
+                .interpolationMethod(.monotone)
+            }
+
+            if let socLow = summary?.socLow,
+               let socLowTime = summary?.socLowTime.flatMap(DateFormatting.parseTimestamp) {
+                PointMark(
+                    x: .value("Low Time", socLowTime),
+                    y: .value("Low SOC", socLow)
+                )
+                .symbolSize(50)
+                .foregroundStyle(FluxTheme.Palette.battery)
+                .annotation(position: .top) {
+                    Text("\(SOCFormatting.format(socLow)) at \(DateFormatting.clockTime(from: socLowTime))")
+                        .appFont(.caption2)
+                        .padding(4)
+                        .background(
+                            .ultraThinMaterial,
+                            in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        )
+                }
+            }
+
+            if let selected = selectedReading {
+                RuleMark(x: .value("Selected", selected.date))
+                    .foregroundStyle(FluxTheme.Palette.secondaryText)
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 2]))
+                PointMark(
+                    x: .value("Selected", selected.date),
+                    y: .value("SOC", selected.point.soc)
+                )
+                .symbolSize(40)
+                .foregroundStyle(FluxTheme.Palette.soc)
+                PointMark(
+                    x: .value("Selected", selected.date),
+                    y: .value("Power", scaledPower(selected.point.pbat))
+                )
+                .symbolSize(40)
+                .foregroundStyle(FluxTheme.Palette.battery)
+            }
+        }
+        .chartYScale(domain: 0 ... 100)
+        .chartXScale(domain: xDomain)
+        .chartXAxis {
+            AxisMarks(values: .stride(by: .hour, count: 3)) {
+                AxisGridLine()
+                AxisValueLabel(format: .dateTime.hour())
+            }
+        }
+        .chartYAxis {
+            AxisMarks(position: .leading, values: [0, 25, 50, 75, 100]) { value in
+                AxisGridLine()
+                AxisValueLabel {
+                    if let percent = value.as(Double.self) {
+                        Text("\(Int(percent))%")
+                    }
+                }
+            }
+            AxisMarks(position: .trailing, values: [0, 25, 50, 75, 100]) { value in
+                AxisValueLabel {
+                    if let scaled = value.as(Double.self) {
+                        Text(powerLabel(forScaled: scaled))
+                    }
+                }
+            }
+        }
+        .chartXSelection(value: $selectedDate)
+        .frame(minHeight: 240)
     }
 
     @ViewBuilder

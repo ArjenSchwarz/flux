@@ -74,6 +74,7 @@ struct ExpandedDayHost: View {
                 EmptyView()
             }
         }
+        .environment(\.chartExpansionAffordanceVisible, false)
         .onChange(of: selectedDate) { _, newValue in
             controller.noteSelectionChange(to: newValue)
         }

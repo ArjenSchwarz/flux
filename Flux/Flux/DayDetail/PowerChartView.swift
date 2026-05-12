@@ -3,9 +3,15 @@ import FluxCore
 import SwiftUI
 
 struct PowerChartView: View {
+    static let chartKind: ChartKind = .dayPower
+
     let date: String
     let readings: [ParsedReading]
     @Binding var selectedDate: Date?
+
+    var expansionScope: ChartScope {
+        .daySpecific(date: DateFormatting.parseDayDate(date) ?? Date())
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -22,75 +28,84 @@ struct PowerChartView: View {
                 .foregroundStyle(.secondary)
             }
 
-            Chart {
-                if let offpeak = DayChartDomain.offpeakRange(for: date) {
-                    RectangleMark(
-                        xStart: .value("Start", offpeak.start),
-                        xEnd: .value("End", offpeak.end)
-                    )
-                    .foregroundStyle(.yellow.opacity(0.1))
-                }
+            ExpandableChartContainer(
+                kind: Self.chartKind,
+                scopeProvider: { expansionScope },
+                content: { chartBody }
+            )
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
 
-                ForEach(readings) { reading in
-                    AreaMark(
-                        x: .value("Time", reading.date),
-                        yStart: .value("Power", 0),
-                        yEnd: .value("Power", reading.point.ppv)
-                    )
-                    .foregroundStyle(by: .value("Series", "Solar"))
-
-                    LineMark(
-                        x: .value("Time", reading.date),
-                        y: .value("Power", reading.point.pload)
-                    )
-                    .foregroundStyle(by: .value("Series", "Load"))
-
-                    LineMark(
-                        x: .value("Time", reading.date),
-                        y: .value("Power", reading.point.pgrid)
-                    )
-                    .foregroundStyle(by: .value("Series", "Grid"))
-                }
-
-                if let selected = selectedReading {
-                    RuleMark(x: .value("Selected", selected.date))
-                        .foregroundStyle(.secondary.opacity(0.5))
-                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 2]))
-
-                    PointMark(x: .value("S", selected.date), y: .value("P", selected.point.ppv))
-                        .symbolSize(40).foregroundStyle(.green)
-                    PointMark(x: .value("S", selected.date), y: .value("P", selected.point.pload))
-                        .symbolSize(40).foregroundStyle(.primary)
-                    PointMark(x: .value("S", selected.date), y: .value("P", selected.point.pgrid))
-                        .symbolSize(40).foregroundStyle(.red)
-                }
+    @ViewBuilder
+    private var chartBody: some View {
+        Chart {
+            if let offpeak = DayChartDomain.offpeakRange(for: date) {
+                RectangleMark(
+                    xStart: .value("Start", offpeak.start),
+                    xEnd: .value("End", offpeak.end)
+                )
+                .foregroundStyle(.yellow.opacity(0.1))
             }
-            .chartForegroundStyleScale([
-                "Solar": Color.green.opacity(0.25),
-                "Load": Color.primary,
-                "Grid": Color.red
-            ])
-            .chartXScale(domain: xDomain)
-            .chartXAxis {
-                AxisMarks(values: .stride(by: .hour, count: 3)) {
-                    AxisGridLine()
-                    AxisValueLabel(format: .dateTime.hour())
-                }
+
+            ForEach(readings) { reading in
+                AreaMark(
+                    x: .value("Time", reading.date),
+                    yStart: .value("Power", 0),
+                    yEnd: .value("Power", reading.point.ppv)
+                )
+                .foregroundStyle(by: .value("Series", "Solar"))
+
+                LineMark(
+                    x: .value("Time", reading.date),
+                    y: .value("Power", reading.point.pload)
+                )
+                .foregroundStyle(by: .value("Series", "Load"))
+
+                LineMark(
+                    x: .value("Time", reading.date),
+                    y: .value("Power", reading.point.pgrid)
+                )
+                .foregroundStyle(by: .value("Series", "Grid"))
             }
-            .chartYAxis {
-                AxisMarks { value in
-                    AxisGridLine()
-                    AxisValueLabel {
-                        if let watts = value.as(Double.self) {
-                            Text(PowerFormatting.formatAxis(watts))
-                        }
+
+            if let selected = selectedReading {
+                RuleMark(x: .value("Selected", selected.date))
+                    .foregroundStyle(.secondary.opacity(0.5))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 2]))
+
+                PointMark(x: .value("S", selected.date), y: .value("P", selected.point.ppv))
+                    .symbolSize(40).foregroundStyle(.green)
+                PointMark(x: .value("S", selected.date), y: .value("P", selected.point.pload))
+                    .symbolSize(40).foregroundStyle(.primary)
+                PointMark(x: .value("S", selected.date), y: .value("P", selected.point.pgrid))
+                    .symbolSize(40).foregroundStyle(.red)
+            }
+        }
+        .chartForegroundStyleScale([
+            "Solar": Color.green.opacity(0.25),
+            "Load": Color.primary,
+            "Grid": Color.red
+        ])
+        .chartXScale(domain: xDomain)
+        .chartXAxis {
+            AxisMarks(values: .stride(by: .hour, count: 3)) {
+                AxisGridLine()
+                AxisValueLabel(format: .dateTime.hour())
+            }
+        }
+        .chartYAxis {
+            AxisMarks { value in
+                AxisGridLine()
+                AxisValueLabel {
+                    if let watts = value.as(Double.self) {
+                        Text(PowerFormatting.formatAxis(watts))
                     }
                 }
             }
-            .chartXSelection(value: $selectedDate)
-            .frame(minHeight: 220)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .chartXSelection(value: $selectedDate)
+        .frame(minHeight: 220)
     }
 
     private var selectedReading: ParsedReading? {
