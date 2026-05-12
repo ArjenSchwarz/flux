@@ -16,6 +16,8 @@ struct FluxApp: App {
     @State private var refreshCoordinator = FluxRefreshCoordinator()
     #endif
 
+    @State private var chartScopeRegistry = ChartScopeRegistry()
+
     @AppStorage(UserDefaults.themeIdentifierKey, store: UserDefaults.fluxAppGroup)
     private var themeRaw: String = ""
 
@@ -37,6 +39,7 @@ struct FluxApp: App {
         WindowGroup {
             AppNavigationView()
                 .environment(refreshCoordinator)
+                .environment(chartScopeRegistry)
                 .preferredColorScheme(preferredScheme)
         }
         .modelContainer(for: CachedDayEnergy.self)
@@ -58,6 +61,7 @@ struct FluxApp: App {
         #else
         WindowGroup {
             AppNavigationView()
+                .environment(chartScopeRegistry)
                 .preferredColorScheme(preferredScheme)
         }
         .modelContainer(for: CachedDayEnergy.self)

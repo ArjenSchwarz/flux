@@ -8,25 +8,25 @@ references:
 
 ## Foundations
 
-- [ ] 1. Write Codable + Hashable tests for ChartKind and ChartScope <!-- id:1iiifug -->
+- [x] 1. Write Codable + Hashable tests for ChartKind and ChartScope <!-- id:1iiifug -->
   - Requirements: [3.2](requirements.md#3.2)
   - References: Flux/FluxTests/Charts/ChartKindTests.swift
 
-- [ ] 2. Implement ChartKind and ChartScope value types <!-- id:1iiifuh -->
+- [x] 2. Implement ChartKind and ChartScope value types <!-- id:1iiifuh -->
   - Blocked-by: 1iiifug (Write Codable + Hashable tests for ChartKind and ChartScope)
   - Requirements: [3.2](requirements.md#3.2)
   - References: Flux/Flux/Charts/Expansion/ChartKind.swift
 
-- [ ] 3. Write tests for ChartScopeRegistry: write/read by kind, overwrite, independence <!-- id:1iiifui -->
+- [x] 3. Write tests for ChartScopeRegistry: write/read by kind, overwrite, independence <!-- id:1iiifui -->
   - Requirements: [3.2](requirements.md#3.2), [5.4](requirements.md#5.4)
   - References: Flux/FluxTests/Charts/ChartScopeRegistryTests.swift
 
-- [ ] 4. Implement ChartScopeRegistry as @Observable, injected at app root <!-- id:1iiifuj -->
+- [x] 4. Implement ChartScopeRegistry as @Observable, injected at app root <!-- id:1iiifuj -->
   - Blocked-by: 1iiifui (Write tests for ChartScopeRegistry: write/read by kind, overwrite, independence)
   - Requirements: [3.2](requirements.md#3.2), [4.5](requirements.md#4.5), [5.4](requirements.md#5.4)
   - References: Flux/Flux/Charts/Expansion/ChartScopeRegistry.swift
 
-- [ ] 5. Declare ChartExpansionAction and EnvironmentValues.chartExpansion entry <!-- id:1iiifuk -->
+- [x] 5. Declare ChartExpansionAction and EnvironmentValues.chartExpansion entry <!-- id:1iiifuk -->
   - Blocked-by: 1iiifuh (Implement ChartKind and ChartScope value types)
   - Requirements: [1.3](requirements.md#1.3)
   - References: Flux/Flux/Charts/Expansion/ChartExpansionAction.swift
