@@ -53,12 +53,12 @@ references:
 
 ## Container and button
 
-- [ ] 10. Write tests for ExpandableChartContainer (button overlay, tap invokes expansion with kind+scope) <!-- id:1iiifup -->
+- [x] 10. Write tests for ExpandableChartContainer (button overlay, tap invokes expansion with kind+scope) <!-- id:1iiifup -->
   - Requirements: [1.1](requirements.md#1.1), [1.2](requirements.md#1.2), [1.3](requirements.md#1.3), [1.5](requirements.md#1.5)
   - References: Flux/FluxTests/Charts/ExpandableChartContainerTests.swift
 
-- [ ] 11. Implement ExpandableChartContainer (top-trailing 8pt-inset button, label 'Expand chart') <!-- id:1iiifuq -->
-  - Blocked-by: 1iiifup (Write tests for ExpandableChartContainer (button overlay, tap invokes expansion with kind+scope)), overlay, invokes, overlay, invokes, overlay, invokes, overlay, invokes, 1iiifuk (Declare ChartExpansionAction and EnvironmentValues.chartExpansion entry)
+- [x] 11. Implement ExpandableChartContainer (top-trailing 8pt-inset button, label 'Expand chart') <!-- id:1iiifuq -->
+  - Blocked-by: 1iiifup (Write tests for ExpandableChartContainer (button overlay, tap invokes expansion with kind+scope)), overlay, invokes, overlay, invokes, overlay, invokes, overlay, invokes, overlay, invokes, overlay, invokes, 1iiifuk (Declare ChartExpansionAction and EnvironmentValues.chartExpansion entry)
   - Requirements: [1.1](requirements.md#1.1), [1.2](requirements.md#1.2), [1.3](requirements.md#1.3), [1.4](requirements.md#1.4), [1.5](requirements.md#1.5)
   - References: Flux/Flux/Charts/Expansion/ExpandableChartContainer.swift
 
@@ -75,7 +75,7 @@ references:
   - References: Flux/FluxTests/Charts/ExpandedChartViewTests.swift
 
 - [ ] 14. Implement ExpandedChartView router (kind -> ExpandedHistoryHost / ExpandedDayHost) <!-- id:1iiifus -->
-  - Blocked-by: 1iiifur (Write tests for ExpandedChartView router (each ChartKind mounts correct host type)), correct, correct, correct, correct, 1iiifuj (Implement ChartScopeRegistry as @Observable, injected at app root)
+  - Blocked-by: 1iiifur (Write tests for ExpandedChartView router (each ChartKind mounts correct host type)), correct, correct, correct, correct, correct, correct, 1iiifuj (Implement ChartScopeRegistry as @Observable, injected at app root)
   - Requirements: [1.3](requirements.md#1.3), [2.4](requirements.md#2.4), [2.5](requirements.md#2.5), [4.1](requirements.md#4.1), [4.2](requirements.md#4.2)
   - References: Flux/Flux/Charts/Expansion/ExpandedChartView.swift
 
@@ -120,17 +120,17 @@ references:
   - References: Flux/FluxTests/Charts/ExpandedChartTopHandleTests.swift
 
 - [ ] 23. Implement ExpandedChartTopHandle (visible 32pt drag-indicator band above title) <!-- id:1iiifv2 -->
-  - Blocked-by: 1iiifv1 (Write tests for ExpandedChartTopHandle (60pt drag threshold; horizontal drag inert; frame above chart drawing area)), drawing, drawing, drawing, drawing
+  - Blocked-by: 1iiifv1 (Write tests for ExpandedChartTopHandle (60pt drag threshold; horizontal drag inert; frame above chart drawing area)), drawing, drawing, drawing, drawing, drawing, drawing
   - Requirements: [2.3](requirements.md#2.3)
   - References: Flux/Flux/Charts/Expansion/iOS/ExpandedChartTopHandle.swift
 
 - [ ] 24. Wire RootView (iOS): @SceneStorage('expandedChart'), .fullScreenCover, iOS ChartExpansionAction writing registry then storage <!-- id:1iiifv3 -->
-  - Blocked-by: 1iiifv0 (Implement OrientationLandscapeScope (UIViewControllerRepresentable) with viewWillAppear/Disappear sequencing and SwiftUI .onDisappear belt-and-braces), 1iiifv2 (Implement ExpandedChartTopHandle (visible 32pt drag-indicator band above title)), visible, visible, visible, visible, 1iiifus (Implement ExpandedChartView router (kind -> ExpandedHistoryHost / ExpandedDayHost)), 1iiifuk (Declare ChartExpansionAction and EnvironmentValues.chartExpansion entry), 1iiifuj (Implement ChartScopeRegistry as @Observable, injected at app root)
+  - Blocked-by: 1iiifv0 (Implement OrientationLandscapeScope (UIViewControllerRepresentable) with viewWillAppear/Disappear sequencing and SwiftUI .onDisappear belt-and-braces), 1iiifv2 (Implement ExpandedChartTopHandle (visible 32pt drag-indicator band above title)), visible, visible, visible, visible, visible, visible, 1iiifus (Implement ExpandedChartView router (kind -> ExpandedHistoryHost / ExpandedDayHost)), 1iiifuk (Declare ChartExpansionAction and EnvironmentValues.chartExpansion entry), 1iiifuj (Implement ChartScopeRegistry as @Observable, injected at app root)
   - Requirements: [1.3](requirements.md#1.3), [2.1](requirements.md#2.1), [5.1](requirements.md#5.1), [5.3](requirements.md#5.3), [5.5](requirements.md#5.5), [6.4](requirements.md#6.4)
   - References: Flux/Flux/RootView.swift
 
 - [ ] 25. Write iOS integration tests: tap expand on each card, verify cover/host/dismiss/orientation reset (including tab-switch teardown) <!-- id:1iiifv4 -->
-  - Blocked-by: 1iiifv3 (Wire RootView (iOS): @SceneStorage('expandedChart'), .fullScreenCover, iOS ChartExpansionAction writing registry then storage), writing, writing, writing, writing
+  - Blocked-by: 1iiifv3 (Wire RootView (iOS): @SceneStorage('expandedChart'), .fullScreenCover, iOS ChartExpansionAction writing registry then storage), writing, writing, writing, writing, writing, writing
   - Requirements: [2.1](requirements.md#2.1), [2.6](requirements.md#2.6), [5.1](requirements.md#5.1), [5.3](requirements.md#5.3)
   - References: Flux/FluxTests/Charts/iOSExpandIntegrationTests.swift
 
@@ -141,7 +141,7 @@ references:
   - References: Flux/FluxTests/Charts/MacOSScopedObserverTests.swift
 
 - [ ] 27. Implement ChartSceneObserver wrapping FluxAPIClient with appearsActive-tiered 60s polling <!-- id:1iiifv6 -->
-  - Blocked-by: 1iiifv5 (Write tests for macOS ChartSceneObserver (60s polling, pause when inactive, switches on scope change)), polling, polling, polling, polling
+  - Blocked-by: 1iiifv5 (Write tests for macOS ChartSceneObserver (60s polling, pause when inactive, switches on scope change)), polling, polling, polling, polling, polling, polling
   - Requirements: [4.5](requirements.md#4.5), [5.4](requirements.md#5.4)
   - References: Flux/Flux/Charts/Expansion/macOS/ChartSceneObserver.swift
 
@@ -156,7 +156,7 @@ references:
   - References: Flux/Flux/FluxApp.swift
 
 - [ ] 30. Write macOS integration tests: same kind twice -> 1 window; different kinds -> 2; relaunch -> no restore <!-- id:1iiifv9 -->
-  - Blocked-by: 1iiifv8 (Implement macOS ChartExpansionAction using openWindow(id:value:) after writing scope to registry), writing, writing, writing, writing
+  - Blocked-by: 1iiifv8 (Implement macOS ChartExpansionAction using openWindow(id:value:) after writing scope to registry), writing, writing, writing, writing, writing, writing
   - Requirements: [3.2](requirements.md#3.2), [3.3](requirements.md#3.3), [3.4](requirements.md#3.4), [3.7](requirements.md#3.7)
   - References: Flux/Flux/Charts/Expansion/macOS/ChartSceneIntegrationTests.swift
 
@@ -167,7 +167,7 @@ references:
   - References: Flux/FluxTests/Charts/HistoryCardExpansionTests.swift
 
 - [ ] 32. Wrap HistorySolarCard / HistoryGridUsageCard / HistoryDailyUsageCard with ExpandableChartContainer (historyRange scope) <!-- id:1iiifvb -->
-  - Blocked-by: 1iiifva (Write expansion tests for the three History cards (correct kind + historyRange scope from current range)), correct, current, correct, current, correct, current, correct, current, 1iiifuq (Implement ExpandableChartContainer (top-trailing 8pt-inset button, label 'Expand chart'))
+  - Blocked-by: 1iiifva (Write expansion tests for the three History cards (correct kind + historyRange scope from current range)), correct, current, correct, current, correct, current, correct, current, correct, current, correct, current, 1iiifuq (Implement ExpandableChartContainer (top-trailing 8pt-inset button, label 'Expand chart'))
   - Requirements: [1.1](requirements.md#1.1), [1.2](requirements.md#1.2), [1.3](requirements.md#1.3), [1.4](requirements.md#1.4)
   - References: Flux/Flux/History/HistorySolarCard.swift, Flux/Flux/History/HistoryGridUsageCard.swift, Flux/Flux/History/HistoryDailyUsageCard.swift
 
