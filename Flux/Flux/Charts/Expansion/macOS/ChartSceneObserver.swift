@@ -1,16 +1,16 @@
-#if os(macOS)
 import FluxCore
 import Foundation
 import Observation
 
-/// Scope-aware data observer for the macOS chart-detail scene.
+/// Scope-aware data observer for an enlarged chart presentation.
 ///
-/// Each enlarged window owns its own observer that polls `FluxAPIClient`
-/// at the inactive 60-second tier when `appearsActive` is true, pauses
-/// when the window is not visible, and switches its fetch target when
-/// the registered scope changes. The observer feeds its result into the
-/// host controller (`ExpandedHistoryHostController` or
-/// `ExpandedDayHostController`) read by `ExpandedChartView`.
+/// Each enlarged presentation (macOS window or iOS full-screen cover)
+/// owns its own observer that polls `FluxAPIClient` at the inactive
+/// 60-second tier when `appearsActive` is true, pauses when not visible,
+/// and switches its fetch target when the registered scope changes.
+/// The observer feeds its result into the host controller
+/// (`ExpandedHistoryHostController` or `ExpandedDayHostController`)
+/// read by `ExpandedChartView`.
 @MainActor
 @Observable
 final class ChartSceneObserver {
@@ -108,7 +108,7 @@ final class ChartSceneObserver {
         let dateString = DateFormatting.dayDateString(from: date)
         do {
             let response = try await api.fetchDay(date: dateString)
-            let parsed = parseReadings(response.readings)
+            let parsed = ParsedReading.parse(response.readings)
             dayController?.adopt(
                 ExpandedDayHostSnapshot(
                     date: response.date,
@@ -121,14 +121,4 @@ final class ChartSceneObserver {
         }
     }
 
-    private func parseReadings(_ readings: [TimeSeriesPoint]) -> [ParsedReading] {
-        var parsed: [ParsedReading] = []
-        parsed.reserveCapacity(readings.count)
-        for reading in readings {
-            guard let parsedDate = DateFormatting.parseTimestamp(reading.timestamp) else { continue }
-            parsed.append(ParsedReading(id: reading.id, date: parsedDate, point: reading))
-        }
-        return parsed
-    }
 }
-#endif

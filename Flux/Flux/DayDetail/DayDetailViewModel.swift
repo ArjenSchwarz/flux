@@ -6,6 +6,16 @@ struct ParsedReading: Identifiable {
     let id: String
     let date: Date
     let point: TimeSeriesPoint
+
+    static func parse(_ readings: [TimeSeriesPoint]) -> [ParsedReading] {
+        var parsed: [ParsedReading] = []
+        parsed.reserveCapacity(readings.count)
+        for reading in readings {
+            guard let parsedDate = DateFormatting.parseTimestamp(reading.timestamp) else { continue }
+            parsed.append(ParsedReading(id: reading.id, date: parsedDate, point: reading))
+        }
+        return parsed
+    }
 }
 
 extension Array where Element == ParsedReading {
@@ -82,7 +92,7 @@ final class DayDetailViewModel {
         do {
             let response = try await apiClient.fetchDay(date: date)
             readings = response.readings
-            parsedReadings = parseReadings(response.readings)
+            parsedReadings = ParsedReading.parse(response.readings)
             summary = response.summary
             hasPowerData = !isFallbackData(response.readings)
             peakPeriods = response.peakPeriods ?? []
@@ -177,16 +187,6 @@ final class DayDetailViewModel {
         }
 
         return DateFormatting.dayDateString(from: newDate)
-    }
-
-    private func parseReadings(_ readings: [TimeSeriesPoint]) -> [ParsedReading] {
-        var parsed: [ParsedReading] = []
-        parsed.reserveCapacity(readings.count)
-        for reading in readings {
-            guard let parsedDate = DateFormatting.parseTimestamp(reading.timestamp) else { continue }
-            parsed.append(ParsedReading(id: reading.id, date: parsedDate, point: reading))
-        }
-        return parsed
     }
 
     private func isFallbackData(_ readings: [TimeSeriesPoint]) -> Bool {

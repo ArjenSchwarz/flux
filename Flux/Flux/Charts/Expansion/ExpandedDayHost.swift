@@ -18,6 +18,8 @@ struct ExpandedDayHostSnapshot {
 final class ExpandedDayHostController {
     private(set) var displayed: ExpandedDayHostSnapshot
     let gate: XSelectionQuiescenceGate<ExpandedDayHostSnapshot>
+    private let quietWindow: TimeInterval
+    private var flushTask: Task<Void, Never>?
 
     init(
         initial: ExpandedDayHostSnapshot,
@@ -25,11 +27,16 @@ final class ExpandedDayHostController {
         clock: @escaping () -> Date = Date.init
     ) {
         self.displayed = initial
+        self.quietWindow = quietWindow
         let gate = XSelectionQuiescenceGate<ExpandedDayHostSnapshot>(quietWindow: quietWindow, clock: clock)
         self.gate = gate
         gate.onApply = { [weak self] snapshot in
             self?.displayed = snapshot
         }
+    }
+
+    deinit {
+        flushTask?.cancel()
     }
 
     func adopt(_ snapshot: ExpandedDayHostSnapshot) {
@@ -39,13 +46,28 @@ final class ExpandedDayHostController {
     func noteSelectionChange(to selection: Date?) {
         if selection == nil {
             gate.noteSelectionCleared()
+            flushTask?.cancel()
+            flushTask = nil
         } else {
             gate.noteSelectionChange()
+            scheduleFlush()
         }
     }
 
+    /// Exposed for tests; production code drives flushing via the
+    /// scheduled task created in `noteSelectionChange`.
     func tick() {
         gate.tick()
+    }
+
+    private func scheduleFlush() {
+        flushTask?.cancel()
+        let window = quietWindow
+        flushTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(window))
+            guard !Task.isCancelled else { return }
+            self?.gate.tick()
+        }
     }
 }
 
@@ -77,12 +99,6 @@ struct ExpandedDayHost: View {
         .environment(\.chartExpansionAffordanceVisible, false)
         .onChange(of: selectedDate) { _, newValue in
             controller.noteSelectionChange(to: newValue)
-        }
-        .task(id: ObjectIdentifier(controller)) {
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 100_000_000)
-                controller.tick()
-            }
         }
     }
 }

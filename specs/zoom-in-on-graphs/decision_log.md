@@ -585,3 +585,114 @@ All exceed the 3:1 floor for graphical objects, and the worst case (4.31 : 1) al
 - If a future chart introduces a fill brighter than the values audited here (e.g. white or unscaled amber over the card background), the check will need to be redone for that fill.
 
 ---
+
+## Decision 18: iOS Cover Also Uses Self-Contained Observation, Not Parent Bindings
+
+**Date**: 2026-05-13
+**Status**: accepted; extends Decision 11
+
+### Context
+
+Design.md described the iOS data path as "parent bindings — the sheet lives inside the parent screen and inherits the same state already passed to the inline card." That assumed the `fullScreenCover` would be attached to `HistoryView` and `DayDetailView`, with each parent threading its existing entries/readings/summary state into the enlarged view.
+
+The implementation that landed instead places the cover on `RootView` (above `AppNavigationView`). Pre-push review found that the cover content was `ExpandedChartView(kind: kind)` with no host controllers, falling through to the `ExpandedChartMissingDataView` placeholder — the iOS path of the feature rendered "Chart data unavailable" instead of the chart. The root cause is the position of the cover: at `RootView` it cannot reach `HistoryView` / `DayDetailView` state, but moving the cover into the parents would require giving each parent its own `@SceneStorage("expanded\(kind)")` and lose the simple single-key restoration model from Decision 15.
+
+### Decision
+
+iOS uses the same self-contained scope-and-observer pattern as macOS (Decision 11). `RootView` keeps the cover and the `@SceneStorage("expandedChart")` binding; the cover mounts a cross-platform `ChartExpansionContent` view that owns a `ChartSceneObserver` and renders `ExpandedChartView` with the resolved host controllers. The original "parent bindings" sketch in design.md is superseded.
+
+### Rationale
+
+Self-observation is what macOS already does; matching iOS to that pattern keeps the data plumbing symmetrical and removes the cross-platform asymmetry that made the iOS path break silently. The alternative — lifting the cover into each parent screen — would have duplicated the scene-storage key per screen and forced threading bindings through multiple intermediate views (HistorySolarCard / HistoryGridUsageCard / HistoryDailyUsageCard, plus the two Day Detail charts) just so the cover could subscribe to the same data the inline card already has. The scoped observer pays one extra HTTP round-trip per open cover; in a two-user app that is dramatically cheaper than the structural complexity.
+
+### Alternatives Considered
+
+- **Move the cover into HistoryView/DayDetailView and pass bindings**: True to the original design sketch, but requires per-screen `@SceneStorage` keys, threads bindings through several intermediate views, and produces a structurally different iOS path from macOS. Rejected as disproportionate.
+- **Inject the active view-model into a shared environment value the cover can read**: Same retention/lifetime problems Decision 11 already rejected for macOS.
+- **Leave the iOS path rendering the missing-data placeholder**: Not a real alternative; the cover would be useless.
+
+### Consequences
+
+**Positive:**
+- iOS and macOS data paths are identical, so the cross-platform `ChartExpansionContent` view contains the entire mount logic in one place.
+- The cover survives parent unmount (tab switch) because it is anchored to the root, matching Decision 15's scene-storage assumption.
+- Adding the affordance to a future chart only requires registering the kind; no per-screen plumbing.
+
+**Negative:**
+- Two pollers exist for the same data while the inline card and the enlarged cover are both visible (one for `HistoryViewModel`/`DayDetailViewModel`, one for the observer). Acceptable on iOS for the same reason it is on macOS (Decision 11).
+- This decision means [AC 4.4](requirements.md#4.4) cannot be satisfied automatically through shared bindings; see Decision 19 for how that AC is resolved.
+
+---
+
+## Decision 19: AC 4.4 (Selection Mirror-Back) Not Implemented Either Platform
+
+**Date**: 2026-05-13
+**Status**: accepted; resolves an open spec divergence
+
+### Context
+
+[AC 4.4](requirements.md#4.4) requires that when the user changes the selected point or selected day inside the enlarged presentation, the system reflects that selection in the underlying inline card on close. Both platforms now use self-contained observation (Decision 11 for macOS; Decision 18 for iOS), which means the enlarged presentation's selection state is local to its own scope and is not threaded back into the inline view models.
+
+Implementing the mirror would require either lifting the inline cards' selection state into a shared bidirectional registry, or wiring a write-on-dismiss callback chain from the enlarged presentation into the inline view model — both of which contradict the lifetime independence Decisions 11 and 18 chose.
+
+### Decision
+
+Treat the enlarged presentation's selection as ephemeral: it is local to the cover/window's lifetime, not persisted to the inline card on close. [AC 4.4](requirements.md#4.4) is documented as not delivered; closing the enlarged presentation returns the inline card to its pre-existing selection (which may be `nil`).
+
+### Rationale
+
+The original AC was written before the data plumbing was settled. Decisions 11 and 18 deliberately decoupled the enlarged presentation from inline view-model state to keep window/cover lifetime independent of main-window navigation. Reintroducing a write-back path would require maintaining a per-kind "last selection" cell that both the inline view and the enlarged view observe — feature-level complexity disproportionate to the user benefit (a personal-use app where the user can simply tap the same point again in the inline view).
+
+If usage shows the mirror-back materially matters, a follow-up can add a `lastSelection: [ChartKind: Date?]` field to `ChartScopeRegistry` and have the inline cards adopt it on appear. That change is localised and reversible.
+
+### Alternatives Considered
+
+- **Add a bidirectional selection registry**: Same cost as Decision 11's rejected store-lift. Premature for personal-app scale.
+- **Pass dismissal callback that pushes the last selection into the inline view model**: Cross-cuts otherwise-clean lifetime boundaries; complicates testing.
+- **Leave AC 4.4 silently unimplemented**: Misleading; the spec implies it works.
+
+### Consequences
+
+**Positive:**
+- The decoupling from Decisions 11 + 18 is preserved.
+- No new shared state.
+
+**Negative:**
+- Users who change the selection in the enlarged view and then dismiss will see the inline card at its previous selection. Documented as a known gap.
+- AC 4.4 is honest about not being delivered.
+
+---
+
+## Decision 20: Quiescence Gate Flushes via Scheduled Task, Not 100 ms Poll
+
+**Date**: 2026-05-13
+**Status**: accepted
+
+### Context
+
+The first implementation of `ExpandedDayHost` ran a `while !Task.isCancelled` loop that slept 100 ms and called `controller.tick()` for the lifetime of the enlarged view. That wakes the main actor ten times per second for the entire window's lifetime even when no selection is pending and no work needs doing. The pre-push efficiency review flagged this.
+
+### Decision
+
+`ExpandedDayHostController.noteSelectionChange(to:)` schedules a single `Task.sleep(quietWindow)` flush whenever a non-nil selection arrives, cancelling and rescheduling on each subsequent change. Clearing the selection cancels the task and flushes pending immediately via `gate.noteSelectionCleared()`. The `tick()` method remains exposed so existing unit tests can drive the gate deterministically with their mock clock.
+
+### Rationale
+
+The original 100 ms poll was a workaround for the fact that `chartXSelection` has no end-of-gesture event — but it solved that problem by polling regardless of whether the gate had any pending work. Event-driven scheduling exploits the fact that the gate's quiescence window is itself event-driven (it only matters in the 400 ms after the most recent `noteSelectionChange`).
+
+### Alternatives Considered
+
+- **Keep the 100 ms poll**: Wakeful and wasteful; flagged by efficiency review.
+- **Drive the flush from the chart binding's `didSet`**: SwiftUI's `@Binding` has no `didSet`; would require routing through an intermediary state-object.
+- **Use a `Timer` instead of `Task.sleep`**: More platform-coupled; no test affordance.
+
+### Consequences
+
+**Positive:**
+- Idle enlarged Day Detail views perform zero main-thread work between user interactions.
+- Existing controller-level unit tests (which call `tick()` directly with a mock clock) are unaffected.
+
+**Negative:**
+- One extra `Task` allocation per selection change, cancelled on the next change. Negligible.
+
+---

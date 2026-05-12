@@ -99,6 +99,6 @@ private struct OrientationLandscapeHost<Content: View>: UIViewControllerRepresen
 }
 
 private extension Logger {
-    static let expansion = Logger(subsystem: "me.nore.ig.Flux", category: "ChartExpansion")
+    static let expansion = Logger(subsystem: "eu.arjen.flux", category: "chart-expansion")
 }
 #endif
