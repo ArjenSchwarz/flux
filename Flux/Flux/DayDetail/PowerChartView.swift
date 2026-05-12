@@ -5,8 +5,7 @@ import SwiftUI
 struct PowerChartView: View {
     let date: String
     let readings: [ParsedReading]
-
-    @State private var selectedDate: Date?
+    @Binding var selectedDate: Date?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -111,7 +110,7 @@ struct PowerChartView: View {
         guard let date = DateFormatting.parseTimestamp(reading.timestamp) else { return nil }
         return ParsedReading(id: reading.id, date: date, point: reading)
     }
-    PowerChartView(date: day.date, readings: parsed)
+    PowerChartView(date: day.date, readings: parsed, selectedDate: .constant(nil))
         .padding()
 }
 #endif

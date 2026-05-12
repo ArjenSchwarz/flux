@@ -10,8 +10,7 @@ struct BatteryCombinedChartView: View {
     let date: String
     let readings: [ParsedReading]
     let summary: DaySummary?
-
-    @State private var selectedDate: Date?
+    @Binding var selectedDate: Date?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -187,7 +186,7 @@ struct BatteryCombinedChartView: View {
         guard let date = DateFormatting.parseTimestamp(reading.timestamp) else { return nil }
         return ParsedReading(id: reading.id, date: date, point: reading)
     }
-    BatteryCombinedChartView(date: day.date, readings: parsed, summary: day.summary)
+    BatteryCombinedChartView(date: day.date, readings: parsed, summary: day.summary, selectedDate: .constant(nil))
         .padding()
 }
 #endif
