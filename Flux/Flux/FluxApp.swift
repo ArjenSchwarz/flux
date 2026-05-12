@@ -14,6 +14,8 @@ struct FluxApp: App {
     #if os(macOS)
     @NSApplicationDelegateAdaptor(FluxAppDelegate.self) private var appDelegate
     @State private var refreshCoordinator = FluxRefreshCoordinator()
+    #else
+    @UIApplicationDelegateAdaptor(FluxiOSAppDelegate.self) private var appDelegate
     #endif
 
     @State private var chartScopeRegistry = ChartScopeRegistry()
@@ -60,7 +62,7 @@ struct FluxApp: App {
         }
         #else
         WindowGroup {
-            AppNavigationView()
+            RootView()
                 .environment(chartScopeRegistry)
                 .preferredColorScheme(preferredScheme)
         }

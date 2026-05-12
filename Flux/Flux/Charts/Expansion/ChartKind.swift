@@ -1,11 +1,13 @@
 import Foundation
 
-enum ChartKind: String, Hashable, Codable, CaseIterable {
+enum ChartKind: String, Hashable, Codable, CaseIterable, Identifiable {
     case historySolar
     case historyGridUsage
     case historyDailyUsage
     case dayPower
     case dayBatteryCombined
+
+    var id: String { rawValue }
 
     enum HostKind: Hashable {
         case history
