@@ -35,10 +35,6 @@ final class ExpandedDayHostController {
         }
     }
 
-    deinit {
-        flushTask?.cancel()
-    }
-
     func adopt(_ snapshot: ExpandedDayHostSnapshot) {
         gate.adopt(snapshot)
     }
