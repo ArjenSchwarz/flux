@@ -5,6 +5,15 @@ struct RootView: View {
     @Environment(ChartScopeRegistry.self) private var registry
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    // Only the `ChartKind` is persisted across backgrounding (per
+    // Decision 15) — the `ChartScope` (range days, specific date) is
+    // held in `ChartScopeRegistry`, which is an in-memory `@MainActor`
+    // store and therefore lost on cold relaunch. After restoration,
+    // `ExpandedChartView.resolvedScope` falls back to
+    // `historyRange(days: defaultHistoryRangeDays)` for History kinds
+    // and `daySpecific(date: today())` for Day kinds. A user who
+    // backgrounded with a 14-day range will see the chart reopen at
+    // 7 days; documented gap.
     @SceneStorage("expandedChart") private var expandedRaw: String = ""
     @State private var focusCoordinator = ChartExpansionFocusCoordinator()
 

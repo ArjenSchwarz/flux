@@ -80,7 +80,13 @@ struct ChartExpansionContent: View {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(60))
                 guard !Task.isCancelled else { return }
-                await observer?.tick()
+                // `observer` is nil for the unconfigured-app path
+                // (`makeAPIClient` returned nil because no token /
+                // URL). Skip the tick in that case so intent is
+                // obvious; `observer.tick()` itself also no-ops when
+                // `appearsActive == false` on macOS.
+                guard let observer else { continue }
+                await observer.tick()
             }
         }
     }
