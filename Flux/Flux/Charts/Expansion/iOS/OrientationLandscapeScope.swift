@@ -25,6 +25,7 @@ private struct OrientationLandscapeHost<Content: View>: UIViewControllerRepresen
         controller.update(rootView: content)
     }
 
+    @MainActor
     static func reset() {
         if OrientationLock.shared.depth > 0 {
             OrientationLock.shared.exit()
