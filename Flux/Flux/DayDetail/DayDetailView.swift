@@ -8,6 +8,8 @@ struct DayDetailView: View {
     @State private var viewModel: DayDetailViewModel
     @State private var showingSettings = false
     @State private var editingNote = false
+    @State private var powerSelected: Date?
+    @State private var batterySelected: Date?
 
     @AppStorage(UserDefaults.compareEnabledKey, store: UserDefaults.fluxAppGroup)
     private var compareEnabled: Bool = false
@@ -177,16 +179,20 @@ struct DayDetailView: View {
     private var contentSection: some View {
         if !viewModel.parsedReadings.isEmpty {
             if viewModel.hasPowerData {
-                DayDetailPanels.power(date: viewModel.date, readings: viewModel.parsedReadings)
+                DayDetailPanels.power(date: viewModel.date,
+                                      readings: viewModel.parsedReadings,
+                                      selectedDate: $powerSelected)
                 DayDetailPanels.battery(date: viewModel.date,
                                         readings: viewModel.parsedReadings,
-                                        summary: viewModel.summary)
+                                        summary: viewModel.summary,
+                                        selectedDate: $batterySelected)
             } else {
                 DayDetailMessagePanel(title: "Power charts unavailable",
                                       detail: "This day has fallback data with SOC readings only.")
                 DayDetailPanels.battery(date: viewModel.date,
                                         readings: viewModel.parsedReadings,
-                                        summary: viewModel.summary)
+                                        summary: viewModel.summary,
+                                        selectedDate: $batterySelected)
             }
         } else if let error = viewModel.error {
             DayDetailErrorPanel(error: error,

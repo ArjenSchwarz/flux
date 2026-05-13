@@ -14,7 +14,12 @@ struct FluxApp: App {
     #if os(macOS)
     @NSApplicationDelegateAdaptor(FluxAppDelegate.self) private var appDelegate
     @State private var refreshCoordinator = FluxRefreshCoordinator()
+    #else
+    @UIApplicationDelegateAdaptor(FluxiOSAppDelegate.self) private var appDelegate
     #endif
+
+    @State private var chartScopeRegistry = ChartScopeRegistry()
+    @State private var chartExpansionFocus = ChartExpansionFocusCoordinator()
 
     @AppStorage(UserDefaults.themeIdentifierKey, store: UserDefaults.fluxAppGroup)
     private var themeRaw: String = ""
@@ -37,12 +42,19 @@ struct FluxApp: App {
         WindowGroup {
             AppNavigationView()
                 .environment(refreshCoordinator)
+                .environment(chartScopeRegistry)
+                .macOSChartExpansion(registry: chartScopeRegistry, focus: chartExpansionFocus)
                 .preferredColorScheme(preferredScheme)
         }
         .modelContainer(for: CachedDayEnergy.self)
         .commands {
             FluxKeyboardCommands(coordinator: refreshCoordinator)
         }
+
+        ChartDetailScene()
+            .environment(chartScopeRegistry)
+            .environment(\.chartExpansionFocus, chartExpansionFocus)
+            .modelContainer(for: CachedDayEnergy.self)
 
         Settings {
             // The Settings scene is a top-level SwiftUI Scene — not a
@@ -57,7 +69,8 @@ struct FluxApp: App {
         }
         #else
         WindowGroup {
-            AppNavigationView()
+            RootView()
+                .environment(chartScopeRegistry)
                 .preferredColorScheme(preferredScheme)
         }
         .modelContainer(for: CachedDayEnergy.self)

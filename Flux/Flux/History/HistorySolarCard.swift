@@ -2,10 +2,15 @@ import Charts
 import SwiftUI
 
 struct HistorySolarCard: View {
+    static let chartKind: ChartKind = .historySolar
+
     let entries: [HistoryViewModel.SolarEntry]
     let summary: HistoryViewModel.PeriodSummary
     let selectedDate: Date?
+    let rangeDays: Int
     let onSelect: (String) -> Void
+
+    var expansionScope: ChartScope { .historyRange(days: rangeDays) }
 
     var body: some View {
         HistoryCardChrome(
@@ -13,8 +18,13 @@ struct HistorySolarCard: View {
             kpi: HistoryFormatters.kwh(summary.solarTotalKwh),
             subtitle: subtitle
         ) {
-            chart
-                .frame(minHeight: 160)
+            ExpandableChartContainer(
+                kind: Self.chartKind,
+                scopeProvider: { expansionScope },
+                content: {
+                    chart.frame(minHeight: 160)
+                }
+            )
         }
     }
 

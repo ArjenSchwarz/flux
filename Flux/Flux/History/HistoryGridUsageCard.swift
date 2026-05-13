@@ -2,10 +2,15 @@ import Charts
 import SwiftUI
 
 struct HistoryGridUsageCard: View {
+    static let chartKind: ChartKind = .historyGridUsage
+
     let entries: [HistoryViewModel.GridEntry]
     let summary: HistoryViewModel.PeriodSummary
     let selectedDate: Date?
+    let rangeDays: Int
     let onSelect: (String) -> Void
+
+    var expansionScope: ChartScope { .historyRange(days: rangeDays) }
 
     var body: some View {
         HistoryCardChrome(
@@ -16,7 +21,13 @@ struct HistoryGridUsageCard: View {
             if entries.isEmpty {
                 placeholder
             } else {
-                chart.frame(minHeight: 180)
+                ExpandableChartContainer(
+                    kind: Self.chartKind,
+                    scopeProvider: { expansionScope },
+                    content: {
+                        chart.frame(minHeight: 180)
+                    }
+                )
             }
         }
     }
