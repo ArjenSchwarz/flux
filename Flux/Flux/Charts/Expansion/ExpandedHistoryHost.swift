@@ -88,6 +88,9 @@ struct ExpandedHistoryHost: View {
                 .simultaneousGesture(dragLifecycleGesture)
             case .dayPower, .dayBatteryCombined:
                 EmptyView()
+                    .onAppear {
+                        assertionFailure("ExpandedHistoryHost received a day kind: \(kind)")
+                    }
             }
         }
         .environment(\.chartExpansionAffordanceVisible, false)

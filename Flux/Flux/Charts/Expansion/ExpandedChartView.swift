@@ -80,7 +80,7 @@ struct ExpandedChartView: View {
         }
         switch kind.hostKind {
         case .history:
-            return .historyRange(days: 7)
+            return .historyRange(days: defaultHistoryRangeDays)
         case .day:
             return .daySpecific(date: today())
         }
@@ -95,6 +95,6 @@ private struct ExpandedChartMissingDataView: View {
             .appFont(.headline)
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .accessibilityLabel("Chart data unavailable for \(kind.rawValue)")
+            .accessibilityLabel("Chart data unavailable for \(kind.displayName)")
     }
 }

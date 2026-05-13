@@ -696,3 +696,41 @@ The original 100 ms poll was a workaround for the fact that `chartXSelection` ha
 - One extra `Task` allocation per selection change, cancelled on the next change. Negligible.
 
 ---
+
+## Decision 21: Bar-Tap Day Navigation Not Wired in Enlarged History View
+
+**Date**: 2026-05-13
+**Status**: accepted
+
+### Context
+
+Inside the inline history cards, tapping a bar invokes `onSelect(dayID)`, which `HistoryView.selectDay` routes into the navigation stack to push Day Detail. The enlarged History view reuses the same card bodies (`HistorySolarCard` / `HistoryGridUsageCard` / `HistoryDailyUsageCard`) via `ExpandedHistoryHost`, so the affordance is visible to the user — but the enlarged view currently passes `onSelectHistoryDay: nil` from `ChartExpansionContent` into `ExpandedChartView`, making bar-tap a no-op.
+
+The PR review (iteration 2) flagged this: bar-tap navigation is a different concern from AC 4.4 selection-mirror-back (Decision 19), and the silent `nil` is potentially confusing for future readers.
+
+### Decision
+
+Document the deferral with an inline code comment at the `nil` site in `ChartExpansionContent` and treat enlarged-view bar-tap navigation as out of scope for T-1215.
+
+### Rationale
+
+Wiring bar-tap navigation would require routing a "dismiss the enlarged presentation, then push Day Detail in the main navigation stack" callback through the enlarged view. On iOS that means lifting `dismiss()` + the `NavigationStack(path:)` binding up to `ChartExpansionContent`; on macOS it means orchestrating a window-close plus a separate main-window navigation push. Both reintroduce exactly the lifetime coupling Decisions 11 (macOS scope-based observer) and 18 (iOS self-contained presentation) chose to avoid.
+
+The user impact is small: dismissing the enlarged view returns the user to the inline card with its bar still tappable. The personal-use scope makes this a reasonable trade-off versus the architectural cost.
+
+### Alternatives Considered
+
+- **Wire dismissal + navigation through the enlarged view**: Reintroduces the cross-layer coupling rejected in Decisions 11 / 18; significant additional surface.
+- **Disable the bar-tap affordance inside the enlarged view**: Would require either a separate "non-navigable" card variant or a no-op closure with a visual cue. The latter is what we ship today (the user can't see the difference until they tap); the former adds two new card permutations.
+- **Leave the `nil` undocumented**: What iteration 1 of this PR did; the reviewer correctly flagged the ambiguity.
+
+### Consequences
+
+**Positive:**
+- Decisions 11 + 18 lifetime independence is preserved.
+- No new shared state and no new cross-layer wiring.
+
+**Negative:**
+- Bar-tap inside the enlarged History view does nothing. Documented as a known gap; future work can revisit if usage data shows it matters.
+
+---

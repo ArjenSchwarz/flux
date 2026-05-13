@@ -30,6 +30,14 @@ struct ChartExpansionContent: View {
                     day: observer.dayController,
                     historyRangeDays: Self.historyRangeDays(from: observer.scope),
                     selectedHistoryDate: $selectedHistoryDate,
+                    // Bar-tap navigation from the enlarged History view to
+                    // Day Detail is intentionally not wired. Decisions 11
+                    // and 18 decouple the enlarged presentation from the
+                    // main window/cover's navigation state; routing a
+                    // dismiss-then-push from here would reintroduce that
+                    // coupling. Users dismiss and tap the same bar in the
+                    // inline card to navigate. See Decision 21.
+                    onSelectHistoryDay: nil,
                     selectedDayDate: $selectedDayDate
                 )
             } else {

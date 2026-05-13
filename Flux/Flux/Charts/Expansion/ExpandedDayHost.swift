@@ -90,6 +90,9 @@ struct ExpandedDayHost: View {
                 )
             case .historySolar, .historyGridUsage, .historyDailyUsage:
                 EmptyView()
+                    .onAppear {
+                        assertionFailure("ExpandedDayHost received a history kind: \(kind)")
+                    }
             }
         }
         .environment(\.chartExpansionAffordanceVisible, false)
