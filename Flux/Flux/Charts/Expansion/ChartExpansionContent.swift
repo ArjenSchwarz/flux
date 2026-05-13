@@ -44,7 +44,18 @@ struct ChartExpansionContent: View {
                 ExpandedChartView(kind: kind)
             }
         }
-        .onAppear { ensureObserver() }
+        .onAppear {
+            ensureObserver()
+            #if !os(macOS)
+            // iOS path: the observer is always active for the lifetime
+            // of the full-screen cover (no scene `appearsActive` signal
+            // to gate on). Activate it and kick off the initial fetch
+            // in the same closure that created the observer so the
+            // ordering dependency is explicit.
+            observer?.appearsActive = true
+            Task { await observer?.tick() }
+            #endif
+        }
         .onDisappear { focusCoordinator.requestRestore(for: kind) }
         .onChange(of: registry.current[kind]) { _, newScope in
             if let newScope { observer?.setScope(newScope) }
@@ -55,11 +66,6 @@ struct ChartExpansionContent: View {
             if isActive {
                 Task { await observer?.tick() }
             }
-        }
-        #else
-        .onAppear {
-            observer?.appearsActive = true
-            Task { await observer?.tick() }
         }
         #endif
         .task(id: kind) {

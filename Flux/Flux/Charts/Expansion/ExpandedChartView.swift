@@ -35,6 +35,14 @@ struct ExpandedChartView: View {
     }
 
     var body: some View {
+        // The opacity/animation gate is intentionally inverted from
+        // the usual Reduce-Motion pattern:
+        //   * Reduce Motion OFF: opacity stays at 1 and animation is
+        //     nil, so the system's default cover/window presentation
+        //     transition plays unchanged.
+        //   * Reduce Motion ON: opacity fades from 0 → 1, replacing
+        //     the system's slide/zoom with the explicit cross-fade
+        //     required by AC 6.4.
         routedContent
             .opacity(reduceMotion ? (contentVisible ? 1 : 0) : 1)
             .animation(reduceMotion ? .easeInOut(duration: Self.crossFadeDuration) : nil, value: contentVisible)

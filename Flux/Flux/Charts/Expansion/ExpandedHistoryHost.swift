@@ -101,7 +101,13 @@ struct ExpandedHistoryHost: View {
     }
 
     private var dragLifecycleGesture: some Gesture {
-        DragGesture(minimumDistance: 0)
+        // 8 pt matches UIKit's default drag-recognition slop and
+        // distinguishes intentional chart scrubs from taps on chart
+        // annotations / bar-tap navigation. `minimumDistance: 0` would
+        // open and immediately close the gate on every tap, which can
+        // flush a pending snapshot if a refresh lands in the same
+        // frame.
+        DragGesture(minimumDistance: 8)
             .onChanged { _ in
                 if !controller.gate.dragging {
                     controller.beginDrag()

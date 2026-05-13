@@ -43,6 +43,16 @@ private struct OrientationLandscapeHost<Content: View>: UIViewControllerRepresen
                     .first
         else { return }
         scene.keyWindow?.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+        // iOS 16+ requires `requestGeometryUpdate` to actually move the
+        // device between orientations; `setNeedsUpdateOfSupportedInterfaceOrientations`
+        // alone only narrows the allowed mask. Mirror the
+        // `viewWillAppear` geometry-update call from the landscape
+        // entry path so the tab-switch reset rotates back to portrait
+        // even when `viewWillDisappear` never fires.
+        let preferences = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .portrait)
+        scene.requestGeometryUpdate(preferences) { error in
+            Logger.expansion.info("portrait geometry denied: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     final class Controller: UIViewController {
