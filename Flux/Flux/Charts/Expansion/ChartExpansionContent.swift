@@ -56,7 +56,15 @@ struct ChartExpansionContent: View {
             Task { await observer?.tick() }
             #endif
         }
+        #if os(macOS)
+        // macOS-only: window-close paths (red traffic light, ⌘W,
+        // programmatic) drive the focus restore here. iOS drives it
+        // from `RootView.onChange(of: expanded)` because that has the
+        // `oldValue` in scope and fires reliably for the
+        // `fullScreenCover` binding clear; running both on iOS would
+        // double-bump the coordinator's token.
         .onDisappear { focusCoordinator.requestRestore(for: kind) }
+        #endif
         .onChange(of: registry.current[kind]) { _, newScope in
             if let newScope { observer?.setScope(newScope) }
         }

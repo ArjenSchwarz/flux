@@ -1,5 +1,4 @@
 #if canImport(UIKit) && !os(macOS)
-import CoreFoundation
 import SwiftUI
 
 struct ExpandedChartTopHandle: View {
