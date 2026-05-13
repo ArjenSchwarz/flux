@@ -53,6 +53,7 @@ struct ExpandedHistoryHost: View {
     let kind: ChartKind
     @Bindable var controller: ExpandedHistoryHostController
     @Binding var selectedDate: Date?
+    let rangeDays: Int
     let onSelect: (String) -> Void
 
     var body: some View {
@@ -63,7 +64,7 @@ struct ExpandedHistoryHost: View {
                     entries: controller.displayed.solar,
                     summary: controller.displayed.summary,
                     selectedDate: selectedDate,
-                    rangeDays: 0,
+                    rangeDays: rangeDays,
                     onSelect: handleSelect
                 )
                 .simultaneousGesture(dragLifecycleGesture)
@@ -72,7 +73,7 @@ struct ExpandedHistoryHost: View {
                     entries: controller.displayed.grid,
                     summary: controller.displayed.summary,
                     selectedDate: selectedDate,
-                    rangeDays: 0,
+                    rangeDays: rangeDays,
                     onSelect: handleSelect
                 )
                 .simultaneousGesture(dragLifecycleGesture)
@@ -81,7 +82,7 @@ struct ExpandedHistoryHost: View {
                     entries: controller.displayed.dailyUsage,
                     summary: controller.displayed.summary,
                     selectedDate: selectedDate,
-                    rangeDays: 0,
+                    rangeDays: rangeDays,
                     onSelect: handleSelect
                 )
                 .simultaneousGesture(dragLifecycleGesture)

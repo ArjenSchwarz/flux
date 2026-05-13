@@ -34,8 +34,7 @@ struct ExpandedChartTopHandle: View {
                     }
                 }
         )
-        .accessibilityLabel("Dismiss enlarged chart")
-        .accessibilityAddTraits(.isButton)
+        .accessibilityHidden(true)
     }
 
     static func resolve(translation: CGSize) -> DragResolution {

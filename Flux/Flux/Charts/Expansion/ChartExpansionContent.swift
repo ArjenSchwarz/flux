@@ -28,6 +28,7 @@ struct ChartExpansionContent: View {
                     kind: kind,
                     history: observer.historyController,
                     day: observer.dayController,
+                    historyRangeDays: Self.historyRangeDays(from: observer.scope),
                     selectedHistoryDate: $selectedHistoryDate,
                     selectedDayDate: $selectedDayDate
                 )
@@ -67,5 +68,12 @@ struct ChartExpansionContent: View {
         guard let api = ExpandedChartObserverFactory.makeAPIClient(keychainService: keychainService) else { return }
         let scope = ExpandedChartView.resolvedScope(for: kind, in: registry)
         observer = ChartSceneObserver(kind: kind, scope: scope, api: api)
+    }
+
+    static func historyRangeDays(from scope: ChartScope) -> Int {
+        if case let .historyRange(days) = scope {
+            return days
+        }
+        return ExpandedChartView.defaultHistoryRangeDays
     }
 }

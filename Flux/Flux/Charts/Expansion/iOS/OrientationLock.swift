@@ -28,12 +28,13 @@ final class OrientationLock {
     }
 }
 
+@MainActor
 final class FluxiOSAppDelegate: NSObject, UIApplicationDelegate {
     func application(
         _ application: UIApplication,
         supportedInterfaceOrientationsFor window: UIWindow?
     ) -> UIInterfaceOrientationMask {
-        MainActor.assumeIsolated { OrientationLock.shared.mask }
+        OrientationLock.shared.mask
     }
 }
 #endif
