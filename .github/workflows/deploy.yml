@@ -109,9 +109,16 @@ jobs:
     # on demand via workflow_dispatch. The CFN deploy above does not change the
     # task definition (image tag is unchanged), so a forced redeployment is
     # what makes ECS pull the freshly-pushed :latest.
+    #
+    # `needs: [deploy-api]` + `!cancelled()` ensures that on workflow_dispatch
+    # we wait for deploy-api to finish (a CFN task-def change must land before
+    # we force a redeploy) while still running on workflow_run, where deploy-api
+    # is skipped by its own if-filter.
+    needs: [deploy-api]
     if: |
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
-      github.event_name == 'workflow_dispatch'
+      !cancelled() &&
+      ((github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+       (github.event_name == 'workflow_dispatch' && needs.deploy-api.result == 'success'))
     runs-on: ubuntu-latest
     steps:
       - name: Configure AWS credentials

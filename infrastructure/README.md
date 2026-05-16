@@ -27,6 +27,22 @@ aws ssm put-parameter \
 
 These parameters must exist before the stack is deployed. The ECS task will fail to start if `/flux/app-secret` is missing, and the Lambda will not authenticate requests without `/flux/api-token`.
 
+## GitHub Actions Setup (one-time)
+
+`.github/workflows/deploy.yml` automates Lambda + ECS deploys on push to `main`. Two repo secrets and one optional repo variable are required (Settings → Secrets and variables → Actions):
+
+- **`AWS_DEPLOY_ROLE_ARN`** (secret) — ARN of an IAM role with an OIDC trust policy that allows `token.actions.githubusercontent.com` for this repository on the `main` branch. The role needs:
+  - `cloudformation:*` on the `flux` stack
+  - `s3:PutObject` / `s3:GetObject` on the bucket in `CFN_PACKAGE_BUCKET`
+  - `lambda:UpdateFunctionCode` on the API function
+  - `ecs:UpdateService` on `flux/flux-poller` (and the matching `DescribeServices` for `wait services-stable`)
+  - `iam:PassRole` for the task execution, task, and Lambda execution roles
+  - Whatever else the CloudFormation template manages on subsequent updates (DynamoDB / EC2 / Logs / SSM / IAM)
+- **`CFN_PACKAGE_BUCKET`** (secret) — name of the S3 bucket used by `aws cloudformation package` for the Lambda zip. Must already exist.
+- **`AWS_REGION`** (variable, optional) — defaults to `ap-southeast-2`.
+
+The workflow assumes the stack already exists; initial creation is still a manual one-shot (see [Build and Deploy](#build-and-deploy)) because parameters like `AlphaESSAppId` have no defaults and the workflow only overrides `ContainerImageUri`.
+
 ## Build and Deploy
 
 ```bash

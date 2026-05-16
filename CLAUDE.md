@@ -34,7 +34,7 @@ aws ssm put-parameter --name "/flux/app-secret" --type SecureString --value "SEC
 aws ssm put-parameter --name "/flux/api-token" --type SecureString --value "TOKEN"
 ```
 
-**Build and deploy:**
+**Build and deploy** (push to `main` runs this automatically via `.github/workflows/deploy.yml`; the commands below are for the initial stack creation and manual one-shots):
 ```bash
 # Build Lambda binary (ARM64 Linux)
 GOOS=linux GOARCH=arm64 go build -o lambda/bootstrap ./cmd/api
@@ -54,7 +54,7 @@ aws cloudformation deploy \
     AlphaESSAppId=APP_ID SystemSerialNumber=SERIAL
 ```
 
-**Force container redeploy** (e.g. after pushing a new image):
+**Force container redeploy** (automated after a Poller CI image push; use manually for ad-hoc rolls):
 ```bash
 aws ecs update-service --cluster flux --service flux-poller --force-new-deployment
 ```
