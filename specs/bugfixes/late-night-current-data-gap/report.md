@@ -85,9 +85,10 @@ Neither the backend nor the frontend treats "the latest reading is too old" as a
 
 **Automated:**
 
-- [ ] Regression tests pass
-- [ ] Full test suite passes (`go test ./...`)
-- [ ] `make lint` passes
+- [x] Regression tests pass (`TestHandleStatusStaleLatestReading_OmitsLive`, `TestHandleStatusStalenessBoundary`).
+- [x] `internal/api` suite passes; the only pre-existing failure is `internal/config/TestLoad_MissingRequiredVars/AWS_REGION`, caused by the test relying on `t.Setenv` while `AWS_REGION` is exported in the local shell. Unrelated to this fix; reproduced on `main`.
+- [x] `make lint` passes (`golangci-lint run` reports 0 issues).
+- [x] `go vet ./...` passes.
 
 **Manual verification:**
 

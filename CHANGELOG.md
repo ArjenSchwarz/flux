@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Dashboard no longer shows hours-old data as live** (T-1274). When AlphaESS stops returning fresh `getLastPowerData` snapshots — most visibly during late evening / overnight quiet hours — the poller stops writing new rows to `flux-readings` and the most recent reading ages. Previously `/status` returned that aged reading as `live`, so the iOS Dashboard kept rendering values from several hours ago as if they were current. The handler now drops `live` (and the `battery.estimatedCutoffTime` / `rolling15min.estimatedCutoffTime` derived from it) when the latest reading is older than 90 s, so the dashboard falls back to its existing "Awaiting live data" state instead of misrepresenting stale numbers.
+
 ## [1.2] - 2026-05-13
 
 ### Added

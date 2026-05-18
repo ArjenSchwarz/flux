@@ -17,6 +17,11 @@ const (
 	// cutoffPercent is the fixed battery cutoff threshold.
 	// Mirrored in iOS FluxCore/BatteryEnergy.swift — update both on hardware changes.
 	cutoffPercent = 5
+	// liveDataStalenessThresholdSec bounds how old the most recent reading
+	// can be before /status stops surfacing it as live. The poller writes
+	// every 10 s, so nine consecutive missed writes (90 s) is unambiguously
+	// broken — most commonly AlphaESS going quiet overnight (T-1274).
+	liveDataStalenessThresholdSec = 90
 )
 
 func (h *Handler) handleStatus(ctx context.Context, _ events.LambdaFunctionURLRequest) events.LambdaFunctionURLResponse {
@@ -75,7 +80,12 @@ func (h *Handler) handleStatus(ctx context.Context, _ events.LambdaFunctionURLRe
 	resp := &StatusResponse{}
 
 	// Live data from latest reading (last element of ascending-sorted results).
-	if len(allReadings) > 0 {
+	// Treat the reading as live only when it is recent: a stale `Live` payload
+	// would be rendered as current on the dashboard, hiding overnight gaps
+	// when AlphaESS stops returning fresh snapshots (T-1274).
+	liveFresh := len(allReadings) > 0 &&
+		nowUnix-allReadings[len(allReadings)-1].Timestamp <= liveDataStalenessThresholdSec
+	if liveFresh {
 		latest := allReadings[len(allReadings)-1]
 		sixtySecReadings := filterReadings(allReadings, nowUnix-60, nowUnix)
 
@@ -107,7 +117,7 @@ func (h *Handler) handleStatus(ctx context.Context, _ events.LambdaFunctionURLRe
 	// projected cutoff past the boundary never actually occurs.
 	nextOpWindowStart, hasOffpeakBoundary := nextOffpeakStart(now, h.offpeakStart, h.offpeakEnd)
 
-	if len(allReadings) > 0 {
+	if liveFresh {
 		latest := allReadings[len(allReadings)-1]
 		if ct := computeCutoffTime(latest.Soc, latest.Pbat, capacity, cutoffPercent, now); ct != nil {
 			if !hasOffpeakBoundary || ct.Before(nextOpWindowStart) {
@@ -140,7 +150,7 @@ func (h *Handler) handleStatus(ctx context.Context, _ events.LambdaFunctionURLRe
 			AvgLoad: roundPower(avgLoad),
 			AvgPbat: roundPower(avgPbat),
 		}
-		if len(allReadings) > 0 {
+		if liveFresh {
 			latest := allReadings[len(allReadings)-1]
 			if ct := computeCutoffTime(latest.Soc, avgPbat, capacity, cutoffPercent, now); ct != nil {
 				if !hasOffpeakBoundary || ct.Before(nextOpWindowStart) {
