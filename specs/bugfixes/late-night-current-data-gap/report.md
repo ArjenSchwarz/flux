@@ -99,7 +99,10 @@ Three layered changes:
 | `internal/poller/poller_test.go` | All-zero-skip + valid-SoC-writes tests. |
 | `internal/api/status.go` | `liveDataStalenessThresholdSec`; suppress `Live` and cutoff times when latest reading is too old. |
 | `internal/api/status_test.go` | Staleness + boundary tests. |
-| `CHANGELOG.md` | Note the fix under the next release. |
+| `internal/dynamo/models.go` | Add `NewReadingItemFromSnapshot` (snapshot → ReadingItem) and `IsAllZeroReading` (bogus-row detector). |
+| `internal/dynamo/models_test.go` | Tests for the two new helpers. |
+| `cmd/backfill-readings/main.go` | New one-off CLI that swaps the bogus zero rows for synthetic readings derived from `getOneDayPowerBySn`. |
+| `CHANGELOG.md` | Note the fix and the new tool under the next release. |
 | `specs/bugfixes/late-night-current-data-gap/report.md` | This report. |
 
 ## Verification
@@ -110,6 +113,22 @@ Three layered changes:
 - [x] `internal/api` suite passes; the only pre-existing failure is `internal/config/TestLoad_MissingRequiredVars/AWS_REGION`, caused by the test relying on `t.Setenv` while `AWS_REGION` is exported in the local shell. Unrelated to this fix; reproduced on `main`.
 - [x] `make lint` passes (`golangci-lint run` reports 0 issues).
 - [x] `go vet ./...` passes.
+
+**Backfill (one-off, after AlphaESS recovers):**
+
+The existing zero rows in `flux-readings` from the most recent outage are still in the table (TTL 30 days). To replace them with real data from AlphaESS's 5-minute snapshots:
+
+```bash
+# Defaults to last 3 days (Sydney TZ). Dry-run first to see the plan.
+ALPHA_APP_ID=... ALPHA_APP_SECRET=... SYSTEM_SERIAL=... AWS_REGION=ap-southeast-2 \
+go run ./cmd/backfill-readings --dry-run
+
+# Apply for real:
+ALPHA_APP_ID=... ALPHA_APP_SECRET=... SYSTEM_SERIAL=... AWS_REGION=ap-southeast-2 \
+go run ./cmd/backfill-readings --from=2026-05-18 --to=2026-05-19
+```
+
+The tool: queries each day's existing readings, identifies the all-zero ones (`isAllZeroReading`), deletes them, fetches `getOneDayPowerBySn`, and writes synthetic 5-minute `ReadingItem`s in their place. Writes are idempotent — re-running is safe. Granularity drops from the live 10 s to 5 min for the backfilled window, which is good enough for the Day Detail chart and recovers `low24h` from picking up bogus 0% lows.
 
 **Manual verification:**
 

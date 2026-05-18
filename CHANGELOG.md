@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - **Dashboard no longer shows "0% / 0 W everywhere" overnight** (T-1274). When AlphaESS goes quiet at night (`getLastPowerData` returns `code:200` with `data: null` or an all-zero object), the poller previously dutifully unmarshalled the missing payload into a zero-valued `PowerData` and wrote a fresh `ReadingItem` with every field zero. `/status` then surfaced those zeros as the live readout, so the dashboard claimed SoC was 0% and nothing was running until backfill caught up. Three reinforcing fixes: (a) `GetLastPowerData` now treats null/empty `data` as an error so the poller logs and skips it; (b) the poller's `fetchAndStoreLiveData` refuses to persist every-field-zero readings and logs the raw values at warn level so the overnight AlphaESS behaviour is visible in CloudWatch; (c) `/status` drops `live` (and the cutoff times derived from it on `battery` and `rolling15min`) when the most recent stored reading is older than 90 s, so the dashboard's existing "Awaiting live data" state surfaces instead of holding aged numbers.
 
+### Added
+
+- **`cmd/backfill-readings` CLI** (T-1274). One-off tool that, for a date range, removes the all-zero `flux-readings` rows the overnight AlphaESS outage produced and replaces them with synthetic 5-minute readings derived from `getOneDayPowerBySn` snapshots (same field mapping the Day Detail past-date fallback uses: `cbat → soc`, `gridCharge − feedIn → pgrid`, `load − ppv − pgrid → pbat`). Supports `--dry-run`; defaults to the trailing 3 days.
+
 ## [1.2] - 2026-05-13
 
 ### Added
