@@ -120,6 +120,78 @@ func TestHandleStatusAllDataPresent(t *testing.T) {
 	assert.Equal(t, roundEnergy(12.345), sr.TodayEnergy.Epv)
 }
 
+// T-1274 regression: when AlphaESS stops returning fresh data overnight, the
+// poller stops writing new readings and the most recent reading ages. /status
+// must not surface that aged reading as if it were live — the iOS Dashboard
+// has no other way to know the data is stale and would render an hours-old
+// snapshot as current. Threshold tracks `liveDataStalenessThreshold`.
+func TestHandleStatusStaleLatestReading_OmitsLive(t *testing.T) {
+	now := fixedNow()
+	nowUnix := now.Unix()
+	// Latest reading is 2 hours old — well past any sane "live" threshold.
+	staleUnix := nowUnix - 2*3600
+	mr := &mockReader{
+		queryReadingsFn: func(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
+			return []dynamo.ReadingItem{
+				{Timestamp: staleUnix, Ppv: 0, Pload: 200, Pbat: 250, Pgrid: 150, Soc: 65},
+			}, nil
+		},
+	}
+
+	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h.nowFunc = func() time.Time { return now }
+
+	resp, err := h.Handle(context.Background(), statusRequest())
+	require.NoError(t, err)
+	assert.Equal(t, 200, resp.StatusCode)
+
+	sr := parseStatusResponse(t, resp)
+	assert.Nil(t, sr.Live, "live should be omitted when latest reading is stale")
+	require.NotNil(t, sr.Battery)
+	assert.Nil(t, sr.Battery.EstimatedCutoff, "cutoff should be omitted when based on a stale reading")
+}
+
+// Boundary: a reading exactly at the staleness threshold is still treated as
+// fresh; one second past it is not.
+func TestHandleStatusStalenessBoundary(t *testing.T) {
+	now := fixedNow()
+	nowUnix := now.Unix()
+
+	cases := map[string]struct {
+		ageSec    int64
+		wantLive  bool
+	}{
+		"fresh":             {ageSec: 10, wantLive: true},
+		"at threshold":      {ageSec: 90, wantLive: true},
+		"one past threshold": {ageSec: 91, wantLive: false},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			mr := &mockReader{
+				queryReadingsFn: func(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
+					return []dynamo.ReadingItem{
+						{Timestamp: nowUnix - tc.ageSec, Ppv: 0, Pload: 200, Pbat: 50, Pgrid: 150, Soc: 75},
+					}, nil
+				},
+			}
+
+			h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+			h.nowFunc = func() time.Time { return now }
+
+			resp, err := h.Handle(context.Background(), statusRequest())
+			require.NoError(t, err)
+			sr := parseStatusResponse(t, resp)
+
+			if tc.wantLive {
+				assert.NotNil(t, sr.Live, "expected Live populated at age=%ds", tc.ageSec)
+			} else {
+				assert.Nil(t, sr.Live, "expected Live omitted at age=%ds", tc.ageSec)
+			}
+		})
+	}
+}
+
 func TestHandleStatusNoReadings(t *testing.T) {
 	mr := &mockReader{
 		queryReadingsFn: func(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
