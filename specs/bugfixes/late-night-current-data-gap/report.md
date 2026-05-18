@@ -1,4 +1,4 @@
-# Bugfix Report: Dashboard shows stale "live" data overnight
+# Bugfix Report: Dashboard shows all-zero "live" data overnight
 
 **Date:** 2026-05-19
 **Status:** Fixed
@@ -6,78 +6,99 @@
 
 ## Description of the Issue
 
-From roughly 11 PM Sydney time onwards, the iOS Flux Dashboard becomes "useless" — it keeps rendering whatever battery / power / SoC numbers were last reported, with no indication that those numbers are hours old. The user expects either current values or a clear signal that current data is unavailable.
+From roughly 11 PM Sydney time onwards, the iOS Flux Dashboard becomes "useless" — every live readout (SoC, solar, house load, grid, battery power) shows zero, and stays at zero until well after midnight. The user expected either current values or a clear signal that current data is unavailable; instead the dashboard appears to claim the battery is empty and the system is idle, which is wrong.
 
 **Reproduction steps:**
 
-1. Wait until late evening (around 11 PM Sydney local time) when AlphaESS appears to stop publishing fresh `getLastPowerData` updates for this serial.
+1. Wait until late evening (around 11 PM Sydney local time) when AlphaESS stops publishing fresh `getLastPowerData` values for this serial.
 2. Open the iOS Dashboard.
-3. Observe that the SoC numeral, the live power trio (solar / house / grid), and the "discharging · X · empty by HH:MM" subline keep showing the same values as they did several hours earlier.
-4. The eyebrow still reads "Now · HH:MM" using the device clock, so the dashboard *claims* to be current.
+3. Observe SoC = 0%, ppv = 0 W, pload = 0 W, pgrid = 0 W, pbat = 0 W — every live field zero.
+4. The eyebrow still reads "Now · HH:MM" using the device clock, so the dashboard appears to be claiming the system is genuinely off.
 
-**Impact:** User-facing correctness and trust. The dashboard's primary job is to show what the battery is doing right now; presenting hours-old values as current makes it actively misleading.
+**Impact:** User-facing correctness and trust. Showing "0% / 0 W everywhere" is worse than no data — it implies the battery is fully empty and the house is consuming nothing, neither of which is true.
 
 ## Investigation Summary
 
-The dashboard's live readout comes from `StatusResponse.Live`, which the `/status` Lambda builds from the most recent row in `flux-readings` within the last 24 hours.
+The dashboard's live readout comes from `StatusResponse.Live`, which the `/status` Lambda builds from the most recent row in `flux-readings`. The poller writes that row every 10 s from `client.GetLastPowerData`.
 
-- `internal/poller/poller.go:138` — `pollLiveData` ticks every 10 s and calls `client.GetLastPowerData`. On error or timeout it logs and returns without writing anything (`fetchAndStoreLiveData` at line 169).
-- `internal/api/status.go:78` — handler takes `latest := allReadings[len(allReadings)-1]` and populates `resp.Live` if any reading exists in the last 24 hours. There is no check on `latest.Timestamp`.
-- `Flux/Flux/Dashboard/DashboardView.swift:113` — `DashboardHeroPanel(live: viewModel.status?.live, ...)`. If `live` is non-nil, the SoC and status line render normally; if nil, the panel falls back to "Awaiting live data". The view has no way to tell that a populated `live` is actually stale.
-- `Flux/Flux/Dashboard/DashboardView.swift:109` — the staleness banner is only shown when `viewModel.error != nil`, i.e. when the API call itself failed. A successful `/status` that just happens to carry an old reading slips past this gate.
+- `internal/alphaess/client.go:92` — `GetLastPowerData` calls `doGet`, then `json.Unmarshal(data, &result)` into a `PowerData` struct. Crucially, `json.Unmarshal([]byte("null"), &result)` succeeds without error and yields a zero-valued struct. So a `code: 200, data: null` response is indistinguishable from a real all-zero reading at the call site.
+- `internal/poller/poller.go:169` — `fetchAndStoreLiveData` only branched on `err`. A zero-valued struct from a `null` payload counted as success, so the poller wrote a `ReadingItem` with every field zero and a freshly stamped `now()` timestamp.
+- `internal/api/status.go:78` — handler took `latest := allReadings[len(allReadings)-1]` and populated `resp.Live` regardless of values or age.
+- `Flux/Flux/Dashboard/DashboardView.swift:113` — renders whatever `live` contains, including zeros.
+
+The user confirmed the symptom is "everything shows 0, no proper data since 11 PM". That rules out the earlier hypothesis that the latest reading was simply aging (which would have left the *previous* non-zero values visible). The poller is actively writing fresh-timestamped zero rows.
 
 **Hypotheses tested:**
 
-- *AlphaESS API errors silently at night.* Plausible — the poller's `slog.Error("fetch live data failed", ...)` path swallows the error and `latest.Timestamp` ages until the API recovers. This matches the observed symptom.
-- *AlphaESS returns the same snapshot repeatedly.* Possible. The poller writes a fresh-timestamped row every 10 s either way, so this case is harder to detect from a single response. Out of scope for this fix.
+- *AlphaESS API errors silently at night.* Ruled out — would log `fetch live data failed`, leave the previous reading in place, and the dashboard would show non-zero stale values. The observed all-zero pattern is incompatible with this path.
+- *AlphaESS returns `code: 200` with no payload (`data: null` or empty).* Confirmed as the most likely explanation. `json.Unmarshal` happily turns either into zero-filled `PowerData`, and the poller writes it.
+- *AlphaESS returns a `code: 200` response carrying an explicit all-zero JSON object.* Possible too — same outcome at the write site. Defended against by the same all-zero check below.
 - *DynamoDB TTL pruning.* Ruled out — TTL is 30 days on `flux-readings`.
 - *iOS app filtering.* Ruled out — the dashboard renders whatever `Live` it receives.
 
 ## Discovered Root Cause
 
-Neither the backend nor the frontend treats "the latest reading is too old" as a distinct signal. `live.timestamp` is already in the wire response but no client reads it; `/status` returns the latest reading regardless of age. As soon as `pollLiveData` stops succeeding (AlphaESS quiet hours, transient errors, container restart in a bad window, etc.), the dashboard keeps presenting the last good reading as if it were current.
+Two reinforcing defects:
 
-**Defect type:** Missing freshness check on the data returned to clients.
+1. `GetLastPowerData` does not distinguish "no data" from "data with every field zero". `json.Unmarshal` of a JSON `null` (or an empty data field) silently produces a zero-valued struct.
+2. `fetchAndStoreLiveData` writes whatever the client returns, with no sanity check on the values. The result is a fresh `ReadingItem` per 10 s with `ppv=0, pload=0, pbat=0, pgrid=0, soc=0` — which `/status` then dutifully surfaces as the current state.
 
-**Why it occurred:** The original `/status` design assumed the poller's 10 s cadence would always produce a fresh row, so the latest reading was treated as authoritative without timestamp validation. Errors on the poller side are logged but not propagated to the API surface.
+The combined effect: when AlphaESS goes quiet overnight (which the user reports happens reliably from around 11 PM), the dashboard renders 0% / 0 W / 0 W / 0 W as if those are the real current values.
+
+**Defect type:** Silent acceptance of "no data" responses as if they were valid data.
+
+**Why it occurred:** The error path covered HTTP / transport / decode failures, but a 200 response with a missing payload looked like a success at every layer. The pattern is already addressed for `getOneDateEnergyBySn` (`isAllZeroEnergy` in `internal/poller/poller.go`) — that precedent simply wasn't applied to `getLastPowerData`.
 
 ## Resolution for the Issue
 
-`/status` now drops `Live` (and `battery.estimatedCutoffTime`, which is computed from the same latest reading) when the most recent reading is older than `liveDataStalenessThreshold` (90 s — nine missed 10 s polls is unambiguously broken). The existing "Awaiting live data" UI state in `DashboardHeroPanel` then surfaces naturally, telling the user the dashboard can't show a current reading instead of pretending an aged one is live.
+Three layered changes:
+
+1. **Client refuses null/empty Data.** `GetLastPowerData` checks for a missing or `null` Data field and returns a descriptive error. The poller's existing `slog.Error("fetch live data failed", ...)` path then logs the no-data response and skips the write — the same way it handles transport errors.
+2. **Poller refuses all-zero values.** `isAllZeroPower` mirrors the existing `isAllZeroEnergy` pattern. When every field is zero, `fetchAndStoreLiveData` logs a warning that includes the raw payload values and returns without writing. This catches the "code: 200, data: {}" variant where the JSON parses but contains zeros, and it puts the diagnostic information directly into CloudWatch so the actual AlphaESS behaviour can be investigated.
+3. **API drops stale `Live`.** `/status` now omits `Live` and the cutoff times derived from it when the most recent stored reading is older than `liveDataStalenessThresholdSec` (90 s — nine missed 10 s writes is unambiguously broken). With (1) and (2) above, the poller stops writing during AlphaESS quiet hours, so the latest reading ages and this gate fires, surfacing the existing "Awaiting live data" UI state.
 
 **Changes made:**
 
-- `internal/api/status.go` — add `liveDataStalenessThreshold` constant; gate the population of `resp.Live` and `battery.EstimatedCutoff` on the latest reading's age. `battery.low24h` and `rolling15min` continue to be derived from their own time-windowed reading subsets, which already produce correct results when nothing is recent.
-- `internal/api/status_test.go` — add `TestHandleStatusStaleLatestReading_OmitsLive` and `TestHandleStatusStalenessBoundary` covering the bug, the threshold edge, and the just-past-threshold case.
-- `CHANGELOG.md` — note the dashboard staleness fix under the next release.
+- `internal/alphaess/client.go` — add `isNullJSON` and reject null/empty Data in `GetLastPowerData`.
+- `internal/alphaess/client_test.go` — add `TestGetLastPowerData_NullData_ReturnsError` and `TestGetLastPowerData_EmptyData_ReturnsError`.
+- `internal/poller/poller.go` — add `isAllZeroPower`; have `fetchAndStoreLiveData` log + skip on all-zero values; include raw values in the warn-level log line for diagnosis.
+- `internal/poller/poller_test.go` — add `TestFetchAndStoreLiveData_AllZeroPayload_LogsAndSkips` and `TestFetchAndStoreLiveData_ValidSocZeroPower_Writes` (pins the threshold so legitimately quiet readings with valid SoC still persist).
+- `internal/api/status.go` — gate `resp.Live` and the cutoff times on a 90 s freshness threshold.
+- `internal/api/status_test.go` — `TestHandleStatusStaleLatestReading_OmitsLive` and `TestHandleStatusStalenessBoundary`.
+- `CHANGELOG.md` — note the fix under the next release.
 
-**Approach rationale:** Keep the fix server-side and minimal. Centralising the staleness call in the API means every client (iOS, macOS, widgets) benefits from a single source of truth, and the existing "Awaiting live data" UI handles the nil case without any client changes. The 90 s threshold is generous enough to absorb a handful of transient timeouts but tight enough that a sustained outage is reflected promptly.
+**Approach rationale:** Each layer fixes a distinct root cause and reinforces the others. (1) is the cleanest fix when AlphaESS returns a structurally empty response. (2) catches the "structurally valid but all-zero" variant and produces the diagnostic logging the user asked for ("why can't it collect the live data?"). (3) is defence in depth — if a future API quirk slips past (1) and (2), the dashboard still falls back to a correct "no live data" state instead of presenting an aged reading.
 
 **Alternatives considered:**
 
-- *Client-side staleness on `live.timestamp`.* Rejected — multiple clients (iOS Dashboard, macOS Dashboard, widgets, Control Center) would each need to reimplement the same logic. The widget already uses a different "staleness" concept based on `fetchedAt`, so adding a second one only on the iOS view increases inconsistency.
-- *Detect repeated-identical readings in the poller.* Rejected for this fix — heuristic, can false-positive when the system is legitimately steady (no load + no solar + idle battery), and adds complexity in a hot path. Worth revisiting only if we observe AlphaESS returning stale-but-distinct snapshots in practice.
-- *Add a new `live.stale` flag rather than omitting `Live`.* Rejected — wider API surface change, every client would need updating, and the existing "Awaiting live data" UI already conveys exactly the intended meaning.
+- *Only fix the API staleness check (the original PR #48 scope).* Rejected once the user clarified that the dashboard was showing all-zeros — staleness alone couldn't explain that, because the rows were fresh, just bogus.
+- *Fall back to the most recent `flux-daily-power` 5-minute snapshot when `getLastPowerData` is bogus.* Considered but deferred: `flux-daily-power` is itself polled hourly and `docs/flux-v1.md` notes its power fields are unreliable on this serial, so it's not a viable real-time substitute. Diagnostic logging from (2) will tell us whether this is worth revisiting.
+- *Detect repeated-identical (non-zero) readings.* Rejected — heuristic, false-positives when the system is genuinely steady.
 
-## Regression Test
+## Regression Tests
 
-**Test file:** `internal/api/status_test.go`
+**Test files:** `internal/alphaess/client_test.go`, `internal/poller/poller_test.go`, `internal/api/status_test.go`
 
 **Test names:**
 
-- `TestHandleStatusStaleLatestReading_OmitsLive`
-- `TestHandleStatusStalenessBoundary` (subtests: `fresh`, `at threshold`, `one past threshold`)
+- `TestGetLastPowerData_NullData_ReturnsError` — `data: null` becomes a typed error.
+- `TestGetLastPowerData_EmptyData_ReturnsError` — missing `data` field becomes a typed error.
+- `TestFetchAndStoreLiveData_AllZeroPayload_LogsAndSkips` — every-field-zero values do not get persisted; the warn log mentions the all-zero condition.
+- `TestFetchAndStoreLiveData_ValidSocZeroPower_Writes` — a quiet but valid reading (SoC > 0, power fields zero) still persists. Pins the threshold so we don't accidentally suppress real overnight data.
+- `TestHandleStatusStaleLatestReading_OmitsLive` and `TestHandleStatusStalenessBoundary/{fresh,at threshold,one past threshold}` — the API drops `Live` when the latest stored reading is older than 90 s.
 
-**What they verify:** A latest reading older than `liveDataStalenessThreshold` causes `/status` to omit both `Live` and `battery.EstimatedCutoff`. A reading at exactly the threshold is still considered fresh; one second past it is not.
-
-**Run command:** `go test ./internal/api/ -run 'TestHandleStatusStale|TestHandleStatusStalenessBoundary' -v`
+**Run command:** `go test ./internal/alphaess/ ./internal/poller/ ./internal/api/ -run 'NullData|EmptyData|AllZeroPayload|ValidSocZeroPower|HandleStatusStale|HandleStatusStalenessBoundary' -v`
 
 ## Affected Files
 
 | File | Change |
 |------|--------|
-| `internal/api/status.go` | Add `liveDataStalenessThreshold`; suppress `Live` and `battery.EstimatedCutoff` when latest reading exceeds the threshold. |
-| `internal/api/status_test.go` | Add `TestHandleStatusStaleLatestReading_OmitsLive` and `TestHandleStatusStalenessBoundary`. |
+| `internal/alphaess/client.go` | Reject null/empty Data in `GetLastPowerData`; add `isNullJSON` helper. |
+| `internal/alphaess/client_test.go` | Tests for the null/empty paths. |
+| `internal/poller/poller.go` | Add `isAllZeroPower`; have `fetchAndStoreLiveData` log + skip on all-zero. |
+| `internal/poller/poller_test.go` | All-zero-skip + valid-SoC-writes tests. |
+| `internal/api/status.go` | `liveDataStalenessThresholdSec`; suppress `Live` and cutoff times when latest reading is too old. |
+| `internal/api/status_test.go` | Staleness + boundary tests. |
 | `CHANGELOG.md` | Note the fix under the next release. |
 | `specs/bugfixes/late-night-current-data-gap/report.md` | This report. |
 
@@ -92,11 +113,15 @@ Neither the backend nor the frontend treats "the latest reading is too old" as a
 
 **Manual verification:**
 
-- Once deployed, the next time AlphaESS goes quiet for more than ~90 s the iOS Dashboard switches to "Awaiting live data" with a "—" SoC instead of holding the previous numbers. When AlphaESS resumes, the next poll cycle restores the live readout.
+- Once deployed, the next late-evening / overnight window AlphaESS goes quiet, expect:
+  - CloudWatch logs from the poller showing `getLastPowerData: no data in response` and/or `skipping reading write: AlphaESS returned all-zero values` with the raw `ppv/pload/pbat/pgrid/soc` values. These tell us exactly what AlphaESS is sending — confirming whether the issue really is "null payload", "all-zero payload", or both.
+  - The iOS Dashboard switches to "Awaiting live data" with a "—" SoC instead of "0% / 0 W everywhere" within ~90 s of the last good reading.
+  - When AlphaESS resumes (typically by morning), the next successful poll restores the live readout automatically.
 
 ## Prevention
 
-- Any future endpoint that surfaces "current" measurements should validate the underlying source's freshness before returning it as live.
+- Any future endpoint that surfaces "current" measurements should validate the underlying response is structurally present (`isNullJSON`) and semantically non-trivial (an `isAllZero*` check) before persisting.
+- The new warn-level logs give us per-poll visibility into AlphaESS overnight behaviour. After a couple of nights of telemetry we should know whether `null` or "all-zero object" is the actual response — that informs whether to pursue a 5-min-snapshot fallback for genuine real-time data.
 - Consider a follow-up that emits a CloudWatch metric when the poller skips a live write so sustained outages are visible without waiting for a user report.
 
 ## Related

@@ -178,6 +178,41 @@ func TestFetchAndStoreLiveData_Success(t *testing.T) {
 	assert.Equal(t, 1, ms.readingsWritten)
 }
 
+// T-1274 regression: when AlphaESS returns code:200 with a present-but-all-zero
+// payload (observed overnight when the inverter isn't actively reporting), the
+// poller previously wrote a phoney "everything is zero" reading. Those rows
+// then drove the iOS Dashboard to render 0% / 0 W as if live. The poller now
+// recognises the pattern, logs a diagnostic warning that includes the raw
+// values, and skips the write.
+func TestFetchAndStoreLiveData_AllZeroPayload_LogsAndSkips(t *testing.T) {
+	buf, restore := captureLog()
+	defer restore()
+
+	mc := &mockClient{lastPowerData: &alphaess.PowerData{}} // every field zero-valued
+	ms := &mockStore{}
+	p := testPoller(mc, ms)
+
+	p.fetchAndStoreLiveData(context.Background())
+
+	assert.Equal(t, 1, mc.lastPowerCalls)
+	assert.Equal(t, 0, ms.readingsWritten, "all-zero readings must not be persisted")
+	assert.True(t, logContains(buf, "all-zero"), "warning should mention the all-zero condition")
+}
+
+// A reading with valid SoC but legitimately quiet power fields (no solar, no
+// load on grid, battery idle) must still be written — only every-field-zero
+// is the bogus pattern. This pins the threshold so we don't accidentally drop
+// real overnight readings.
+func TestFetchAndStoreLiveData_ValidSocZeroPower_Writes(t *testing.T) {
+	mc := &mockClient{lastPowerData: &alphaess.PowerData{Soc: 72.0}}
+	ms := &mockStore{}
+	p := testPoller(mc, ms)
+
+	p.fetchAndStoreLiveData(context.Background())
+
+	assert.Equal(t, 1, ms.readingsWritten, "a reading with valid SoC must still be persisted")
+}
+
 func TestFetchAndStoreLiveData_APIError_LogsAndSkips(t *testing.T) {
 	buf, restore := captureLog()
 	defer restore()

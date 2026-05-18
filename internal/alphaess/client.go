@@ -1,6 +1,7 @@
 package alphaess
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha512"
 	"encoding/hex"
@@ -90,10 +91,20 @@ func (c *Client) doGet(ctx context.Context, endpoint string, params map[string]s
 }
 
 // GetLastPowerData retrieves real-time power data for the given serial number.
+//
+// AlphaESS occasionally returns `code: 200` with `data: null` (or an empty
+// data field) when the inverter isn't actively publishing live values —
+// observed overnight when the system is quiet. Unmarshalling `null` into
+// PowerData silently produces every-field-zero, which would otherwise be
+// written into flux-readings as a phoney "everything is zero" reading. Turn
+// no-data into an error so the poller logs and skips instead.
 func (c *Client) GetLastPowerData(ctx context.Context, serial string) (*PowerData, error) {
 	data, err := c.doGet(ctx, "getLastPowerData", map[string]string{"sysSn": serial})
 	if err != nil {
 		return nil, err
+	}
+	if isNullJSON(data) {
+		return nil, fmt.Errorf("getLastPowerData: no data in response (sysSn=%s)", serial)
 	}
 
 	var result PowerData
@@ -101,6 +112,12 @@ func (c *Client) GetLastPowerData(ctx context.Context, serial string) (*PowerDat
 		return nil, fmt.Errorf("getLastPowerData: unmarshal data: %w", err)
 	}
 	return &result, nil
+}
+
+// isNullJSON reports whether a raw JSON value is missing or the literal
+// `null` — both meaning "no data" from AlphaESS.
+func isNullJSON(data json.RawMessage) bool {
+	return len(data) == 0 || bytes.Equal(bytes.TrimSpace(data), []byte("null"))
 }
 
 // GetOneDayPower retrieves 5-minute power snapshots for the given serial and date.
