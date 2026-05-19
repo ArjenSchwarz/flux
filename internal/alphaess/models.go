@@ -39,6 +39,19 @@ type PowerSnapshot struct {
 	UploadTime string  `json:"uploadTime"`
 }
 
+// DerivePower reconstructs the live-reading-shape (pgrid, pbat) from a 5-minute
+// snapshot's gross fields. Sign conventions match the live readings produced
+// by getLastPowerData: pgrid > 0 = importing, pbat > 0 = discharging.
+//
+// Both consumers — Day Detail's past-date fallback (mapDailyPowerToPoints) and
+// the readings backfill (NewReadingItemFromSnapshot) — go through this so the
+// invariant can only drift in one place.
+func DerivePower(load, ppv, gridCharge, feedIn float64) (pgrid, pbat float64) {
+	pgrid = gridCharge - feedIn
+	pbat = load - ppv - pgrid
+	return
+}
+
 // SystemInfo represents a single system entry from getEssList.
 type SystemInfo struct {
 	SysSn     string  `json:"sysSn"`

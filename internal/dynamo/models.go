@@ -1,6 +1,7 @@
 package dynamo
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/ArjenSchwarz/flux/internal/alphaess"
@@ -161,6 +162,54 @@ func NewReadingItem(serial string, data *alphaess.PowerData, now time.Time) Read
 		Soc:       data.Soc,
 		TTL:       now.Add(ttl30Days).Unix(),
 	}
+}
+
+// NewReadingItemFromSnapshot derives a ReadingItem from a 5-minute AlphaESS
+// PowerSnapshot (`getOneDayPowerBySn`). Used by the backfill tool to fill in
+// synthetic readings when the live poll path lost data — e.g. the T-1274
+// overnight outage where `getLastPowerData` returned null and the poller
+// either skipped writes or stored zero rows.
+//
+// Power and grid fields are reconstructed using the same mapping
+// `mapDailyPowerToPoints` uses for the past-date Day Detail fallback:
+//   - soc = cbat
+//   - pgrid = gridCharge - feedIn (positive = importing)
+//   - pbat  = load - ppv - pgrid (positive = discharging)
+//
+// `now` is used for the 30-day TTL so backfilled rows get a fresh lease on
+// life instead of inheriting the snapshot's age.
+func NewReadingItemFromSnapshot(serial string, snap alphaess.PowerSnapshot, loc *time.Location, now time.Time) (ReadingItem, error) {
+	t, err := time.ParseInLocation("2006-01-02 15:04:05", snap.UploadTime, loc)
+	if err != nil {
+		return ReadingItem{}, fmt.Errorf("parse uploadTime %q: %w", snap.UploadTime, err)
+	}
+	pgrid, pbat := alphaess.DerivePower(snap.Load, snap.Ppv, snap.GridCharge, snap.FeedIn)
+	return ReadingItem{
+		SysSn:     serial,
+		Timestamp: t.Unix(),
+		Ppv:       snap.Ppv,
+		Pload:     snap.Load,
+		Pbat:      pbat,
+		Pgrid:     pgrid,
+		Soc:       snap.Cbat,
+		TTL:       now.Add(ttl30Days).Unix(),
+	}, nil
+}
+
+// IsAllZeroReading reports whether every power/SoC field on a stored
+// ReadingItem is exactly zero — the bogus pattern T-1274 introduced when
+// AlphaESS returned null `getLastPowerData` payloads overnight. Used by the
+// backfill tool to identify rows safe to delete.
+//
+// The "safe to delete" claim depends on the AlphaESS inverter being configured
+// with a non-zero minimum-discharge floor (currently 5%, see `cutoffPercent`
+// in internal/api/status.go and FluxCore/BatteryEnergy.swift). If that floor
+// is ever lowered to 0%, a row taken at the moment the battery legitimately
+// sat at SoC=0% AND every power channel happened to be 0 W would be deleted
+// here. The decision_log of the late-night-current-data-gap bugfix captures
+// the trade-off.
+func IsAllZeroReading(r ReadingItem) bool {
+	return r.Ppv == 0 && r.Pload == 0 && r.Pbat == 0 && r.Pgrid == 0 && r.Soc == 0
 }
 
 // NewDailyEnergyItem transforms AlphaESS energy data into a DynamoDB daily energy item.

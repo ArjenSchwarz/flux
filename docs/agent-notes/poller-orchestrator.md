@@ -19,6 +19,8 @@
 - `wallClockTime` constructs a specific wall-clock time using `time.Date` for DST safety.
 - Mid-window recovery: queries store for pending record, recovers start snapshot from it. Store errors are logged and skipped (not propagated).
 - Failed end snapshot: deletes pending record via `store.DeleteOffpeak`.
+- `fetchAndStoreLiveData` refuses to persist all-zero `PowerData` (T-1274). AlphaESS occasionally returns `code:200` with `data:null` for `getLastPowerData` overnight; without this guard the silently-unmarshalled zero struct gets written every 10 s and the iOS Dashboard renders 0% / 0 W as if live. The skip path logs the raw `ppv/pload/pbat/pgrid/soc` values at warn so the upstream behaviour is visible in CloudWatch. `isAllZeroPower` is the sibling of the existing `isAllZeroEnergy` (same shape, different field set).
+- `internal/alphaess/client.go::GetLastPowerData` is the layer that turns `data:null` / empty `Data` into an error, so the poller's existing error-skip path catches the structurally-empty variant before it reaches `isAllZeroPower`.
 
 ## Testing Patterns
 

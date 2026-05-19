@@ -6,6 +6,7 @@ import (
 
 	"github.com/ArjenSchwarz/flux/internal/alphaess"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewReadingItem(t *testing.T) {
@@ -48,6 +49,93 @@ func TestNewReadingItem(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got := NewReadingItem(tc.serial, tc.data, now)
 			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestNewReadingItemFromSnapshot(t *testing.T) {
+	loc, err := time.LoadLocation("Australia/Sydney")
+	if err != nil {
+		t.Fatalf("load Sydney: %v", err)
+	}
+	now := time.Date(2026, 5, 19, 9, 0, 0, 0, time.UTC)
+
+	tests := map[string]struct {
+		serial  string
+		snap    alphaess.PowerSnapshot
+		wantTS  int64
+		wantPb  float64
+		wantPg  float64
+		wantSoc float64
+		wantErr bool
+	}{
+		"importing — gridCharge > feedIn, ppv < load": {
+			serial: "SN1",
+			snap: alphaess.PowerSnapshot{
+				Cbat: 72.0, Ppv: 100, Load: 400, FeedIn: 0, GridCharge: 50,
+				UploadTime: "2026-05-18 23:30:00",
+			},
+			// pgrid = 50 - 0 = 50 (import); pbat = 400 - 100 - 50 = 250 (discharge)
+			wantTS:  time.Date(2026, 5, 18, 23, 30, 0, 0, loc).Unix(),
+			wantPb:  250,
+			wantPg:  50,
+			wantSoc: 72.0,
+		},
+		"exporting — feedIn > gridCharge": {
+			serial: "SN1",
+			snap: alphaess.PowerSnapshot{
+				Cbat: 95.0, Ppv: 3000, Load: 500, FeedIn: 2000, GridCharge: 0,
+				UploadTime: "2026-05-18 13:00:00",
+			},
+			// pgrid = 0 - 2000 = -2000 (export); pbat = 500 - 3000 - (-2000) = -500 (charge)
+			wantTS:  time.Date(2026, 5, 18, 13, 0, 0, 0, loc).Unix(),
+			wantPb:  -500,
+			wantPg:  -2000,
+			wantSoc: 95.0,
+		},
+		"invalid uploadTime returns error": {
+			serial:  "SN1",
+			snap:    alphaess.PowerSnapshot{UploadTime: "not-a-time"},
+			wantErr: true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			got, err := NewReadingItemFromSnapshot(tc.serial, tc.snap, loc, now)
+			if tc.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.serial, got.SysSn)
+			assert.Equal(t, tc.wantTS, got.Timestamp)
+			assert.Equal(t, tc.wantPb, got.Pbat)
+			assert.Equal(t, tc.wantPg, got.Pgrid)
+			assert.Equal(t, tc.wantSoc, got.Soc)
+			// TTL must be derived from `now`, not from the snapshot — backfilling
+			// older snapshots shouldn't write rows that expire before they're
+			// useful.
+			assert.Equal(t, now.Add(30*24*time.Hour).Unix(), got.TTL)
+		})
+	}
+}
+
+func TestIsAllZeroReading(t *testing.T) {
+	tests := map[string]struct {
+		r    ReadingItem
+		want bool
+	}{
+		"every field zero":             {r: ReadingItem{SysSn: "SN", Timestamp: 1}, want: true},
+		"non-zero SoC alone":           {r: ReadingItem{Soc: 72.0}, want: false},
+		"non-zero ppv alone":           {r: ReadingItem{Ppv: 0.001}, want: false},
+		"negative pgrid (exporting)":   {r: ReadingItem{Pgrid: -100}, want: false},
+		"sysSn/timestamp do not count": {r: ReadingItem{SysSn: "AB1234", Timestamp: 123456789, TTL: 999}, want: true},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tc.want, IsAllZeroReading(tc.r))
 		})
 	}
 }

@@ -87,6 +87,41 @@ func TestGetLastPowerData_Success(t *testing.T) {
 	assert.Equal(t, 85.0, got.Soc)
 }
 
+// T-1274 regression: AlphaESS sometimes returns `code: 200` with `data: null`
+// overnight when the inverter isn't publishing live data. json.Unmarshal of a
+// JSON null silently produces a zero-valued PowerData, which the poller would
+// then write as a phoney "everything is zero" reading. The client must turn
+// no-data into an error so the poller skips the write.
+func TestGetLastPowerData_NullData_ReturnsError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(t, w, apiResponse{Code: 200, Msg: "Success", Data: json.RawMessage("null")})
+	}))
+	defer srv.Close()
+
+	c := NewClient("app", "secret", 10*time.Second)
+	c.baseURL = srv.URL
+
+	_, err := c.GetLastPowerData(context.Background(), "SN123")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no data")
+}
+
+// Companion: an empty Data field (some flavours of "no data" return an empty
+// string rather than the JSON literal `null`) is treated the same way.
+func TestGetLastPowerData_EmptyData_ReturnsError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(t, w, apiResponse{Code: 200, Msg: "Success", Data: nil})
+	}))
+	defer srv.Close()
+
+	c := NewClient("app", "secret", 10*time.Second)
+	c.baseURL = srv.URL
+
+	_, err := c.GetLastPowerData(context.Background(), "SN123")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no data")
+}
+
 func TestGetOneDateEnergy_Success(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		data := EnergyData{Epv: 12.5, EInput: 3.0, EOutput: 1.5, ECharge: 5.0, EDischarge: 2.0, EGridCharge: 0.5}

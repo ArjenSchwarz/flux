@@ -177,12 +177,32 @@ func (p *Poller) fetchAndStoreLiveData(ctx context.Context) {
 		logDryRunPayload("getLastPowerData", data)
 	}
 
+	// AlphaESS occasionally returns code:200 with present-but-all-zero values
+	// when the inverter isn't actively reporting (observed overnight). Writing
+	// that as a reading drives the iOS Dashboard to render 0% / 0 W as if
+	// live. Skip the write and log the payload at warn so the gap is visible
+	// in CloudWatch. (T-1274)
+	if isAllZeroPower(data) {
+		slog.Warn("skipping reading write: AlphaESS returned all-zero values (inverter likely not reporting)",
+			"sysSn", p.cfg.Serial,
+			"ppv", data.Ppv, "pload", data.Pload, "pbat", data.Pbat, "pgrid", data.Pgrid, "soc", data.Soc)
+		return
+	}
+
 	item := dynamo.NewReadingItem(p.cfg.Serial, data, p.now())
 	if err := p.store.WriteReading(ctx, item); err != nil {
 		slog.Error("write reading failed", "error", err)
 		return
 	}
 	slog.Info("stored reading", "sysSn", p.cfg.Serial)
+}
+
+// isAllZeroPower reports whether every field on the live power response is
+// zero. A working battery system never produces an all-zero live snapshot
+// (SoC alone is always positive on a system that has been running), so such
+// a response means AlphaESS isn't actually reporting current values.
+func isAllZeroPower(d *alphaess.PowerData) bool {
+	return d.Ppv == 0 && d.Pload == 0 && d.Pbat == 0 && d.Pgrid == 0 && d.Soc == 0
 }
 
 // fetchAndStoreDailyPower fetches and stores 5-minute power snapshots. If
