@@ -38,6 +38,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
 	"time"
 
 	_ "time/tzdata"
@@ -240,15 +241,11 @@ func batchDeleteReadings(ctx context.Context, ddb *dynamodb.Client, table string
 		}
 		requests := make([]types.WriteRequest, 0, end-i)
 		for _, r := range items[i:end] {
-			key, err := attributevalue.MarshalMap(struct {
-				SysSn     string `dynamodbav:"sysSn"`
-				Timestamp int64  `dynamodbav:"timestamp"`
-			}{r.SysSn, r.Timestamp})
-			if err != nil {
-				return fmt.Errorf("marshal delete key (sysSn=%s, ts=%d): %w", r.SysSn, r.Timestamp, err)
-			}
 			requests = append(requests, types.WriteRequest{
-				DeleteRequest: &types.DeleteRequest{Key: key},
+				DeleteRequest: &types.DeleteRequest{Key: map[string]types.AttributeValue{
+					"sysSn":     &types.AttributeValueMemberS{Value: r.SysSn},
+					"timestamp": &types.AttributeValueMemberN{Value: strconv.FormatInt(r.Timestamp, 10)},
+				}},
 			})
 		}
 		if err := submitBatch(ctx, ddb, table, requests, "delete"); err != nil {

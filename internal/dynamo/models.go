@@ -183,8 +183,7 @@ func NewReadingItemFromSnapshot(serial string, snap alphaess.PowerSnapshot, loc 
 	if err != nil {
 		return ReadingItem{}, fmt.Errorf("parse uploadTime %q: %w", snap.UploadTime, err)
 	}
-	pgrid := snap.GridCharge - snap.FeedIn
-	pbat := snap.Load - snap.Ppv - pgrid
+	pgrid, pbat := alphaess.DerivePower(snap.Load, snap.Ppv, snap.GridCharge, snap.FeedIn)
 	return ReadingItem{
 		SysSn:     serial,
 		Timestamp: t.Unix(),

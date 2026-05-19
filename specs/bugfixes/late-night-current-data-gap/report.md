@@ -59,20 +59,37 @@ Three layered changes:
 
 **Changes made:**
 
+Defence-in-depth fixes (the bug itself):
+
 - `internal/alphaess/client.go` — add `isNullJSON` and reject null/empty Data in `GetLastPowerData`.
 - `internal/alphaess/client_test.go` — add `TestGetLastPowerData_NullData_ReturnsError` and `TestGetLastPowerData_EmptyData_ReturnsError`.
 - `internal/poller/poller.go` — add `isAllZeroPower`; have `fetchAndStoreLiveData` log + skip on all-zero values; include raw values in the warn-level log line for diagnosis.
 - `internal/poller/poller_test.go` — add `TestFetchAndStoreLiveData_AllZeroPayload_LogsAndSkips` and `TestFetchAndStoreLiveData_ValidSocZeroPower_Writes` (pins the threshold so legitimately quiet readings with valid SoC still persist).
-- `internal/api/status.go` — gate `resp.Live` and the cutoff times on a 90 s freshness threshold.
+- `internal/api/status.go` — gate `resp.Live` and the cutoff times on `liveDataStalenessThreshold` (90 s).
 - `internal/api/status_test.go` — `TestHandleStatusStaleLatestReading_OmitsLive` and `TestHandleStatusStalenessBoundary`.
-- `CHANGELOG.md` — note the fix under the next release.
+
+Backfill tooling (repair the rows the outage left behind):
+
+- `internal/dynamo/models.go` — add `NewReadingItemFromSnapshot` (5-min snapshot → `ReadingItem`) and `IsAllZeroReading` (bogus-row detector).
+- `internal/dynamo/models_test.go` — table-driven tests for both helpers (importing / exporting / invalid timestamp / TTL boundary).
+- `internal/alphaess/models.go` — `DerivePower(load, ppv, gridCharge, feedIn) → (pgrid, pbat)` so the live-reading sign convention is pinned in one place; consumed by both `mapDailyPowerToPoints` (past-date Day Detail) and `NewReadingItemFromSnapshot` (the backfill).
+- `internal/alphaess/models_test.go` — `TestDerivePower` exercises importing / exporting / idle / solar-covers-load.
+- `internal/api/day.go` — `mapDailyPowerToPoints` now goes through `alphaess.DerivePower`.
+- `cmd/backfill-readings/main.go` — new one-off CLI that swaps the bogus zero rows for synthetic readings derived from `getOneDayPowerBySn`.
+
+Docs:
+
+- `docs/flux-v1.md` — correct the `getOneDayPowerBySn` row (the prior "Power fields return 0" claim was outdated; `mapDailyPowerToPoints` and the backfill both depend on those fields).
+- `docs/agent-notes/{poller-orchestrator,api-layer,dynamo-layer}.md` — note the new behaviours and helpers.
+- `CHANGELOG.md` — note the fix and the new tool under the next release.
+- `specs/bugfixes/late-night-current-data-gap/{report.md,decision_log.md}` — this report and the decisions for the 90 s threshold + the all-zero-deletion assumption.
 
 **Approach rationale:** Each layer fixes a distinct root cause and reinforces the others. (1) is the cleanest fix when AlphaESS returns a structurally empty response. (2) catches the "structurally valid but all-zero" variant and produces the diagnostic logging the user asked for ("why can't it collect the live data?"). (3) is defence in depth — if a future API quirk slips past (1) and (2), the dashboard still falls back to a correct "no live data" state instead of presenting an aged reading.
 
 **Alternatives considered:**
 
 - *Only fix the API staleness check (the original PR #48 scope).* Rejected once the user clarified that the dashboard was showing all-zeros — staleness alone couldn't explain that, because the rows were fresh, just bogus.
-- *Fall back to the most recent `flux-daily-power` 5-minute snapshot when `getLastPowerData` is bogus.* Considered but deferred: `flux-daily-power` is itself polled hourly and `docs/flux-v1.md` notes its power fields are unreliable on this serial, so it's not a viable real-time substitute. Diagnostic logging from (2) will tell us whether this is worth revisiting.
+- *Fall back to the most recent `flux-daily-power` 5-minute snapshot when `getLastPowerData` is bogus, in real time.* Considered but deferred. The 5-minute snapshots are the right shape — the backfill uses exactly them — but the poller refreshes the table only hourly, so the freshest entry can be up to an hour old when the live endpoint goes quiet. That's worse than the existing "Awaiting live data" UI state for a dashboard people open expecting a current reading. Diagnostic logging from (2) will tell us whether a more aggressive real-time fallback (e.g. fetching `getOneDayPowerBySn` on demand when the latest reading ages past the threshold) is worth the API-call budget.
 - *Detect repeated-identical (non-zero) readings.* Rejected — heuristic, false-positives when the system is genuinely steady.
 
 ## Regression Tests

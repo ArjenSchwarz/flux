@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/ArjenSchwarz/flux/internal/alphaess"
 	"github.com/ArjenSchwarz/flux/internal/derivedstats"
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
 	"github.com/aws/aws-lambda-go/events"
@@ -209,11 +210,9 @@ func (h *Handler) handleDay(ctx context.Context, req events.LambdaFunctionURLReq
 
 // mapDailyPowerToPoints converts fallback daily power items to time series points.
 // Maps the 5-minute snapshot fields onto the live-reading shape: cbat → soc,
-// load → pload, ppv → ppv, gridCharge − feedIn → pgrid (positive = import),
-// and pbat is derived from the instantaneous power balance
-// pbat = pload − ppv − pgrid (positive = discharging; matches the live reading
-// convention used by computeTodayEnergy and BatteryPowerChartView). Used
-// directly without downsampling.
+// load → pload, ppv → ppv, and (pgrid, pbat) via alphaess.DerivePower (matches
+// the live-reading sign convention used by computeTodayEnergy and
+// BatteryPowerChartView). Used directly without downsampling.
 func mapDailyPowerToPoints(items []dynamo.DailyPowerItem) []TimeSeriesPoint {
 	points := make([]TimeSeriesPoint, 0, len(items))
 	for _, item := range items {
@@ -222,8 +221,7 @@ func mapDailyPowerToPoints(items []dynamo.DailyPowerItem) []TimeSeriesPoint {
 			slog.Warn("skipping daily power item with unparseable uploadTime", "uploadTime", item.UploadTime, "error", err)
 			continue
 		}
-		pgrid := item.GridCharge - item.FeedIn
-		pbat := item.Load - item.Ppv - pgrid
+		pgrid, pbat := alphaess.DerivePower(item.Load, item.Ppv, item.GridCharge, item.FeedIn)
 		points = append(points, TimeSeriesPoint{
 			Timestamp: t.UTC().Format(time.RFC3339),
 			Soc:       roundPower(item.Cbat),

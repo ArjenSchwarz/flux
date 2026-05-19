@@ -31,6 +31,8 @@
 - `DynamoNoteWriter.DeleteNote` is unconditionally idempotent: DynamoDB `DeleteItem` succeeds for missing keys without a `ConditionExpression`, so no pre-check is needed.
 - `DynamoNoteWriter.PutNote` carries no `ConditionExpression` — concurrent saves resolve last-write-wins, intentional per design Decision 5.
 - `QueryNotes` uses `#d` expression attribute name (date is a reserved word) and a `BETWEEN` sort-key condition over `[startDate, endDate]`.
+- `NewReadingItemFromSnapshot` (T-1274) converts a 5-minute `alphaess.PowerSnapshot` into a `ReadingItem` using `alphaess.DerivePower` for pgrid/pbat. Used by `cmd/backfill-readings` to replace the all-zero rows the AlphaESS overnight outage produced. TTL uses `now`, not the snapshot's age, so backfilled rows still get a full 30-day lease.
+- `IsAllZeroReading` (T-1274) — every-field-zero detector used by the backfill tool to identify safe-to-delete rows. Companion to `internal/poller.isAllZeroPower` and `internal/poller.isAllZeroEnergy`; the three live in three packages because they operate on three different types but share the same semantic ("AlphaESS no-data sentinel").
 
 ## Testing Patterns
 
