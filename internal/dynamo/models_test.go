@@ -6,6 +6,7 @@ import (
 
 	"github.com/ArjenSchwarz/flux/internal/alphaess"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewReadingItem(t *testing.T) {
@@ -106,7 +107,7 @@ func TestNewReadingItemFromSnapshot(t *testing.T) {
 				assert.Error(t, err)
 				return
 			}
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, tc.serial, got.SysSn)
 			assert.Equal(t, tc.wantTS, got.Timestamp)
 			assert.Equal(t, tc.wantPb, got.Pbat)

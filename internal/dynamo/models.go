@@ -199,8 +199,15 @@ func NewReadingItemFromSnapshot(serial string, snap alphaess.PowerSnapshot, loc 
 // IsAllZeroReading reports whether every power/SoC field on a stored
 // ReadingItem is exactly zero — the bogus pattern T-1274 introduced when
 // AlphaESS returned null `getLastPowerData` payloads overnight. Used by the
-// backfill tool to identify rows safe to delete; a working battery system
-// never legitimately produces every-field-zero.
+// backfill tool to identify rows safe to delete.
+//
+// The "safe to delete" claim depends on the AlphaESS inverter being configured
+// with a non-zero minimum-discharge floor (currently 5%, see `cutoffPercent`
+// in internal/api/status.go and FluxCore/BatteryEnergy.swift). If that floor
+// is ever lowered to 0%, a row taken at the moment the battery legitimately
+// sat at SoC=0% AND every power channel happened to be 0 W would be deleted
+// here. The decision_log of the late-night-current-data-gap bugfix captures
+// the trade-off.
 func IsAllZeroReading(r ReadingItem) bool {
 	return r.Ppv == 0 && r.Pload == 0 && r.Pbat == 0 && r.Pgrid == 0 && r.Soc == 0
 }

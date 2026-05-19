@@ -115,9 +115,12 @@ func (c *Client) GetLastPowerData(ctx context.Context, serial string) (*PowerDat
 }
 
 // isNullJSON reports whether a raw JSON value is missing or the literal
-// `null` — both meaning "no data" from AlphaESS.
+// `null` — both meaning "no data" from AlphaESS. Uses `string(b) == "null"`
+// (rather than `bytes.Equal` against a byte-slice literal) so the comparison
+// itself is allocation-free on the 10 s live-poll hot path.
 func isNullJSON(data json.RawMessage) bool {
-	return len(data) == 0 || bytes.Equal(bytes.TrimSpace(data), []byte("null"))
+	trimmed := bytes.TrimSpace(data)
+	return len(trimmed) == 0 || string(trimmed) == "null"
 }
 
 // GetOneDayPower retrieves 5-minute power snapshots for the given serial and date.
