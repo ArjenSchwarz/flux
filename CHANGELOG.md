@@ -14,6 +14,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - **`cmd/backfill-readings` CLI** (T-1274). One-off tool that, for a date range, removes the all-zero `flux-readings` rows the overnight AlphaESS outage produced and replaces them with synthetic 5-minute readings derived from `getOneDayPowerBySn` snapshots (same field mapping the Day Detail past-date fallback uses: `cbat → soc`, `gridCharge − feedIn → pgrid`, `load − ppv − pgrid → pbat`). Supports `--dry-run`; defaults to the trailing 3 days.
 
+### Documentation
+
+- **SoC Alerts spec** (T-1288). Spec for user-defined battery state-of-charge alerts: per-device rules with HH:MM time windows, server-side evaluation in the existing Go poller (10 s cadence), APNs delivery via `sideshow/apns2`, three new DynamoDB tables (`flux-devices`, `flux-soc-rules`, `flux-soc-fire-state`), five new Lambda endpoints, and iOS/macOS Settings → Alerts UI. Documents only — no functionality shipped yet. See `specs/soc-alerts/`.
+
+
 ## [1.2] - 2026-05-13
 
 ### Added
