@@ -46,6 +46,13 @@ struct AppNavigationView: View {
             .onChange(of: scenePhase) { _, newPhase in
                 if newPhase == .active {
                     reloadDependencies()
+                    // Replay any pending SoC alert registration (AC 1.7,
+                    // 2.4): a failed POST in registerDeviceIfNeeded leaves
+                    // the device record stashed locally; foregroundHook
+                    // re-attempts and clears lastError on success.
+                    Task { @MainActor in
+                        await SoCAlertsService.shared.foregroundHook()
+                    }
                 }
             }
             .onOpenURL { url in

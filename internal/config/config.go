@@ -23,11 +23,22 @@ type Config struct {
 	Location     *time.Location
 
 	// DynamoDB table names (empty in dry-run mode)
-	TableReadings    string
-	TableDailyEnergy string
-	TableDailyPower  string
-	TableSystem      string
-	TableOffpeak     string
+	TableReadings     string
+	TableDailyEnergy  string
+	TableDailyPower   string
+	TableSystem       string
+	TableOffpeak      string
+	TableDevices      string
+	TableSocRules     string
+	TableSocFireState string
+
+	// APNs SSM parameter paths (empty in dry-run mode and when SoC alerts
+	// are not deployed). When all are set, the poller wires the alert path.
+	APNsKeyParam      string
+	APNsKeyIDParam    string
+	APNsTeamIDParam   string
+	APNsBundleIDParam string
+	APNsEnvParam      string
 
 	// Runtime
 	AWSRegion   string
@@ -99,6 +110,17 @@ func Load() (*Config, error) {
 		cfg.TableDailyPower = requireEnv("TABLE_DAILY_POWER", &errs)
 		cfg.TableSystem = requireEnv("TABLE_SYSTEM", &errs)
 		cfg.TableOffpeak = requireEnv("TABLE_OFFPEAK", &errs)
+		// SoC alert tables and APNs SSM params are optional: when missing
+		// the poller starts without the SoC alert path. Production wires
+		// them via CloudFormation; integration tests leave them unset.
+		cfg.TableDevices = os.Getenv("TABLE_DEVICES")
+		cfg.TableSocRules = os.Getenv("TABLE_SOC_RULES")
+		cfg.TableSocFireState = os.Getenv("TABLE_SOC_FIRESTATE")
+		cfg.APNsKeyParam = os.Getenv("APNS_KEY_PARAM")
+		cfg.APNsKeyIDParam = os.Getenv("APNS_KEY_ID_PARAM")
+		cfg.APNsTeamIDParam = os.Getenv("APNS_TEAM_ID_PARAM")
+		cfg.APNsBundleIDParam = os.Getenv("APNS_BUNDLE_ID_PARAM")
+		cfg.APNsEnvParam = os.Getenv("APNS_ENV_PARAM")
 	}
 
 	if len(errs) > 0 {
@@ -142,6 +164,15 @@ func parseHHMM(s string) (time.Duration, error) {
 	}
 
 	return time.Duration(h)*time.Hour + time.Duration(m)*time.Minute, nil
+}
+
+// SocAlertsConfigured reports whether all SoC alert env vars are present.
+// When false, the poller starts without the alert pipeline — useful for
+// the gradual rollout described in design.md §Deploy ordering.
+func (c *Config) SocAlertsConfigured() bool {
+	return c.TableDevices != "" && c.TableSocRules != "" && c.TableSocFireState != "" &&
+		c.APNsKeyParam != "" && c.APNsKeyIDParam != "" && c.APNsTeamIDParam != "" &&
+		c.APNsBundleIDParam != "" && c.APNsEnvParam != ""
 }
 
 // FormatHHMM formats a duration-from-midnight back to HH:MM for logging.

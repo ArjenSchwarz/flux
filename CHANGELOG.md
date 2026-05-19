@@ -6,17 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **SoC Alerts** (T-1288). User-defined battery state-of-charge alerts. Each device manages up to 10 rules — threshold percent (1–99), HH:MM start/end window (cross-midnight supported with `00:00` end-of-day), an enabled toggle, and an optional 40-char label. The Go poller evaluates every enabled rule each 10 s cycle, fires at most once per (device, rule, window-start day) on a downward crossing, and dispatches APNs pushes via `sideshow/apns2` through a bounded 4-worker queue (capacity 64) so a slow APNs RTT never stalls the poll cadence. Fire-state rows are written conditionally before the push enqueue so a crash leaves at most a silent miss rather than a duplicate; the same `(deviceId, ruleId, windowStartDate)` triple becomes the APNs collapse-id (`base64url(sha256(...))[:22]`) so accidental duplicates are also collapsed on the device. Three new DynamoDB tables back the feature: `flux-devices` (PITR), `flux-soc-rules` (PITR), `flux-soc-fire-state` (TTL 7 d, no PITR). Lambda gains POST `/devices`, GET/POST `/devices/{id}/rules`, and PUT/DELETE `/devices/{id}/rules/{ruleId}`; the existing routing migrates to `http.ServeMux` with bearer-token middleware. Lambda mutations cascade-clean the affected fire-state rows so the next poll cycle re-arms under the new configuration. A daily orphan GC step in the midnight finalizer removes devices that haven't registered for 30 days, with a 24-hour in-flight fire-state guard and a conditional delete on `lastRegisteredAt` to survive the re-registration race. The iOS/macOS Settings → Alerts screen lists, creates, edits, toggles, and deletes rules with banners for the denied-permission and backend-error cases; registration is idempotent (POSTs only when token or TZ changes) and the foreground hook replays pending registrations.
+- **`cmd/backfill-readings` CLI** (T-1274). One-off tool that, for a date range, removes the all-zero `flux-readings` rows the overnight AlphaESS outage produced and replaces them with synthetic 5-minute readings derived from `getOneDayPowerBySn` snapshots (same field mapping the Day Detail past-date fallback uses: `cbat → soc`, `gridCharge − feedIn → pgrid`, `load − ppv − pgrid → pbat`). Supports `--dry-run`; defaults to the trailing 3 days.
+
 ### Fixed
 
 - **Dashboard no longer shows "0% / 0 W everywhere" overnight** (T-1274). When AlphaESS goes quiet at night (`getLastPowerData` returns `code:200` with `data: null` or an all-zero object), the poller previously dutifully unmarshalled the missing payload into a zero-valued `PowerData` and wrote a fresh `ReadingItem` with every field zero. `/status` then surfaced those zeros as the live readout, so the dashboard claimed SoC was 0% and nothing was running until backfill caught up. Three reinforcing fixes: (a) `GetLastPowerData` now treats null/empty `data` as an error so the poller logs and skips it; (b) the poller's `fetchAndStoreLiveData` refuses to persist every-field-zero readings and logs the raw values at warn level so the overnight AlphaESS behaviour is visible in CloudWatch; (c) `/status` drops `live` (and the cutoff times derived from it on `battery` and `rolling15min`) when the most recent stored reading is older than 90 s, so the dashboard's existing "Awaiting live data" state surfaces instead of holding aged numbers.
 
-### Added
-
-- **`cmd/backfill-readings` CLI** (T-1274). One-off tool that, for a date range, removes the all-zero `flux-readings` rows the overnight AlphaESS outage produced and replaces them with synthetic 5-minute readings derived from `getOneDayPowerBySn` snapshots (same field mapping the Day Detail past-date fallback uses: `cbat → soc`, `gridCharge − feedIn → pgrid`, `load − ppv − pgrid → pbat`). Supports `--dry-run`; defaults to the trailing 3 days.
-
 ### Documentation
 
-- **SoC Alerts spec** (T-1288). Spec for user-defined battery state-of-charge alerts: per-device rules with HH:MM time windows, server-side evaluation in the existing Go poller (10 s cadence), APNs delivery via `sideshow/apns2`, three new DynamoDB tables (`flux-devices`, `flux-soc-rules`, `flux-soc-fire-state`), five new Lambda endpoints, and iOS/macOS Settings → Alerts UI. Documents only — no functionality shipped yet. See `specs/soc-alerts/`.
+- **SoC Alerts spec** (T-1288). Implementation spec for the SoC alert feature above. See `specs/soc-alerts/`.
 
 
 ## [1.2] - 2026-05-13

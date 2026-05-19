@@ -201,6 +201,21 @@ Resources:
                   - !GetAtt DailyPowerTable.Arn
                   - !GetAtt SystemTable.Arn
                   - !GetAtt OffpeakTable.Arn
+              # SoC alert tables — the poller reads rules + devices, writes
+              # fire-state, and (for the daily orphan GC) Scans + cascade-
+              # deletes from all three. Scan is only needed on flux-devices.
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                Resource:
+                  - !GetAtt DevicesTable.Arn
+                  - !GetAtt SocRulesTable.Arn
+                  - !GetAtt SocFireStateTable.Arn
         # daily-derived-stats spec, AC 1.11 / 7.3 + Decision 3.
         # UpdateItem on DailyEnergyTable is also covered by FluxTaskPolicy
         # above; declared again here so the derivedStats writer's IAM
@@ -246,9 +261,9 @@ Resources:
                   - !GetAtt DailyPowerTable.Arn
                   - !GetAtt SystemTable.Arn
                   - !GetAtt OffpeakTable.Arn
-              # Notes is the only table the Lambda may write to. Keep this
-              # block scoped to NotesTable.Arn — req 6.4 forbids widening
-              # write rights onto the read-only tables above.
+              # Notes is the only legacy table the Lambda may write to. Keep
+              # this block scoped to NotesTable.Arn — req 6.4 forbids
+              # widening write rights onto the read-only tables above.
               - Effect: Allow
                 Action:
                   - dynamodb:GetItem
@@ -257,6 +272,25 @@ Resources:
                   - dynamodb:DeleteItem
                 Resource:
                   - !GetAtt NotesTable.Arn
+              # SoC alert tables — Lambda owns device registration and rule
+              # CRUD (full read+write on devices and rules), and clears
+              # fire-state on rule edit/delete (Query + DeleteItem only).
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:Query
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                Resource:
+                  - !GetAtt DevicesTable.Arn
+                  - !GetAtt SocRulesTable.Arn
+              - Effect: Allow
+                Action:
+                  - dynamodb:Query
+                  - dynamodb:DeleteItem
+                Resource:
+                  - !GetAtt SocFireStateTable.Arn
               - Effect: Allow
                 Action:
                   - ssm:GetParameter
@@ -432,6 +466,67 @@ Resources:
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
 
+  # --- SoC Alerts tables (soc-alerts spec) ---
+  # PITR is enabled on user-authored data (devices, rules); fire-state is
+  # idempotent and reconstructable so it carries TTL and skips PITR.
+
+  DevicesTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: flux-devices
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: deviceId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: deviceId
+          KeyType: HASH
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+  SocRulesTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: flux-soc-rules
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: deviceId
+          AttributeType: S
+        - AttributeName: ruleId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: deviceId
+          KeyType: HASH
+        - AttributeName: ruleId
+          KeyType: RANGE
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+  SocFireStateTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: flux-soc-fire-state
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: deviceRule
+          AttributeType: S
+        - AttributeName: windowStartDate
+          AttributeType: S
+      KeySchema:
+        - AttributeName: deviceRule
+          KeyType: HASH
+        - AttributeName: windowStartDate
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+
   # --- Lambda Function and Function URL ---
 
   ApiFunction:
@@ -461,6 +556,9 @@ Resources:
           TABLE_SYSTEM: !Ref SystemTable
           TABLE_OFFPEAK: !Ref OffpeakTable
           TABLE_NOTES: !Ref NotesTable
+          TABLE_DEVICES: !Ref DevicesTable
+          TABLE_SOC_RULES: !Ref SocRulesTable
+          TABLE_SOC_FIRESTATE: !Ref SocFireStateTable
 
   ApiFunctionUrl:
     Type: AWS::Lambda::Url
@@ -532,6 +630,25 @@ Resources:
               Value: !Ref SystemTable
             - Name: TABLE_OFFPEAK
               Value: !Ref OffpeakTable
+            - Name: TABLE_DEVICES
+              Value: !Ref DevicesTable
+            - Name: TABLE_SOC_RULES
+              Value: !Ref SocRulesTable
+            - Name: TABLE_SOC_FIRESTATE
+              Value: !Ref SocFireStateTable
+            # APNs SSM paths — the poller fetches the values at startup
+            # (SecureString for the .p8 key, String for the rest). Created
+            # manually before the first stack deploy per prerequisites.md.
+            - Name: APNS_KEY_PARAM
+              Value: !Sub "${SSMPathPrefix}/apns/key"
+            - Name: APNS_KEY_ID_PARAM
+              Value: !Sub "${SSMPathPrefix}/apns/key-id"
+            - Name: APNS_TEAM_ID_PARAM
+              Value: !Sub "${SSMPathPrefix}/apns/team-id"
+            - Name: APNS_BUNDLE_ID_PARAM
+              Value: !Sub "${SSMPathPrefix}/apns/bundle-id"
+            - Name: APNS_ENV_PARAM
+              Value: !Sub "${SSMPathPrefix}/apns/env"
             - Name: TZ
               Value: Australia/Sydney
           HealthCheck:

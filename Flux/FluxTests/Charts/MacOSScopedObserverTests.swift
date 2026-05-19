@@ -317,5 +317,23 @@ private final class StubObserverAPIClient: FluxAPIClient, @unchecked Sendable {
     func saveNote(date: String, text _: String) async throws -> NoteResponse {
         NoteResponse(date: date, text: "", updatedAt: nil)
     }
+
+    // SoC alerts — these observer tests don't exercise the endpoint, but
+    // the protocol requires the methods.
+    func registerDevice(_: DeviceRegistration) async throws -> DeviceItemResponse {
+        throw FluxAPIError.notConfigured
+    }
+    func fetchRules(deviceId _: String) async throws -> [SoCAlertRule] {
+        throw FluxAPIError.notConfigured
+    }
+    func createRule(deviceId _: String, rule _: SoCAlertRuleDraft) async throws -> SoCAlertRule {
+        throw FluxAPIError.notConfigured
+    }
+    func updateRule(deviceId _: String, rule _: SoCAlertRule) async throws -> SoCAlertRule {
+        throw FluxAPIError.notConfigured
+    }
+    func deleteRule(deviceId _: String, ruleId _: String) async throws {
+        throw FluxAPIError.notConfigured
+    }
 }
 #endif

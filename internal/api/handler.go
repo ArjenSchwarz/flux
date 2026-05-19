@@ -2,11 +2,10 @@ package api
 
 import (
 	"context"
-	"crypto/subtle"
 	"encoding/json"
 	"log/slog"
 	"net/http"
-	"strings"
+	"net/http/httptest"
 	"time"
 
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
@@ -24,6 +23,9 @@ type NoteWriter interface {
 type Handler struct {
 	reader       dynamo.Reader
 	notes        NoteWriter
+	devices      DeviceStore
+	rules        SocRuleStore
+	fireState    FireStateCleaner
 	serial       string
 	apiToken     string
 	offpeakStart string
@@ -31,12 +33,18 @@ type Handler struct {
 	// nowFunc returns the current time. Defaults to time.Now.
 	// Exposed for testing to ensure consistent time capture per request.
 	nowFunc func() time.Time
+	// idFunc generates a UUID for newly-created rules. Defaults to
+	// crypto-quality UUID; tests inject a deterministic stub.
+	idFunc func() string
+	// mux is the routed http.Handler with bearer-auth middleware applied.
+	// Built once in NewHandler so per-request work is just translation.
+	mux http.Handler
 }
 
 // NewHandler creates a Handler with all dependencies injected. Pass a nil
 // notes writer in tests that don't exercise the write endpoint.
 func NewHandler(reader dynamo.Reader, notes NoteWriter, serial, apiToken, offpeakStart, offpeakEnd string) *Handler {
-	return &Handler{
+	h := &Handler{
 		reader:       reader,
 		notes:        notes,
 		serial:       serial,
@@ -44,7 +52,10 @@ func NewHandler(reader dynamo.Reader, notes NoteWriter, serial, apiToken, offpea
 		offpeakStart: offpeakStart,
 		offpeakEnd:   offpeakEnd,
 		nowFunc:      time.Now,
+		idFunc:       defaultIDFunc,
 	}
+	h.mux = h.buildMux()
+	return h
 }
 
 // SetNow overrides the clock used by request handlers. Intended for the
@@ -54,17 +65,50 @@ func (h *Handler) SetNow(now func() time.Time) {
 	h.nowFunc = now
 }
 
+// buildMux wires the existing event-returning handlers into a ServeMux and
+// wraps the result with the bearer-token middleware. Auth runs before
+// routing — an invalid token on an unknown path still surfaces 401, not 404.
+func (h *Handler) buildMux() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /status", adaptEventHandler(h.handleStatus))
+	mux.HandleFunc("GET /history", adaptEventHandler(h.handleHistory))
+	mux.HandleFunc("GET /day", adaptEventHandler(h.handleDay))
+	mux.HandleFunc("PUT /note", adaptEventHandler(h.handleNote))
+	mux.HandleFunc("POST /devices", adaptEventHandler(h.handleRegisterDevice))
+	mux.HandleFunc("GET /devices/{deviceId}/rules", h.handleListRules)
+	mux.HandleFunc("POST /devices/{deviceId}/rules", h.handleCreateRule)
+	mux.HandleFunc("PUT /devices/{deviceId}/rules/{ruleId}", h.handleUpdateRule)
+	mux.HandleFunc("DELETE /devices/{deviceId}/rules/{ruleId}", h.handleDeleteRule)
+	return bearerTokenMiddleware(h.apiToken, jsonNotFound(jsonMethodNotAllowed(mux)))
+}
+
+// SetDeviceStore wires the device upsert dependency. Called by cmd/api/main.go.
+func (h *Handler) SetDeviceStore(s DeviceStore) {
+	h.devices = s
+}
+
+// SetSocRuleStore wires the rule CRUD dependency. Called by cmd/api/main.go.
+func (h *Handler) SetSocRuleStore(s SocRuleStore) {
+	h.rules = s
+}
+
+// SetFireStateCleaner wires the fire-state cleanup dependency. Called by
+// cmd/api/main.go.
+func (h *Handler) SetFireStateCleaner(c FireStateCleaner) {
+	h.fireState = c
+}
+
 // Handle is the Lambda entry point. Processing order:
-// 1. Check HTTP method (GET only)
-// 2. Validate bearer token (auth before routing)
-// 3. Route to endpoint handler
-// 4. Log request with method, path, status, duration
+// 1. Translate request to *http.Request.
+// 2. ServeHTTP through the auth-wrapped mux.
+// 3. Render the captured response back to Lambda shape.
+// 4. Log request with method, path, status, duration.
 func (h *Handler) Handle(ctx context.Context, req events.LambdaFunctionURLRequest) (events.LambdaFunctionURLResponse, error) {
 	start := time.Now()
 	method := req.RequestContext.HTTP.Method
 	path := req.RawPath
 
-	resp := h.handle(ctx, req)
+	resp := h.serve(ctx, req)
 
 	slog.Info("request",
 		"method", method,
@@ -76,51 +120,17 @@ func (h *Handler) Handle(ctx context.Context, req events.LambdaFunctionURLReques
 	return resp, nil
 }
 
-// handle contains the core logic, separated from Handle to simplify logging.
-func (h *Handler) handle(ctx context.Context, req events.LambdaFunctionURLRequest) events.LambdaFunctionURLResponse {
-	if !h.validToken(req.Headers["authorization"]) {
-		return errorResponse(401, "unauthorized")
+func (h *Handler) serve(ctx context.Context, req events.LambdaFunctionURLRequest) events.LambdaFunctionURLResponse {
+	httpReq, err := lambdaToHTTPRequest(req)
+	if err != nil {
+		slog.Error("lambda request translation failed", "error", err)
+		return errorResponse(http.StatusBadRequest, "malformed request")
 	}
+	httpReq = withRequestContext(httpReq.WithContext(ctx), req)
 
-	method := req.RequestContext.HTTP.Method
-	switch method {
-	case http.MethodGet:
-		switch req.RawPath {
-		case "/status":
-			return h.handleStatus(ctx, req)
-		case "/history":
-			return h.handleHistory(ctx, req)
-		case "/day":
-			return h.handleDay(ctx, req)
-		}
-	case http.MethodPut:
-		if req.RawPath == "/note" {
-			return h.handleNote(ctx, req)
-		}
-	}
-
-	// Unknown method on a known path → 405 with the path's allowed methods.
-	allow := http.MethodGet
-	if req.RawPath == "/note" {
-		allow = http.MethodPut
-	}
-	switch req.RawPath {
-	case "/status", "/history", "/day", "/note":
-		resp := errorResponse(405, "method not allowed")
-		resp.Headers["Allow"] = allow
-		return resp
-	}
-	return errorResponse(404, "not found")
-}
-
-// validToken checks the Authorization header using constant-time comparison.
-// Returns false for missing, malformed, or incorrect tokens.
-func (h *Handler) validToken(authHeader string) bool {
-	token, ok := strings.CutPrefix(authHeader, "Bearer ")
-	if !ok || token == "" {
-		return false
-	}
-	return subtle.ConstantTimeCompare([]byte(token), []byte(h.apiToken)) == 1
+	rec := httptest.NewRecorder()
+	h.mux.ServeHTTP(rec, httpReq)
+	return httpResponseToLambda(rec)
 }
 
 // errorResponse builds a JSON error response with the given status and message.
@@ -138,11 +148,62 @@ func jsonResponse(v any) events.LambdaFunctionURLResponse {
 	data, err := json.Marshal(v)
 	if err != nil {
 		slog.Error("marshal response", "error", err)
-		return errorResponse(500, "internal error")
+		return errorResponse(http.StatusInternalServerError, "internal error")
 	}
 	return events.LambdaFunctionURLResponse{
 		StatusCode: 200,
 		Headers:    map[string]string{"Content-Type": "application/json"},
 		Body:       string(data),
+	}
+}
+
+// jsonNotFound rewrites the default ServeMux 404 ("404 page not found\n",
+// text/plain) into the project's JSON error shape, so clients consume a
+// single error format across all status codes.
+func jsonNotFound(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		buffer := httptest.NewRecorder()
+		next.ServeHTTP(buffer, r)
+		if buffer.Code == http.StatusNotFound && buffer.Header().Get("Content-Type") != "application/json" {
+			writeJSONError(w, http.StatusNotFound, "not found")
+			return
+		}
+		copyRecorderToWriter(buffer, w)
+	})
+}
+
+// jsonMethodNotAllowed does the same rewrite for 405 responses generated by
+// ServeMux when a path is matched on the wrong method. The Allow header set
+// by the mux is preserved.
+func jsonMethodNotAllowed(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		buffer := httptest.NewRecorder()
+		next.ServeHTTP(buffer, r)
+		if buffer.Code == http.StatusMethodNotAllowed && buffer.Header().Get("Content-Type") != "application/json" {
+			allow := buffer.Header().Get("Allow")
+			w.Header().Set("Content-Type", "application/json")
+			if allow != "" {
+				w.Header().Set("Allow", allow)
+			}
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			_, _ = w.Write([]byte(`{"error":"method not allowed"}`))
+			return
+		}
+		copyRecorderToWriter(buffer, w)
+	})
+}
+
+// copyRecorderToWriter writes a captured response through to the real
+// http.ResponseWriter. Used by the JSON-error wrappers.
+func copyRecorderToWriter(rec *httptest.ResponseRecorder, w http.ResponseWriter) {
+	for k, v := range rec.Header() {
+		w.Header()[k] = v
+	}
+	if rec.Code == 0 {
+		rec.Code = http.StatusOK
+	}
+	w.WriteHeader(rec.Code)
+	if rec.Body.Len() > 0 {
+		_, _ = w.Write(rec.Body.Bytes())
 	}
 }

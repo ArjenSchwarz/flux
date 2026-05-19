@@ -26,10 +26,13 @@ type Store interface {
 
 // TableNames holds the DynamoDB table names, loaded from environment variables.
 type TableNames struct {
-	Readings    string
-	DailyEnergy string
-	DailyPower  string
-	System      string
-	Offpeak     string
-	Notes       string
+	Readings     string
+	DailyEnergy  string
+	DailyPower   string
+	System       string
+	Offpeak      string
+	Notes        string
+	Devices      string
+	SocRules     string
+	SocFireState string
 }

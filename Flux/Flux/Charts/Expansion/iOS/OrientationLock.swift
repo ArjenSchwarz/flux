@@ -27,14 +27,4 @@ final class OrientationLock {
         }
     }
 }
-
-@MainActor
-final class FluxiOSAppDelegate: NSObject, UIApplicationDelegate {
-    func application(
-        _ application: UIApplication,
-        supportedInterfaceOrientationsFor window: UIWindow?
-    ) -> UIInterfaceOrientationMask {
-        OrientationLock.shared.mask
-    }
-}
 #endif

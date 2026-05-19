@@ -116,6 +116,14 @@ struct SettingsView: View {
                 }
             }
 
+            Section("Alerts") {
+                NavigationLink {
+                    SoCAlertsView()
+                } label: {
+                    Label("Battery alerts", systemImage: "bell.badge")
+                }
+            }
+
             if manualWhatsNewRelease != nil {
                 Section("About") {
                     Button("What's New") { showingManualWhatsNew = true }
@@ -211,6 +219,19 @@ struct SettingsView: View {
                     .keyboardShortcut(.defaultAction)
                     .buttonStyle(.borderedProminent)
                     .disabled(viewModel.isValidating || hasMissingRequiredFields)
+                }
+
+                LiquidGlassSection(title: "Alerts") {
+                    Grid(alignment: .leadingFirstTextBaseline,
+                         horizontalSpacing: 16, verticalSpacing: 14) {
+                        FormRow("Battery alerts", labelWidth: Self.labelWidth) {
+                            NavigationLink {
+                                SoCAlertsView()
+                            } label: {
+                                Label("Manage…", systemImage: "bell.badge")
+                            }
+                        }
+                    }
                 }
 
                 if manualWhatsNewRelease != nil {
