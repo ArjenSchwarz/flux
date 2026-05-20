@@ -149,37 +149,12 @@ func (q *Queue) dispatch(ctx context.Context, job Job) {
 		return
 	}
 	class := "transient"
-	if isPermanentErr(err) {
+	if errors.Is(err, ErrPermanent) {
 		class = "permanent"
 	}
 	q.incFailureClass(class)
 	slog.Warn("flux_apns_push_failed",
 		"device_id", job.DeviceID, "rule_id", job.RuleID, "class", class, "error", err)
-}
-
-// isPermanentErr is a thin sniff for the permanent-class error message
-// produced by Notifier.Push. Avoids leaking an enum across packages while
-// still letting workers count failures by class for observability.
-func isPermanentErr(err error) bool {
-	return err != nil && containsString(err.Error(), "apns permanent")
-}
-
-// containsString avoids the strings package for this single use; the
-// substring is fixed and short, so the inline loop is cheaper than the
-// import.
-func containsString(s, sub string) bool {
-	if len(sub) == 0 {
-		return true
-	}
-	if len(sub) > len(s) {
-		return false
-	}
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
 }
 
 func (q *Queue) incFailureClass(class string) {

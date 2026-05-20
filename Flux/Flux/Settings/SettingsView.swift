@@ -283,7 +283,7 @@ private struct FormRow<Content: View>: View {
     }
 }
 
-private struct LiquidGlassSection<Content: View>: View {
+struct LiquidGlassSection<Content: View>: View {
     let title: String
     let content: Content
 

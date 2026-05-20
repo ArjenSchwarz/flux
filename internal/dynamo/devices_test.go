@@ -189,6 +189,7 @@ type mockDevicesAPI struct {
 	putItemFn    func(ctx context.Context, params *dynamodb.PutItemInput) (*dynamodb.PutItemOutput, error)
 	deleteItemFn func(ctx context.Context, params *dynamodb.DeleteItemInput) (*dynamodb.DeleteItemOutput, error)
 	updateItemFn func(ctx context.Context, params *dynamodb.UpdateItemInput) (*dynamodb.UpdateItemOutput, error)
+	getItemFn    func(ctx context.Context, params *dynamodb.GetItemInput) (*dynamodb.GetItemOutput, error)
 }
 
 func (m *mockDevicesAPI) PutItem(ctx context.Context, params *dynamodb.PutItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error) {
@@ -210,4 +211,11 @@ func (m *mockDevicesAPI) UpdateItem(ctx context.Context, params *dynamodb.Update
 		return m.updateItemFn(ctx, params)
 	}
 	return &dynamodb.UpdateItemOutput{}, nil
+}
+
+func (m *mockDevicesAPI) GetItem(ctx context.Context, params *dynamodb.GetItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
+	if m.getItemFn != nil {
+		return m.getItemFn(ctx, params)
+	}
+	return &dynamodb.GetItemOutput{}, nil
 }

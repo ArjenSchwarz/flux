@@ -25,11 +25,13 @@ type DeviceItem struct {
 // DevicesAPI is the subset of the DynamoDB client used by DynamoDeviceWriter.
 // PutItem upserts the device row; DeleteItem is used by the conditional orphan
 // GC path; UpdateItem narrowly handles the stale-token mutation triggered by
-// APNs feedback.
+// APNs feedback; GetItem is used by the Lambda to read existing values
+// before overwriting (preserves token across token-less re-registrations).
 type DevicesAPI interface {
 	PutItem(ctx context.Context, params *dynamodb.PutItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error)
 	DeleteItem(ctx context.Context, params *dynamodb.DeleteItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error)
 	UpdateItem(ctx context.Context, params *dynamodb.UpdateItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error)
+	GetItem(ctx context.Context, params *dynamodb.GetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error)
 }
 
 // DynamoDeviceWriter writes device rows to DynamoDB. The single live
@@ -42,6 +44,33 @@ type DynamoDeviceWriter struct {
 // NewDynamoDeviceWriter returns a writer scoped to the given table name.
 func NewDynamoDeviceWriter(client DevicesAPI, table string) *DynamoDeviceWriter {
 	return &DynamoDeviceWriter{client: client, table: table}
+}
+
+// PutDeviceConditional upserts the row only when no existing row exists or
+// the stored tzUpdatedAt is less than or equal to the incoming value (AC 4.5).
+// Returns *types.ConditionalCheckFailedException when a newer TZ already
+// won — the Lambda maps that to a 409 response.
+//
+// The condition is evaluated server-side, so two concurrent registrations
+// with different TZUpdatedAt values cannot both clobber each other.
+func (w *DynamoDeviceWriter) PutDeviceConditional(ctx context.Context, item DeviceItem, incomingTZUpdatedAt int64) error {
+	av, err := attributevalue.MarshalMap(item)
+	if err != nil {
+		return fmt.Errorf("marshal device (deviceId=%s): %w", item.DeviceID, err)
+	}
+	cond := "attribute_not_exists(deviceId) OR tzUpdatedAt <= :incoming"
+	_, err = w.client.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName:           &w.table,
+		Item:                av,
+		ConditionExpression: &cond,
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":incoming": &types.AttributeValueMemberN{Value: fmt.Sprintf("%d", incomingTZUpdatedAt)},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("put device conditional (table=%s, deviceId=%s): %w", w.table, item.DeviceID, err)
+	}
+	return nil
 }
 
 // PutDevice upserts a single device row. Last-write-wins; the Lambda guards
@@ -108,6 +137,18 @@ func ScanDevices(ctx context.Context, client interface {
 		input.ExclusiveStartKey = out.LastEvaluatedKey
 	}
 	return items, nil
+}
+
+// GetDevice returns the row for the given deviceId or nil when not present.
+// Used by the Lambda's POST /devices handler to preserve fields the payload
+// omits (most importantly the APNs token after a permission-grant flip).
+func (w *DynamoDeviceWriter) GetDevice(ctx context.Context, deviceID string) (*DeviceItem, error) {
+	return getItem[DeviceItem](ctx, w.client, w.table,
+		map[string]types.AttributeValue{
+			"deviceId": &types.AttributeValueMemberS{Value: deviceID},
+		},
+		fmt.Sprintf("device (table=%s, deviceId=%s)", w.table, deviceID),
+	)
 }
 
 // MarkStale sets tokenStatus = "stale" for the given device. Called by the

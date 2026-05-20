@@ -33,6 +33,11 @@ const defaultBackoffBase = time.Second
 // fire-state row is retained so we don't re-fire today.
 var ErrStaleToken = errors.New("apns: device token is stale")
 
+// ErrPermanent means APNs returned a permanent 4xx (e.g. PayloadEmpty,
+// BadCollapseId). Retrying won't help; the worker counts it under the
+// "permanent" failure class for observability.
+var ErrPermanent = errors.New("apns: permanent failure")
+
 // Notifier is a thin wrapper over PushClient that adds the project's retry,
 // classification, and observability behaviour.
 type Notifier struct {
@@ -98,7 +103,7 @@ func (n *Notifier) Push(ctx context.Context, token, collapseID string, p Payload
 			continue
 		case classPermanent:
 			// Permanent 4xx (e.g., PayloadEmpty) won't be fixed by retry.
-			return fmt.Errorf("apns permanent (status=%d reason=%s)", resp.StatusCode, resp.Reason)
+			return fmt.Errorf("apns permanent (status=%d reason=%s): %w", resp.StatusCode, resp.Reason, ErrPermanent)
 		}
 	}
 	if lastErr == nil {

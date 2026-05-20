@@ -22,6 +22,9 @@ import (
 type config struct {
 	reader       dynamo.Reader
 	notes        api.NoteWriter
+	devices      api.DeviceStore
+	rules        api.SocRuleStore
+	fireState    api.FireStateCleaner
 	apiToken     string
 	serial       string
 	offpeakStart string
@@ -36,6 +39,9 @@ var requiredEnvVars = []string{
 	"TABLE_SYSTEM",
 	"TABLE_OFFPEAK",
 	"TABLE_NOTES",
+	"TABLE_DEVICES",
+	"TABLE_SOC_RULES",
+	"TABLE_SOC_FIRESTATE",
 	"OFFPEAK_START",
 	"OFFPEAK_END",
 	"API_TOKEN_PARAM",
@@ -53,6 +59,9 @@ func main() {
 	}
 
 	handler := api.NewHandler(cfg.reader, cfg.notes, cfg.serial, cfg.apiToken, cfg.offpeakStart, cfg.offpeakEnd)
+	handler.SetDeviceStore(cfg.devices)
+	handler.SetSocRuleStore(cfg.rules)
+	handler.SetFireStateCleaner(cfg.fireState)
 	lambda.Start(handler.Handle)
 }
 
@@ -98,14 +107,57 @@ func loadConfig(ctx context.Context) (*config, error) {
 	})
 	notes := dynamo.NewDynamoNoteWriter(ddbClient, os.Getenv("TABLE_NOTES"))
 
+	// SoC alert stores. The Dynamo writer/reader concrete types satisfy
+	// the api package's DeviceStore / SocRuleStore / FireStateCleaner
+	// interfaces directly — the FireStateCleaner adapter only translates
+	// the int return of DeleteByDeviceRule into the interface contract.
+	devices := dynamo.NewDynamoDeviceWriter(ddbClient, os.Getenv("TABLE_DEVICES"))
+	ruleReader := dynamo.NewDynamoSocRuleReader(ddbClient, os.Getenv("TABLE_SOC_RULES"))
+	ruleWriter := dynamo.NewDynamoSocRuleWriter(ddbClient, os.Getenv("TABLE_SOC_RULES"))
+	fireState := dynamo.NewDynamoSocFireStateWriter(ddbClient, os.Getenv("TABLE_SOC_FIRESTATE"))
+
 	return &config{
 		reader:       reader,
 		notes:        notes,
+		devices:      devices,
+		rules:        socRuleStoreAdapter{reader: ruleReader, writer: ruleWriter},
+		fireState:    fireStateCleanerAdapter{store: fireState},
 		apiToken:     apiToken,
 		serial:       serial,
 		offpeakStart: os.Getenv("OFFPEAK_START"),
 		offpeakEnd:   os.Getenv("OFFPEAK_END"),
 	}, nil
+}
+
+// socRuleStoreAdapter exposes the (reader, writer) pair as the single
+// SocRuleStore interface the handler depends on.
+type socRuleStoreAdapter struct {
+	reader *dynamo.DynamoSocRuleReader
+	writer *dynamo.DynamoSocRuleWriter
+}
+
+func (a socRuleStoreAdapter) ListRulesByDevice(ctx context.Context, deviceID string) ([]dynamo.SoCRuleItem, error) {
+	return a.reader.ListRulesByDevice(ctx, deviceID)
+}
+
+func (a socRuleStoreAdapter) PutRule(ctx context.Context, item dynamo.SoCRuleItem) error {
+	return a.writer.PutRule(ctx, item)
+}
+
+func (a socRuleStoreAdapter) DeleteRule(ctx context.Context, deviceID, ruleID string) error {
+	return a.writer.DeleteRule(ctx, deviceID, ruleID)
+}
+
+// fireStateCleanerAdapter wraps DynamoSocFireStateWriter.DeleteByDeviceRule
+// into the FireStateCleaner interface. The wrapper is needed only because
+// the interface returns the count for observability while the writer's
+// method matches in shape but lives in the dynamo package.
+type fireStateCleanerAdapter struct {
+	store *dynamo.DynamoSocFireStateWriter
+}
+
+func (a fireStateCleanerAdapter) DeleteFireStateByDeviceRule(ctx context.Context, deviceID, ruleID string) (int, error) {
+	return a.store.DeleteByDeviceRule(ctx, deviceID, ruleID)
 }
 
 // ssmAPI is the subset of the SSM client used for parameter fetching.

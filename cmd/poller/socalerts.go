@@ -63,58 +63,47 @@ func wireSocAlerts(ctx context.Context, p *poller.Poller, cfg *config.Config, aw
 	return nil
 }
 
-// loadAPNsCredentials fetches the five APNs SSM parameters in parallel.
-// All five must succeed; otherwise we fail loudly rather than partially
-// initialising APNs.
+// loadAPNsCredentials fetches the five APNs SSM parameters in a single
+// GetParameters call (one round-trip total, with decryption applied to the
+// .p8 SecureString). All five must succeed; otherwise we fail loudly rather
+// than partially initialising APNs.
 func loadAPNsCredentials(ctx context.Context, client ssmAPI, cfg *config.Config) (apns.Credentials, error) {
-	keyValue, err := getSSMParam(ctx, client, cfg.APNsKeyParam)
-	if err != nil {
-		return apns.Credentials{}, err
+	names := []string{
+		cfg.APNsKeyParam,
+		cfg.APNsKeyIDParam,
+		cfg.APNsTeamIDParam,
+		cfg.APNsBundleIDParam,
+		cfg.APNsEnvParam,
 	}
-	keyID, err := getSSMParam(ctx, client, cfg.APNsKeyIDParam)
+	decrypt := true
+	out, err := client.GetParameters(ctx, &ssm.GetParametersInput{
+		Names:          names,
+		WithDecryption: &decrypt,
+	})
 	if err != nil {
-		return apns.Credentials{}, err
+		return apns.Credentials{}, fmt.Errorf("get apns ssm params: %w", err)
 	}
-	teamID, err := getSSMParam(ctx, client, cfg.APNsTeamIDParam)
-	if err != nil {
-		return apns.Credentials{}, err
+	if len(out.InvalidParameters) > 0 {
+		return apns.Credentials{}, fmt.Errorf("apns ssm params missing: %v", out.InvalidParameters)
 	}
-	bundleID, err := getSSMParam(ctx, client, cfg.APNsBundleIDParam)
-	if err != nil {
-		return apns.Credentials{}, err
-	}
-	env, err := getSSMParam(ctx, client, cfg.APNsEnvParam)
-	if err != nil {
-		return apns.Credentials{}, err
+	values := make(map[string]string, len(out.Parameters))
+	for _, p := range out.Parameters {
+		if p.Name != nil && p.Value != nil {
+			values[*p.Name] = *p.Value
+		}
 	}
 	return apns.Credentials{
-		P8Key:    keyValue,
-		KeyID:    keyID,
-		TeamID:   teamID,
-		BundleID: bundleID,
-		Env:      env,
+		P8Key:    values[cfg.APNsKeyParam],
+		KeyID:    values[cfg.APNsKeyIDParam],
+		TeamID:   values[cfg.APNsTeamIDParam],
+		BundleID: values[cfg.APNsBundleIDParam],
+		Env:      values[cfg.APNsEnvParam],
 	}, nil
 }
 
 // ssmAPI is the subset of the SSM client used for parameter fetching.
 type ssmAPI interface {
-	GetParameter(ctx context.Context, params *ssm.GetParameterInput, optFns ...func(*ssm.Options)) (*ssm.GetParameterOutput, error)
-}
-
-// getSSMParam fetches a single SSM parameter value with decryption.
-func getSSMParam(ctx context.Context, client ssmAPI, name string) (string, error) {
-	decrypt := true
-	out, err := client.GetParameter(ctx, &ssm.GetParameterInput{
-		Name:           &name,
-		WithDecryption: &decrypt,
-	})
-	if err != nil {
-		return "", fmt.Errorf("get SSM parameter %q: %w", name, err)
-	}
-	if out.Parameter == nil || out.Parameter.Value == nil {
-		return "", fmt.Errorf("SSM parameter %q has no value", name)
-	}
-	return *out.Parameter.Value, nil
+	GetParameters(ctx context.Context, params *ssm.GetParametersInput, optFns ...func(*ssm.Options)) (*ssm.GetParametersOutput, error)
 }
 
 // fireStateAdapter bridges *dynamo.DynamoSocFireStateWriter to the eval

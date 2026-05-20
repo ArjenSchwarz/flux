@@ -109,6 +109,10 @@ type Evaluator struct {
 	now       func() time.Time
 	mu        sync.Mutex
 	prev      map[prevKey]prevValue
+	// locCache memoises *time.Location lookups so the hot poll-loop path
+	// doesn't reparse the tzdata file every 10s. Population is rare (one
+	// entry per distinct device TZ); reads dominate.
+	locCache map[string]*time.Location
 }
 
 // NewEvaluator constructs an Evaluator wired to the given dependencies.
@@ -120,6 +124,7 @@ func NewEvaluator(cache RulesCache, fireState FireStateRW, queue PushQueue) *Eva
 		queue:     queue,
 		now:       time.Now,
 		prev:      make(map[prevKey]prevValue),
+		locCache:  make(map[string]*time.Location),
 	}
 }
 
@@ -129,6 +134,15 @@ func (e *Evaluator) SetNow(now func() time.Time) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.now = now
+}
+
+// cycleCounters carries per-cycle observability counters. Logged once at
+// the end of Evaluate as `flux_eval_cycle` (AC 6.4).
+type cycleCounters struct {
+	rulesEvaluated int
+	rulesFired     int
+	pushesQueued   int
+	queueOverflow  int
 }
 
 // Evaluate runs one cycle: for every enabled rule on every device, compare
@@ -145,11 +159,11 @@ func (e *Evaluator) Evaluate(ctx context.Context, soc float64, readingAt time.Ti
 
 	// AC 3.4: skip when the reading is unusable.
 	if soc < 0 || soc > 100 {
-		slog.Info("soc_alerts skipped: soc out of range", "soc", soc)
+		slog.Info("flux_eval_skip_stale", "reason", "soc_out_of_range", "soc", soc)
 		return
 	}
 	if e.now().Sub(readingAt) > readingMaxAge {
-		slog.Info("soc_alerts skipped: reading is stale",
+		slog.Info("flux_eval_skip_stale", "reason", "reading_stale",
 			"reading_at", readingAt, "now", e.now())
 		return
 	}
@@ -163,19 +177,28 @@ func (e *Evaluator) Evaluate(ctx context.Context, soc float64, readingAt time.Ti
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
+	var counters cycleCounters
 	for _, d := range devices {
-		e.evaluateDevice(ctx, d, soc, readingAt)
+		e.evaluateDevice(ctx, d, soc, readingAt, &counters)
+	}
+	if counters.rulesEvaluated > 0 || counters.rulesFired > 0 {
+		slog.Info("flux_eval_cycle",
+			"rules_evaluated", counters.rulesEvaluated,
+			"rules_fired", counters.rulesFired,
+			"pushes_queued", counters.pushesQueued,
+			"queue_overflow", counters.queueOverflow,
+		)
 	}
 }
 
 // evaluateDevice runs all enabled rules for one device. Caller holds e.mu.
-func (e *Evaluator) evaluateDevice(ctx context.Context, d DeviceWithRules, soc float64, readingAt time.Time) {
+func (e *Evaluator) evaluateDevice(ctx context.Context, d DeviceWithRules, soc float64, readingAt time.Time, counters *cycleCounters) {
 	if len(d.Rules) == 0 {
 		return
 	}
-	loc, err := time.LoadLocation(d.TZIdentifier)
+	loc, err := e.loadLocation(d.TZIdentifier)
 	if err != nil {
-		slog.Warn("soc_alerts tz invalid", "device_id", d.DeviceID, "tz", d.TZIdentifier, "error", err)
+		slog.Warn("flux_eval_tz_invalid", "device_id", d.DeviceID, "tz", d.TZIdentifier, "error", err)
 		return
 	}
 	for _, r := range d.Rules {
@@ -186,6 +209,7 @@ func (e *Evaluator) evaluateDevice(ctx context.Context, d DeviceWithRules, soc f
 		if !inside {
 			continue
 		}
+		counters.rulesEvaluated++
 		key := prevKey{
 			deviceRule:      d.DeviceID + "#" + r.RuleID,
 			windowStartDate: windowStart,
@@ -204,7 +228,7 @@ func (e *Evaluator) evaluateDevice(ctx context.Context, d DeviceWithRules, soc f
 		// Downward-crossing semantics (Decision 6).
 		threshold := float64(r.ThresholdPercent)
 		if val.soc > threshold && soc <= threshold {
-			e.maybeFire(ctx, d, r, soc, readingAt, windowStart)
+			e.maybeFire(ctx, d, r, soc, readingAt, windowStart, counters)
 		}
 		e.prev[key] = prevValue{soc: soc, ruleUpdatedAt: r.UpdatedAt}
 	}
@@ -213,7 +237,7 @@ func (e *Evaluator) evaluateDevice(ctx context.Context, d DeviceWithRules, soc f
 // maybeFire writes the fire-state row and (on success) enqueues the push.
 // Decision 9: write before enqueue so a crash post-write produces at most a
 // silent miss rather than a duplicate.
-func (e *Evaluator) maybeFire(ctx context.Context, d DeviceWithRules, r RuleSnapshot, soc float64, readingAt time.Time, windowStartDate string) {
+func (e *Evaluator) maybeFire(ctx context.Context, d DeviceWithRules, r RuleSnapshot, soc float64, readingAt time.Time, windowStartDate string, counters *cycleCounters) {
 	collapseID := CollapseID(d.DeviceID, r.RuleID, windowStartDate)
 	rec := SoCFireStateRecord{
 		DeviceID:        d.DeviceID,
@@ -234,6 +258,7 @@ func (e *Evaluator) maybeFire(ctx context.Context, d DeviceWithRules, r RuleSnap
 		// today's fire.
 		return
 	}
+	counters.rulesFired++
 	// AC 2.3 / 3.9: do not push to stale tokens. The device row is retained
 	// so the next registration recovers state.
 	if d.TokenStatus == "stale" || d.APNsToken == "" {
@@ -253,16 +278,34 @@ func (e *Evaluator) maybeFire(ctx context.Context, d DeviceWithRules, r RuleSnap
 	}
 	if err := e.queue.Enqueue(ctx, job); err != nil {
 		if errors.Is(err, ErrQueueFull) {
-			slog.Warn("soc_alerts push queue overflow; fire-state row retained",
+			counters.queueOverflow++
+			slog.Warn("flux_apns_queue_overflow",
 				"device_id", d.DeviceID, "rule_id", r.RuleID)
 			return
 		}
 		slog.Error("soc_alerts enqueue failed",
 			"device_id", d.DeviceID, "rule_id", r.RuleID, "error", err)
+		return
 	}
+	counters.pushesQueued++
 }
 
 // ErrQueueFull is returned by PushQueue.Enqueue when the queue is at
 // capacity. Defined here so the evaluator can recognise the overflow case
 // without importing the apns package (which would create a cycle).
 var ErrQueueFull = errors.New("push queue full")
+
+// loadLocation returns the *time.Location for the given IANA identifier,
+// memoising results to avoid reparsing tzdata on every cycle. Caller holds
+// e.mu so the bare map access is safe.
+func (e *Evaluator) loadLocation(tzID string) (*time.Location, error) {
+	if loc, ok := e.locCache[tzID]; ok {
+		return loc, nil
+	}
+	loc, err := time.LoadLocation(tzID)
+	if err != nil {
+		return nil, err
+	}
+	e.locCache[tzID] = loc
+	return loc, nil
+}
