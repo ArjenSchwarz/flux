@@ -121,12 +121,12 @@ func (h *Handler) Handle(ctx context.Context, req events.LambdaFunctionURLReques
 }
 
 func (h *Handler) serve(ctx context.Context, req events.LambdaFunctionURLRequest) events.LambdaFunctionURLResponse {
-	httpReq, err := lambdaToHTTPRequest(req)
+	httpReq, err := lambdaToHTTPRequest(ctx, req)
 	if err != nil {
 		slog.Error("lambda request translation failed", "error", err)
 		return errorResponse(http.StatusBadRequest, "malformed request")
 	}
-	httpReq = withRequestContext(httpReq.WithContext(ctx), req)
+	httpReq = withRequestContext(httpReq, req)
 
 	rec := httptest.NewRecorder()
 	h.mux.ServeHTTP(rec, httpReq)

@@ -28,7 +28,7 @@ func TestLambdaToHTTPRequest_PathHeadersAndQuery(t *testing.T) {
 		Body: `{"deviceId":"abc"}`,
 	}
 
-	httpReq, err := lambdaToHTTPRequest(req)
+	httpReq, err := lambdaToHTTPRequest(t.Context(), req)
 	require.NoError(t, err)
 	assert.Equal(t, http.MethodPost, httpReq.Method)
 	assert.Equal(t, "/devices", httpReq.URL.Path)
@@ -51,7 +51,7 @@ func TestLambdaToHTTPRequest_Base64Body(t *testing.T) {
 			HTTP: events.LambdaFunctionURLRequestContextHTTPDescription{Method: http.MethodPost},
 		},
 	}
-	httpReq, err := lambdaToHTTPRequest(req)
+	httpReq, err := lambdaToHTTPRequest(t.Context(), req)
 	require.NoError(t, err)
 	body, err := io.ReadAll(httpReq.Body)
 	require.NoError(t, err)
@@ -89,7 +89,7 @@ func TestLambdaToHTTPRequest_EmptyBodyOK(t *testing.T) {
 			HTTP: events.LambdaFunctionURLRequestContextHTTPDescription{Method: http.MethodGet},
 		},
 	}
-	httpReq, err := lambdaToHTTPRequest(req)
+	httpReq, err := lambdaToHTTPRequest(t.Context(), req)
 	require.NoError(t, err)
 	body, err := io.ReadAll(httpReq.Body)
 	require.NoError(t, err)
@@ -104,7 +104,7 @@ func TestLambdaToHTTPRequest_PreservesRawQueryEncoding(t *testing.T) {
 			HTTP: events.LambdaFunctionURLRequestContextHTTPDescription{Method: http.MethodGet},
 		},
 	}
-	httpReq, err := lambdaToHTTPRequest(req)
+	httpReq, err := lambdaToHTTPRequest(t.Context(), req)
 	require.NoError(t, err)
 	assert.Equal(t, "date=2026-05-19", httpReq.URL.RawQuery,
 		"raw query string should pass through unchanged for handlers that re-parse it")

@@ -16,8 +16,10 @@ import (
 
 // lambdaToHTTPRequest translates a Lambda Function URL request into the
 // standard *http.Request shape so handlers and middleware written against
-// net/http can run unchanged. ~30 LOC as the design predicts.
-func lambdaToHTTPRequest(req events.LambdaFunctionURLRequest) (*http.Request, error) {
+// net/http can run unchanged. ~30 LOC as the design predicts. The Lambda
+// invocation context is threaded through so downstream handlers and AWS
+// SDK calls observe the same deadline.
+func lambdaToHTTPRequest(ctx context.Context, req events.LambdaFunctionURLRequest) (*http.Request, error) {
 	method := req.RequestContext.HTTP.Method
 	if method == "" {
 		method = http.MethodGet
@@ -55,7 +57,7 @@ func lambdaToHTTPRequest(req events.LambdaFunctionURLRequest) (*http.Request, er
 		bodyReader = strings.NewReader("")
 	}
 
-	httpReq, err := http.NewRequestWithContext(context.Background(), method, target, bodyReader)
+	httpReq, err := http.NewRequestWithContext(ctx, method, target, bodyReader)
 	if err != nil {
 		return nil, fmt.Errorf("build http request: %w", err)
 	}
@@ -66,8 +68,9 @@ func lambdaToHTTPRequest(req events.LambdaFunctionURLRequest) (*http.Request, er
 }
 
 // httpResponseToLambda renders an httptest.ResponseRecorder into the Lambda
-// response shape. Body bytes that don't survive a UTF-8 round-trip are
-// base64-encoded; this matches Function URLs' isBase64Encoded contract.
+// response shape. All current responses are JSON (valid UTF-8) so the body
+// is passed through as-is via string conversion. If a future endpoint needs
+// to emit binary bytes, switch to base64 encoding and set IsBase64Encoded.
 func httpResponseToLambda(rec *httptest.ResponseRecorder) events.LambdaFunctionURLResponse {
 	status := rec.Code
 	if status == 0 {

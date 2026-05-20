@@ -11,6 +11,11 @@ import (
 	"github.com/aws/aws-lambda-go/events"
 )
 
+// deviceBodyMaxBytes caps the POST /devices request body. A registration
+// payload is at most a few hundred bytes; 8 KB rejects anything that could
+// only be hostile or accidental while leaving generous slack.
+const deviceBodyMaxBytes = 8192
+
 // deviceRegistration is the wire shape of POST /devices.
 type deviceRegistration struct {
 	DeviceID        string  `json:"deviceId"`
@@ -32,6 +37,9 @@ func (h *Handler) handleRegisterDevice(ctx context.Context, req events.LambdaFun
 	}
 
 	body := requestBody(req)
+	if len(body) > deviceBodyMaxBytes {
+		return errorResponse(http.StatusRequestEntityTooLarge, "request body too large")
+	}
 	var payload deviceRegistration
 	if err := json.Unmarshal(body, &payload); err != nil {
 		return errorResponse(http.StatusBadRequest, "malformed request body")
@@ -44,6 +52,12 @@ func (h *Handler) handleRegisterDevice(ctx context.Context, req events.LambdaFun
 	}
 	if payload.TZIdentifier == "" {
 		return errorResponse(http.StatusBadRequest, "tzIdentifier required")
+	}
+	// Rejecting bad tz at the API boundary surfaces a useful 400 to the
+	// caller; the evaluator's flux_eval_tz_invalid path would silently
+	// drop the device's rules and leave the user without alerts.
+	if _, err := time.LoadLocation(payload.TZIdentifier); err != nil {
+		return errorResponse(http.StatusBadRequest, "tzIdentifier not a recognised IANA zone")
 	}
 	if payload.APNsEnvironment != "" &&
 		payload.APNsEnvironment != "development" &&
@@ -81,10 +95,17 @@ func (h *Handler) handleRegisterDevice(ctx context.Context, req events.LambdaFun
 		if existing.CreatedAt != "" {
 			item.CreatedAt = existing.CreatedAt
 		}
-		// Token absent in the payload but present in the row: keep it.
+		// Token absent in the payload but present in the row: keep it,
+		// AND preserve the existing TokenStatus. A previously-stale row
+		// must not re-activate from a token-less re-register (denied or
+		// foreground-replay path); only a fresh token below clears the
+		// stale flag.
 		if payload.APNsToken == nil {
 			item.APNsToken = existing.APNsToken
 			item.APNsTokenUpdatedAt = existing.APNsTokenUpdatedAt
+			if existing.TokenStatus != "" {
+				item.TokenStatus = existing.TokenStatus
+			}
 		}
 		// Environment absent in the payload but present in the row: keep it.
 		// (Lets a token-less re-register from the denial path retain the
