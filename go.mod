@@ -33,6 +33,9 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.41.10 // indirect
 	github.com/aws/smithy-go v1.25.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/golang-jwt/jwt/v4 v4.4.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/sideshow/apns2 v0.25.0 // indirect
+	golang.org/x/net v0.0.0-20220403103023-749bd193bc2b // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

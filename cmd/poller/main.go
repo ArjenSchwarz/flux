@@ -64,6 +64,15 @@ func main() {
 			os.Exit(1)
 		}
 		p.SetMetrics(poller.NewMetrics(cloudwatch.NewFromConfig(awsCfg)))
+
+		if cfg.SocAlertsConfigured() {
+			if err := wireSocAlerts(ctx, p, cfg, awsCfg); err != nil {
+				slog.Error("wire soc alerts failed", "error", err)
+				os.Exit(1)
+			}
+		} else {
+			slog.Info("soc alerts not configured; skipping APNs wiring")
+		}
 	}
 
 	if err := p.Run(ctx); err != nil {

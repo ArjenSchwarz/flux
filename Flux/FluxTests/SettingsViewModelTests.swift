@@ -275,6 +275,28 @@ private actor MockSettingsAPIClient: FluxAPIClient {
     func saveNote(date _: String, text _: String) async throws -> NoteResponse {
         throw FluxAPIError.notConfigured
     }
+
+    // SoC alert endpoints — SettingsViewModel never invokes these, so the
+    // mock implementations are minimal stubs that throw notConfigured.
+    func registerDevice(_: DeviceRegistration) async throws -> DeviceItemResponse {
+        throw FluxAPIError.notConfigured
+    }
+
+    func fetchRules(deviceId _: String) async throws -> [SoCAlertRule] {
+        throw FluxAPIError.notConfigured
+    }
+
+    func createRule(deviceId _: String, rule _: SoCAlertRuleDraft) async throws -> SoCAlertRule {
+        throw FluxAPIError.notConfigured
+    }
+
+    func updateRule(deviceId _: String, rule _: SoCAlertRule) async throws -> SoCAlertRule {
+        throw FluxAPIError.notConfigured
+    }
+
+    func deleteRule(deviceId _: String, ruleId _: String) async throws {
+        throw FluxAPIError.notConfigured
+    }
 }
 
 private final class CaptureBox: @unchecked Sendable {

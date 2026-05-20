@@ -8,6 +8,7 @@ public enum FluxAPIError: Error, Sendable, Equatable {
     case networkError(String)
     case decodingError(String)
     case unexpectedStatus(Int)
+    case ruleCapReached
 }
 
 extension FluxAPIError {
@@ -34,6 +35,8 @@ extension FluxAPIError {
             return "The app could not read backend data: \(details)"
         case let .unexpectedStatus(status):
             return "The backend returned an unexpected status (\(status))."
+        case .ruleCapReached:
+            return "You can have at most 10 alert rules per device."
         }
     }
 

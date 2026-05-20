@@ -18,16 +18,34 @@ public final class URLSessionAPIClient: FluxAPIClient, Sendable {
         self.session = session ?? Self.noCacheSession
         self.baseURL = baseURL
         self.tokenProvider = { keychainService.loadToken() }
-        self.decoder = JSONDecoder()
-        self.encoder = JSONEncoder()
+        self.decoder = Self.makeDecoder()
+        self.encoder = Self.makeEncoder()
     }
 
     public init(baseURL: URL, token: String, session: URLSession? = nil) {
         self.session = session ?? Self.noCacheSession
         self.baseURL = baseURL
         self.tokenProvider = { token }
-        self.decoder = JSONDecoder()
-        self.encoder = JSONEncoder()
+        self.decoder = Self.makeDecoder()
+        self.encoder = Self.makeEncoder()
+    }
+
+    /// The Go backend serialises every Date as RFC 3339 (e.g.
+    /// `"2026-05-19T10:00:00Z"`). The default `JSONDecoder` treats `Date`
+    /// as a `TimeInterval`, which silently fails to parse those strings.
+    /// Setting `.iso8601` once here so every endpoint that decodes a
+    /// `Date` field (rule timestamps, future endpoints) lands on the
+    /// success path.
+    private static func makeDecoder() -> JSONDecoder {
+        let d = JSONDecoder()
+        d.dateDecodingStrategy = .iso8601
+        return d
+    }
+
+    private static func makeEncoder() -> JSONEncoder {
+        let e = JSONEncoder()
+        e.dateEncodingStrategy = .iso8601
+        return e
     }
 
     public func fetchStatus() async throws -> StatusResponse {
@@ -61,6 +79,84 @@ public final class URLSessionAPIClient: FluxAPIClient, Sendable {
     private struct NotePayload: Encodable {
         let date: String
         let text: String
+    }
+
+    // MARK: - SoC Alerts
+
+    public func registerDevice(_ registration: DeviceRegistration) async throws -> DeviceItemResponse {
+        let body = try encoder.encode(registration)
+        return try await performRequest(
+            path: "devices",
+            queryItems: [],
+            method: "POST",
+            body: body
+        )
+    }
+
+    public func fetchRules(deviceId: String) async throws -> [SoCAlertRule] {
+        let response: SoCAlertRulesResponse = try await performRequest(
+            path: "devices/\(deviceId)/rules",
+            queryItems: []
+        )
+        return response.rules
+    }
+
+    public func createRule(deviceId: String, rule: SoCAlertRuleDraft) async throws -> SoCAlertRule {
+        let body = try encoder.encode(RulePayload(rule: rule))
+        return try await performRequest(
+            path: "devices/\(deviceId)/rules",
+            queryItems: [],
+            method: "POST",
+            body: body
+        )
+    }
+
+    public func updateRule(deviceId: String, rule: SoCAlertRule) async throws -> SoCAlertRule {
+        let body = try encoder.encode(RulePayload(rule: rule))
+        return try await performRequest(
+            path: "devices/\(deviceId)/rules/\(rule.id)",
+            queryItems: [],
+            method: "PUT",
+            body: body
+        )
+    }
+
+    public func deleteRule(deviceId: String, ruleId: String) async throws {
+        let _: EmptyResponse = try await performRequest(
+            path: "devices/\(deviceId)/rules/\(ruleId)",
+            queryItems: [],
+            method: "DELETE"
+        )
+    }
+
+    private struct RulePayload: Encodable {
+        let thresholdPercent: Int
+        let windowStart: String
+        let windowEnd: String
+        let enabled: Bool
+        let label: String?
+
+        init(rule: SoCAlertRuleDraft) {
+            self.thresholdPercent = rule.thresholdPercent
+            self.windowStart = rule.windowStart
+            self.windowEnd = rule.windowEnd
+            self.enabled = rule.enabled
+            self.label = rule.label
+        }
+
+        init(rule: SoCAlertRule) {
+            self.thresholdPercent = rule.thresholdPercent
+            self.windowStart = rule.windowStart
+            self.windowEnd = rule.windowEnd
+            self.enabled = rule.enabled
+            self.label = rule.label
+        }
+    }
+
+    /// EmptyResponse handles 204 No Content responses where the decoder would
+    /// otherwise reject an empty body.
+    private struct EmptyResponse: Decodable {
+        init(from _: Decoder) throws {}
     }
 
     private func performRequest<T: Decodable>(
@@ -115,17 +211,27 @@ public final class URLSessionAPIClient: FluxAPIClient, Sendable {
         }
 
         switch httpResponse.statusCode {
+        case 204:
+            return try decodeResponse(emptyResponseData())
         case 200 ... 299:
             return try decodeResponse(data)
         case 400:
             throw FluxAPIError.badRequest(parseErrorMessage(from: data))
         case 401, 403:
             throw FluxAPIError.unauthorized
+        case 409:
+            throw FluxAPIError.ruleCapReached
         case 500 ... 599:
             throw FluxAPIError.serverError
         default:
             throw FluxAPIError.unexpectedStatus(httpResponse.statusCode)
         }
+    }
+
+    /// 204 No Content responses carry no JSON body; feed the decoder a valid
+    /// empty-object literal so `EmptyResponse` can land on the success path.
+    private func emptyResponseData() -> Data {
+        Data("{}".utf8)
     }
 
     /// On macOS, URLSession requests issued right after launch can be cancelled

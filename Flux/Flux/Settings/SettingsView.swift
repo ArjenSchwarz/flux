@@ -116,6 +116,14 @@ struct SettingsView: View {
                 }
             }
 
+            Section("Alerts") {
+                NavigationLink {
+                    SoCAlertsView()
+                } label: {
+                    Label("Battery alerts", systemImage: "bell.badge")
+                }
+            }
+
             if manualWhatsNewRelease != nil {
                 Section("About") {
                     Button("What's New") { showingManualWhatsNew = true }
@@ -213,6 +221,19 @@ struct SettingsView: View {
                     .disabled(viewModel.isValidating || hasMissingRequiredFields)
                 }
 
+                LiquidGlassSection(title: "Alerts") {
+                    Grid(alignment: .leadingFirstTextBaseline,
+                         horizontalSpacing: 16, verticalSpacing: 14) {
+                        FormRow("Battery alerts", labelWidth: Self.labelWidth) {
+                            NavigationLink {
+                                SoCAlertsView()
+                            } label: {
+                                Label("Manage…", systemImage: "bell.badge")
+                            }
+                        }
+                    }
+                }
+
                 if manualWhatsNewRelease != nil {
                     LiquidGlassSection(title: "About") {
                         Grid(alignment: .leadingFirstTextBaseline,
@@ -262,7 +283,7 @@ private struct FormRow<Content: View>: View {
     }
 }
 
-private struct LiquidGlassSection<Content: View>: View {
+struct LiquidGlassSection<Content: View>: View {
     let title: String
     let content: Content
 

@@ -9,6 +9,12 @@ final actor MockFluxAPIClient: FluxAPIClient {
 
     private(set) var lastSaveNoteCall: (date: String, text: String)?
 
+    // SoC alerts mock state. Stored per device id, matches the cap behaviour.
+    private var registeredDevices: [String: DeviceItemResponse] = [:]
+    private var rulesByDevice: [String: [SoCAlertRule]] = [:]
+    private var nextRuleSeq = 1
+    private static let socAlertRuleCap = 10
+
     private static let calendar: Calendar = {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = DateFormatting.sydneyTimeZone
@@ -247,6 +253,63 @@ final actor MockFluxAPIClient: FluxAPIClient {
             text: text,
             updatedAt: text.isEmpty ? nil : Self.isoUTCFormatter.string(from: Date())
         )
+    }
+
+    // MARK: - SoC Alerts
+
+    func registerDevice(_ registration: DeviceRegistration) async throws -> DeviceItemResponse {
+        let response = DeviceItemResponse(
+            deviceId: registration.deviceId,
+            platform: registration.platform,
+            apnsToken: registration.apnsToken,
+            tzIdentifier: registration.tzIdentifier,
+            tzUpdatedAt: registration.tzUpdatedAt,
+            tokenStatus: "active",
+            lastRegisteredAt: Self.isoUTCFormatter.string(from: Date())
+        )
+        registeredDevices[registration.deviceId] = response
+        return response
+    }
+
+    func fetchRules(deviceId: String) async throws -> [SoCAlertRule] {
+        (rulesByDevice[deviceId] ?? []).sorted { $0.createdAt < $1.createdAt }
+    }
+
+    func createRule(deviceId: String, rule: SoCAlertRuleDraft) async throws -> SoCAlertRule {
+        let existing = rulesByDevice[deviceId] ?? []
+        if existing.count >= Self.socAlertRuleCap {
+            throw FluxAPIError.ruleCapReached
+        }
+        let now = Date()
+        let created = SoCAlertRule(
+            id: "mock-rule-\(nextRuleSeq)",
+            thresholdPercent: rule.thresholdPercent,
+            windowStart: rule.windowStart,
+            windowEnd: rule.windowEnd,
+            enabled: rule.enabled,
+            label: rule.label,
+            createdAt: now,
+            updatedAt: now
+        )
+        nextRuleSeq += 1
+        rulesByDevice[deviceId] = existing + [created]
+        return created
+    }
+
+    func updateRule(deviceId: String, rule: SoCAlertRule) async throws -> SoCAlertRule {
+        var rules = rulesByDevice[deviceId] ?? []
+        guard let idx = rules.firstIndex(where: { $0.id == rule.id }) else {
+            throw FluxAPIError.badRequest("rule not found")
+        }
+        var updated = rule
+        updated.updatedAt = Date()
+        rules[idx] = updated
+        rulesByDevice[deviceId] = rules
+        return updated
+    }
+
+    func deleteRule(deviceId: String, ruleId: String) async throws {
+        rulesByDevice[deviceId] = (rulesByDevice[deviceId] ?? []).filter { $0.id != ruleId }
     }
 }
 #endif

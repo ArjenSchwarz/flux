@@ -37,13 +37,35 @@ type APIClient interface {
 	GetEssList(ctx context.Context, serial string) (*alphaess.SystemInfo, error)
 }
 
+// LiveDataEvaluator is the contract the live-data goroutine uses to fire
+// SoC alerts. Defined here so the poller package does not import internal/poller/eval.
+type LiveDataEvaluator interface {
+	Evaluate(ctx context.Context, soc float64, readingAt time.Time)
+}
+
+// SocAlertsLifecycle is the lifecycle interface implemented by the push
+// queue (Start/Stop). Optional — the poller calls these only when wired.
+type SocAlertsLifecycle interface {
+	Start()
+	Stop(ctx context.Context)
+}
+
+// OrphanGC runs the daily device-orphan garbage collection step. Wired
+// optionally so the integration tests don't need to construct it.
+type OrphanGC interface {
+	Run(ctx context.Context)
+}
+
 // Poller orchestrates multi-schedule polling of the AlphaESS API.
 type Poller struct {
-	client  APIClient
-	store   dynamo.Store
-	cfg     *config.Config
-	offpeak *OffpeakScheduler
-	metrics MetricsRecorder
+	client    APIClient
+	store     dynamo.Store
+	cfg       *config.Config
+	offpeak   *OffpeakScheduler
+	metrics   MetricsRecorder
+	evaluator LiveDataEvaluator
+	queue     SocAlertsLifecycle
+	orphanGC  OrphanGC
 
 	// now returns the current time. Injectable for deterministic testing.
 	now func() time.Time
@@ -70,6 +92,20 @@ func (p *Poller) SetMetrics(m MetricsRecorder) {
 	p.metrics = m
 }
 
+// SetSocAlerts wires the SoC alert evaluator and push queue. Both must be
+// non-nil; the queue's lifecycle is managed by Run. Tests that don't exercise
+// the SoC path simply don't call this and the live-poll path stays unchanged.
+func (p *Poller) SetSocAlerts(eval LiveDataEvaluator, queue SocAlertsLifecycle) {
+	p.evaluator = eval
+	p.queue = queue
+}
+
+// SetOrphanGC wires the orphan-device garbage collector. Called by the
+// midnight finalizer after yesterday's summarisation completes.
+func (p *Poller) SetOrphanGC(gc OrphanGC) {
+	p.orphanGC = gc
+}
+
 // SetNow overrides the clock used by Run and the per-tick helpers. Intended
 // for deterministic tests (notably the integration test, which lives in
 // another package and cannot reach the unexported field). Safe to call
@@ -92,6 +128,10 @@ func (p *Poller) Run(ctx context.Context) error {
 	drainCtx, drainCancel := context.WithCancel(context.Background())
 	defer drainCancel()
 
+	if p.queue != nil {
+		p.queue.Start()
+	}
+
 	var wg sync.WaitGroup
 	wg.Add(7)
 	go p.pollLiveData(ctx, drainCtx, &wg)
@@ -104,6 +144,10 @@ func (p *Poller) Run(ctx context.Context) error {
 
 	<-ctx.Done()
 	slog.Info("poller stopping")
+
+	if p.queue != nil {
+		p.queue.Stop(drainCtx)
+	}
 
 	done := make(chan struct{})
 	go func() { wg.Wait(); close(done) }()
@@ -195,6 +239,10 @@ func (p *Poller) fetchAndStoreLiveData(ctx context.Context) {
 		return
 	}
 	slog.Info("stored reading", "sysSn", p.cfg.Serial)
+
+	if p.evaluator != nil {
+		p.evaluator.Evaluate(ctx, item.Soc, p.now())
+	}
 }
 
 // isAllZeroPower reports whether every field on the live power response is
@@ -312,6 +360,9 @@ func (p *Poller) runMidnightFinalizer(loopCtx, drainCtx context.Context, wg *syn
 		p.fetchAndStoreDailyPower(drainCtx, yesterday)
 		p.fetchAndStoreDailyEnergy(drainCtx, yesterday)
 		p.runSummarisationPass(drainCtx, yesterday)
+		if p.orphanGC != nil {
+			p.orphanGC.Run(drainCtx)
+		}
 	}
 }
 

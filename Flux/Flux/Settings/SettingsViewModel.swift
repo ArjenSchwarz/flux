@@ -129,6 +129,12 @@ final class SettingsViewModel {
             return message
         case let .unexpectedStatus(statusCode):
             return "Unexpected response (\(statusCode))."
+        case .ruleCapReached:
+            // SettingsView never exposes the SoC-rule create endpoint, so
+            // this is unreachable in practice; surface a literal message so
+            // the switch stays exhaustive without a default that would hide
+            // future cases.
+            return "Rule limit reached."
         }
     }
 }
