@@ -180,13 +180,10 @@ func jsonMethodNotAllowed(next http.Handler) http.Handler {
 		buffer := httptest.NewRecorder()
 		next.ServeHTTP(buffer, r)
 		if buffer.Code == http.StatusMethodNotAllowed && buffer.Header().Get("Content-Type") != "application/json" {
-			allow := buffer.Header().Get("Allow")
-			w.Header().Set("Content-Type", "application/json")
-			if allow != "" {
+			if allow := buffer.Header().Get("Allow"); allow != "" {
 				w.Header().Set("Allow", allow)
 			}
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			_, _ = w.Write([]byte(`{"error":"method not allowed"}`))
+			writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
 		copyRecorderToWriter(buffer, w)

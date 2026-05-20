@@ -66,6 +66,13 @@ final class SoCAlertsViewModel {
         try? await service.refresh()
     }
 
+    /// Pass-through so views never reach into SoCAlertsService.shared and
+    /// permission/registration flows honour the injected service in tests
+    /// and previews.
+    func requestAuthorizationAndRegister() async {
+        try? await service.requestAuthorizationAndRegister()
+    }
+
     func beginCreate() {
         draft = SoCAlertRuleDraft()
         editorMode = .create
@@ -86,6 +93,9 @@ final class SoCAlertsViewModel {
             editorMode = nil
             return created
         case .edit(let original):
+            // The backend stamps its own `updatedAt`; sending `now` here keeps
+            // the outgoing payload from carrying a stale value the server is
+            // about to overwrite.
             let updated = SoCAlertRule(
                 id: original.id,
                 thresholdPercent: draft.thresholdPercent,
@@ -94,7 +104,7 @@ final class SoCAlertsViewModel {
                 enabled: draft.enabled,
                 label: draft.label,
                 createdAt: original.createdAt,
-                updatedAt: original.updatedAt
+                updatedAt: Date()
             )
             let result = try await service.update(updated)
             editorMode = nil

@@ -2,6 +2,8 @@ package api
 
 import (
 	"crypto/subtle"
+	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strings"
 )
@@ -25,9 +27,20 @@ func bearerTokenMiddleware(token string, next http.Handler) http.Handler {
 }
 
 // writeJSONError writes a {"error": message} body with the given status.
-// Mirrors errorResponse() but for the http.ResponseWriter path.
+// Mirrors errorResponse() but for the http.ResponseWriter path. The body is
+// produced via json.Marshal so messages containing quotes or backslashes do
+// not break the response.
 func writeJSONError(w http.ResponseWriter, status int, message string) {
+	body, err := json.Marshal(struct {
+		Error string `json:"error"`
+	}{Error: message})
+	if err != nil {
+		// json.Marshal of a plain string can't fail in practice; log and
+		// fall back to a known-safe literal rather than emitting nothing.
+		slog.Error("marshal error body", "error", err)
+		body = []byte(`{"error":"internal error"}`)
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_, _ = w.Write([]byte(`{"error":"` + message + `"}`))
+	_, _ = w.Write(body)
 }

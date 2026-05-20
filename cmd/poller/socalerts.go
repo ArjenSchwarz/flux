@@ -56,6 +56,7 @@ func wireSocAlerts(ctx context.Context, p *poller.Poller, cfg *config.Config, aw
 		devicesTable: cfg.TableDevices,
 		devicesStore: devices,
 		rulesReader:  rules,
+		rulesWriter:  dynamo.NewDynamoSocRuleWriter(ddb, rules.Table()),
 		fireState:    fireState,
 	}
 	gc := poller.NewOrphanDeviceGC(gcBackend, 30*24*time.Hour, 24*time.Hour, time.Now)
@@ -198,6 +199,7 @@ type orphanGCBackend struct {
 	devicesTable string
 	devicesStore *dynamo.DynamoDeviceWriter
 	rulesReader  *dynamo.DynamoSocRuleReader
+	rulesWriter  *dynamo.DynamoSocRuleWriter
 	fireState    *dynamo.DynamoSocFireStateWriter
 }
 
@@ -247,16 +249,9 @@ func (b *orphanGCBackend) DeleteFireStateRow(ctx context.Context, deviceRule, wi
 }
 
 func (b *orphanGCBackend) DeleteRule(ctx context.Context, deviceID, ruleID string) error {
-	// Reuse the writer used by the Lambda; the poller's IAM has DeleteItem
-	// on flux-soc-rules (Decision 17 covers the Lambda; the poller has full
-	// CRUD per design.md TaskRole policy).
-	writer := dynamo.NewDynamoSocRuleWriter(b.ddb, b.rulesTable())
-	return writer.DeleteRule(ctx, deviceID, ruleID)
-}
-
-func (b *orphanGCBackend) rulesTable() string {
-	// The rules reader exposes its table name through a method added below.
-	return b.rulesReader.Table()
+	// The poller's IAM has DeleteItem on flux-soc-rules (design.md TaskRole
+	// policy); Decision 17 narrows the Lambda's IAM only.
+	return b.rulesWriter.DeleteRule(ctx, deviceID, ruleID)
 }
 
 func (b *orphanGCBackend) DeleteDeviceConditional(ctx context.Context, deviceID, scanned string) error {

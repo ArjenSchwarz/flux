@@ -23,7 +23,7 @@ struct SoCAlertsView: View {
         .navigationTitle("Battery alerts")
         .task {
             await viewModel.refresh()
-            try? await SoCAlertsService.shared.requestAuthorizationAndRegister()
+            await viewModel.requestAuthorizationAndRegister()
         }
         .sheet(
             isPresented: Binding(
@@ -75,6 +75,7 @@ struct SoCAlertsView: View {
         }
     }
 
+    #if os(macOS)
     private var macOSContent: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
@@ -110,6 +111,7 @@ struct SoCAlertsView: View {
             .padding()
         }
     }
+    #endif
 
     private var permissionDeniedBanner: some View {
         VStack(alignment: .leading, spacing: 6) {
