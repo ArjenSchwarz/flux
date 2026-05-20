@@ -169,7 +169,16 @@ struct AppNavigationView: View {
     }
 
     private func reloadDependencies() {
-        apiClient = makeAPIClient()
+        let client = makeAPIClient()
+        apiClient = client
+        // SoC alerts share the same backend client. Without this bind the
+        // SoCAlertsService.shared methods all throw .notConfigured from
+        // their guard clauses — which fires before lastError is set, so
+        // the Settings → Alerts editor's Save button has no visible effect:
+        // the sheet just stays open with no banner.
+        if let client {
+            SoCAlertsService.shared.bind(apiClient: client)
+        }
         selectedScreen = apiClient == nil ? .settings : (selectedScreen ?? .dashboard)
     }
 
