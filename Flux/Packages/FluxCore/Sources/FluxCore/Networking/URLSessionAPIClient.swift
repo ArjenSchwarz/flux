@@ -102,7 +102,7 @@ public final class URLSessionAPIClient: FluxAPIClient, Sendable {
     }
 
     public func createRule(deviceId: String, rule: SoCAlertRuleDraft) async throws -> SoCAlertRule {
-        let body = try encoder.encode(RuleCreatePayload(rule: rule))
+        let body = try encoder.encode(RulePayload(rule: rule))
         return try await performRequest(
             path: "devices/\(deviceId)/rules",
             queryItems: [],
@@ -112,7 +112,7 @@ public final class URLSessionAPIClient: FluxAPIClient, Sendable {
     }
 
     public func updateRule(deviceId: String, rule: SoCAlertRule) async throws -> SoCAlertRule {
-        let body = try encoder.encode(RuleUpdatePayload(rule: rule))
+        let body = try encoder.encode(RulePayload(rule: rule))
         return try await performRequest(
             path: "devices/\(deviceId)/rules/\(rule.id)",
             queryItems: [],
@@ -129,7 +129,7 @@ public final class URLSessionAPIClient: FluxAPIClient, Sendable {
         )
     }
 
-    private struct RuleCreatePayload: Encodable {
+    private struct RulePayload: Encodable {
         let thresholdPercent: Int
         let windowStart: String
         let windowEnd: String
@@ -143,14 +143,6 @@ public final class URLSessionAPIClient: FluxAPIClient, Sendable {
             self.enabled = rule.enabled
             self.label = rule.label
         }
-    }
-
-    private struct RuleUpdatePayload: Encodable {
-        let thresholdPercent: Int
-        let windowStart: String
-        let windowEnd: String
-        let enabled: Bool
-        let label: String?
 
         init(rule: SoCAlertRule) {
             self.thresholdPercent = rule.thresholdPercent

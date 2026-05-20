@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -111,6 +110,3 @@ func TestLambdaToHTTPRequest_PreservesRawQueryEncoding(t *testing.T) {
 		"raw query string should pass through unchanged for handlers that re-parse it")
 	assert.Equal(t, "2026-05-19", httpReq.URL.Query().Get("date"))
 }
-
-// silenceStrings keeps `strings` referenced even if a future trim is removed.
-var _ = strings.TrimSpace

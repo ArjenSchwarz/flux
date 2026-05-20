@@ -53,8 +53,16 @@ struct SoCAlertEditor: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
                         Task {
-                            try? await viewModel.save()
-                            dismiss()
+                            // Only dismiss on success; on failure the view
+                            // model surfaces lastError as a banner and we
+                            // keep the sheet open so the user's edits
+                            // aren't discarded.
+                            do {
+                                _ = try await viewModel.save()
+                                dismiss()
+                            } catch {
+                                // viewModel.lastError is already set.
+                            }
                         }
                     }
                     .disabled(!viewModel.canSave)
