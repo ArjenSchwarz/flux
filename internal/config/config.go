@@ -34,11 +34,13 @@ type Config struct {
 
 	// APNs SSM parameter paths (empty in dry-run mode and when SoC alerts
 	// are not deployed). When all are set, the poller wires the alert path.
+	// The APNs environment is carried per device on the registration row,
+	// not loaded from SSM, so two users on different builds (Xcode dev /
+	// TestFlight / App Store) coexist on the same poller.
 	APNsKeyParam      string
 	APNsKeyIDParam    string
 	APNsTeamIDParam   string
 	APNsBundleIDParam string
-	APNsEnvParam      string
 
 	// Runtime
 	AWSRegion   string
@@ -120,7 +122,6 @@ func Load() (*Config, error) {
 		cfg.APNsKeyIDParam = os.Getenv("APNS_KEY_ID_PARAM")
 		cfg.APNsTeamIDParam = os.Getenv("APNS_TEAM_ID_PARAM")
 		cfg.APNsBundleIDParam = os.Getenv("APNS_BUNDLE_ID_PARAM")
-		cfg.APNsEnvParam = os.Getenv("APNS_ENV_PARAM")
 	}
 
 	if len(errs) > 0 {
@@ -172,7 +173,7 @@ func parseHHMM(s string) (time.Duration, error) {
 func (c *Config) SocAlertsConfigured() bool {
 	return c.TableDevices != "" && c.TableSocRules != "" && c.TableSocFireState != "" &&
 		c.APNsKeyParam != "" && c.APNsKeyIDParam != "" && c.APNsTeamIDParam != "" &&
-		c.APNsBundleIDParam != "" && c.APNsEnvParam != ""
+		c.APNsBundleIDParam != ""
 }
 
 // FormatHHMM formats a duration-from-midnight back to HH:MM for logging.

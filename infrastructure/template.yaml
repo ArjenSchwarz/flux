@@ -647,8 +647,9 @@ Resources:
               Value: !Sub "${SSMPathPrefix}/apns/team-id"
             - Name: APNS_BUNDLE_ID_PARAM
               Value: !Sub "${SSMPathPrefix}/apns/bundle-id"
-            - Name: APNS_ENV_PARAM
-              Value: !Sub "${SSMPathPrefix}/apns/env"
+            # APNs environment is carried per device on the device row, not
+            # configured at the poller level — two users on different build
+            # types (Xcode dev / TestFlight / App Store) coexist correctly.
             - Name: TZ
               Value: Australia/Sydney
           HealthCheck:

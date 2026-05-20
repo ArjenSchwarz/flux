@@ -22,6 +22,7 @@ struct URLSessionAPIClientNotificationsTests {
             deviceId: "dev-1",
             platform: "ios",
             apnsToken: "deadbeef",
+            apnsEnvironment: "development",
             tzIdentifier: "Australia/Sydney",
             tzUpdatedAt: 1_700_000_000
         )
@@ -191,7 +192,7 @@ struct URLSessionAPIClientNotificationsTests {
 
     // MARK: - helpers
 
-    private func canonicalDeviceResponse() -> String {
+    nonisolated private func canonicalDeviceResponse() -> String {
         """
         {"deviceId":"dev-1","platform":"ios","tzIdentifier":"Australia/Sydney","tzUpdatedAt":1700000000,"tokenStatus":"active"}
         """

@@ -18,16 +18,34 @@ public final class URLSessionAPIClient: FluxAPIClient, Sendable {
         self.session = session ?? Self.noCacheSession
         self.baseURL = baseURL
         self.tokenProvider = { keychainService.loadToken() }
-        self.decoder = JSONDecoder()
-        self.encoder = JSONEncoder()
+        self.decoder = Self.makeDecoder()
+        self.encoder = Self.makeEncoder()
     }
 
     public init(baseURL: URL, token: String, session: URLSession? = nil) {
         self.session = session ?? Self.noCacheSession
         self.baseURL = baseURL
         self.tokenProvider = { token }
-        self.decoder = JSONDecoder()
-        self.encoder = JSONEncoder()
+        self.decoder = Self.makeDecoder()
+        self.encoder = Self.makeEncoder()
+    }
+
+    /// The Go backend serialises every Date as RFC 3339 (e.g.
+    /// `"2026-05-19T10:00:00Z"`). The default `JSONDecoder` treats `Date`
+    /// as a `TimeInterval`, which silently fails to parse those strings.
+    /// Setting `.iso8601` once here so every endpoint that decodes a
+    /// `Date` field (rule timestamps, future endpoints) lands on the
+    /// success path.
+    private static func makeDecoder() -> JSONDecoder {
+        let d = JSONDecoder()
+        d.dateDecodingStrategy = .iso8601
+        return d
+    }
+
+    private static func makeEncoder() -> JSONEncoder {
+        let e = JSONEncoder()
+        e.dateEncodingStrategy = .iso8601
+        return e
     }
 
     public func fetchStatus() async throws -> StatusResponse {

@@ -152,11 +152,13 @@ final class TestAPIClient: FluxAPIClient, @unchecked Sendable {
     }
 
     func registerDevice(_ registration: DeviceRegistration) async throws -> DeviceItemResponse {
+        // Record every attempt (including failures) so tests can assert on
+        // retry behaviour without surprising semantics.
+        registrationCalls.append(registration)
         if registerFailures > 0 {
             registerFailures -= 1
             throw FluxAPIError.serverError
         }
-        registrationCalls.append(registration)
         return DeviceItemResponse(
             deviceId: registration.deviceId,
             platform: registration.platform,

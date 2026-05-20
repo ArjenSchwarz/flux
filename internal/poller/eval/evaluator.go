@@ -19,12 +19,13 @@ const evalTimeout = 3 * time.Second
 
 // DeviceWithRules is the per-device unit returned by RulesCache.Snapshot.
 type DeviceWithRules struct {
-	DeviceID     string
-	Platform     string
-	APNsToken    string
-	TZIdentifier string
-	TokenStatus  string // "active" | "stale"
-	Rules        []RuleSnapshot
+	DeviceID        string
+	Platform        string
+	APNsToken       string
+	APNsEnvironment string // "development" | "production"
+	TZIdentifier    string
+	TokenStatus     string // "active" | "stale"
+	Rules           []RuleSnapshot
 }
 
 // RuleSnapshot is the read-only rule view used by the evaluator. The cache
@@ -59,6 +60,7 @@ type PushJob struct {
 	DeviceID         string
 	RuleID           string
 	APNsToken        string
+	APNsEnvironment  string // "development" | "production" — picks the APNs host
 	APNsCollapseID   string
 	ThresholdPercent int
 	ObservedSoc      float64
@@ -270,6 +272,7 @@ func (e *Evaluator) maybeFire(ctx context.Context, d DeviceWithRules, r RuleSnap
 		DeviceID:         d.DeviceID,
 		RuleID:           r.RuleID,
 		APNsToken:        d.APNsToken,
+		APNsEnvironment:  d.APNsEnvironment,
 		APNsCollapseID:   collapseID,
 		ThresholdPercent: r.ThresholdPercent,
 		ObservedSoc:      soc,

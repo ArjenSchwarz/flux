@@ -2,11 +2,15 @@ import Foundation
 
 /// Wire shape for POST /devices. The backend stores the row keyed by
 /// deviceId; the tzUpdatedAt monotonic counter prevents lost-update races
-/// (AC 4.5).
+/// (AC 4.5). The apnsEnvironment field tells the backend which APNs host
+/// to dispatch this device's pushes against — Xcode dev builds get
+/// sandbox tokens; TestFlight / App Store builds get production tokens —
+/// so a single backend can serve both user types simultaneously.
 public struct DeviceRegistration: Codable, Sendable, Equatable {
     public let deviceId: String
     public let platform: String           // "ios" | "macos"
     public let apnsToken: String?         // omitted when authorisation denied
+    public let apnsEnvironment: String?   // "development" | "production"
     public let tzIdentifier: String
     public let tzUpdatedAt: Int64
 
@@ -14,12 +18,14 @@ public struct DeviceRegistration: Codable, Sendable, Equatable {
         deviceId: String,
         platform: String,
         apnsToken: String?,
+        apnsEnvironment: String?,
         tzIdentifier: String,
         tzUpdatedAt: Int64
     ) {
         self.deviceId = deviceId
         self.platform = platform
         self.apnsToken = apnsToken
+        self.apnsEnvironment = apnsEnvironment
         self.tzIdentifier = tzIdentifier
         self.tzUpdatedAt = tzUpdatedAt
     }

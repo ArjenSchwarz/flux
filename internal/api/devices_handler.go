@@ -13,11 +13,12 @@ import (
 
 // deviceRegistration is the wire shape of POST /devices.
 type deviceRegistration struct {
-	DeviceID     string  `json:"deviceId"`
-	Platform     string  `json:"platform"`
-	APNsToken    *string `json:"apnsToken,omitempty"`
-	TZIdentifier string  `json:"tzIdentifier"`
-	TZUpdatedAt  int64   `json:"tzUpdatedAt"`
+	DeviceID        string  `json:"deviceId"`
+	Platform        string  `json:"platform"`
+	APNsToken       *string `json:"apnsToken,omitempty"`
+	APNsEnvironment string  `json:"apnsEnvironment,omitempty"` // "development" | "production"
+	TZIdentifier    string  `json:"tzIdentifier"`
+	TZUpdatedAt     int64   `json:"tzUpdatedAt"`
 }
 
 // handleRegisterDevice upserts a device row. Idempotent: re-POSTing the same
@@ -44,6 +45,11 @@ func (h *Handler) handleRegisterDevice(ctx context.Context, req events.LambdaFun
 	if payload.TZIdentifier == "" {
 		return errorResponse(http.StatusBadRequest, "tzIdentifier required")
 	}
+	if payload.APNsEnvironment != "" &&
+		payload.APNsEnvironment != "development" &&
+		payload.APNsEnvironment != "production" {
+		return errorResponse(http.StatusBadRequest, "apnsEnvironment must be development or production")
+	}
 
 	now := h.nowFunc().UTC().Format(time.RFC3339)
 
@@ -59,6 +65,7 @@ func (h *Handler) handleRegisterDevice(ctx context.Context, req events.LambdaFun
 	item := dynamo.DeviceItem{
 		DeviceID:         payload.DeviceID,
 		Platform:         payload.Platform,
+		APNsEnvironment:  payload.APNsEnvironment,
 		TZIdentifier:     payload.TZIdentifier,
 		TZUpdatedAt:      payload.TZUpdatedAt,
 		LastRegisteredAt: now,
@@ -78,6 +85,12 @@ func (h *Handler) handleRegisterDevice(ctx context.Context, req events.LambdaFun
 		if payload.APNsToken == nil {
 			item.APNsToken = existing.APNsToken
 			item.APNsTokenUpdatedAt = existing.APNsTokenUpdatedAt
+		}
+		// Environment absent in the payload but present in the row: keep it.
+		// (Lets a token-less re-register from the denial path retain the
+		// env the app reported on a previous successful registration.)
+		if payload.APNsEnvironment == "" {
+			item.APNsEnvironment = existing.APNsEnvironment
 		}
 	}
 

@@ -23,9 +23,13 @@ public final class SoCAlertsService {
     private var apiClient: (any FluxAPIClient)?
 
     /// State of the last successful registration; used to short-circuit
-    /// duplicate POSTs while the device is on the same {token, tz}.
+    /// duplicate POSTs while the device is on the same {token, tz, env}.
+    /// The env field is optional in storage so old caches written before
+    /// the multi-env upgrade still decode; an absent env triggers a re-POST
+    /// to ensure the backend has the current value.
     private struct LastRegistration: Codable {
         let apnsToken: String?
+        let apnsEnvironment: String?
         let tzIdentifier: String
         let tzUpdatedAt: Int64
     }
@@ -76,13 +80,20 @@ public final class SoCAlertsService {
         }
     }
 
-    /// Idempotent registration. POSTs only when the (token, tz) tuple
+    /// Idempotent registration. POSTs only when the (token, tz, env) tuple
     /// differs from the last successfully-sent one cached in UserDefaults.
+    /// The env value comes from this build's `aps-environment` entitlement
+    /// so a TestFlight install on the same backend as a Dev install
+    /// registers under its own host.
     public func registerDeviceIfNeeded(token: Data?, tz: TimeZone) async throws {
         guard let apiClient else { return }
         let tokenHex = token.map { hexString($0) }
+        let env = APNsEnvironment.current()
         let cached = loadLastRegistration()
-        if let cached, cached.apnsToken == tokenHex, cached.tzIdentifier == tz.identifier {
+        if let cached,
+           cached.apnsToken == tokenHex,
+           cached.apnsEnvironment == env,
+           cached.tzIdentifier == tz.identifier {
             // Nothing changed since the last successful POST.
             return
         }
@@ -90,6 +101,7 @@ public final class SoCAlertsService {
             deviceId: deviceIdentifier.currentOrGenerate(),
             platform: currentPlatform,
             apnsToken: tokenHex,
+            apnsEnvironment: env,
             tzIdentifier: tz.identifier,
             tzUpdatedAt: Int64(Date().timeIntervalSince1970)
         )
@@ -97,6 +109,7 @@ public final class SoCAlertsService {
             _ = try await apiClient.registerDevice(registration)
             saveLastRegistration(LastRegistration(
                 apnsToken: tokenHex,
+                apnsEnvironment: env,
                 tzIdentifier: tz.identifier,
                 tzUpdatedAt: registration.tzUpdatedAt
             ))

@@ -18,11 +18,12 @@ var ErrQueueFull = errors.New("apns: push queue full")
 // the Adapter (defined here) converts between them so neither package
 // imports the other.
 type Job struct {
-	DeviceID   string
-	RuleID     string
-	Token      string
-	CollapseID string
-	Payload    Payload
+	DeviceID    string
+	RuleID      string
+	Token       string
+	Environment string // "development" | "production"
+	CollapseID  string
+	Payload     Payload
 }
 
 // StaleTokenSink is the side-effect interface used when APNs reports a
@@ -130,7 +131,7 @@ func (q *Queue) workerLoop() {
 }
 
 func (q *Queue) dispatch(ctx context.Context, job Job) {
-	err := q.cfg.Notifier.Push(ctx, job.Token, job.CollapseID, job.Payload)
+	err := q.cfg.Notifier.Push(ctx, job.Environment, job.Token, job.CollapseID, job.Payload)
 	if err == nil {
 		q.succeeded.Add(1)
 		slog.Info("flux_apns_push_succeeded",

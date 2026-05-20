@@ -50,7 +50,7 @@ func TestNotifier_Push_Success(t *testing.T) {
 		responses: []*apns2.Response{{StatusCode: http.StatusOK}},
 	}
 	n := newNotifierWithPusher(p)
-	err := n.Push(context.Background(), "token-abc", "collapse-1", Payload{Title: "T", Body: "B"})
+	err := n.Push(context.Background(), "development", "token-abc", "collapse-1", Payload{Title: "T", Body: "B"})
 	require.NoError(t, err)
 	assert.Equal(t, int32(1), p.calls.Load())
 }
@@ -60,7 +60,7 @@ func TestNotifier_Push_StaleTokenOnUnregistered(t *testing.T) {
 		responses: []*apns2.Response{{StatusCode: http.StatusGone, Reason: apns2.ReasonUnregistered}},
 	}
 	n := newNotifierWithPusher(p)
-	err := n.Push(context.Background(), "token-abc", "collapse-1", Payload{Title: "T", Body: "B"})
+	err := n.Push(context.Background(), "development", "token-abc", "collapse-1", Payload{Title: "T", Body: "B"})
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, ErrStaleToken), "410 must surface ErrStaleToken")
 	assert.Equal(t, int32(1), p.calls.Load(), "410 must not retry")
@@ -71,7 +71,7 @@ func TestNotifier_Push_StaleTokenOnBadDeviceToken(t *testing.T) {
 		responses: []*apns2.Response{{StatusCode: http.StatusBadRequest, Reason: apns2.ReasonBadDeviceToken}},
 	}
 	n := newNotifierWithPusher(p)
-	err := n.Push(context.Background(), "token-abc", "collapse-1", Payload{Title: "T", Body: "B"})
+	err := n.Push(context.Background(), "development", "token-abc", "collapse-1", Payload{Title: "T", Body: "B"})
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, ErrStaleToken),
 		"400 BadDeviceToken must classify as stale per AC 3.9")
@@ -87,7 +87,7 @@ func TestNotifier_Push_Retries5xx(t *testing.T) {
 		},
 	}
 	n := newNotifierWithPusher(p)
-	err := n.Push(context.Background(), "token-abc", "collapse-1", Payload{Title: "T", Body: "B"})
+	err := n.Push(context.Background(), "development", "token-abc", "collapse-1", Payload{Title: "T", Body: "B"})
 	require.NoError(t, err)
 	assert.Equal(t, int32(3), p.calls.Load(), "5xx must retry up to maxRetry attempts")
 }
@@ -100,7 +100,7 @@ func TestNotifier_Push_Retries429(t *testing.T) {
 		},
 	}
 	n := newNotifierWithPusher(p)
-	err := n.Push(context.Background(), "token-abc", "collapse-1", Payload{Title: "T", Body: "B"})
+	err := n.Push(context.Background(), "development", "token-abc", "collapse-1", Payload{Title: "T", Body: "B"})
 	require.NoError(t, err)
 	assert.Equal(t, int32(2), p.calls.Load())
 }
@@ -115,7 +115,7 @@ func TestNotifier_Push_RetriesTransport(t *testing.T) {
 		responses: []*apns2.Response{nil, nil, {StatusCode: http.StatusOK}},
 	}
 	n := newNotifierWithPusher(p)
-	err := n.Push(context.Background(), "token-abc", "collapse-1", Payload{Title: "T", Body: "B"})
+	err := n.Push(context.Background(), "development", "token-abc", "collapse-1", Payload{Title: "T", Body: "B"})
 	require.NoError(t, err)
 	assert.Equal(t, int32(3), p.calls.Load(), "transport errors must retry")
 }
@@ -129,7 +129,7 @@ func TestNotifier_Push_ExhaustedRetriesReturnsLastError(t *testing.T) {
 		},
 	}
 	n := newNotifierWithPusher(p)
-	err := n.Push(context.Background(), "token-abc", "collapse-1", Payload{Title: "T", Body: "B"})
+	err := n.Push(context.Background(), "development", "token-abc", "collapse-1", Payload{Title: "T", Body: "B"})
 	require.Error(t, err)
 	assert.False(t, errors.Is(err, ErrStaleToken),
 		"exhausted retries must surface a transient error, not stale-token classification")
@@ -146,7 +146,7 @@ func TestNotifier_Push_DoesNotRetryOn4xxNonStale(t *testing.T) {
 		},
 	}
 	n := newNotifierWithPusher(p)
-	err := n.Push(context.Background(), "token-abc", "collapse-1", Payload{Title: "T", Body: "B"})
+	err := n.Push(context.Background(), "development", "token-abc", "collapse-1", Payload{Title: "T", Body: "B"})
 	require.Error(t, err)
 	assert.Equal(t, int32(1), p.calls.Load(),
 		"permanent 4xx must not be retried (saves cycles for transient errors)")
@@ -179,4 +179,44 @@ func TestEnvironmentFromSSM(t *testing.T) {
 
 	_, err = apnsHostForEnv("staging")
 	assert.Error(t, err, "unknown environment value must error so we never silently default")
+}
+
+// TestNotifier_RoutesByEnvironment is the load-bearing test for multi-user
+// support: two devices on different APNs environments must hit different
+// HTTP/2 clients. Without per-env routing one user's pushes silently 400
+// when their token reaches the wrong host.
+func TestNotifier_RoutesByEnvironment(t *testing.T) {
+	dev := &fakePusher{responses: []*apns2.Response{{StatusCode: http.StatusOK}}}
+	prod := &fakePusher{responses: []*apns2.Response{{StatusCode: http.StatusOK}}}
+	n := NewMultiEnvNotifier(dev, prod, "me.nore.ig.flux")
+	n.backoffBase = 0
+
+	require.NoError(t, n.Push(context.Background(), "development", "tok-dev", "c-1", Payload{Title: "T", Body: "B"}))
+	require.NoError(t, n.Push(context.Background(), "production", "tok-prod", "c-2", Payload{Title: "T", Body: "B"}))
+
+	assert.Equal(t, int32(1), dev.calls.Load(), "development push must hit the dev client")
+	assert.Equal(t, int32(1), prod.calls.Load(), "production push must hit the prod client")
+}
+
+func TestNotifier_RejectsUnknownEnvironment(t *testing.T) {
+	dev := &fakePusher{}
+	prod := &fakePusher{}
+	n := NewMultiEnvNotifier(dev, prod, "me.nore.ig.flux")
+	err := n.Push(context.Background(), "staging", "tok", "c", Payload{Title: "T", Body: "B"})
+	require.Error(t, err)
+	assert.Equal(t, int32(0), dev.calls.Load(), "unknown env must not reach any client")
+	assert.Equal(t, int32(0), prod.calls.Load())
+}
+
+func TestNotifier_EmptyEnvironmentDefaultsToDev(t *testing.T) {
+	// Backwards compatibility: a device row from before this change has no
+	// APNsEnvironment field. Treat the empty string as development so the
+	// poller doesn't drop pushes for legacy registrations.
+	dev := &fakePusher{responses: []*apns2.Response{{StatusCode: http.StatusOK}}}
+	prod := &fakePusher{}
+	n := NewMultiEnvNotifier(dev, prod, "me.nore.ig.flux")
+	n.backoffBase = 0
+	require.NoError(t, n.Push(context.Background(), "", "tok", "c", Payload{Title: "T", Body: "B"}))
+	assert.Equal(t, int32(1), dev.calls.Load())
+	assert.Equal(t, int32(0), prod.calls.Load())
 }

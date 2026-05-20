@@ -73,7 +73,6 @@ func loadAPNsCredentials(ctx context.Context, client ssmAPI, cfg *config.Config)
 		cfg.APNsKeyIDParam,
 		cfg.APNsTeamIDParam,
 		cfg.APNsBundleIDParam,
-		cfg.APNsEnvParam,
 	}
 	decrypt := true
 	out, err := client.GetParameters(ctx, &ssm.GetParametersInput{
@@ -97,7 +96,6 @@ func loadAPNsCredentials(ctx context.Context, client ssmAPI, cfg *config.Config)
 		KeyID:    values[cfg.APNsKeyIDParam],
 		TeamID:   values[cfg.APNsTeamIDParam],
 		BundleID: values[cfg.APNsBundleIDParam],
-		Env:      values[cfg.APNsEnvParam],
 	}, nil
 }
 
@@ -130,10 +128,11 @@ type queueAdapter struct {
 
 func (a *queueAdapter) Enqueue(ctx context.Context, job eval.PushJob) error {
 	apnsJob := apns.Job{
-		DeviceID:   job.DeviceID,
-		RuleID:     job.RuleID,
-		Token:      job.APNsToken,
-		CollapseID: job.APNsCollapseID,
+		DeviceID:    job.DeviceID,
+		RuleID:      job.RuleID,
+		Token:       job.APNsToken,
+		Environment: job.APNsEnvironment,
+		CollapseID:  job.APNsCollapseID,
 		Payload: apns.Payload{
 			Title:            buildAlertTitle(job),
 			Body:             buildAlertBody(job),
@@ -180,11 +179,12 @@ func (l *deviceLister) ListDevices(ctx context.Context) ([]eval.DeviceWithRules,
 	out := make([]eval.DeviceWithRules, 0, len(items))
 	for _, d := range items {
 		out = append(out, eval.DeviceWithRules{
-			DeviceID:     d.DeviceID,
-			Platform:     d.Platform,
-			APNsToken:    d.APNsToken,
-			TZIdentifier: d.TZIdentifier,
-			TokenStatus:  d.TokenStatus,
+			DeviceID:        d.DeviceID,
+			Platform:        d.Platform,
+			APNsToken:       d.APNsToken,
+			APNsEnvironment: d.APNsEnvironment,
+			TZIdentifier:    d.TZIdentifier,
+			TokenStatus:     d.TokenStatus,
 		})
 	}
 	return out, nil

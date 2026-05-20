@@ -12,13 +12,12 @@ These tasks must be completed by the user before implementation can finish. All 
   aws ssm put-parameter --name "/flux/apns/key-id"    --type String --value "XXXXXXXXXX"
   aws ssm put-parameter --name "/flux/apns/team-id"   --type String --value "YYYYYYYYYY"
   aws ssm put-parameter --name "/flux/apns/bundle-id" --type String --value "me.nore.ig.flux"
-  aws ssm put-parameter --name "/flux/apns/env"       --type String --value "development"
   ```
-  `env=development` is correct for Xcode-built debug installs on your own devices. You will flip it to `production` only when shipping a TestFlight or App Store build (see Xcode capability note below).
+  There is **no** `/flux/apns/env` parameter — the APNs environment (sandbox vs production) is carried per device on its registration row. The poller maintains one HTTP/2 client per environment (same `.p8` key, different host) and dispatches each push against the host that matches the device's token. This is what lets one user run Xcode dev builds while the other runs TestFlight on the same backend.
 
 ## Xcode capability — already done; nothing required during this feature
 
-`Flux/Flux/Flux.entitlements` already declares `aps-environment = development` and the "Push Notifications" capability is configured for both iOS and macOS targets. For your normal Xcode-installed dev builds, that's everything — no extra setup. **The one time you'd touch this** is when you eventually ship to TestFlight or the App Store: change the entitlement to `aps-environment = production` (one-line edit in `Flux.entitlements`, mirrored on macOS) **and** update `/flux/apns/env` SSM param to `production` so the poller talks to Apple's production APNs host. The `.p8` key works on both hosts unchanged.
+`Flux/Flux/Flux.entitlements` already declares `aps-environment = development` and the "Push Notifications" capability is configured for both iOS and macOS targets. For your normal Xcode-installed dev builds, that's everything — no extra setup. **For TestFlight or App Store builds** the entitlement becomes `aps-environment = production` automatically when Xcode signs with a distribution profile (no source change required). The app reads its own `aps-environment` entitlement at runtime and sends it to the backend on registration, so the poller routes pushes for that device to the correct APNs host without any operator action.
 
 ## Before Testing on a Real Device
 

@@ -40,17 +40,33 @@ var ErrPermanent = errors.New("apns: permanent failure")
 
 // Notifier is a thin wrapper over PushClient that adds the project's retry,
 // classification, and observability behaviour.
+//
+// Each device's tokens are tied to a single APNs environment (sandbox vs
+// production). The Notifier holds one client per environment so a single
+// poller process can serve both Xcode-dev and TestFlight installs in the
+// same run.
 type Notifier struct {
-	client      PushClient
+	clientDev   PushClient
+	clientProd  PushClient
 	topic       string
 	maxRetry    int
 	backoffBase time.Duration
 }
 
-// NewNotifier constructs a Notifier with the production retry policy.
+// NewNotifier constructs a Notifier wired against a single client. Both
+// environments resolve to the same client — used by tests that don't care
+// about host routing.
 func NewNotifier(client PushClient, topic string) *Notifier {
+	return NewMultiEnvNotifier(client, client, topic)
+}
+
+// NewMultiEnvNotifier constructs a Notifier that routes each push to the
+// matching APNs environment. Production code wires two real *apns2.Client
+// instances (same .p8 key, different Host).
+func NewMultiEnvNotifier(dev, prod PushClient, topic string) *Notifier {
 	return &Notifier{
-		client:      client,
+		clientDev:   dev,
+		clientProd:  prod,
 		topic:       topic,
 		maxRetry:    maxRetryAttempts,
 		backoffBase: defaultBackoffBase,
@@ -58,9 +74,14 @@ func NewNotifier(client PushClient, topic string) *Notifier {
 }
 
 // Push submits the payload to APNs with the topic and collapse-id set per
-// design.md. Returns ErrStaleToken when APNs reports the token as invalid;
-// returns the last seen error after exhausted retries.
-func (n *Notifier) Push(ctx context.Context, token, collapseID string, p Payload) error {
+// design.md. The env argument selects the APNs host ("development" or
+// "production"). Returns ErrStaleToken when APNs reports the token as
+// invalid; returns the last seen error after exhausted retries.
+func (n *Notifier) Push(ctx context.Context, env, token, collapseID string, p Payload) error {
+	client, err := n.clientForEnv(env)
+	if err != nil {
+		return err
+	}
 	body, err := p.MarshalJSON()
 	if err != nil {
 		return fmt.Errorf("marshal apns payload: %w", err)
@@ -83,7 +104,7 @@ func (n *Notifier) Push(ctx context.Context, token, collapseID string, p Payload
 				}
 			}
 		}
-		resp, err := n.client.Push(ctx, note)
+		resp, err := client.Push(ctx, note)
 		if err != nil {
 			// Transport / I/O error — retryable.
 			lastErr = fmt.Errorf("apns push: %w", err)
@@ -156,6 +177,20 @@ func computeBackoff(attempt int, base time.Duration) time.Duration {
 	factor := 1 << attempt
 	jitter := 0.5 + rand.Float64() // [0.5, 1.5)
 	return time.Duration(float64(base) * float64(factor) * jitter)
+}
+
+// clientForEnv picks the right client for the push's APNs environment.
+// Empty env defaults to development, matching the historical single-env
+// behaviour for tests that don't set it explicitly.
+func (n *Notifier) clientForEnv(env string) (PushClient, error) {
+	switch env {
+	case "", "development":
+		return n.clientDev, nil
+	case "production":
+		return n.clientProd, nil
+	default:
+		return nil, fmt.Errorf("apns: unknown environment %q on push (expected development or production)", env)
+	}
 }
 
 // apnsHostForEnv maps the /flux/apns/env SSM value to the apns2 host URL.

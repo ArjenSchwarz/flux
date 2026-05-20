@@ -91,6 +91,71 @@ func TestHandleRegisterDevice_Valid(t *testing.T) {
 	assert.Equal(t, int64(100), got.TZUpdatedAt)
 }
 
+func TestHandleRegisterDevice_PersistsAPNsEnvironment(t *testing.T) {
+	store := newFakeDeviceStore()
+	h := newDeviceTestHandler(store)
+
+	body := `{
+		"deviceId":"dev-1",
+		"platform":"ios",
+		"apnsToken":"deadbeef",
+		"apnsEnvironment":"production",
+		"tzIdentifier":"Australia/Sydney",
+		"tzUpdatedAt":100
+	}`
+	req := makeDeviceJSONRequest(http.MethodPost, "/devices", body)
+	resp, err := h.Handle(context.Background(), req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	got, _ := store.GetDevice(context.Background(), "dev-1")
+	require.NotNil(t, got)
+	assert.Equal(t, "production", got.APNsEnvironment,
+		"apnsEnvironment must be persisted so the poller can dispatch to the right APNs host")
+}
+
+func TestHandleRegisterDevice_RejectsUnknownEnvironment(t *testing.T) {
+	store := newFakeDeviceStore()
+	h := newDeviceTestHandler(store)
+
+	body := `{
+		"deviceId":"dev-1",
+		"platform":"ios",
+		"apnsToken":"deadbeef",
+		"apnsEnvironment":"staging",
+		"tzIdentifier":"Australia/Sydney",
+		"tzUpdatedAt":100
+	}`
+	req := makeDeviceJSONRequest(http.MethodPost, "/devices", body)
+	resp, err := h.Handle(context.Background(), req)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestHandleRegisterDevice_PreservesEnvironmentWhenAbsent(t *testing.T) {
+	// Token-less re-registration from the denial path: the payload omits
+	// apnsEnvironment because the app didn't have a token to send yet.
+	// The stored env from the previous successful registration must survive.
+	store := newFakeDeviceStore()
+	store.devices["dev-1"] = dynamo.DeviceItem{
+		DeviceID:        "dev-1",
+		Platform:        "ios",
+		APNsEnvironment: "production",
+		TZUpdatedAt:     50,
+	}
+	h := newDeviceTestHandler(store)
+
+	body := `{"deviceId":"dev-1","platform":"ios","tzIdentifier":"Australia/Sydney","tzUpdatedAt":100}`
+	resp, err := h.Handle(context.Background(), makeDeviceJSONRequest(http.MethodPost, "/devices", body))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	got, _ := store.GetDevice(context.Background(), "dev-1")
+	require.NotNil(t, got)
+	assert.Equal(t, "production", got.APNsEnvironment,
+		"existing env must survive a token-less re-registration")
+}
+
 func TestHandleRegisterDevice_NullToken(t *testing.T) {
 	store := newFakeDeviceStore()
 	h := newDeviceTestHandler(store)
