@@ -36,14 +36,17 @@ public enum APNsEnvironment: Sendable {
         }
         // The .mobileprovision / .provisionprofile file is a CMS-signed
         // container wrapping an XML plist. Strip the signature framing by
-        // locating the embedded plist payload directly.
-        guard let scan = String(data: data, encoding: .ascii),
+        // locating the embedded plist payload directly. Decoding uses
+        // ISO Latin-1 because the surrounding DER bytes routinely exceed
+        // 0x7F; ASCII decoding would short-circuit to nil on the first
+        // such byte and leave the reader as dead code.
+        guard let scan = String(data: data, encoding: .isoLatin1),
               let openRange = scan.range(of: "<?xml"),
               let closeRange = scan.range(of: "</plist>") else {
             return nil
         }
         let plistRange = openRange.lowerBound ..< closeRange.upperBound
-        guard let plistData = String(scan[plistRange]).data(using: .ascii) else {
+        guard let plistData = String(scan[plistRange]).data(using: .isoLatin1) else {
             return nil
         }
         guard let profile = try? PropertyListSerialization.propertyList(
