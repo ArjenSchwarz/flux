@@ -17,6 +17,12 @@ const ruleCap = 10
 // client cannot bypass.
 const labelMaxChars = 40
 
+// labelMaxBytes is a defence-in-depth cap on the encoded byte length. A
+// 40-rune string of 4-byte code points encodes to 160 bytes; rejecting
+// anything larger keeps a hostile client from inflating the APNs payload
+// or the DynamoDB row beyond what the rune cap implies.
+const labelMaxBytes = 160
+
 // SocRuleStore is the api-package-local view of the rule store. Lambda
 // wiring constructs a dynamo.DynamoSocRuleWriter and reader and adapts them
 // to this interface so the api package doesn't import the dynamo writer

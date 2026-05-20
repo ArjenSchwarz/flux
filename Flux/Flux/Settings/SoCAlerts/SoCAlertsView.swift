@@ -171,7 +171,7 @@ struct SoCAlertsView: View {
                 Toggle("", isOn: Binding(
                     get: { rule.enabled },
                     set: { _ in
-                        Task { try? await viewModel.toggleEnabled(rule) }
+                        Task { await viewModel.toggleEnabled(rule) }
                     }
                 ))
                 .labelsHidden()

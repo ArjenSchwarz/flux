@@ -48,6 +48,9 @@ func (p socRulePayload) validate() string {
 	if utf8.RuneCountInString(p.Label) > labelMaxChars {
 		return "label exceeds 40 characters"
 	}
+	if len(p.Label) > labelMaxBytes {
+		return "label exceeds 160 bytes"
+	}
 	return ""
 }
 

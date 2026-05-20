@@ -116,10 +116,19 @@ final class SoCAlertsViewModel {
         try await service.delete(rule.id)
     }
 
-    func toggleEnabled(_ rule: SoCAlertRule) async throws {
+    func toggleEnabled(_ rule: SoCAlertRule) async {
         var updated = rule
         updated.enabled.toggle()
-        _ = try await service.update(updated)
+        do {
+            _ = try await service.update(updated)
+        } catch {
+            // service.update already set lastError; refresh so the Toggle's
+            // post-tap visual state snaps back to the unchanged rule.enabled.
+            // Without this re-fetch nothing observable changes on failure, so
+            // SwiftUI's Toggle would hold its incorrect post-tap state until
+            // the view is dismissed.
+            try? await service.refresh()
+        }
     }
 
     func clearError() { service.clearError() }
