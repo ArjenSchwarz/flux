@@ -15,6 +15,12 @@ import (
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
 )
 
+// ruleBodyMaxBytes caps inbound JSON for rule mutations. A maxed-out rule
+// (40-char label plus the four small fixed fields) fits in <200 bytes; 4096
+// leaves generous room for whitespace and field order variations while
+// rejecting bodies that could only be hostile or accidental.
+const ruleBodyMaxBytes = 4096
+
 // socRulePayload is the wire shape of POST/PUT /devices/{deviceId}/rules.
 type socRulePayload struct {
 	ThresholdPercent int    `json:"thresholdPercent"`
@@ -74,7 +80,7 @@ func (h *Handler) handleListRules(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	deviceID := r.PathValue("deviceId")
-	if deviceID == "" {
+	if !validDeviceID(deviceID) {
 		writeJSONError(w, http.StatusBadRequest, "deviceId required")
 		return
 	}
@@ -100,11 +106,12 @@ func (h *Handler) handleCreateRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	deviceID := r.PathValue("deviceId")
-	if deviceID == "" {
+	if !validDeviceID(deviceID) {
 		writeJSONError(w, http.StatusBadRequest, "deviceId required")
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, ruleBodyMaxBytes)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		writeJSONError(w, http.StatusBadRequest, "malformed request body")
@@ -162,11 +169,12 @@ func (h *Handler) handleUpdateRule(w http.ResponseWriter, r *http.Request) {
 	}
 	deviceID := r.PathValue("deviceId")
 	ruleID := r.PathValue("ruleId")
-	if deviceID == "" || ruleID == "" {
+	if !validDeviceID(deviceID) || ruleID == "" {
 		writeJSONError(w, http.StatusBadRequest, "deviceId and ruleId required")
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, ruleBodyMaxBytes)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		writeJSONError(w, http.StatusBadRequest, "malformed request body")
@@ -230,7 +238,7 @@ func (h *Handler) handleDeleteRule(w http.ResponseWriter, r *http.Request) {
 	}
 	deviceID := r.PathValue("deviceId")
 	ruleID := r.PathValue("ruleId")
-	if deviceID == "" || ruleID == "" {
+	if !validDeviceID(deviceID) || ruleID == "" {
 		writeJSONError(w, http.StatusBadRequest, "deviceId and ruleId required")
 		return
 	}

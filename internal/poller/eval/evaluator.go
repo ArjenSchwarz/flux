@@ -140,11 +140,20 @@ func (e *Evaluator) SetNow(now func() time.Time) {
 
 // cycleCounters carries per-cycle observability counters. Logged once at
 // the end of Evaluate as `flux_eval_cycle` (AC 6.4).
+//
+// rulesFired counts fire-state rows successfully written (i.e. crossings
+// recorded). missedFires counts the subset of those that did not produce a
+// user-visible push for any reason (queue overflow per Decision 15, other
+// enqueue error, or stale-token suppression per AC 2.3 / 3.9). The
+// invariant pushesQueued + missedFires == rulesFired makes a non-zero
+// missedFires immediately visible in CloudWatch instead of hidden behind
+// a Warn-level overflow line.
 type cycleCounters struct {
 	rulesEvaluated int
 	rulesFired     int
 	pushesQueued   int
 	queueOverflow  int
+	missedFires    int
 }
 
 // Evaluate runs one cycle: for every enabled rule on every device, compare
@@ -189,6 +198,7 @@ func (e *Evaluator) Evaluate(ctx context.Context, soc float64, readingAt time.Ti
 			"rules_fired", counters.rulesFired,
 			"pushes_queued", counters.pushesQueued,
 			"queue_overflow", counters.queueOverflow,
+			"missed_fires", counters.missedFires,
 		)
 	}
 }
@@ -262,8 +272,11 @@ func (e *Evaluator) maybeFire(ctx context.Context, d DeviceWithRules, r RuleSnap
 	}
 	counters.rulesFired++
 	// AC 2.3 / 3.9: do not push to stale tokens. The device row is retained
-	// so the next registration recovers state.
+	// so the next registration recovers state. The fire-state row has
+	// already been written, so this crossing is permanently missed for
+	// today — the missedFires counter surfaces this in the cycle log.
 	if d.TokenStatus == "stale" || d.APNsToken == "" {
+		counters.missedFires++
 		slog.Info("soc_alerts fire suppressed: no usable token",
 			"device_id", d.DeviceID, "token_status", d.TokenStatus)
 		return
@@ -280,6 +293,9 @@ func (e *Evaluator) maybeFire(ctx context.Context, d DeviceWithRules, r RuleSnap
 		Label:            r.Label,
 	}
 	if err := e.queue.Enqueue(ctx, job); err != nil {
+		// Fire-state is already written; today's crossing won't produce a
+		// push regardless of which branch we take below.
+		counters.missedFires++
 		if errors.Is(err, ErrQueueFull) {
 			counters.queueOverflow++
 			slog.Warn("flux_apns_queue_overflow",

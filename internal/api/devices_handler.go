@@ -36,7 +36,7 @@ func (h *Handler) handleRegisterDevice(ctx context.Context, req events.LambdaFun
 	if err := json.Unmarshal(body, &payload); err != nil {
 		return errorResponse(http.StatusBadRequest, "malformed request body")
 	}
-	if payload.DeviceID == "" {
+	if !validDeviceID(payload.DeviceID) {
 		return errorResponse(http.StatusBadRequest, "deviceId required")
 	}
 	if payload.Platform != "ios" && payload.Platform != "macos" {
