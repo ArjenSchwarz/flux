@@ -138,10 +138,6 @@ public final class SoCAlertsService {
 
     public func refresh() async throws {
         guard let apiClient else {
-            // refresh is called from .task on every list appearance; a
-            // missing apiClient means the host app forgot to call
-            // bind(apiClient:). Surface it through lastError so the banner
-            // appears instead of leaving the list silently empty.
             lastError = FluxAPIError.notConfigured
             throw FluxAPIError.notConfigured
         }
