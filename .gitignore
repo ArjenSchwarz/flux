@@ -18,3 +18,6 @@ DerivedData/
 .build-xc/
 Packages/**/.swiftpm/
 
+
+# Claude Code session worktrees
+.claude/worktrees/

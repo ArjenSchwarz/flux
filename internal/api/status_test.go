@@ -158,11 +158,11 @@ func TestHandleStatusStalenessBoundary(t *testing.T) {
 	nowUnix := now.Unix()
 
 	cases := map[string]struct {
-		ageSec    int64
-		wantLive  bool
+		ageSec   int64
+		wantLive bool
 	}{
-		"fresh":             {ageSec: 10, wantLive: true},
-		"at threshold":      {ageSec: 90, wantLive: true},
+		"fresh":              {ageSec: 10, wantLive: true},
+		"at threshold":       {ageSec: 90, wantLive: true},
 		"one past threshold": {ageSec: 91, wantLive: false},
 	}
 

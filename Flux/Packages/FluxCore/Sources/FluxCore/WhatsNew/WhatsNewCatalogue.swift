@@ -3,6 +3,22 @@ import Foundation
 public enum WhatsNewCatalogue {
     public static let releases: [WhatsNewRelease] = [
         WhatsNewRelease(
+            version: "1.3",
+            date: dateOf(year: 2026, month: 5),
+            highlights: [
+                Highlight(
+                    category: .new,
+                    title: "Battery alerts",
+                    detail: "Get a push when your battery drops below a level you choose, inside a time window you set. Up to 10 rules per device — set them up in Settings → Alerts."
+                ),
+                Highlight(
+                    category: .fixed,
+                    title: "No more overnight zeros",
+                    detail: "When the inverter goes quiet at night, the Dashboard now shows \"Awaiting live data\" instead of locking to 0% and 0 W everywhere."
+                )
+            ]
+        ),
+        WhatsNewRelease(
             version: "1.1",
             date: dateOf(year: 2026, month: 5),
             highlights: [
