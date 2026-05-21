@@ -25,8 +25,10 @@ These tasks must be completed by the user before implementation can finish. All 
 
 - [ ] **Bundle ID match (case-sensitive).** Confirm `/flux/apns/bundle-id` matches `PRODUCT_BUNDLE_IDENTIFIER` exactly, including case. APNs treats the `apns-topic` header case-sensitively and returns `status=400 reason=TopicDisallowed` on a mismatch, which the poller logs as `flux_apns_push_failed class=permanent` and otherwise leaves no user-visible signal. Verify with:
   ```bash
-  # Compare these two values byte-for-byte
-  grep -m1 PRODUCT_BUNDLE_IDENTIFIER Flux/Flux.xcodeproj/project.pbxproj
+  # Show every PRODUCT_BUNDLE_IDENTIFIER value in the project. The project
+  # has one per target (app, tests, widget extension), so pick the entry
+  # whose value has no suffix after "Flux" — that's the main app.
+  grep PRODUCT_BUNDLE_IDENTIFIER Flux/Flux.xcodeproj/project.pbxproj | sort -u
   aws ssm get-parameter --name "/flux/apns/bundle-id" --query 'Parameter.Value' --output text
   ```
 - [ ] **Watch the device-token roundtrip on first launch.** Open Settings → Alerts in the app, grant notification permission. In Xcode's Console or Console.app, you should see `didRegisterForRemoteNotificationsWithDeviceToken` fire and a subsequent successful `POST /devices` to the Lambda. If the delegate callback never fires, the app's push entitlement or signing is misconfigured.
