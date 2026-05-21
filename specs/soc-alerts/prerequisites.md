@@ -11,8 +11,13 @@ These tasks must be completed by the user before implementation can finish. All 
     --value "$(cat /path/to/AuthKey_XXXXXXXXXX.p8)"
   aws ssm put-parameter --name "/flux/apns/key-id"    --type String --value "XXXXXXXXXX"
   aws ssm put-parameter --name "/flux/apns/team-id"   --type String --value "YYYYYYYYYY"
-  aws ssm put-parameter --name "/flux/apns/bundle-id" --type String --value "me.nore.ig.flux"
+  aws ssm put-parameter --name "/flux/apns/bundle-id" --type String --value "me.nore.ig.Flux"
   ```
+  **The bundle ID is case-sensitive.**
+  - **Canonical value**: `PRODUCT_BUNDLE_IDENTIFIER` in `Flux/Flux.xcodeproj/project.pbxproj` (or Xcode → target → Signing & Capabilities). The iOS app target is `me.nore.ig.Flux` with a capital `F`.
+  - **Not the App Group**: `group.me.nore.ig.flux` is intentionally lowercase. Don't conflate the two.
+  - **Symptom of a mismatch**: APNs returns `status=400 reason=TopicDisallowed` and silently drops every push.
+
   There is **no** `/flux/apns/env` parameter — the APNs environment (sandbox vs production) is carried per device on its registration row. The poller maintains one HTTP/2 client per environment (same `.p8` key, different host) and dispatches each push against the host that matches the device's token. This is what lets one user run Xcode dev builds while the other runs TestFlight on the same backend.
 
 ## Xcode capability — already done; nothing required during this feature
@@ -21,7 +26,13 @@ These tasks must be completed by the user before implementation can finish. All 
 
 ## Before Testing on a Real Device
 
-- [ ] **Bundle ID match.** Confirm the device-side bundle ID matches `/flux/apns/bundle-id`. APNs rejects pushes when the topic header (bundle ID) differs from what's expected for the key.
+- [ ] **Bundle ID match (case-sensitive).** Confirm `/flux/apns/bundle-id` matches `PRODUCT_BUNDLE_IDENTIFIER` exactly, including case. APNs treats the `apns-topic` header case-sensitively and returns `status=400 reason=TopicDisallowed` on a mismatch, which the poller logs as `flux_apns_push_failed class=permanent` and otherwise leaves no user-visible signal. Verify with:
+  ```bash
+  # Look for the line that reads exactly: PRODUCT_BUNDLE_IDENTIFIER = me.nore.ig.Flux;
+  # The other entries are tests / UI tests / widget extension.
+  grep PRODUCT_BUNDLE_IDENTIFIER Flux/Flux.xcodeproj/project.pbxproj | sort -u
+  aws ssm get-parameter --name "/flux/apns/bundle-id" --query 'Parameter.Value' --output text
+  ```
 - [ ] **Watch the device-token roundtrip on first launch.** Open Settings → Alerts in the app, grant notification permission. In Xcode's Console or Console.app, you should see `didRegisterForRemoteNotificationsWithDeviceToken` fire and a subsequent successful `POST /devices` to the Lambda. If the delegate callback never fires, the app's push entitlement or signing is misconfigured.
 
 ## Key Rotation (operational, not for this feature)
