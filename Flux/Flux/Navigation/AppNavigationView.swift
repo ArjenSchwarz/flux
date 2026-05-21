@@ -169,7 +169,12 @@ struct AppNavigationView: View {
     }
 
     private func reloadDependencies() {
-        apiClient = makeAPIClient()
+        let client = makeAPIClient()
+        apiClient = client
+        // Also binds SoCAlertsService so its CRUD calls don't throw .notConfigured.
+        if let client {
+            SoCAlertsService.shared.bind(apiClient: client)
+        }
         selectedScreen = apiClient == nil ? .settings : (selectedScreen ?? .dashboard)
     }
 

@@ -137,7 +137,10 @@ public final class SoCAlertsService {
     // MARK: - Rule CRUD
 
     public func refresh() async throws {
-        guard let apiClient else { return }
+        guard let apiClient else {
+            lastError = FluxAPIError.notConfigured
+            throw FluxAPIError.notConfigured
+        }
         let deviceID = deviceIdentifier.currentOrGenerate()
         do {
             let remote = try await apiClient.fetchRules(deviceId: deviceID)
@@ -151,6 +154,7 @@ public final class SoCAlertsService {
 
     public func create(_ draft: SoCAlertRuleDraft) async throws -> SoCAlertRule {
         guard let apiClient else {
+            lastError = FluxAPIError.notConfigured
             throw FluxAPIError.notConfigured
         }
         let deviceID = deviceIdentifier.currentOrGenerate()
@@ -166,7 +170,10 @@ public final class SoCAlertsService {
     }
 
     public func update(_ rule: SoCAlertRule) async throws -> SoCAlertRule {
-        guard let apiClient else { throw FluxAPIError.notConfigured }
+        guard let apiClient else {
+            lastError = FluxAPIError.notConfigured
+            throw FluxAPIError.notConfigured
+        }
         let deviceID = deviceIdentifier.currentOrGenerate()
         do {
             let updated = try await apiClient.updateRule(deviceId: deviceID, rule: rule)
@@ -182,7 +189,10 @@ public final class SoCAlertsService {
     }
 
     public func delete(_ ruleId: String) async throws {
-        guard let apiClient else { throw FluxAPIError.notConfigured }
+        guard let apiClient else {
+            lastError = FluxAPIError.notConfigured
+            throw FluxAPIError.notConfigured
+        }
         let deviceID = deviceIdentifier.currentOrGenerate()
         do {
             try await apiClient.deleteRule(deviceId: deviceID, ruleId: ruleId)
