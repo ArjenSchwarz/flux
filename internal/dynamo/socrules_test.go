@@ -2,6 +2,7 @@ package dynamo
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sort"
 	"testing"
@@ -12,6 +13,74 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// TestSoCRuleItemJSONWireShape pins the on-the-wire JSON keys the Swift
+// client decodes into SoCAlertRule. A Go-only round-trip can't catch a
+// cross-language casing regression — both encode and decode use the same
+// Go field, so the wire shape drifts silently. This test asserts the keys
+// explicitly.
+func TestSoCRuleItemJSONWireShape(t *testing.T) {
+	item := SoCRuleItem{
+		DeviceID:         "dev-1",
+		RuleID:           "rule-uuid-1",
+		ThresholdPercent: 40,
+		WindowStart:      "17:00",
+		WindowEnd:        "23:59",
+		Enabled:          true,
+		Label:            "Evening cooking",
+		CreatedAt:        "2026-05-20T10:00:00Z",
+		UpdatedAt:        "2026-05-20T10:00:00Z",
+	}
+	encoded, err := json.Marshal(item)
+	require.NoError(t, err)
+
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal(encoded, &raw))
+
+	// RuleID must serialise as "id" — the Swift SoCAlertRule reads it
+	// through Identifiable.id, not a separate ruleId field.
+	assert.NotContains(t, raw, "ruleId")
+	assert.NotContains(t, raw, "RuleID")
+
+	// Exhaustive key set: every JSON field expected from a fully populated
+	// SoCRuleItem. Using a single map plus an equal-length assertion turns
+	// a future tag-less field into a test failure (instead of leaking
+	// through as another silent client-side decode error).
+	expected := map[string]any{
+		"id":               "rule-uuid-1",
+		"deviceId":         "dev-1",
+		"thresholdPercent": float64(40), // JSON numbers decode as float64
+		"windowStart":      "17:00",
+		"windowEnd":        "23:59",
+		"enabled":          true,
+		"label":            "Evening cooking",
+		"createdAt":        "2026-05-20T10:00:00Z",
+		"updatedAt":        "2026-05-20T10:00:00Z",
+	}
+	for key, want := range expected {
+		assert.Equal(t, want, raw[key], "wire shape key %q", key)
+	}
+	assert.Len(t, raw, len(expected), "unexpected extra keys in wire output: %v", raw)
+}
+
+func TestSoCRuleItemJSONOmitsEmptyLabel(t *testing.T) {
+	item := SoCRuleItem{
+		DeviceID:         "dev-1",
+		RuleID:           "rule-uuid-1",
+		ThresholdPercent: 40,
+		WindowStart:      "17:00",
+		WindowEnd:        "23:59",
+		Enabled:          true,
+		CreatedAt:        "2026-05-20T10:00:00Z",
+		UpdatedAt:        "2026-05-20T10:00:00Z",
+	}
+	encoded, err := json.Marshal(item)
+	require.NoError(t, err)
+
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal(encoded, &raw))
+	assert.NotContains(t, raw, "label", "empty label must be omitted, not serialised as \"\"")
+}
 
 // inMemorySocRulesAPI implements the subset of the DynamoDB client used by
 // DynamoSocRuleWriter (PutItem, DeleteItem, Query). The map is keyed by

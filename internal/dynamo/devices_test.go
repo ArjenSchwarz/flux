@@ -2,6 +2,7 @@ package dynamo
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -12,6 +13,70 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// TestDeviceItemJSONWireShape pins the on-the-wire JSON keys the Swift
+// DeviceItemResponse decoder consumes. Without explicit assertions a
+// PascalCase regression in DeviceItem's struct tags survives the Go-only
+// round-trip tests undetected.
+func TestDeviceItemJSONWireShape(t *testing.T) {
+	item := DeviceItem{
+		DeviceID:           "dev-1",
+		Platform:           "ios",
+		APNsToken:          "deadbeef",
+		APNsTokenUpdatedAt: "2026-05-20T10:00:00Z",
+		APNsEnvironment:    "development",
+		TZIdentifier:       "Australia/Sydney",
+		TZUpdatedAt:        1716200000,
+		LastRegisteredAt:   "2026-05-20T10:00:00Z",
+		TokenStatus:        "active",
+		CreatedAt:          "2026-05-20T10:00:00Z",
+	}
+	encoded, err := json.Marshal(item)
+	require.NoError(t, err)
+
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal(encoded, &raw))
+
+	// Exhaustive key set: every JSON field expected from a fully populated
+	// DeviceItem. The equal-length assertion turns a future tag-less field
+	// into a test failure instead of a silent client-side decode error.
+	expected := map[string]any{
+		"deviceId":           "dev-1",
+		"platform":           "ios",
+		"apnsToken":          "deadbeef",
+		"apnsTokenUpdatedAt": "2026-05-20T10:00:00Z",
+		"apnsEnvironment":    "development",
+		"tzIdentifier":       "Australia/Sydney",
+		"tzUpdatedAt":        float64(1716200000),
+		"lastRegisteredAt":   "2026-05-20T10:00:00Z",
+		"tokenStatus":        "active",
+		"createdAt":          "2026-05-20T10:00:00Z",
+	}
+	for key, want := range expected {
+		assert.Equal(t, want, raw[key], "wire shape key %q", key)
+	}
+	assert.Len(t, raw, len(expected), "unexpected extra keys in wire output: %v", raw)
+}
+
+func TestDeviceItemJSONOmitsAbsentOptionalFields(t *testing.T) {
+	item := DeviceItem{
+		DeviceID:         "dev-1",
+		Platform:         "ios",
+		TZIdentifier:     "Australia/Sydney",
+		TZUpdatedAt:      1716200000,
+		LastRegisteredAt: "2026-05-20T10:00:00Z",
+		TokenStatus:      "active",
+		CreatedAt:        "2026-05-20T10:00:00Z",
+	}
+	encoded, err := json.Marshal(item)
+	require.NoError(t, err)
+
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal(encoded, &raw))
+	for _, key := range []string{"apnsToken", "apnsTokenUpdatedAt", "apnsEnvironment"} {
+		assert.NotContains(t, raw, key, "empty %q must be omitted", key)
+	}
+}
 
 // inMemoryDevicesAPI implements the union of WriteAPI + GetItem + UpdateItem
 // used by DynamoDeviceWriter. The single shared map keeps writes and reads

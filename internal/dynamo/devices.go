@@ -15,16 +15,16 @@ import (
 // push to the correct APNs host (sandbox vs production). Two users running
 // different build types (Xcode dev vs TestFlight) coexist on the same backend.
 type DeviceItem struct {
-	DeviceID           string `dynamodbav:"deviceId"`
-	Platform           string `dynamodbav:"platform"`            // "ios" | "macos"
-	APNsToken          string `dynamodbav:"apnsToken,omitempty"` // lowercase hex; empty until granted
-	APNsTokenUpdatedAt string `dynamodbav:"apnsTokenUpdatedAt,omitempty"`
-	APNsEnvironment    string `dynamodbav:"apnsEnvironment,omitempty"` // "development" | "production"
-	TZIdentifier       string `dynamodbav:"tzIdentifier"`              // IANA
-	TZUpdatedAt        int64  `dynamodbav:"tzUpdatedAt"`               // unix seconds, monotonic per device
-	LastRegisteredAt   string `dynamodbav:"lastRegisteredAt"`          // RFC 3339 UTC
-	TokenStatus        string `dynamodbav:"tokenStatus"`               // "active" | "stale"
-	CreatedAt          string `dynamodbav:"createdAt"`
+	DeviceID           string `dynamodbav:"deviceId" json:"deviceId"`
+	Platform           string `dynamodbav:"platform" json:"platform"`                                 // "ios" | "macos"
+	APNsToken          string `dynamodbav:"apnsToken,omitempty" json:"apnsToken,omitempty"`           // lowercase hex; empty until granted
+	APNsTokenUpdatedAt string `dynamodbav:"apnsTokenUpdatedAt,omitempty" json:"apnsTokenUpdatedAt,omitempty"`
+	APNsEnvironment    string `dynamodbav:"apnsEnvironment,omitempty" json:"apnsEnvironment,omitempty"` // "development" | "production"
+	TZIdentifier       string `dynamodbav:"tzIdentifier" json:"tzIdentifier"`                         // IANA
+	TZUpdatedAt        int64  `dynamodbav:"tzUpdatedAt" json:"tzUpdatedAt"`                           // unix seconds, monotonic per device
+	LastRegisteredAt   string `dynamodbav:"lastRegisteredAt" json:"lastRegisteredAt"`                 // RFC 3339 UTC
+	TokenStatus        string `dynamodbav:"tokenStatus" json:"tokenStatus"`                           // "active" | "stale"
+	CreatedAt          string `dynamodbav:"createdAt" json:"createdAt"`
 }
 
 // DevicesAPI is the subset of the DynamoDB client used by DynamoDeviceWriter.
