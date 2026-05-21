@@ -13,7 +13,10 @@ These tasks must be completed by the user before implementation can finish. All 
   aws ssm put-parameter --name "/flux/apns/team-id"   --type String --value "YYYYYYYYYY"
   aws ssm put-parameter --name "/flux/apns/bundle-id" --type String --value "me.nore.ig.Flux"
   ```
-  **The bundle ID is case-sensitive.** Copy the value from `PRODUCT_BUNDLE_IDENTIFIER` in `Flux/Flux.xcodeproj/project.pbxproj` (or from Xcode → target → Signing & Capabilities) — the iOS app target uses `me.nore.ig.Flux` with a capital `F`, distinct from the App Group identifier `group.me.nore.ig.flux` which is intentionally lowercase. APNs returns `status=400 reason=TopicDisallowed` and silently drops every push when the cases differ.
+  **The bundle ID is case-sensitive.**
+  - **Canonical value**: `PRODUCT_BUNDLE_IDENTIFIER` in `Flux/Flux.xcodeproj/project.pbxproj` (or Xcode → target → Signing & Capabilities). The iOS app target is `me.nore.ig.Flux` with a capital `F`.
+  - **Not the App Group**: `group.me.nore.ig.flux` is intentionally lowercase. Don't conflate the two.
+  - **Symptom of a mismatch**: APNs returns `status=400 reason=TopicDisallowed` and silently drops every push.
 
   There is **no** `/flux/apns/env` parameter — the APNs environment (sandbox vs production) is carried per device on its registration row. The poller maintains one HTTP/2 client per environment (same `.p8` key, different host) and dispatches each push against the host that matches the device's token. This is what lets one user run Xcode dev builds while the other runs TestFlight on the same backend.
 
@@ -25,9 +28,8 @@ These tasks must be completed by the user before implementation can finish. All 
 
 - [ ] **Bundle ID match (case-sensitive).** Confirm `/flux/apns/bundle-id` matches `PRODUCT_BUNDLE_IDENTIFIER` exactly, including case. APNs treats the `apns-topic` header case-sensitively and returns `status=400 reason=TopicDisallowed` on a mismatch, which the poller logs as `flux_apns_push_failed class=permanent` and otherwise leaves no user-visible signal. Verify with:
   ```bash
-  # Show every PRODUCT_BUNDLE_IDENTIFIER value in the project. The project
-  # has one per target (app, tests, widget extension), so pick the entry
-  # whose value has no suffix after "Flux" — that's the main app.
+  # Look for the line that reads exactly: PRODUCT_BUNDLE_IDENTIFIER = me.nore.ig.Flux;
+  # The other entries are tests / UI tests / widget extension.
   grep PRODUCT_BUNDLE_IDENTIFIER Flux/Flux.xcodeproj/project.pbxproj | sort -u
   aws ssm get-parameter --name "/flux/apns/bundle-id" --query 'Parameter.Value' --output text
   ```
