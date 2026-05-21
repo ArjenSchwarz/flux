@@ -9,17 +9,18 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
 
-// SoCRuleItem represents a row in the flux-soc-rules table.
+// SoCRuleItem represents a row in the flux-soc-rules table. RuleID is
+// serialised as "id" so the Swift client decodes it into Identifiable.id.
 type SoCRuleItem struct {
-	DeviceID         string `dynamodbav:"deviceId"`
-	RuleID           string `dynamodbav:"ruleId"`           // UUID, server-assigned
-	ThresholdPercent int    `dynamodbav:"thresholdPercent"` // 1..99
-	WindowStart      string `dynamodbav:"windowStart"`      // HH:MM
-	WindowEnd        string `dynamodbav:"windowEnd"`        // HH:MM
-	Enabled          bool   `dynamodbav:"enabled"`
-	Label            string `dynamodbav:"label,omitempty"` // <=40 chars
-	CreatedAt        string `dynamodbav:"createdAt"`
-	UpdatedAt        string `dynamodbav:"updatedAt"` // bumped by every PUT
+	DeviceID         string `dynamodbav:"deviceId" json:"deviceId"`
+	RuleID           string `dynamodbav:"ruleId" json:"id"`                         // UUID, server-assigned
+	ThresholdPercent int    `dynamodbav:"thresholdPercent" json:"thresholdPercent"` // 1..99
+	WindowStart      string `dynamodbav:"windowStart" json:"windowStart"`           // HH:MM
+	WindowEnd        string `dynamodbav:"windowEnd" json:"windowEnd"`               // HH:MM
+	Enabled          bool   `dynamodbav:"enabled" json:"enabled"`
+	Label            string `dynamodbav:"label,omitempty" json:"label,omitempty"` // <=40 chars
+	CreatedAt        string `dynamodbav:"createdAt" json:"createdAt"`
+	UpdatedAt        string `dynamodbav:"updatedAt" json:"updatedAt"` // bumped by every PUT
 }
 
 // SoCRulesWriteAPI is the subset of the DynamoDB client used by the rule
