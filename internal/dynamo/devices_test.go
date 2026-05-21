@@ -37,6 +37,9 @@ func TestDeviceItemJSONWireShape(t *testing.T) {
 	var raw map[string]any
 	require.NoError(t, json.Unmarshal(encoded, &raw))
 
+	// Exhaustive key set: every JSON field expected from a fully populated
+	// DeviceItem. The equal-length assertion turns a future tag-less field
+	// into a test failure instead of a silent client-side decode error.
 	expected := map[string]any{
 		"deviceId":           "dev-1",
 		"platform":           "ios",
@@ -52,13 +55,7 @@ func TestDeviceItemJSONWireShape(t *testing.T) {
 	for key, want := range expected {
 		assert.Equal(t, want, raw[key], "wire shape key %q", key)
 	}
-	for _, leaked := range []string{
-		"DeviceID", "Platform", "APNsToken", "APNsTokenUpdatedAt",
-		"APNsEnvironment", "TZIdentifier", "TZUpdatedAt",
-		"LastRegisteredAt", "TokenStatus", "CreatedAt",
-	} {
-		assert.NotContains(t, raw, leaked, "PascalCase field leaked")
-	}
+	assert.Len(t, raw, len(expected), "unexpected extra keys in wire output: %v", raw)
 }
 
 func TestDeviceItemJSONOmitsAbsentOptionalFields(t *testing.T) {

@@ -39,12 +39,15 @@ func TestSoCRuleItemJSONWireShape(t *testing.T) {
 
 	// RuleID must serialise as "id" — the Swift SoCAlertRule reads it
 	// through Identifiable.id, not a separate ruleId field.
-	assert.Equal(t, "rule-uuid-1", raw["id"])
 	assert.NotContains(t, raw, "ruleId")
 	assert.NotContains(t, raw, "RuleID")
 
-	// Everything else stays camelCase.
+	// Exhaustive key set: every JSON field expected from a fully populated
+	// SoCRuleItem. Using a single map plus an equal-length assertion turns
+	// a future tag-less field into a test failure (instead of leaking
+	// through as another silent client-side decode error).
 	expected := map[string]any{
+		"id":               "rule-uuid-1",
 		"deviceId":         "dev-1",
 		"thresholdPercent": float64(40), // JSON numbers decode as float64
 		"windowStart":      "17:00",
@@ -57,15 +60,7 @@ func TestSoCRuleItemJSONWireShape(t *testing.T) {
 	for key, want := range expected {
 		assert.Equal(t, want, raw[key], "wire shape key %q", key)
 	}
-
-	// Pin the absence of accidental PascalCase leakage from Go's default
-	// json.Marshal field-name behaviour.
-	for _, leaked := range []string{
-		"DeviceID", "ThresholdPercent", "WindowStart",
-		"WindowEnd", "Enabled", "Label", "CreatedAt", "UpdatedAt",
-	} {
-		assert.NotContains(t, raw, leaked, "PascalCase field leaked")
-	}
+	assert.Len(t, raw, len(expected), "unexpected extra keys in wire output: %v", raw)
 }
 
 func TestSoCRuleItemJSONOmitsEmptyLabel(t *testing.T) {
