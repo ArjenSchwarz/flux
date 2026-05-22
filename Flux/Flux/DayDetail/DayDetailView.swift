@@ -1,10 +1,13 @@
 import FluxCore
 import SwiftUI
 
+// swiftlint:disable type_body_length
+
 /// V5 "Today" screen. Wraps the existing chart implementations
 /// (PowerChartView / BatteryPowerChartView / SOCChartView) in V5 panels and
 /// adds the Summary, Off-peak, and "five blocks" panels.
 struct DayDetailView: View {
+    @Environment(\.horizontalSizeClass) private var hSizeClass
     @State private var viewModel: DayDetailViewModel
     @State private var showingSettings = false
     @State private var editingNote = false
@@ -55,45 +58,11 @@ struct DayDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: FluxTheme.Metrics.panelGap) {
-                header
-                DayNavigationHeader(viewModel: viewModel)
-                DayDetailNoteSection(viewModel: viewModel, editingNote: $editingNote)
-
-                CompareControl(
-                    enabled: $compareEnabled,
-                    period: comparePeriod,
-                    unavailable: viewModel.comparisonState.isUnavailable
-                )
-
-                if let dailyUsage = viewModel.dailyUsage, !dailyUsage.blocks.isEmpty {
-                    DayInFiveBlocksPanel(dailyUsage: dailyUsage,
-                                         compare: viewModel.comparisonState)
-                }
-
-                contentSection
-
-                SummaryBlock(
-                    title: "Power",
-                    trailing: trailingSummaryDate,
-                    summary: viewModel.summary,
-                    // Prefer the canonical server value (DaySummary now carries
-                    // it for any date with an off-peak record); fall back to
-                    // the readings-derived approximation when the server
-                    // hasn't returned a split.
-                    offpeakGridImport: viewModel.summary?.offpeakGridImportKwh ?? viewModel.offpeakStats.gridImportKwh,
-                    showsBatteryCycle: false,
-                    compare: viewModel.comparisonState
-                )
-                BatteryBlock(
-                    batteryCharge: viewModel.summary?.eCharge,
-                    batteryDischarge: viewModel.summary?.eDischarge,
-                    lowestSOC: viewModel.offpeakStats.lowestSOC,
-                    lowestSOCTimestamp: viewModel.offpeakStats.lowestSOCTimestamp
-                )
+            if usesRegularLayout {
+                dayDetailContentRegular
+            } else {
+                dayDetailContent
             }
-            .padding(.horizontal, FluxTheme.Metrics.screenHorizontalPadding)
-            .padding(.bottom, FluxTheme.Metrics.screenBottomPadding)
         }
         .scrollContentBackground(.hidden)
         .fluxScreenBackground()
@@ -142,6 +111,157 @@ struct DayDetailView: View {
                 viewModel: NoteEditorViewModel(initial: viewModel.note ?? "", parent: viewModel)
             )
         }
+    }
+
+    /// Gate for the iPad regular-size-class layout. macOS keeps the existing
+    /// single-column layout (AC 7.2); iPhone Plus/Max landscape reports
+    /// `.regular` but the iPad layout is only meaningful inside the iPad
+    /// sidebar shell. Idiom check matches `AppNavigationView.usesPadShell`.
+    private var usesRegularLayout: Bool {
+        #if os(iOS)
+        UIDevice.current.userInterfaceIdiom == .pad && hSizeClass == .regular
+        #else
+        false
+        #endif
+    }
+
+    @ViewBuilder
+    private var dayDetailContent: some View {
+        VStack(alignment: .leading, spacing: FluxTheme.Metrics.panelGap) {
+            header
+            DayNavigationHeader(viewModel: viewModel)
+            DayDetailNoteSection(viewModel: viewModel, editingNote: $editingNote)
+            CompareControl(
+                enabled: $compareEnabled,
+                period: comparePeriod,
+                unavailable: viewModel.comparisonState.isUnavailable
+            )
+            if let dailyUsage = viewModel.dailyUsage, !dailyUsage.blocks.isEmpty {
+                DayInFiveBlocksPanel(dailyUsage: dailyUsage,
+                                     compare: viewModel.comparisonState)
+            }
+            contentSection
+            summaryBlock
+            batteryBlock
+        }
+        .padding(.horizontal, FluxTheme.Metrics.screenHorizontalPadding)
+        .padding(.bottom, FluxTheme.Metrics.screenBottomPadding)
+    }
+
+    @ViewBuilder
+    private var dayDetailContentRegular: some View {
+        VStack(alignment: .leading, spacing: FluxTheme.Metrics.panelGap) {
+            header
+            DayNavigationHeader(viewModel: viewModel)
+            DayDetailNoteSection(viewModel: viewModel, editingNote: $editingNote)
+            CompareControl(
+                enabled: $compareEnabled,
+                period: comparePeriod,
+                unavailable: viewModel.comparisonState.isUnavailable
+            )
+
+            Grid(alignment: .topLeading, horizontalSpacing: FluxTheme.Metrics.panelGap,
+                 verticalSpacing: FluxTheme.Metrics.panelGap) {
+                GridRow {
+                    summaryColumn
+                    chartsColumn
+                }
+            }
+        }
+        .padding(.horizontal, FluxTheme.Metrics.screenHorizontalPadding)
+        .padding(.bottom, FluxTheme.Metrics.screenBottomPadding)
+    }
+
+    @ViewBuilder
+    private var summaryColumn: some View {
+        VStack(alignment: .leading, spacing: FluxTheme.Metrics.panelGap) {
+            if let dailyUsage = viewModel.dailyUsage, !dailyUsage.blocks.isEmpty {
+                DayInFiveBlocksPanel(dailyUsage: dailyUsage,
+                                     compare: viewModel.comparisonState)
+            }
+            summaryBlock
+            batteryBlock
+            if let dailyUsage = viewModel.dailyUsage, !dailyUsage.blocks.isEmpty {
+                DailyUsageCard(dailyUsage: dailyUsage)
+            }
+            if !viewModel.peakPeriods.isEmpty {
+                PeakUsageCard(periods: viewModel.peakPeriods)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var chartsColumn: some View {
+        VStack(alignment: .leading, spacing: FluxTheme.Metrics.panelGap) {
+            if !viewModel.parsedReadings.isEmpty {
+                if viewModel.hasPowerData {
+                    DayDetailPanels.power(date: viewModel.date,
+                                          readings: viewModel.parsedReadings,
+                                          selectedDate: $powerSelected)
+                    FluxPanel {
+                        VStack(alignment: .leading, spacing: 0) {
+                            FluxPanelHeader(label: "Battery Power", right: "kW")
+                            BatteryPowerChartView(date: viewModel.date,
+                                                  readings: viewModel.parsedReadings)
+                        }
+                    }
+                    FluxPanel {
+                        VStack(alignment: .leading, spacing: 0) {
+                            FluxPanelHeader(label: "State of Charge", right: "%")
+                            SOCChartView(date: viewModel.date,
+                                         readings: viewModel.parsedReadings,
+                                         summary: viewModel.summary)
+                        }
+                    }
+                } else {
+                    DayDetailMessagePanel(title: "Power charts unavailable",
+                                          detail: "This day has fallback data with SOC readings only.")
+                    DayDetailPanels.battery(date: viewModel.date,
+                                            readings: viewModel.parsedReadings,
+                                            summary: viewModel.summary,
+                                            selectedDate: $batterySelected)
+                }
+            } else if let error = viewModel.error {
+                DayDetailErrorPanel(error: error,
+                                    showingSettings: $showingSettings,
+                                    onRetry: { Task { await viewModel.loadDay() } })
+            } else if viewModel.isLoading {
+                FluxPanel {
+                    HStack {
+                        Spacer()
+                        ProgressView("Loading day data…")
+                            .tint(FluxTheme.Palette.primaryText)
+                        Spacer()
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var summaryBlock: some View {
+        SummaryBlock(
+            title: "Power",
+            trailing: trailingSummaryDate,
+            summary: viewModel.summary,
+            // Prefer the canonical server value (DaySummary now carries it
+            // for any date with an off-peak record); fall back to the
+            // readings-derived approximation when the server hasn't returned
+            // a split.
+            offpeakGridImport: viewModel.summary?.offpeakGridImportKwh ?? viewModel.offpeakStats.gridImportKwh,
+            showsBatteryCycle: false,
+            compare: viewModel.comparisonState
+        )
+    }
+
+    @ViewBuilder
+    private var batteryBlock: some View {
+        BatteryBlock(
+            batteryCharge: viewModel.summary?.eCharge,
+            batteryDischarge: viewModel.summary?.eDischarge,
+            lowestSOC: viewModel.offpeakStats.lowestSOC,
+            lowestSOCTimestamp: viewModel.offpeakStats.lowestSOCTimestamp
+        )
     }
 
     @ViewBuilder
@@ -238,11 +358,28 @@ struct DayDetailView: View {
     }
 
 }
+// swiftlint:enable type_body_length
 
 #if DEBUG
-#Preview {
+#Preview("Compact") {
     NavigationStack {
         DayDetailView(date: MockFluxAPIClient.previewDate, apiClient: MockFluxAPIClient.preview)
     }
+}
+
+#Preview("Regular 770") {
+    NavigationStack {
+        DayDetailView(date: MockFluxAPIClient.previewDate, apiClient: MockFluxAPIClient.preview)
+    }
+    .frame(width: 770)
+    .environment(\.horizontalSizeClass, .regular)
+}
+
+#Preview("Regular 1080") {
+    NavigationStack {
+        DayDetailView(date: MockFluxAPIClient.previewDate, apiClient: MockFluxAPIClient.preview)
+    }
+    .frame(width: 1080)
+    .environment(\.horizontalSizeClass, .regular)
 }
 #endif

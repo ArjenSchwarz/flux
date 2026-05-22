@@ -153,7 +153,7 @@ references:
 
 ## Adaptive layouts
 
-- [ ] 16. Measure detail-column widths on iPad simulators; adjust thresholds if needed <!-- id:sgahfrg -->
+- [x] 16. Measure detail-column widths on iPad simulators; adjust thresholds if needed <!-- id:sgahfrg -->
   - Add a temporary GeometryReader probe to FluxiPadRoot's detail column that logs the width on appear
   - Run on iPad mini portrait/landscape, iPad Air portrait/landscape, iPad Pro 13" portrait/landscape, half Split View on iPad Pro 13"
   - Record values in new file specs/ipad-adaptive-layout/implementation.md
@@ -163,7 +163,7 @@ references:
   - Stream: 1
   - Requirements: [9.1](requirements.md#9.1), [9.3](requirements.md#9.3)
 
-- [ ] 17. Add Dashboard regular-size-class layout (DashboardView) <!-- id:sgahfrh -->
+- [x] 17. Add Dashboard regular-size-class layout (DashboardView) <!-- id:sgahfrh -->
   - Edit Flux/Flux/Dashboard/DashboardView.swift
   - Add dashboardContentRegular @ViewBuilder branch using AdaptiveColumnsLayout for hero+trio side-by-side at w ≥ 700
   - SummaryBlock full width; BatteryBlock (+ future blocks) flowing through AdaptiveColumnsLayout
@@ -175,7 +175,7 @@ references:
   - Stream: 1
   - Requirements: [2.1](requirements.md#2.1), [2.2](requirements.md#2.2), [2.3](requirements.md#2.3), [2.4](requirements.md#2.4), [8.1](requirements.md#8.1)
 
-- [ ] 18. Add History regular-size-class card grid (HistoryView) <!-- id:sgahfri -->
+- [x] 18. Add History regular-size-class card grid (HistoryView) <!-- id:sgahfri -->
   - Edit Flux/Flux/History/HistoryView.swift
   - Add historyContentRegular @ViewBuilder branch that lays the four cards (HistorySolarCard, HistoryGridUsageCard, HistoryDailyUsageCard, conditional summaryCard) through AdaptiveColumnsLayout
   - HistoryStatsOverviewCard stays full width above the grid; its existing 4-col/2-col internal branch is untouched (AC 3.3)
@@ -184,7 +184,7 @@ references:
   - Stream: 1
   - Requirements: [3.1](requirements.md#3.1), [3.2](requirements.md#3.2), [3.3](requirements.md#3.3), [3.4](requirements.md#3.4), [8.1](requirements.md#8.1)
 
-- [ ] 19. Add Day Detail two-column regular-size-class layout (DayDetailView) <!-- id:sgahfrj -->
+- [x] 19. Add Day Detail two-column regular-size-class layout (DayDetailView) <!-- id:sgahfrj -->
   - Edit Flux/Flux/DayDetail/DayDetailView.swift
   - Add dayDetailContentRegular @ViewBuilder branch
   - Header row (DayNavigationHeader, DayDetailNoteSection, CompareControl) full width
@@ -195,7 +195,7 @@ references:
   - Stream: 1
   - Requirements: [4.1](requirements.md#4.1), [4.2](requirements.md#4.2), [4.3](requirements.md#4.3), [4.4](requirements.md#4.4), [8.1](requirements.md#8.1)
 
-- [ ] 20. Verify Settings sheet width on iPad; add 640pt cap if needed <!-- id:sgahfrk -->
+- [x] 20. Verify Settings sheet width on iPad; add 640pt cap if needed <!-- id:sgahfrk -->
   - Run app on iPad simulator at regular width; present Settings
   - If default sheet width already constrains the form to a comfortable reading width (likely .formSheet behaviour), record observation in implementation.md and close the task with no code change
   - If the form stretches edge-to-edge, edit Flux/Flux/Settings/SettingsView.swift to wrap form contents in .frame(maxWidth: 640) + .frame(maxWidth: .infinity), gated by horizontalSizeClass == .regular

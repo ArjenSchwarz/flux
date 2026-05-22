@@ -2,7 +2,9 @@ import FluxCore
 import SwiftData
 import SwiftUI
 
+// swiftlint:disable type_body_length
 struct HistoryView: View {
+    @Environment(\.horizontalSizeClass) private var hSizeClass
     @State private var viewModel: HistoryViewModel
     @State private var selectedRange: Int = 7
     @State private var showingSettings = false
@@ -68,47 +70,11 @@ struct HistoryView: View {
                 } else if viewModel.days.isEmpty, !viewModel.isLoading {
                     emptyState
                 } else {
-                    let derived = viewModel.derived
-                    let selectedDate = viewModel.selectedDay
-                        .flatMap { DateFormatting.parseDayDate($0.date) }
-
-                    VStack(alignment: .leading, spacing: 16) {
-                        HistoryStatsOverviewCard(
-                            summary: derived.summary,
-                            entries: derived.solar,
-                            onSelect: selectDay
-                        )
-
-                        HistorySolarCard(
-                            entries: derived.solar,
-                            summary: derived.summary,
-                            selectedDate: selectedDate,
-                            rangeDays: selectedRange,
-                            onSelect: selectDay
-                        )
-
-                        HistoryGridUsageCard(
-                            entries: derived.grid,
-                            summary: derived.summary,
-                            selectedDate: selectedDate,
-                            rangeDays: selectedRange,
-                            onSelect: selectDay
-                        )
-
-                        HistoryDailyUsageCard(
-                            entries: derived.dailyUsage,
-                            summary: derived.summary,
-                            selectedDate: selectedDate,
-                            rangeDays: selectedRange,
-                            onSelect: selectDay
-                        )
-
-                        if let selectedDay = viewModel.selectedDay {
-                            summaryCard(for: selectedDay)
-                        }
+                    if usesRegularLayout {
+                        historyContentRegular
+                    } else {
+                        historyContent
                     }
-                    .opacity(viewModel.isLoading ? 0.5 : 1.0)
-                    .animation(.easeInOut(duration: 0.15), value: viewModel.isLoading)
                 }
             }
             .padding(.horizontal, FluxTheme.Metrics.screenHorizontalPadding)
@@ -160,6 +126,102 @@ struct HistoryView: View {
             }
         }
         #endif
+    }
+
+    /// Gate for the iPad regular-size-class layout. macOS keeps the existing
+    /// single-column layout (AC 7.2); iPhone Plus/Max landscape reports
+    /// `.regular` but the iPad layout is only meaningful inside the iPad
+    /// sidebar shell. Idiom check matches `AppNavigationView.usesPadShell`.
+    private var usesRegularLayout: Bool {
+        #if os(iOS)
+        UIDevice.current.userInterfaceIdiom == .pad && hSizeClass == .regular
+        #else
+        false
+        #endif
+    }
+
+    @ViewBuilder
+    private var historyContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            statsOverviewCard
+            solarCard
+            gridUsageCard
+            dailyUsageCard
+            if let selectedDay = viewModel.selectedDay {
+                summaryCard(for: selectedDay)
+            }
+        }
+        .opacity(viewModel.isLoading ? 0.5 : 1.0)
+        .animation(.easeInOut(duration: 0.15), value: viewModel.isLoading)
+    }
+
+    @ViewBuilder
+    private var historyContentRegular: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            statsOverviewCard
+            AdaptiveColumnsLayout {
+                solarCard
+                gridUsageCard
+                dailyUsageCard
+                if let selectedDay = viewModel.selectedDay {
+                    summaryCard(for: selectedDay)
+                }
+            }
+        }
+        .opacity(viewModel.isLoading ? 0.5 : 1.0)
+        .animation(.easeInOut(duration: 0.15), value: viewModel.isLoading)
+    }
+
+    @ViewBuilder
+    private var statsOverviewCard: some View {
+        let derived = viewModel.derived
+        HistoryStatsOverviewCard(
+            summary: derived.summary,
+            entries: derived.solar,
+            onSelect: selectDay
+        )
+    }
+
+    @ViewBuilder
+    private var solarCard: some View {
+        let derived = viewModel.derived
+        let selectedDate = viewModel.selectedDay
+            .flatMap { DateFormatting.parseDayDate($0.date) }
+        HistorySolarCard(
+            entries: derived.solar,
+            summary: derived.summary,
+            selectedDate: selectedDate,
+            rangeDays: selectedRange,
+            onSelect: selectDay
+        )
+    }
+
+    @ViewBuilder
+    private var gridUsageCard: some View {
+        let derived = viewModel.derived
+        let selectedDate = viewModel.selectedDay
+            .flatMap { DateFormatting.parseDayDate($0.date) }
+        HistoryGridUsageCard(
+            entries: derived.grid,
+            summary: derived.summary,
+            selectedDate: selectedDate,
+            rangeDays: selectedRange,
+            onSelect: selectDay
+        )
+    }
+
+    @ViewBuilder
+    private var dailyUsageCard: some View {
+        let derived = viewModel.derived
+        let selectedDate = viewModel.selectedDay
+            .flatMap { DateFormatting.parseDayDate($0.date) }
+        HistoryDailyUsageCard(
+            entries: derived.dailyUsage,
+            summary: derived.summary,
+            selectedDate: selectedDate,
+            rangeDays: selectedRange,
+            onSelect: selectDay
+        )
     }
 
     private func selectDay(_ dayID: String) {
@@ -253,6 +315,8 @@ struct HistoryView: View {
     }
 }
 
+// swiftlint:enable type_body_length
+
 enum HistoryRoute: Hashable {
     case dayDetail(String)
 }
@@ -267,12 +331,23 @@ private enum HistorySummaryDateFormatter {
 }
 
 #if DEBUG
-#Preview {
+#Preview("Compact") {
     let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
     // swiftlint:disable:next force_try
     let container = try! ModelContainer(for: CachedDayEnergy.self, configurations: configuration)
     NavigationStack {
         HistoryView(apiClient: MockFluxAPIClient.preview, modelContext: ModelContext(container))
     }
+}
+
+#Preview("Regular 770") {
+    let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+    // swiftlint:disable:next force_try
+    let container = try! ModelContainer(for: CachedDayEnergy.self, configurations: configuration)
+    NavigationStack {
+        HistoryView(apiClient: MockFluxAPIClient.preview, modelContext: ModelContext(container))
+    }
+    .frame(width: 770)
+    .environment(\.horizontalSizeClass, .regular)
 }
 #endif
