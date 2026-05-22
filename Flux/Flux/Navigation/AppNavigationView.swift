@@ -6,6 +6,9 @@ import SwiftUI
 struct AppNavigationView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
+    #if !os(macOS)
+    @Environment(\.horizontalSizeClass) private var hSizeClass
+    #endif
 
     @State private var selectedScreen: Screen? = .dashboard
     @State private var navigationPath = NavigationPath()
@@ -169,17 +172,37 @@ struct AppNavigationView: View {
     #if !os(macOS)
     @ViewBuilder
     private var iOSRoot: some View {
-        if let apiClient, let dashboardViewModel, let historyViewModel {
-            FluxiOSRoot(
-                apiClient: apiClient,
-                tab: $iosTab,
-                dashboardViewModel: dashboardViewModel,
-                historyViewModel: historyViewModel
-            )
-            .modelContext(modelContext)
+        if let apiClient, let dashboardViewModel, let historyViewModel, let todayDayDetailViewModel {
+            if usesPadShell {
+                FluxiPadRoot(
+                    apiClient: apiClient,
+                    selectedScreen: $selectedScreen,
+                    navigationPath: $navigationPath,
+                    today: today,
+                    dashboardViewModel: dashboardViewModel,
+                    historyViewModel: historyViewModel,
+                    todayDayDetailViewModel: todayDayDetailViewModel
+                )
+                .modelContext(modelContext)
+            } else {
+                FluxiOSRoot(
+                    apiClient: apiClient,
+                    tab: $iosTab,
+                    dashboardViewModel: dashboardViewModel,
+                    historyViewModel: historyViewModel
+                )
+                .modelContext(modelContext)
+            }
         } else {
             SettingsView(onSaved: handleSettingsSaved)
         }
+    }
+
+    /// Gate for the iPad sidebar shell. iPhone Plus/Max landscape reports
+    /// `.regular` horizontal size class but must keep `FluxiOSRoot`, so the
+    /// idiom check is load-bearing.
+    private var usesPadShell: Bool {
+        UIDevice.current.userInterfaceIdiom == .pad && hSizeClass == .regular
     }
     #endif
 

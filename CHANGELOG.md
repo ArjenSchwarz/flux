@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **iPad sidebar shell** (T-1150). At regular horizontal size class on iPad — full-screen and ≥½ Split View on any iPad in the lineup — Flux now renders a `NavigationSplitView(.balanced)` with a Dashboard / Today / History sidebar and a detail column hosting the selected screen. Settings stays as a sheet, opened via a toolbar gear in the detail column. At compact widths (Slide Over, ⅓ Split View) iPad falls back to the existing tab-bar shell, and iPhone Plus/Max landscape (which reports `.regular` horizontal but is not iPad) is also routed to the tab-bar shell via a `userInterfaceIdiom == .pad` gate. Detail-column content is still the existing single-column body — the adaptive multi-column layouts for Dashboard / History / Day Detail land in the next phase.
+
 ### Changed
 
 - **iPad adaptive layout foundations** (T-1150). Internal-only scaffolding ahead of the iPad shell: a reusable `AdaptiveColumnsLayout` helper that reflows children into 1/2/3 columns at width thresholds `700`/`1000` and drops one column at Dynamic Type ≥ AX4; a `Screen(tab:)` initialiser and a widened `Screen.sidebarVisible` that exposes Dashboard / Today / History (no Settings row) on both iOS and macOS; a `DayDetailViewModel.setDate(_:)` method that swaps the date in place and clears per-day fields without rebuilding the view, used by the upcoming Today midnight-rollover path; and a pure `syncedState(selected:tab:)` reducer that defines the canonical sidebar ↔ tab pair. No user-visible change yet — the iPad shell that consumes these lands in later phases.

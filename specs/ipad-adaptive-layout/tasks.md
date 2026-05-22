@@ -129,7 +129,7 @@ references:
 
 ## iPad shell
 
-- [ ] 14. Add FluxiPadRoot — sidebar + detail NavigationStack + toolbar gear <!-- id:sgahfre -->
+- [x] 14. Add FluxiPadRoot — sidebar + detail NavigationStack + toolbar gear <!-- id:sgahfre -->
   - New file Flux/Flux/Navigation/FluxiPadRoot.swift
   - Accepts injected apiClient and view-models from AppNavigationView
   - NavigationSplitView(preferredCompactColumn:) with SidebarView in the sidebar and NavigationStack(path:) in the detail
@@ -141,7 +141,7 @@ references:
   - Stream: 1
   - Requirements: [1.1](requirements.md#1.1), [1.3](requirements.md#1.3), [1.4](requirements.md#1.4), [1.5](requirements.md#1.5), [1.7](requirements.md#1.7), [1.8](requirements.md#1.8), [8.3](requirements.md#8.3)
 
-- [ ] 15. Add usesPadShell gate in AppNavigationView.iOSRoot <!-- id:sgahfrf -->
+- [x] 15. Add usesPadShell gate in AppNavigationView.iOSRoot <!-- id:sgahfrf -->
   - Edit Flux/Flux/Navigation/AppNavigationView.swift
   - Add @Environment(\.horizontalSizeClass) private var hSizeClass
   - Add private var usesPadShell: Bool { UIDevice.current.userInterfaceIdiom == .pad && hSizeClass == .regular }
