@@ -81,7 +81,7 @@ references:
 
 ## AppNavigationView wiring
 
-- [ ] 9. Add today @State + 60s recompute task + scenePhase recompute to AppNavigationView <!-- id:sgahfr9 -->
+- [x] 9. Add today @State + 60s recompute task + scenePhase recompute to AppNavigationView <!-- id:sgahfr9 -->
   - Edit Flux/Flux/Navigation/AppNavigationView.swift
   - Add @State private var today: String = DateFormatting.todayDateString()
   - Add .task that loops with Task.sleep(for: .seconds(60)) and updates today when DateFormatting.todayDateString() differs
@@ -91,7 +91,7 @@ references:
   - Stream: 1
   - Requirements: [1.7](requirements.md#1.7)
 
-- [ ] 10. Hoist Dashboard / History / Today DayDetail view-models into AppNavigationView <!-- id:sgahfra -->
+- [x] 10. Hoist Dashboard / History / Today DayDetail view-models into AppNavigationView <!-- id:sgahfra -->
   - Edit Flux/Flux/Navigation/AppNavigationView.swift and Flux/Flux/Navigation/FluxiOSRoot.swift
   - Move @State dashboardViewModel out of FluxiOSRoot; AppNavigationView owns DashboardViewModel, HistoryViewModel, and a Today DayDetailViewModel
   - Thread VMs into FluxiOSRoot via init
@@ -101,7 +101,7 @@ references:
   - Stream: 1
   - Requirements: [6.4](requirements.md#6.4), [6.5](requirements.md#6.5), [7.1](requirements.md#7.1)
 
-- [ ] 11. Wire today rollover task to call setDate on the Today view-model <!-- id:sgahfrb -->
+- [x] 11. Wire today rollover task to call setDate on the Today view-model <!-- id:sgahfrb -->
   - Edit Flux/Flux/Navigation/AppNavigationView.swift
   - Inside the 60s rollover task and the scenePhase onChange, after updating today, call await todayDayDetailViewModel.setDate(today)
   - Dashboard 10s auto-refresh and SoCAlertsService.foregroundHook calls already inside the scenePhase block continue to run alongside the rollover handler
@@ -109,7 +109,7 @@ references:
   - Stream: 1
   - Requirements: [1.7](requirements.md#1.7), [6.4](requirements.md#6.4)
 
-- [ ] 12. Rebuild hoisted VMs in reloadDependencies() when API client identity changes <!-- id:sgahfrc -->
+- [x] 12. Rebuild hoisted VMs in reloadDependencies() when API client identity changes <!-- id:sgahfrc -->
   - Edit Flux/Flux/Navigation/AppNavigationView.swift, function reloadDependencies()
   - Compute clientChanged = (apiClient as AnyObject?) !== (client as AnyObject?)
   - When clientChanged && client != nil, reconstruct dashboardViewModel, historyViewModel, and todayDayDetailViewModel with the new client (and current today for DayDetail)
@@ -118,7 +118,7 @@ references:
   - Stream: 1
   - Requirements: [6.4](requirements.md#6.4), [1.6](requirements.md#1.6)
 
-- [ ] 13. Apply syncedState reducer via two onChange handlers in AppNavigationView <!-- id:sgahfrd -->
+- [x] 13. Apply syncedState reducer via two onChange handlers in AppNavigationView <!-- id:sgahfrd -->
   - Edit Flux/Flux/Navigation/AppNavigationView.swift
   - Add .onChange(of: selectedScreen) and .onChange(of: iosTab) handlers
   - Each handler computes syncedState(selected:tab:) and writes the other side only when it differs from the current value

@@ -8,10 +8,9 @@ import SwiftUI
 /// so there is no system tab bar — the navigation chrome is built from the
 /// V5 tokens.
 ///
-/// The Dashboard view-model is held here so its 10s auto-refresh state and
-/// last fetched payload survive tab switches; the Today and History
-/// view-models reload cheaply when their tabs become visible, so they're
-/// allowed to be reconstructed.
+/// View-models are injected by `AppNavigationView` rather than constructed
+/// here, so they survive a size-class flip between the iPhone shell and the
+/// upcoming iPad sidebar shell (AC 6.4).
 ///
 /// Each tab owns its own `NavigationPath`. Tapping any tab in the tab bar
 /// pops that tab back to its root — including taps on the already-selected
@@ -20,19 +19,26 @@ import SwiftUI
 struct FluxiOSRoot: View {
     @Environment(\.modelContext) private var modelContext
 
-    @State private var dashboardViewModel: DashboardViewModel
     @State private var dashboardPath = NavigationPath()
     @State private var todayPath = NavigationPath()
     @State private var historyPath = NavigationPath()
     @State private var showingSettings = false
 
     let apiClient: any FluxAPIClient
+    let dashboardViewModel: DashboardViewModel
+    let historyViewModel: HistoryViewModel
     @Binding var tab: FluxTab
 
-    init(apiClient: any FluxAPIClient, tab: Binding<FluxTab>) {
+    init(
+        apiClient: any FluxAPIClient,
+        tab: Binding<FluxTab>,
+        dashboardViewModel: DashboardViewModel,
+        historyViewModel: HistoryViewModel
+    ) {
         self.apiClient = apiClient
         _tab = tab
-        _dashboardViewModel = State(initialValue: DashboardViewModel(apiClient: apiClient))
+        self.dashboardViewModel = dashboardViewModel
+        self.historyViewModel = historyViewModel
     }
 
     var body: some View {
@@ -62,8 +68,10 @@ struct FluxiOSRoot: View {
             case .history:
                 NavigationStack(path: $historyPath) {
                     HistoryView(
-                        apiClient: apiClient,
-                        modelContext: modelContext,
+                        viewModel: historyViewModel,
+                        makeDayDetailViewModel: { date in
+                            DayDetailViewModel(date: date, apiClient: apiClient)
+                        },
                         tab: $tab,
                         onSettingsTap: { showingSettings = true },
                         onTabActivate: handleTabActivate

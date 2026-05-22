@@ -13,6 +13,10 @@ struct AppNavigationView: View {
     @State private var keychainService = KeychainService()
     @State private var apiClient: (any FluxAPIClient)?
     @State private var iosTab: FluxTab = .dashboard
+    @State private var today: String = DateFormatting.todayDateString()
+    @State private var dashboardViewModel: DashboardViewModel?
+    @State private var historyViewModel: HistoryViewModel?
+    @State private var todayDayDetailViewModel: DayDetailViewModel?
     @State private var pendingAuto: PendingAutoPresentation?
     @State private var didEvaluateAutoPresentation = false
     @State private var canonicalInstalledVersion: String = ""
@@ -42,10 +46,20 @@ struct AppNavigationView: View {
                     storedSelection = newScreen.rawValue
                 }
                 #endif
+                if let newScreen, let mappedTab = newScreen.tab, mappedTab != iosTab {
+                    iosTab = mappedTab
+                }
+            }
+            .onChange(of: iosTab) { _, newTab in
+                let mapped = Screen(tab: newTab)
+                if selectedScreen != mapped, selectedScreen != .settings {
+                    selectedScreen = mapped
+                }
             }
             .onChange(of: scenePhase) { _, newPhase in
                 if newPhase == .active {
                     reloadDependencies()
+                    rolloverToday()
                     // Replay any pending SoC alert registration (AC 1.7,
                     // 2.4): a failed POST in registerDeviceIfNeeded leaves
                     // the device record stashed locally; foregroundHook
@@ -53,6 +67,13 @@ struct AppNavigationView: View {
                     Task { @MainActor in
                         await SoCAlertsService.shared.foregroundHook()
                     }
+                }
+            }
+            .task {
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(60))
+                    if Task.isCancelled { return }
+                    rolloverToday()
                 }
             }
             .onOpenURL { url in
@@ -148,9 +169,14 @@ struct AppNavigationView: View {
     #if !os(macOS)
     @ViewBuilder
     private var iOSRoot: some View {
-        if let apiClient {
-            FluxiOSRoot(apiClient: apiClient, tab: $iosTab)
-                .modelContext(modelContext)
+        if let apiClient, let dashboardViewModel, let historyViewModel {
+            FluxiOSRoot(
+                apiClient: apiClient,
+                tab: $iosTab,
+                dashboardViewModel: dashboardViewModel,
+                historyViewModel: historyViewModel
+            )
+            .modelContext(modelContext)
         } else {
             SettingsView(onSaved: handleSettingsSaved)
         }
@@ -168,9 +194,29 @@ struct AppNavigationView: View {
         reloadDependencies()
     }
 
+    private func rolloverToday() {
+        let now = DateFormatting.todayDateString()
+        guard now != today else { return }
+        today = now
+        if let todayDayDetailViewModel {
+            Task { @MainActor in
+                await todayDayDetailViewModel.setDate(now)
+            }
+        }
+    }
+
     private func reloadDependencies() {
         let client = makeAPIClient()
+        let clientChanged = (apiClient as AnyObject?) !== (client as AnyObject?)
         apiClient = client
+        if clientChanged, let client {
+            // Hoisted VMs hold their constructor-time apiClient reference.
+            // Rebuild them on credential change so they hit the new client
+            // rather than continuing to use a stale (unauthorized) one.
+            dashboardViewModel = DashboardViewModel(apiClient: client)
+            historyViewModel = HistoryViewModel(apiClient: client, modelContext: modelContext)
+            todayDayDetailViewModel = DayDetailViewModel(date: today, apiClient: client)
+        }
         // Also binds SoCAlertsService so its CRUD calls don't throw .notConfigured.
         if let client {
             SoCAlertsService.shared.bind(apiClient: client)

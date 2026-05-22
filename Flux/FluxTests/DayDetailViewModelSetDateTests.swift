@@ -42,7 +42,6 @@ struct DayDetailViewModelSetDateTests {
     }
 
     @Test
-    // swiftlint:disable:next function_body_length
     func setDateClearsPerDayFieldsBeforeReload() async {
         let apiClient = SetDateMockAPIClient()
         let readings = [TimeSeriesPoint(
