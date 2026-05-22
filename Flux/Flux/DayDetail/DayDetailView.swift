@@ -67,7 +67,11 @@ struct DayDetailView: View {
         .scrollContentBackground(.hidden)
         .fluxScreenBackground()
         #if os(iOS)
-        .toolbar(.hidden, for: .navigationBar)
+        // iPhone V5 shell hides the system navigation bar; iPad sidebar
+        // shell wants it visible so the toolbar gear and sidebar toggle
+        // render. See DashboardView.body for the same pattern.
+        .toolbar(usesRegularLayout ? .visible : .hidden, for: .navigationBar)
+        .navigationTitle(usesRegularLayout ? "Day Detail" : "")
         #endif
         .task(id: viewModel.date) {
             await viewModel.loadDay()
@@ -140,8 +144,9 @@ struct DayDetailView: View {
 
     @ViewBuilder
     private var dayDetailContentRegular: some View {
+        // iPad sidebar shell: navigation bar carries the title and gear,
+        // so skip the FluxScreenHeader / legacy eyebrow+title block.
         VStack(alignment: .leading, spacing: FluxTheme.Metrics.panelGap) {
-            header
             DayNavigationHeader(viewModel: viewModel)
             DayDetailNoteSection(viewModel: viewModel, editingNote: $editingNote)
             CompareControl(
@@ -183,27 +188,23 @@ struct DayDetailView: View {
 
     @ViewBuilder
     private var chartsColumn: some View {
+        // Reuse the same Power + BatteryCombined panels as the compact
+        // layout so each chart keeps its tap-to-enlarge affordance from
+        // T-1215. A three-panel split (Power / BatteryPower / SOC) was
+        // explored but would require new ChartKind cases and dedicated
+        // ExpandableChartContainer wiring; not worth the regression
+        // surface for an iPad-only layout. Decision noted in
+        // implementation.md.
         VStack(alignment: .leading, spacing: FluxTheme.Metrics.panelGap) {
             if !viewModel.parsedReadings.isEmpty {
                 if viewModel.hasPowerData {
                     DayDetailPanels.power(date: viewModel.date,
                                           readings: viewModel.parsedReadings,
                                           selectedDate: $powerSelected)
-                    FluxPanel {
-                        VStack(alignment: .leading, spacing: 0) {
-                            FluxPanelHeader(label: "Battery Power", right: "kW")
-                            BatteryPowerChartView(date: viewModel.date,
-                                                  readings: viewModel.parsedReadings)
-                        }
-                    }
-                    FluxPanel {
-                        VStack(alignment: .leading, spacing: 0) {
-                            FluxPanelHeader(label: "State of Charge", right: "%")
-                            SOCChartView(date: viewModel.date,
-                                         readings: viewModel.parsedReadings,
-                                         summary: viewModel.summary)
-                        }
-                    }
+                    DayDetailPanels.battery(date: viewModel.date,
+                                            readings: viewModel.parsedReadings,
+                                            summary: viewModel.summary,
+                                            selectedDate: $batterySelected)
                 } else {
                     DayDetailMessagePanel(title: "Power charts unavailable",
                                           detail: "This day has fallback data with SOC readings only.")

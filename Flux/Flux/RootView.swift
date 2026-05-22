@@ -64,6 +64,15 @@ private struct ChartExpansionCover: View {
 private struct ExpandedChartTopBar: View {
     let onClose: () -> Void
 
+    // iPad in Stage Manager renders window controls in the top-leading
+    // corner of the scene; on iPad Pro full-screen there's also a wider
+    // safe-area inset around the chrome. A ~16-pt leading padding sits
+    // right under those controls. Bumping to ~56pt on iPad keeps the
+    // xmark visible. iPhone keeps the tighter 8pt.
+    private var leadingPadding: CGFloat {
+        UIDevice.current.userInterfaceIdiom == .pad ? 56 : 8
+    }
+
     var body: some View {
         ZStack {
             ExpandedChartTopHandle(onDismiss: onClose)
@@ -79,7 +88,7 @@ private struct ExpandedChartTopBar: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Close enlarged chart")
-                .padding(.leading, 8)
+                .padding(.leading, leadingPadding)
 
                 Spacer()
             }

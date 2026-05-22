@@ -43,7 +43,13 @@ struct DashboardView: View {
         contentContainer
             .fluxScreenBackground()
         #if os(iOS)
-            .toolbar(.hidden, for: .navigationBar)
+            // Hide the system navigation bar in the iPhone V5 shell so the
+            // FluxScreenHeader tab bar is the only chrome. The iPad sidebar
+            // shell wants the system navigation bar visible so its
+            // `.primaryAction` toolbar gear renders and the sidebar toggle
+            // works.
+            .toolbar(usesRegularLayout ? .visible : .hidden, for: .navigationBar)
+            .navigationTitle(usesRegularLayout ? "Dashboard" : "")
         #endif
         #if os(macOS)
         .task {
@@ -118,8 +124,10 @@ struct DashboardView: View {
 
     @ViewBuilder
     private var dashboardContentRegular: some View {
+        // iPad sidebar shell: the system navigation bar carries the title
+        // and the settings toolbar gear, so skip both the FluxScreenHeader
+        // tab bar and the legacyHeader eyebrow/title block.
         VStack(alignment: .leading, spacing: FluxTheme.Metrics.panelGap) {
-            headerSection
             if viewModel.error != nil {
                 stalenessBanner
             }
