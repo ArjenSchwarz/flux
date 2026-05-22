@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Documentation
+
+- **iPad adaptive layout spec** (T-1150). Implementation spec for swapping the stretched iPhone V5 shell on iPad for a `NavigationSplitView(.balanced)` sidebar at regular size class, with compact widths (Slide Over / narrow Split View) falling back to the existing tab-bar shell. Covers Dashboard / History / Day Detail multi-column layouts above 700 / 1000 pt detail widths, midnight rollover on the Today entry via a new `DayDetailViewModel.setDate(_:)`, and a `userInterfaceIdiom == .pad && hSizeClass == .regular` gate so iPhone Plus/Max landscape stays on the iPhone shell. See `specs/ipad-adaptive-layout/`.
+
 ## [1.3] - 2026-05-21
 
 ### Added
