@@ -52,4 +52,43 @@ the updated boundary values.
 
 ## Task 21 verification log
 
-To be filled in during Task 21.
+### Automated tests (2026-05-22)
+
+- `make ios-build` — succeeds.
+- `make macos-build` — succeeds.
+- `make ios-lint` — no violations in files touched by this spec; pre-existing
+  violations remain in unrelated FluxCore and SoCAlerts files.
+- `make ios-test` — passes for the four new test suites added by this spec
+  (`AdaptiveColumnsLayoutTests`, `ScreenTests`, `SidebarTabSyncTests`,
+  `DayDetailViewModelSetDateTests`). Two pre-existing tests are flaky when
+  run in parallel mode but pass in isolation:
+  - `DashboardViewModelTests.refreshSkipsWhenAlreadyLoading` — timing-based
+    concurrency test, fails under load.
+  - `CompareControlTests.*` — UIHostingController text-inspection tests,
+    fail when the test host has stale state from prior tests in the same
+    process. Confirmed passing in isolation (`-only-testing` flag).
+- `make macos-test` — same observation: only `refreshSkipsWhenAlreadyLoading`
+  is flaky, passes in isolation.
+
+### Manual smoke check (deferred to human verification)
+
+The interactive verification matrix below requires a developer to drive the
+simulators (rotate, advance the clock, switch to Slide Over / Split View).
+Build and code-level verification has been completed; recording these rows
+is the final acceptance step before merging.
+
+| Target | Expected | Result |
+|---|---|---|
+| iPhone 17 Pro | FluxTabBar visible all three tabs; Settings sheet reachable from each; History → Day Detail push | _to verify_ |
+| macOS | Sidebar with Dashboard / Today / History; ⌘, opens Settings scene; ⌘R refresh; ← / → on Day Detail | _to verify_ |
+| iPad mini portrait | FluxiPadRoot, sidebar visible, detail column shows Dashboard at single-col (width < 700) | _to verify_ |
+| iPad mini landscape | FluxiPadRoot, sidebar visible, detail column shows 2-col Dashboard | _to verify_ |
+| iPad Air landscape | FluxiPadRoot, 2-col Dashboard / History card grid / Day Detail two-column | _to verify_ |
+| iPad Pro 13" portrait | FluxiPadRoot, 2 or 3-col Dashboard (depending on sidebar state) | _to verify_ |
+| iPad Pro 13" landscape | FluxiPadRoot, 3-col Dashboard at detail width ≥ 1000pt | _to verify_ |
+| iPad Pro 13" ½ Split View | FluxiPadRoot, detail column narrow → single-col fallback | _to verify_ |
+| iPad Slide Over | FluxiOSRoot (tab-bar shell) — `usesPadShell` returns false at compact size class | _to verify_ |
+| Today midnight rollover | Advance simulator clock past midnight on Today sidebar entry; date updates and reload fires within 60s | _to verify_ |
+| Settings sheet on iPad | Form content capped to 640pt-wide column centred in sheet | _to verify_ |
+| Dashboard 10s refresh on iPad | Live values update every 10s while Dashboard is selected | _to verify_ |
+| History → Day Detail push on iPad regular | Day Detail pushes onto detail-column NavigationStack | _to verify_ |

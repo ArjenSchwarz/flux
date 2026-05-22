@@ -206,7 +206,7 @@ references:
 
 ## Verification
 
-- [ ] 21. Run full smoke check + iPad device coverage; record results in implementation.md <!-- id:sgahfrl -->
+- [x] 21. Run full smoke check + iPad device coverage; record results in implementation.md <!-- id:sgahfrl -->
   - Record per row in specs/ipad-adaptive-layout/implementation.md
   - iPhone: FluxTabBar visible all three tabs; Settings sheet from each screen; History → Day Detail push
   - macOS: sidebar with Dashboard/Today/History (no Settings row); ⌘, opens Settings scene; ⌘R refresh; ←/→ on Day Detail
