@@ -113,17 +113,7 @@ struct DayDetailView: View {
         }
     }
 
-    /// Gate for the iPad regular-size-class layout. macOS keeps the existing
-    /// single-column layout (AC 7.2); iPhone Plus/Max landscape reports
-    /// `.regular` but the iPad layout is only meaningful inside the iPad
-    /// sidebar shell. Idiom check matches `AppNavigationView.usesPadShell`.
-    private var usesRegularLayout: Bool {
-        #if os(iOS)
-        UIDevice.current.userInterfaceIdiom == .pad && hSizeClass == .regular
-        #else
-        false
-        #endif
-    }
+    private var usesRegularLayout: Bool { IPadLayoutGate.isActive(hSizeClass: hSizeClass) }
 
     @ViewBuilder
     private var dayDetailContent: some View {
@@ -174,14 +164,15 @@ struct DayDetailView: View {
 
     @ViewBuilder
     private var summaryColumn: some View {
+        let dailyUsage = viewModel.dailyUsage.flatMap { $0.blocks.isEmpty ? nil : $0 }
         VStack(alignment: .leading, spacing: FluxTheme.Metrics.panelGap) {
-            if let dailyUsage = viewModel.dailyUsage, !dailyUsage.blocks.isEmpty {
+            if let dailyUsage {
                 DayInFiveBlocksPanel(dailyUsage: dailyUsage,
                                      compare: viewModel.comparisonState)
             }
             summaryBlock
             batteryBlock
-            if let dailyUsage = viewModel.dailyUsage, !dailyUsage.blocks.isEmpty {
+            if let dailyUsage {
                 DailyUsageCard(dailyUsage: dailyUsage)
             }
             if !viewModel.peakPeriods.isEmpty {

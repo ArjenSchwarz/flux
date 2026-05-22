@@ -128,25 +128,17 @@ struct HistoryView: View {
         #endif
     }
 
-    /// Gate for the iPad regular-size-class layout. macOS keeps the existing
-    /// single-column layout (AC 7.2); iPhone Plus/Max landscape reports
-    /// `.regular` but the iPad layout is only meaningful inside the iPad
-    /// sidebar shell. Idiom check matches `AppNavigationView.usesPadShell`.
-    private var usesRegularLayout: Bool {
-        #if os(iOS)
-        UIDevice.current.userInterfaceIdiom == .pad && hSizeClass == .regular
-        #else
-        false
-        #endif
-    }
+    private var usesRegularLayout: Bool { IPadLayoutGate.isActive(hSizeClass: hSizeClass) }
 
     @ViewBuilder
     private var historyContent: some View {
+        let derived = viewModel.derived
+        let selectedDate = viewModel.selectedDay.flatMap { DateFormatting.parseDayDate($0.date) }
         VStack(alignment: .leading, spacing: 16) {
-            statsOverviewCard
-            solarCard
-            gridUsageCard
-            dailyUsageCard
+            statsOverviewCard(derived: derived)
+            solarCard(derived: derived, selectedDate: selectedDate)
+            gridUsageCard(derived: derived, selectedDate: selectedDate)
+            dailyUsageCard(derived: derived, selectedDate: selectedDate)
             if let selectedDay = viewModel.selectedDay {
                 summaryCard(for: selectedDay)
             }
@@ -157,12 +149,14 @@ struct HistoryView: View {
 
     @ViewBuilder
     private var historyContentRegular: some View {
+        let derived = viewModel.derived
+        let selectedDate = viewModel.selectedDay.flatMap { DateFormatting.parseDayDate($0.date) }
         VStack(alignment: .leading, spacing: 16) {
-            statsOverviewCard
+            statsOverviewCard(derived: derived)
             AdaptiveColumnsLayout {
-                solarCard
-                gridUsageCard
-                dailyUsageCard
+                solarCard(derived: derived, selectedDate: selectedDate)
+                gridUsageCard(derived: derived, selectedDate: selectedDate)
+                dailyUsageCard(derived: derived, selectedDate: selectedDate)
                 if let selectedDay = viewModel.selectedDay {
                     summaryCard(for: selectedDay)
                 }
@@ -173,8 +167,7 @@ struct HistoryView: View {
     }
 
     @ViewBuilder
-    private var statsOverviewCard: some View {
-        let derived = viewModel.derived
+    private func statsOverviewCard(derived: HistoryViewModel.DerivedState) -> some View {
         HistoryStatsOverviewCard(
             summary: derived.summary,
             entries: derived.solar,
@@ -183,10 +176,7 @@ struct HistoryView: View {
     }
 
     @ViewBuilder
-    private var solarCard: some View {
-        let derived = viewModel.derived
-        let selectedDate = viewModel.selectedDay
-            .flatMap { DateFormatting.parseDayDate($0.date) }
+    private func solarCard(derived: HistoryViewModel.DerivedState, selectedDate: Date?) -> some View {
         HistorySolarCard(
             entries: derived.solar,
             summary: derived.summary,
@@ -197,10 +187,7 @@ struct HistoryView: View {
     }
 
     @ViewBuilder
-    private var gridUsageCard: some View {
-        let derived = viewModel.derived
-        let selectedDate = viewModel.selectedDay
-            .flatMap { DateFormatting.parseDayDate($0.date) }
+    private func gridUsageCard(derived: HistoryViewModel.DerivedState, selectedDate: Date?) -> some View {
         HistoryGridUsageCard(
             entries: derived.grid,
             summary: derived.summary,
@@ -211,10 +198,7 @@ struct HistoryView: View {
     }
 
     @ViewBuilder
-    private var dailyUsageCard: some View {
-        let derived = viewModel.derived
-        let selectedDate = viewModel.selectedDay
-            .flatMap { DateFormatting.parseDayDate($0.date) }
+    private func dailyUsageCard(derived: HistoryViewModel.DerivedState, selectedDate: Date?) -> some View {
         HistoryDailyUsageCard(
             entries: derived.dailyUsage,
             summary: derived.summary,

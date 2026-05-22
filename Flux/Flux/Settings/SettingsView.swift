@@ -328,13 +328,7 @@ private struct IPadFormWidthCap: ViewModifier {
         }
     }
 
-    private var shouldApply: Bool {
-        #if os(iOS)
-        UIDevice.current.userInterfaceIdiom == .pad && hSizeClass == .regular
-        #else
-        false
-        #endif
-    }
+    private var shouldApply: Bool { IPadLayoutGate.isActive(hSizeClass: hSizeClass) }
 }
 #endif
 

@@ -2,8 +2,6 @@ import FluxCore
 import SwiftData
 import SwiftUI
 
-// swiftlint:disable type_body_length
-
 /// V5 dashboard. All the V4 sub-views (BatteryHeroView / PowerTrioView /
 /// SecondaryStatsView / TodayEnergyView / NoteRowView) have been folded into
 /// the panels below.
@@ -100,17 +98,7 @@ struct DashboardView: View {
         .scrollBounceBehavior(.basedOnSize)
     }
 
-    /// Gate for the iPad regular-size-class layout. macOS keeps the existing
-    /// single-column layout (AC 7.2); iPhone Plus/Max landscape reports
-    /// `.regular` but the iPad layout is only meaningful inside the iPad
-    /// sidebar shell. Idiom check matches `AppNavigationView.usesPadShell`.
-    private var usesRegularLayout: Bool {
-        #if os(iOS)
-        UIDevice.current.userInterfaceIdiom == .pad && hSizeClass == .regular
-        #else
-        false
-        #endif
-    }
+    private var usesRegularLayout: Bool { IPadLayoutGate.isActive(hSizeClass: hSizeClass) }
 
     @ViewBuilder
     private var dashboardContent: some View {
@@ -290,7 +278,6 @@ struct DashboardView: View {
         return "Showing stale data"
     }
 }
-// swiftlint:enable type_body_length
 
 private enum DashboardEyebrowFormatter {
     static let short: DateFormatter = {

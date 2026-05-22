@@ -21,7 +21,6 @@ struct FluxiPadRoot: View {
     let apiClient: any FluxAPIClient
     @Binding var selectedScreen: Screen?
     @Binding var navigationPath: NavigationPath
-    let today: String
     let dashboardViewModel: DashboardViewModel
     let historyViewModel: HistoryViewModel
     let todayDayDetailViewModel: DayDetailViewModel

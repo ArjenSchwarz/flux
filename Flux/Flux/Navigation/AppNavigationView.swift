@@ -20,6 +20,7 @@ struct AppNavigationView: View {
     @State private var dashboardViewModel: DashboardViewModel?
     @State private var historyViewModel: HistoryViewModel?
     @State private var todayDayDetailViewModel: DayDetailViewModel?
+    @State private var credentialFingerprint: String?
     @State private var pendingAuto: PendingAutoPresentation?
     @State private var didEvaluateAutoPresentation = false
     @State private var canonicalInstalledVersion: String = ""
@@ -49,15 +50,12 @@ struct AppNavigationView: View {
                     storedSelection = newScreen.rawValue
                 }
                 #endif
-                if let newScreen, let mappedTab = newScreen.tab, mappedTab != iosTab {
-                    iosTab = mappedTab
-                }
+                let mapped = mappedIosTab(for: newScreen, currentTab: iosTab)
+                if mapped != iosTab { iosTab = mapped }
             }
             .onChange(of: iosTab) { _, newTab in
-                let mapped = Screen(tab: newTab)
-                if selectedScreen != mapped, selectedScreen != .settings {
-                    selectedScreen = mapped
-                }
+                let mapped = mappedSelectedScreen(for: newTab, currentSelection: selectedScreen)
+                if mapped != selectedScreen { selectedScreen = mapped }
             }
             .onChange(of: scenePhase) { _, newPhase in
                 if newPhase == .active {
@@ -178,7 +176,6 @@ struct AppNavigationView: View {
                     apiClient: apiClient,
                     selectedScreen: $selectedScreen,
                     navigationPath: $navigationPath,
-                    today: today,
                     dashboardViewModel: dashboardViewModel,
                     historyViewModel: historyViewModel,
                     todayDayDetailViewModel: todayDayDetailViewModel
@@ -198,12 +195,7 @@ struct AppNavigationView: View {
         }
     }
 
-    /// Gate for the iPad sidebar shell. iPhone Plus/Max landscape reports
-    /// `.regular` horizontal size class but must keep `FluxiOSRoot`, so the
-    /// idiom check is load-bearing.
-    private var usesPadShell: Bool {
-        UIDevice.current.userInterfaceIdiom == .pad && hSizeClass == .regular
-    }
+    private var usesPadShell: Bool { IPadLayoutGate.isActive(hSizeClass: hSizeClass) }
     #endif
 
     private var effectiveScreen: Screen {
@@ -229,22 +221,50 @@ struct AppNavigationView: View {
     }
 
     private func reloadDependencies() {
-        let client = makeAPIClient()
-        let clientChanged = (apiClient as AnyObject?) !== (client as AnyObject?)
-        apiClient = client
-        if clientChanged, let client {
-            // Hoisted VMs hold their constructor-time apiClient reference.
-            // Rebuild them on credential change so they hit the new client
-            // rather than continuing to use a stale (unauthorized) one.
-            dashboardViewModel = DashboardViewModel(apiClient: client)
-            historyViewModel = HistoryViewModel(apiClient: client, modelContext: modelContext)
-            todayDayDetailViewModel = DayDetailViewModel(date: today, apiClient: client)
+        // Fingerprint the credentials so we only rebuild the API client and
+        // the three hoisted VMs when the URL or token actually changes —
+        // otherwise every scenePhase → .active foreground would discard
+        // cached state and in-flight refresh timers (violating AC 6.4).
+        let newFingerprint = currentCredentialFingerprint()
+        let credentialsChanged = newFingerprint != credentialFingerprint
+        credentialFingerprint = newFingerprint
+
+        if credentialsChanged {
+            let client = makeAPIClient()
+            apiClient = client
+            if let client {
+                dashboardViewModel = DashboardViewModel(apiClient: client)
+                historyViewModel = HistoryViewModel(apiClient: client, modelContext: modelContext)
+                todayDayDetailViewModel = DayDetailViewModel(date: today, apiClient: client)
+            } else {
+                dashboardViewModel = nil
+                historyViewModel = nil
+                todayDayDetailViewModel = nil
+            }
         }
+
         // Also binds SoCAlertsService so its CRUD calls don't throw .notConfigured.
-        if let client {
-            SoCAlertsService.shared.bind(apiClient: client)
+        if let apiClient {
+            SoCAlertsService.shared.bind(apiClient: apiClient)
         }
         selectedScreen = apiClient == nil ? .settings : (selectedScreen ?? .dashboard)
+    }
+
+    /// Joins the trimmed API URL and the keychain token into a single
+    /// string so `reloadDependencies()` can detect a credentials change
+    /// by comparison instead of by API-client reference identity (the
+    /// client is a class instance and `makeAPIClient()` returns a fresh
+    /// one every call).
+    private func currentCredentialFingerprint() -> String? {
+        guard let urlString = UserDefaults.fluxAppGroup.apiURL?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+              !urlString.isEmpty,
+              let token = keychainService.loadToken(),
+              !token.isEmpty
+        else {
+            return nil
+        }
+        return "\(urlString)|\(token)"
     }
 
     private func makeAPIClient() -> (any FluxAPIClient)? {

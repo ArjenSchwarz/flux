@@ -8,19 +8,23 @@ import SwiftUI
 /// At `dynamicTypeSize >= .accessibility4` the column count drops by one
 /// (never below 1) so cards retain a readable per-column width.
 struct AdaptiveColumnsLayout<Content: View>: View {
-    let minCardWidth: CGFloat
     let spacing: CGFloat
     @ViewBuilder let content: () -> Content
 
-    @State private var measuredWidth: CGFloat = 0
+    // Seed at 700pt — the 2-column tier. This is only rendered inside the
+    // iPad regular shell (callers gate on `IPadLayoutGate`), where the
+    // detail-column width is always in the 2- or 3-column range. Starting
+    // at 1 column produced a visible 1-frame collapse on every appearance
+    // before `onGeometryChange` delivered the real width; starting at the
+    // 2-column tier means the snap-up to 3-column on iPad Pro 13" landscape
+    // is the only visible reflow and is much less obtrusive.
+    @State private var measuredWidth: CGFloat = 700
     @Environment(\.dynamicTypeSize) private var typeSize
 
     init(
-        minCardWidth: CGFloat = 320,
         spacing: CGFloat = FluxTheme.Metrics.panelGap,
         @ViewBuilder content: @escaping () -> Content
     ) {
-        self.minCardWidth = minCardWidth
         self.spacing = spacing
         self.content = content
     }

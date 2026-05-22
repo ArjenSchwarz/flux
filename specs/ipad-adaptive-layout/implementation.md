@@ -50,6 +50,54 @@ the updated boundary values.
 | iPad ½ Split View (any model) | reports `.regular` but narrower | falls into 1-col tier below 700 |
 | iPad Slide Over | reports `.compact` | iPhone shell fallback |
 
+## Pre-push review fixes (2026-05-22)
+
+Applied after the four-agent pre-push review:
+
+- Extracted the duplicated `userInterfaceIdiom == .pad && hSizeClass == .regular`
+  predicate into a single `IPadLayoutGate.isActive(hSizeClass:)` helper in
+  `Flux/Flux/Helpers/IPadLayoutGate.swift`. `AppNavigationView`,
+  `DashboardView`, `HistoryView`, `DayDetailView`, and `SettingsView` now
+  delegate to it — drift between the five copies could otherwise silently
+  regress AC 7.1 (the iPhone Plus/Max landscape guard).
+- Replaced the unused symmetric `syncedState(selected:tab:)` reducer with two
+  trigger-aware helpers (`mappedIosTab(for:currentTab:)`,
+  `mappedSelectedScreen(for:currentSelection:)`) that the live `onChange`
+  handlers in `AppNavigationView` actually invoke. The previous code shipped
+  a reducer that the unit tests covered but production bypassed; the new
+  helpers are the load-bearing path and the test suite is now exercising
+  what runs.
+- Fixed an AC 6.4 regression in `reloadDependencies()`. The previous identity
+  comparison (`(apiClient as AnyObject?) !== (client as AnyObject?)`) was
+  always true because `makeAPIClient()` returns a fresh `URLSessionAPIClient`
+  every call; the three hoisted view-models were therefore rebuilt on every
+  `scenePhase → .active` foreground transition, discarding cached state and
+  in-flight refresh timers. Replaced with a `credentialFingerprint`
+  (`apiURL|token`) compare so a rebuild only happens when the URL or token
+  actually changed.
+- `AdaptiveColumnsLayout` now seeds `measuredWidth` at the 2-column tier
+  instead of `0`, so the first frame doesn't briefly render every iPad screen
+  as a single column before `onGeometryChange` delivers the real width. The
+  unused `minCardWidth` parameter (never consumed by `columnCount(width:typeSize:)`)
+  was removed.
+- Dropped the unused `today: String` parameter from `FluxiPadRoot.init` —
+  the hoisted Today `DayDetailViewModel` already carries the date.
+- `DayDetailView.summaryColumn` now unwraps `viewModel.dailyUsage` once per
+  render instead of twice (once for `DayInFiveBlocksPanel`, once for
+  `DailyUsageCard`).
+- `HistoryView`'s per-card `@ViewBuilder` properties became functions that
+  accept `derived: HistoryViewModel.DerivedState` and `selectedDate: Date?`
+  parameters. The values are now computed once at the top of
+  `historyContent`/`historyContentRegular` instead of four times per render.
+- Updated the `nonisolated(unsafe) comparisonTask` invariant comment in
+  `DayDetailViewModel` to list `setDate` as an approved MainActor access
+  point alongside `updateCompare`.
+- Collapsed the four CHANGELOG entries (Added × 2, Changed × 2) for this
+  feature into a single user-facing Added bullet — the "Changed" entries
+  described internal scaffolding that ships together with the user-facing
+  shell, and the sidebar-shell bullet had a leftover "adaptive layouts land
+  in next phase" sentence that now contradicted reality.
+
 ## Task 21 verification log
 
 ### Automated tests (2026-05-22)
