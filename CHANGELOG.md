@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **iPad adaptive layout foundations** (T-1150). Internal-only scaffolding ahead of the iPad shell: a reusable `AdaptiveColumnsLayout` helper that reflows children into 1/2/3 columns at width thresholds `700`/`1000` and drops one column at Dynamic Type ≥ AX4; a `Screen(tab:)` initialiser and a widened `Screen.sidebarVisible` that exposes Dashboard / Today / History (no Settings row) on both iOS and macOS; a `DayDetailViewModel.setDate(_:)` method that swaps the date in place and clears per-day fields without rebuilding the view, used by the upcoming Today midnight-rollover path; and a pure `syncedState(selected:tab:)` reducer that defines the canonical sidebar ↔ tab pair. No user-visible change yet — the iPad shell that consumes these lands in later phases.
+
 ### Documentation
 
 - **iPad adaptive layout spec** (T-1150). Implementation spec for swapping the stretched iPhone V5 shell on iPad for a `NavigationSplitView(.balanced)` sidebar at regular size class, with compact widths (Slide Over / narrow Split View) falling back to the existing tab-bar shell. Covers Dashboard / History / Day Detail multi-column layouts above 700 / 1000 pt detail widths, midnight rollover on the Today entry via a new `DayDetailViewModel.setDate(_:)`, and a `userInterfaceIdiom == .pad && hSizeClass == .regular` gate so iPhone Plus/Max landscape stays on the iPhone shell. See `specs/ipad-adaptive-layout/`.

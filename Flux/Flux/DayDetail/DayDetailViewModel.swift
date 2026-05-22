@@ -83,6 +83,25 @@ final class DayDetailViewModel {
         DateFormatting.isToday(date, now: nowProvider())
     }
 
+    /// Used only by the iPad Today rollover path (T-1150). Reuses this VM
+    /// across midnight so view-level state (chart highlight, note draft) is
+    /// preserved; per-day fields are cleared explicitly. General date
+    /// navigation constructs a fresh VM.
+    func setDate(_ newDate: String) async {
+        guard newDate != date else { return }
+        comparisonTask?.cancel()
+        date = newDate
+        readings = []
+        parsedReadings = []
+        summary = nil
+        peakPeriods = []
+        dailyUsage = nil
+        note = nil
+        offpeakStats = .empty
+        comparisonState = .off
+        await loadDay()
+    }
+
     func loadDay() async {
         guard !isLoading else { return }
 

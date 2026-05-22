@@ -8,7 +8,7 @@ references:
 
 ## Foundations
 
-- [ ] 1. Write unit tests for AdaptiveColumnsLayout.columnCount <!-- id:sgahfr1 -->
+- [x] 1. Write unit tests for AdaptiveColumnsLayout.columnCount <!-- id:sgahfr1 -->
   - New test file Flux/FluxTests/AdaptiveColumnsLayoutTests.swift
   - Use Swift Testing (@Test, #expect)
   - Boundary widths: 699 → 1, 700 → 2, 999 → 2, 1000 → 3
@@ -17,7 +17,7 @@ references:
   - Stream: 1
   - Requirements: [8.2](requirements.md#8.2)
 
-- [ ] 2. Implement AdaptiveColumnsLayout helper <!-- id:sgahfr2 -->
+- [x] 2. Implement AdaptiveColumnsLayout helper <!-- id:sgahfr2 -->
   - New file Flux/Flux/Helpers/AdaptiveColumnsLayout.swift
   - Generic over content; takes minCardWidth: CGFloat = 320, spacing: CGFloat = FluxTheme.Metrics.panelGap
   - Internal columnCount(width:) reads @Environment(\.dynamicTypeSize)
@@ -27,7 +27,7 @@ references:
   - Stream: 1
   - Requirements: [2.2](requirements.md#2.2), [3.1](requirements.md#3.1), [4.1](requirements.md#4.1), [8.2](requirements.md#8.2)
 
-- [ ] 3. Write unit tests for Screen tab init and widened sidebarVisible <!-- id:sgahfr3 -->
+- [x] 3. Write unit tests for Screen tab init and widened sidebarVisible <!-- id:sgahfr3 -->
   - Edit Flux/FluxTests/ScreenTests.swift (create if missing)
   - Every FluxTab maps to a Screen whose .tab returns the original
   - Screen.sidebarVisible returns [.dashboard, .today, .history] on iOS (no .settings)
@@ -35,7 +35,7 @@ references:
   - Stream: 1
   - Requirements: [1.1](requirements.md#1.1), [1.3](requirements.md#1.3), [1.7](requirements.md#1.7), [6.1](requirements.md#6.1), [6.2](requirements.md#6.2)
 
-- [ ] 4. Implement Screen tab init and widen Screen.sidebarVisible <!-- id:sgahfr4 -->
+- [x] 4. Implement Screen tab init and widen Screen.sidebarVisible <!-- id:sgahfr4 -->
   - Edit Flux/Flux/Navigation/Screen.swift
   - Add init(tab: FluxTab) initialiser
   - Drop the iOS-side filter that excludes .today from sidebarVisible (lines 36-38 today)
@@ -44,7 +44,7 @@ references:
   - Stream: 1
   - Requirements: [1.1](requirements.md#1.1), [1.3](requirements.md#1.3), [1.7](requirements.md#1.7), [6.1](requirements.md#6.1), [6.2](requirements.md#6.2)
 
-- [ ] 5. Write unit tests for DayDetailViewModel setDate <!-- id:sgahfr5 -->
+- [x] 5. Write unit tests for DayDetailViewModel setDate <!-- id:sgahfr5 -->
   - Edit Flux/FluxTests/DayDetailViewModelTests.swift (create if missing)
   - Use a mock FluxAPIClient that counts loadDay invocations
   - Verify per-day fields reset: readings, parsedReadings, summary, peakPeriods, dailyUsage, note, offpeakStats, comparisonState
@@ -53,7 +53,7 @@ references:
   - Stream: 1
   - Requirements: [1.7](requirements.md#1.7)
 
-- [ ] 6. Implement DayDetailViewModel setDate method <!-- id:sgahfr6 -->
+- [x] 6. Implement DayDetailViewModel setDate method <!-- id:sgahfr6 -->
   - Edit Flux/Flux/DayDetail/DayDetailViewModel.swift
   - Method signature: func setDate(_ newDate: String) async
   - Cancel comparisonTask; mutate date; clear listed per-day fields; await loadDay()
@@ -62,7 +62,7 @@ references:
   - Stream: 1
   - Requirements: [1.7](requirements.md#1.7)
 
-- [ ] 7. Write unit tests for sidebar↔tab syncedState reducer <!-- id:sgahfr7 -->
+- [x] 7. Write unit tests for sidebar↔tab syncedState reducer <!-- id:sgahfr7 -->
   - New test file Flux/FluxTests/SidebarTabSyncTests.swift
   - Reducer signature: func syncedState(selected: Screen?, tab: FluxTab) -> (Screen?, FluxTab)
   - Identity inputs are fixed points
@@ -71,7 +71,7 @@ references:
   - Stream: 1
   - Requirements: [6.1](requirements.md#6.1), [6.2](requirements.md#6.2)
 
-- [ ] 8. Implement syncedState pure function <!-- id:sgahfr8 -->
+- [x] 8. Implement syncedState pure function <!-- id:sgahfr8 -->
   - New file Flux/Flux/Navigation/SidebarTabSync.swift
   - Pure free function — no SwiftUI imports beyond what Screen / FluxTab need
   - Single source of truth for the Screen ↔ FluxTab mapping

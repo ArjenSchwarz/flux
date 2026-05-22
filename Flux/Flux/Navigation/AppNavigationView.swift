@@ -190,17 +190,6 @@ struct AppNavigationView: View {
     }
 }
 
-private extension Screen {
-    var tab: FluxTab? {
-        switch self {
-        case .dashboard: .dashboard
-        case .today: .today
-        case .history: .history
-        case .settings: nil
-        }
-    }
-}
-
 #if os(macOS)
 private struct MacUnconfiguredView: View {
     var body: some View {

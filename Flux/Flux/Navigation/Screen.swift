@@ -26,15 +26,26 @@ enum Screen: String, CaseIterable, Identifiable {
         }
     }
 
+    /// macOS uses the Settings scene (⌘,); iPad regular uses the per-screen
+    /// settings affordance. Neither shell wants a Settings sidebar row.
     static var sidebarVisible: [Screen] {
-        #if os(macOS)
-        // macOS uses the Settings scene (⌘,) instead of an inline entry.
-        return Screen.allCases.filter { $0 != .settings }
-        #else
-        // `.today` is a macOS-only sidebar entry per T-1081 polish; iOS
-        // continues to reach Day Detail via the Dashboard's "Today detail"
-        // button.
-        return Screen.allCases.filter { $0 != .today }
-        #endif
+        Screen.allCases.filter { $0 != .settings }
+    }
+
+    var tab: FluxTab? {
+        switch self {
+        case .dashboard: .dashboard
+        case .today: .today
+        case .history: .history
+        case .settings: nil
+        }
+    }
+
+    init(tab: FluxTab) {
+        switch tab {
+        case .dashboard: self = .dashboard
+        case .today: self = .today
+        case .history: self = .history
+        }
     }
 }
