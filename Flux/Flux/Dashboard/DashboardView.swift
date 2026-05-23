@@ -136,9 +136,12 @@ struct DashboardView: View {
                 trioPanel
             }
             summaryPanel
-            AdaptiveColumnsLayout {
-                batteryPanel
-            }
+            // `batteryPanel` is the only secondary block today; wrap inline
+            // rather than in an `AdaptiveColumnsLayout` (a 1-child grid is
+            // identical to a plain row but pays the GeometryReader cost).
+            // Switch back to `AdaptiveColumnsLayout` when a second secondary
+            // block lands.
+            batteryPanel
         }
         .padding(.horizontal, FluxTheme.Metrics.screenHorizontalPadding)
         .padding(.bottom, FluxTheme.Metrics.screenBottomPadding)

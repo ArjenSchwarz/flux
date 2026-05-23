@@ -71,7 +71,11 @@ struct DayDetailView: View {
         // shell wants it visible so the toolbar gear and sidebar toggle
         // render. See DashboardView.body for the same pattern.
         .toolbar(usesRegularLayout ? .visible : .hidden, for: .navigationBar)
-        .navigationTitle(usesRegularLayout ? "Day Detail" : "")
+        // Use the same "Today" / formatted-date label the eyebrow already
+        // surfaces so the sidebar entry ("Today") agrees with the navbar
+        // when reached via the Today sidebar; History → Day Detail pushes
+        // get the formatted date (e.g. "Thu, 22 May").
+        .navigationTitle(usesRegularLayout ? pageTitle : "")
         #endif
         .task(id: viewModel.date) {
             await viewModel.loadDay()
