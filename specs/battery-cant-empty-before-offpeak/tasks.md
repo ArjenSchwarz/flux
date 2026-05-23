@@ -36,7 +36,7 @@ metadata:
   - (e) `nowFunc` pinned to `2026-10-04 01:30 Australia/Sydney` (DST start), window 11:00-14:00, Soc 60, capacity 13.34, assert flag tracks `nextOffpeakStart` advancing through the DST gap.
   - (f) System record missing → flag uses `fallbackCapacityKwh = 13.34`.
   - Tests fail because the field is not yet on `BatteryInfo`.
-  - Blocked-by: p1ve882 (Backend (Go) — implement helpers (green)), helpers, helpers, helpers, helpers
+  - Blocked-by: p1ve882 (Backend (Go) — implement helpers (green))
   - Stream: 1
   - Requirements: [1.3](requirements.md#1.3), [1.7](requirements.md#1.7), [2.4](requirements.md#2.4)
 
@@ -44,7 +44,7 @@ metadata:
   - `internal/api/response.go`: add `CantEmptyBeforeOffpeak *bool` JSON-tagged `cantEmptyBeforeOffpeak` to `BatteryInfo` (pointer, no `omitempty`, mirrors `EstimatedCutoff` encoding).
   - `handleStatus` in `internal/api/status.go`: inside the existing `liveFresh` branch, immediately after `battery.EstimatedCutoff` is set, call `withinOffpeakWindow(now, h.offpeakStart, h.offpeakEnd)`, build `cantEmptyInput`, call `computeCantEmptyBeforeOffpeak`, and assign the result to `battery.CantEmptyBeforeOffpeak`.
   - No changes to the `!liveFresh` branch — the field stays nil.
-  - Blocked-by: p1ve882 (Backend (Go) — implement helpers (green)), helpers, helpers, helpers, helpers, p1ve883 (Backend (Go) — handler integration tests (red)), handler, handler, handler, handler
+  - Blocked-by: p1ve882 (Backend (Go) — implement helpers (green)), p1ve883 (Backend (Go) — handler integration tests (red))
   - Stream: 1
   - Requirements: [1.7](requirements.md#1.7), [2.1](requirements.md#2.1), [2.2](requirements.md#2.2), [2.3](requirements.md#2.3)
 
@@ -71,7 +71,7 @@ metadata:
   - Add a Swift Testing case under `Flux/FluxTests/` that constructs `DashboardHeroPanel(live:, rolling15min:, battery:, offpeakWindowStart:)` with `battery.cantEmptyBeforeOffpeak == true` and `offpeakWindowStart == "23:00"`.
   - Assert the rendered indicator's `accessibilityLabel` is exactly `"Battery won't empty before off-peak at 23:00"`.
   - Test fails because the panel does not yet accept the new inputs.
-  - Blocked-by: p1ve886 (Swift — add field to BatteryInfo + fixture variants (green)), fixture, fixture, fixture, fixture
+  - Blocked-by: p1ve886 (Swift — add field to BatteryInfo + fixture variants (green))
   - Stream: 2
   - Requirements: [3.5](requirements.md#3.5)
 
@@ -82,14 +82,14 @@ metadata:
   - Set the indicator's `accessibilityLabel` to `"Battery won't empty before off-peak at <HH:MM>"` where `<HH:MM>` is the value of `offpeakWindowStart`.
   - `Flux/Flux/Dashboard/DashboardView.swift:113-116`: pass `battery: viewModel.status?.battery` and `offpeakWindowStart: viewModel.status?.offpeak?.windowStart`.
   - Update the `#Preview` block to render both states using the new `MockFluxAPIClient.statusResponseCantEmpty` fixture alongside the default.
-  - Blocked-by: p1ve886 (Swift — add field to BatteryInfo + fixture variants (green)), fixture, fixture, fixture, fixture, p1ve887 (Swift — Dashboard hero accessibility test (red))
+  - Blocked-by: p1ve886 (Swift — add field to BatteryInfo + fixture variants (green)), p1ve887 (Swift — Dashboard hero accessibility test (red))
   - Stream: 2
   - Requirements: [3.1](requirements.md#3.1), [3.2](requirements.md#3.2), [3.3](requirements.md#3.3), [3.4](requirements.md#3.4), [3.5](requirements.md#3.5)
 
 ## Validation
 
-- [ ] 9. Validate — run lint and full test suites <!-- id:p1ve889 -->
+- [x] 9. Validate — run lint and full test suites <!-- id:p1ve889 -->
   - Run `make lint`, `go test ./...`, and the Swift test schemes (`make macos-test` and/or `make ios-test` depending on what's defined in the Makefile).
   - Fix any lint/test failures introduced by this branch. No new feature code — only test fixes, lint fixes, and follow-on adjustments.
-  - Blocked-by: p1ve884 (Backend (Go) — add field + wire handler (green)), handler, handler, handler, handler, p1ve888 (Swift — implement hero indicator + wire DashboardView (green))
+  - Blocked-by: p1ve884 (Backend (Go) — add field + wire handler (green)), p1ve888 (Swift — implement hero indicator + wire DashboardView (green))
   - Stream: 1
