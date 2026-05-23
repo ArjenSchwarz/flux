@@ -7,6 +7,7 @@ import (
 
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestOffpeakDeltas(t *testing.T) {
@@ -655,6 +656,166 @@ func TestComputeTodayEnergy(t *testing.T) {
 			assert.InDelta(t, tc.want.EDischarge, got.EDischarge, 1e-9)
 		})
 	}
+}
+
+func TestWithinOffpeakWindow(t *testing.T) {
+	syd := func(h, m int) time.Time {
+		return time.Date(2026, 4, 15, h, m, 0, 0, sydneyTZ)
+	}
+
+	tests := map[string]struct {
+		now          time.Time
+		offpeakStart string
+		offpeakEnd   string
+		want         bool
+	}{
+		"before window": {
+			now: syd(10, 59), offpeakStart: "11:00", offpeakEnd: "14:00",
+			want: false,
+		},
+		"at start": {
+			now: syd(11, 0), offpeakStart: "11:00", offpeakEnd: "14:00",
+			want: true,
+		},
+		"mid-window": {
+			now: syd(12, 30), offpeakStart: "11:00", offpeakEnd: "14:00",
+			want: true,
+		},
+		"at end (exclusive)": {
+			now: syd(14, 0), offpeakStart: "11:00", offpeakEnd: "14:00",
+			want: false,
+		},
+		"after window": {
+			now: syd(14, 30), offpeakStart: "11:00", offpeakEnd: "14:00",
+			want: false,
+		},
+		"unparseable strings": {
+			now: syd(12, 0), offpeakStart: "x", offpeakEnd: "y",
+			want: false,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := withinOffpeakWindow(tc.now, tc.offpeakStart, tc.offpeakEnd)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestComputeCantEmptyBeforeOffpeak(t *testing.T) {
+	now := time.Date(2026, 4, 15, 10, 0, 0, 0, sydneyTZ)
+
+	// Boundary equality: requiredHours = (Soc - cutoffPercent)/100 * CapacityKwh / maxDischargeKW
+	// Pick Soc such that requiredHours == 1h exactly with capacity 13.34 and max 5.0:
+	// requiredHours = 1 → (Soc - 5)/100 * 13.34 / 5 = 1 → Soc - 5 = 500/13.34 → Soc = 5 + 500/13.34
+	boundarySoc := 5.0 + 500.0/13.34
+
+	tests := map[string]struct {
+		in   cantEmptyInput
+		want *bool
+	}{
+		"soc just above cutoff, short window": {
+			// Soc 6, cap 13.34, cutoff 5 → remaining 0.1334 kWh.
+			// At 5 kW the battery drains in ~1.6 min; a 1-minute window
+			// therefore opens before drain completes → flag &true.
+			in: cantEmptyInput{
+				Soc: 6, CapacityKwh: 13.34,
+				Now: now, NextOpStart: now.Add(1 * time.Minute),
+				HasBoundary: true, WithinOffpeakWindow: false,
+			},
+			want: boolPtr(true),
+		},
+		"soc just above cutoff, long window": {
+			in: cantEmptyInput{
+				Soc: 6, CapacityKwh: 13.34,
+				Now: now, NextOpStart: now.Add(24 * time.Hour),
+				HasBoundary: true, WithinOffpeakWindow: false,
+			},
+			want: nil,
+		},
+		"soc well above cutoff, short window": {
+			in: cantEmptyInput{
+				Soc: 90, CapacityKwh: 13.34,
+				Now: now, NextOpStart: now.Add(30 * time.Minute),
+				HasBoundary: true, WithinOffpeakWindow: false,
+			},
+			want: boolPtr(true),
+		},
+		"soc well above cutoff, long window": {
+			in: cantEmptyInput{
+				Soc: 90, CapacityKwh: 13.34,
+				Now: now, NextOpStart: now.Add(48 * time.Hour),
+				HasBoundary: true, WithinOffpeakWindow: false,
+			},
+			want: nil,
+		},
+		"soc exactly at cutoff": {
+			in: cantEmptyInput{
+				Soc: 5, CapacityKwh: 13.34,
+				Now: now, NextOpStart: now.Add(1 * time.Hour),
+				HasBoundary: true, WithinOffpeakWindow: false,
+			},
+			want: nil,
+		},
+		"soc below cutoff": {
+			in: cantEmptyInput{
+				Soc: 3, CapacityKwh: 13.34,
+				Now: now, NextOpStart: now.Add(1 * time.Hour),
+				HasBoundary: true, WithinOffpeakWindow: false,
+			},
+			want: nil,
+		},
+		"window currently active": {
+			in: cantEmptyInput{
+				Soc: 80, CapacityKwh: 13.34,
+				Now: now, NextOpStart: now.Add(1 * time.Hour),
+				HasBoundary: true, WithinOffpeakWindow: true,
+			},
+			want: nil,
+		},
+		"no boundary": {
+			in: cantEmptyInput{
+				Soc: 80, CapacityKwh: 13.34,
+				Now: now, NextOpStart: time.Time{},
+				HasBoundary: false, WithinOffpeakWindow: false,
+			},
+			want: nil,
+		},
+		"zero capacity": {
+			in: cantEmptyInput{
+				Soc: 80, CapacityKwh: 0,
+				Now: now, NextOpStart: now.Add(1 * time.Hour),
+				HasBoundary: true, WithinOffpeakWindow: false,
+			},
+			want: nil,
+		},
+		"boundary equality": {
+			in: cantEmptyInput{
+				Soc: boundarySoc, CapacityKwh: 13.34,
+				Now: now, NextOpStart: now.Add(1 * time.Hour),
+				HasBoundary: true, WithinOffpeakWindow: false,
+			},
+			want: nil,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := computeCantEmptyBeforeOffpeak(tc.in)
+			if tc.want == nil {
+				assert.Nil(t, got)
+				return
+			}
+			require.NotNil(t, got)
+			assert.Equal(t, *tc.want, *got)
+		})
+	}
+}
+
+// boolPtr returns a pointer to the given bool.
+func boolPtr(b bool) *bool {
+	return &b
 }
 
 func TestReconcileEnergy(t *testing.T) {

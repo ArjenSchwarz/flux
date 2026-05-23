@@ -26,11 +26,17 @@ type LiveData struct {
 
 // BatteryInfo contains battery capacity, cutoff estimates, and the lowest
 // SOC since 00:00 Sydney local on the current day.
+//
+// CantEmptyBeforeOffpeak is the T-1327 "won't drain in time" indicator. It is
+// a pointer with no omitempty so the wire emits `null` when the condition
+// does not hold and `true` when it does — `false` is never serialised
+// (mirrors EstimatedCutoff). See AC 2.2.
 type BatteryInfo struct {
-	CapacityKwh     float64 `json:"capacityKwh"`
-	CutoffPercent   int     `json:"cutoffPercent"`
-	EstimatedCutoff *string `json:"estimatedCutoffTime"`
-	Low24h          *Low24h `json:"low24h"`
+	CapacityKwh            float64 `json:"capacityKwh"`
+	CutoffPercent          int     `json:"cutoffPercent"`
+	EstimatedCutoff        *string `json:"estimatedCutoffTime"`
+	CantEmptyBeforeOffpeak *bool   `json:"cantEmptyBeforeOffpeak"`
+	Low24h                 *Low24h `json:"low24h"`
 }
 
 // Low24h contains the lowest SOC reading since 00:00 Sydney local on the

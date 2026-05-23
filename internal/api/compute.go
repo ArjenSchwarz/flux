@@ -80,6 +80,55 @@ func computeCutoffTime(soc, pbat, capacityKwh, cutoffPercent float64, now time.T
 	return &t
 }
 
+// cantEmptyInput bundles the inputs to computeCantEmptyBeforeOffpeak.
+//
+// Soc is the latest battery SOC (percent). CapacityKwh is the configured
+// battery capacity. Now and NextOpStart are absolute Sydney-local times.
+// HasBoundary mirrors nextOffpeakStart's ok return — false when the off-peak
+// window is unparseable. WithinOffpeakWindow is true when Now falls inside
+// the configured window (any future cutoff during a charging window is
+// meaningless).
+type cantEmptyInput struct {
+	Soc, CapacityKwh    float64
+	Now, NextOpStart    time.Time
+	HasBoundary         bool
+	WithinOffpeakWindow bool
+}
+
+// computeCantEmptyBeforeOffpeak returns &true when, at the constant
+// maxDischargeKW ceiling, the battery cannot reach cutoffPercent before
+// NextOpStart. Returns nil when the question is meaningless (no off-peak
+// boundary, window currently active, SOC already at/below cutoff, or
+// non-positive capacity) or when the battery can in fact empty in time.
+// The comparison is strict (After), so Now+requiredHours == NextOpStart
+// returns nil — see requirements AC 2.4 (boundary equality).
+func computeCantEmptyBeforeOffpeak(in cantEmptyInput) *bool {
+	if !in.HasBoundary || in.WithinOffpeakWindow || in.Soc <= cutoffPercent || in.CapacityKwh <= 0 {
+		return nil
+	}
+	remainingKwh := (in.Soc - cutoffPercent) / 100 * in.CapacityKwh
+	requiredHours := remainingKwh / maxDischargeKW
+	if in.Now.Add(time.Duration(requiredHours * float64(time.Hour))).After(in.NextOpStart) {
+		t := true
+		return &t
+	}
+	return nil
+}
+
+// withinOffpeakWindow reports whether now (in Sydney local time per the
+// handler's invariant) falls inside the off-peak window [start, end).
+// Parsing is delegated to derivedstats.ParseOffpeakWindow so this stays a
+// single source of truth — unparseable inputs return false rather than
+// raising an error (consistent with how cutoff-time suppression degrades).
+func withinOffpeakWindow(now time.Time, offpeakStart, offpeakEnd string) bool {
+	startMin, endMin, ok := derivedstats.ParseOffpeakWindow(offpeakStart, offpeakEnd)
+	if !ok {
+		return false
+	}
+	minuteOfDay := now.Hour()*60 + now.Minute()
+	return minuteOfDay >= startMin && minuteOfDay < endMin
+}
+
 // computeRollingAverages returns the mean pload and pbat over the given readings.
 // Returns (0, 0) for an empty slice.
 func computeRollingAverages(readings []dynamo.ReadingItem) (avgLoad, avgPbat float64) {

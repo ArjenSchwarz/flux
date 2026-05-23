@@ -854,6 +854,198 @@ func TestHandleStatusBundlesNote(t *testing.T) {
 	})
 }
 
+// TestHandleStatusCantEmptyBeforeOffpeak covers the wire-level cases for the
+// T-1327 "battery can't empty before off-peak" indicator: liveFresh on/off,
+// flag on/off, off-peak config presence, DST transition, and fallback
+// capacity. Each case asserts the marshalled JSON shape ("cantEmptyBeforeOffpeak":
+// true | null — false is never emitted) per AC 2.2.
+func TestHandleStatusCantEmptyBeforeOffpeak(t *testing.T) {
+	t.Run("a) liveFresh and condition true emits true", func(t *testing.T) {
+		// now = 10:50 Sydney, off-peak 11:00-14:00 → 10 min to window.
+		// Soc 60 with 13.34 kWh cap at 5 kW max → requires ~88 min to reach 5%
+		// → cannot empty in 10 min → flag &true.
+		now := time.Date(2026, 4, 15, 10, 50, 0, 0, sydneyTZ)
+		nowUnix := now.Unix()
+		mr := &mockReader{
+			queryReadingsFn: func(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
+				return []dynamo.ReadingItem{
+					{Timestamp: nowUnix - 10, Ppv: 0, Pload: 200, Pbat: 100, Pgrid: 50, Soc: 60},
+				}, nil
+			},
+			getSystemFn: func(_ context.Context, serial string) (*dynamo.SystemItem, error) {
+				return &dynamo.SystemItem{SysSn: serial, Cobat: 13.34}, nil
+			},
+		}
+		h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+		h.nowFunc = func() time.Time { return now }
+
+		resp, err := h.Handle(context.Background(), statusRequest())
+		require.NoError(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+
+		sr := parseStatusResponse(t, resp)
+		require.NotNil(t, sr.Battery)
+		require.NotNil(t, sr.Battery.CantEmptyBeforeOffpeak, "flag must be set when condition holds")
+		assert.True(t, *sr.Battery.CantEmptyBeforeOffpeak)
+
+		// Verify JSON shape: field present and explicitly true.
+		var raw map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal([]byte(resp.Body), &raw))
+		var battery map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal(raw["battery"], &battery))
+		require.Contains(t, battery, "cantEmptyBeforeOffpeak")
+		assert.Equal(t, "true", string(battery["cantEmptyBeforeOffpeak"]))
+	})
+
+	t.Run("b) liveFresh and condition false emits null", func(t *testing.T) {
+		// now = 10:00, off-peak 11:00-14:00 → 1 hour to window.
+		// Soc 6 with 13.34 kWh → requires ~1.6 min, can empty in 1h → flag nil.
+		now := time.Date(2026, 4, 15, 10, 0, 0, 0, sydneyTZ)
+		nowUnix := now.Unix()
+		mr := &mockReader{
+			queryReadingsFn: func(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
+				return []dynamo.ReadingItem{
+					{Timestamp: nowUnix - 10, Ppv: 0, Pload: 200, Pbat: 100, Pgrid: 50, Soc: 6},
+				}, nil
+			},
+			getSystemFn: func(_ context.Context, serial string) (*dynamo.SystemItem, error) {
+				return &dynamo.SystemItem{SysSn: serial, Cobat: 13.34}, nil
+			},
+		}
+		h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+		h.nowFunc = func() time.Time { return now }
+
+		resp, err := h.Handle(context.Background(), statusRequest())
+		require.NoError(t, err)
+		sr := parseStatusResponse(t, resp)
+		require.NotNil(t, sr.Battery)
+		assert.Nil(t, sr.Battery.CantEmptyBeforeOffpeak, "flag must be nil when battery can empty in time")
+
+		var raw map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal([]byte(resp.Body), &raw))
+		var battery map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal(raw["battery"], &battery))
+		require.Contains(t, battery, "cantEmptyBeforeOffpeak", "field must always be serialised (no omitempty)")
+		assert.Equal(t, "null", string(battery["cantEmptyBeforeOffpeak"]))
+	})
+
+	t.Run("c) not liveFresh emits null regardless", func(t *testing.T) {
+		// Stale reading (>90s old) → liveFresh false → flag must not be computed.
+		now := time.Date(2026, 4, 15, 10, 50, 0, 0, sydneyTZ)
+		nowUnix := now.Unix()
+		mr := &mockReader{
+			queryReadingsFn: func(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
+				return []dynamo.ReadingItem{
+					{Timestamp: nowUnix - 3600, Ppv: 0, Pload: 200, Pbat: 100, Pgrid: 50, Soc: 60},
+				}, nil
+			},
+			getSystemFn: func(_ context.Context, serial string) (*dynamo.SystemItem, error) {
+				return &dynamo.SystemItem{SysSn: serial, Cobat: 13.34}, nil
+			},
+		}
+		h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+		h.nowFunc = func() time.Time { return now }
+
+		resp, err := h.Handle(context.Background(), statusRequest())
+		require.NoError(t, err)
+		sr := parseStatusResponse(t, resp)
+		assert.Nil(t, sr.Live, "precondition: live must be omitted when stale")
+		require.NotNil(t, sr.Battery)
+		assert.Nil(t, sr.Battery.CantEmptyBeforeOffpeak, "flag must be nil when !liveFresh")
+	})
+
+	t.Run("d) empty off-peak config emits null", func(t *testing.T) {
+		now := time.Date(2026, 4, 15, 10, 50, 0, 0, sydneyTZ)
+		nowUnix := now.Unix()
+		mr := &mockReader{
+			queryReadingsFn: func(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
+				return []dynamo.ReadingItem{
+					{Timestamp: nowUnix - 10, Ppv: 0, Pload: 200, Pbat: 100, Pgrid: 50, Soc: 60},
+				}, nil
+			},
+			getSystemFn: func(_ context.Context, serial string) (*dynamo.SystemItem, error) {
+				return &dynamo.SystemItem{SysSn: serial, Cobat: 13.34}, nil
+			},
+		}
+		// Empty off-peak config → ParseOffpeakWindow returns ok=false → no boundary.
+		h := NewHandler(mr, nil, testSerial, testToken, "", "")
+		h.nowFunc = func() time.Time { return now }
+
+		resp, err := h.Handle(context.Background(), statusRequest())
+		require.NoError(t, err)
+		sr := parseStatusResponse(t, resp)
+		require.NotNil(t, sr.Battery)
+		assert.Nil(t, sr.Battery.CantEmptyBeforeOffpeak, "flag must be nil when off-peak config is missing")
+	})
+
+	t.Run("e) Sydney DST transition day", func(t *testing.T) {
+		// 2026-10-04 is DST start in Sydney — clocks jump 02:00 AEST → 03:00 AEDT.
+		// Pin now to 01:30 AEST (= 15:30 UTC on 2026-10-03). Off-peak start
+		// 11:00 AEDT (= 00:00 UTC on 2026-10-04) → real elapsed ≈ 8.5 h.
+		// Soc 60 with 13.34 kWh at 5 kW max → required ≈ 1.47 h < 8.5 h → flag nil.
+		// The point is to verify nextOffpeakStart's DST math feeds the helper
+		// without producing a spurious flag flip on the gap day.
+		loc, err := time.LoadLocation("Australia/Sydney")
+		require.NoError(t, err)
+		now := time.Date(2026, 10, 4, 1, 30, 0, 0, loc)
+		nowUnix := now.Unix()
+		mr := &mockReader{
+			queryReadingsFn: func(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
+				return []dynamo.ReadingItem{
+					{Timestamp: nowUnix - 10, Ppv: 0, Pload: 200, Pbat: 100, Pgrid: 50, Soc: 60},
+				}, nil
+			},
+			getSystemFn: func(_ context.Context, serial string) (*dynamo.SystemItem, error) {
+				return &dynamo.SystemItem{SysSn: serial, Cobat: 13.34}, nil
+			},
+		}
+		h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+		h.nowFunc = func() time.Time { return now }
+
+		resp, err := h.Handle(context.Background(), statusRequest())
+		require.NoError(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+		sr := parseStatusResponse(t, resp)
+		require.NotNil(t, sr.Battery)
+		assert.Nil(t, sr.Battery.CantEmptyBeforeOffpeak,
+			"DST day: required hours (~1.47h) far less than time-to-window (~8.5h) → flag nil")
+
+		// Cross-check the boundary the integration uses: nextOpStart on
+		// the DST day must be 11:00 AEDT (UTC+11), not 11:00 AEST.
+		nextOp, ok := nextOffpeakStart(now.In(sydneyTZ), "11:00", "14:00")
+		require.True(t, ok)
+		_, offsetSec := nextOp.Zone()
+		assert.Equal(t, 11*3600, offsetSec, "off-peak start sits in AEDT after the DST gap")
+	})
+
+	t.Run("f) fallback capacity when system record missing", func(t *testing.T) {
+		// System record nil → handler uses fallbackCapacityKwh = 13.34.
+		// Same conditions as case (a): flag should fire.
+		now := time.Date(2026, 4, 15, 10, 50, 0, 0, sydneyTZ)
+		nowUnix := now.Unix()
+		mr := &mockReader{
+			queryReadingsFn: func(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
+				return []dynamo.ReadingItem{
+					{Timestamp: nowUnix - 10, Ppv: 0, Pload: 200, Pbat: 100, Pgrid: 50, Soc: 60},
+				}, nil
+			},
+			getSystemFn: func(_ context.Context, _ string) (*dynamo.SystemItem, error) {
+				return nil, nil // not found → fallback capacity used
+			},
+		}
+		h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+		h.nowFunc = func() time.Time { return now }
+
+		resp, err := h.Handle(context.Background(), statusRequest())
+		require.NoError(t, err)
+		sr := parseStatusResponse(t, resp)
+		require.NotNil(t, sr.Battery)
+		assert.Equal(t, 13.34, sr.Battery.CapacityKwh, "precondition: fallback capacity in use")
+		require.NotNil(t, sr.Battery.CantEmptyBeforeOffpeak, "flag must fire even on fallback capacity")
+		assert.True(t, *sr.Battery.CantEmptyBeforeOffpeak)
+	})
+}
+
 func TestHandleStatusSingleNowCapture(t *testing.T) {
 	// Verify that the handler captures "now" once and uses it consistently.
 	// The mock clock should be called exactly once via nowFunc.
