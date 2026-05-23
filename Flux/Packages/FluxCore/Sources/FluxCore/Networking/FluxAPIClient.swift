@@ -16,7 +16,10 @@ public protocol FluxAPIClient: Sendable {
     func createPricing(_ draft: PricingPeriodDraft) async throws -> PricingPeriod
     func updatePricing(id: String, _ draft: PricingPeriodDraft) async throws -> PricingPeriod
     func deletePricing(id: String) async throws
-    func replaceOpenEndedPricing(closingId: String, with draft: PricingPeriodDraft) async throws -> PricingPeriod
+    func replaceOpenEndedPricing(
+        closingId: String,
+        with draft: PricingPeriodDraft
+    ) async throws -> ReplaceOpenEndedResult
 }
 
 // Default implementations for the SoC-alert endpoints so existing test
@@ -60,7 +63,10 @@ public extension FluxAPIClient {
         throw FluxAPIError.notConfigured
     }
 
-    func replaceOpenEndedPricing(closingId _: String, with _: PricingPeriodDraft) async throws -> PricingPeriod {
+    func replaceOpenEndedPricing(
+        closingId _: String,
+        with _: PricingPeriodDraft
+    ) async throws -> ReplaceOpenEndedResult {
         throw FluxAPIError.notConfigured
     }
 }

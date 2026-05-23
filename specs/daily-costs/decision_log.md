@@ -751,3 +751,36 @@ Decision 9 frames peak as "everything outside the off-peak window." If the split
 - A day with a missing off-peak split shows `$0.00` savings even if the user actually consumed off-peak energy. Mitigated because the missing-split state is rare on recent data and the Day Detail off-peak energy tile would already be missing in this state.
 
 ---
+
+## Decision 24: Pricing list and replace-open-ended responses share a `pricing` envelope
+
+**Date**: 2026-05-24
+**Status**: accepted
+
+### Context
+
+During the post-merge design-critic review of the implementation, two production-breaking JSON envelope mismatches surfaced. The server's `GET /pricing` returns `{"pricing": [...]}` and `POST /pricing/replace-open-ended` returns `{"pricing": [closing, new]}`, but the original Swift client decoder expected `{"periods": [...]}` for the list endpoint and a bare `PricingPeriod` object from the replace endpoint. The design document specified the wire types for `PricingPayload` and the `pricingError` shape but was silent on the envelope key used by the multi-row endpoints.
+
+### Decision
+
+Standardise both multi-row pricing responses on the `{"pricing": [...]}` envelope. Single-row endpoints (`POST /pricing`, `PUT /pricing/{id}`) continue to return bare `PricingPeriod` objects. The Swift client decodes `replace-open-ended` into a new `ReplaceOpenEndedResult { closing, newPeriod }` value, and `PricingService.replaceOpenEnded` folds both rows into its local list instead of only the new row.
+
+### Rationale
+
+Both endpoints already returned the same shape on the server, so aligning the client to the server avoided a server change and any deployed-Lambda compatibility window. Keeping a structured `ReplaceOpenEndedResult` instead of returning `[PricingPeriod]` lets the editor surface "the open-ended period you just closed ended on X" without re-indexing the array, and pins the closing/new ordering at the type level.
+
+### Alternatives Considered
+
+- **Change the server to return `periods`**: Would require redeploying the Lambda before any client could be released and offered no advantage over aligning the client. Rejected.
+- **Have `replaceOpenEndedPricing` return `[PricingPeriod]`**: Simpler but loses the closing/new distinction at the type level, forcing every caller to know which index is which. Rejected.
+
+### Consequences
+
+**Positive:**
+- Server and client agree end-to-end on every pricing endpoint.
+- The editor's optimistic fold updates both rows immediately, removing the dependency on the fire-and-forget refetch to surface the closing row's new `endDate`.
+
+**Negative:**
+- The protocol is mildly asymmetric — multi-row responses carry an envelope, single-row responses do not. This is consistent with how the SoC Alerts feature already shapes its responses.
+
+---

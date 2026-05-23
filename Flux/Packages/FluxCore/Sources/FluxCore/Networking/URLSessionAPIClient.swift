@@ -306,7 +306,7 @@ public final class URLSessionAPIClient: FluxAPIClient, Sendable {
 extension URLSessionAPIClient {
     public func fetchPricing() async throws -> [PricingPeriod] {
         let response: PricingListResponse = try await performRequest(path: "pricing", queryItems: [])
-        return response.periods
+        return response.pricing
     }
 
     public func createPricing(_ draft: PricingPeriodDraft) async throws -> PricingPeriod {
@@ -330,15 +330,19 @@ extension URLSessionAPIClient {
     public func replaceOpenEndedPricing(
         closingId: String,
         with draft: PricingPeriodDraft
-    ) async throws -> PricingPeriod {
+    ) async throws -> ReplaceOpenEndedResult {
         let payload = ReplaceOpenEndedPayload(closingPricingId: closingId, newPeriod: draft)
         let body = try encoder.encode(payload)
-        return try await performRequest(
+        let response: PricingListResponse = try await performRequest(
             path: "pricing/replace-open-ended",
             queryItems: [],
             method: "POST",
             body: body
         )
+        guard response.pricing.count == 2 else {
+            throw FluxAPIError.decodingError("replace-open-ended expected 2 rows, got \(response.pricing.count)")
+        }
+        return ReplaceOpenEndedResult(closing: response.pricing[0], newPeriod: response.pricing[1])
     }
 
     fileprivate func parsePricingValidationReason(from data: Data) -> PricingValidationReason? {
@@ -369,7 +373,7 @@ extension URLSessionAPIClient {
     }
 
     fileprivate struct PricingListResponse: Decodable {
-        let periods: [PricingPeriod]
+        let pricing: [PricingPeriod]
     }
 
     fileprivate struct ReplaceOpenEndedPayload: Encodable {

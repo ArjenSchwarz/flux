@@ -44,3 +44,15 @@ public struct PricingPeriod: Identifiable, Codable, Sendable, Equatable, Hashabl
         return true
     }
 }
+
+/// Server response from POST /pricing/replace-open-ended: the closing row
+/// (with a freshly-assigned end date) and the new open-ended row.
+public struct ReplaceOpenEndedResult: Sendable, Equatable {
+    public let closing: PricingPeriod
+    public let newPeriod: PricingPeriod
+
+    public init(closing: PricingPeriod, newPeriod: PricingPeriod) {
+        self.closing = closing
+        self.newPeriod = newPeriod
+    }
+}

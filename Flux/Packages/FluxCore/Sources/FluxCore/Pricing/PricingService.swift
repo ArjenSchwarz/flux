@@ -102,14 +102,12 @@ public final class PricingService {
             throw FluxAPIError.notConfigured
         }
         do {
-            let newPeriod = try await apiClient.replaceOpenEndedPricing(closingId: closingId, with: draft)
-            // The closing row's endDate change isn't carried in the response;
-            // a refetch is what surfaces it. Fold the new row optimistically
-            // so the editor's UI updates immediately.
-            foldInsert(newPeriod)
+            let result = try await apiClient.replaceOpenEndedPricing(closingId: closingId, with: draft)
+            foldInsert(result.closing)
+            foldInsert(result.newPeriod)
             lastError = nil
             scheduleRefetch()
-            return newPeriod
+            return result.newPeriod
         } catch {
             lastError = error
             throw error

@@ -17,7 +17,7 @@ struct URLSessionAPIClientPricingTests {
             )!
             let body = """
             {
-              "periods": [
+              "pricing": [
                 {
                   "id": "pp-1",
                   "startDate": "2026-01-01",
@@ -64,7 +64,7 @@ struct URLSessionAPIClientPricingTests {
             let response = HTTPURLResponse(
                 url: url, statusCode: 200, httpVersion: nil, headerFields: nil
             )!
-            return (response, Data("{\"periods\": []}".utf8))
+            return (response, Data("{\"pricing\": []}".utf8))
         }
         let client = makeClient(session: session)
         let periods = try await client.fetchPricing()
@@ -359,13 +359,27 @@ struct URLSessionAPIClientPricingTests {
             )!
             let body = """
             {
-              "id": "pp-new",
-              "startDate": "2026-08-01",
-              "peakRate": 0.30,
-              "feedInRate": 0.06,
-              "offPeakSavingsRate": 0.12,
-              "createdAt": "2026-08-01T00:00:00Z",
-              "updatedAt": "2026-08-01T00:00:00Z"
+              "pricing": [
+                {
+                  "id": "pp-open",
+                  "startDate": "2026-01-01",
+                  "endDate": "2026-07-31",
+                  "peakRate": 0.2873,
+                  "feedInRate": 0.05,
+                  "offPeakSavingsRate": 0.12,
+                  "createdAt": "2026-01-01T00:00:00Z",
+                  "updatedAt": "2026-08-01T00:00:00Z"
+                },
+                {
+                  "id": "pp-new",
+                  "startDate": "2026-08-01",
+                  "peakRate": 0.30,
+                  "feedInRate": 0.06,
+                  "offPeakSavingsRate": 0.12,
+                  "createdAt": "2026-08-01T00:00:00Z",
+                  "updatedAt": "2026-08-01T00:00:00Z"
+                }
+              ]
             }
             """
             return (response, Data(body.utf8))
@@ -378,8 +392,11 @@ struct URLSessionAPIClientPricingTests {
             offPeakSavingsRate: 0.12
         )
         let client = makeClient(session: session)
-        let created = try await client.replaceOpenEndedPricing(closingId: "pp-open", with: draft)
-        #expect(created.id == "pp-new")
+        let result = try await client.replaceOpenEndedPricing(closingId: "pp-open", with: draft)
+        #expect(result.closing.id == "pp-open")
+        #expect(result.closing.endDate == "2026-07-31")
+        #expect(result.newPeriod.id == "pp-new")
+        #expect(result.newPeriod.endDate == nil)
         let request = try #require(PricingMockURLProtocol.lastRequest)
         #expect(request.httpMethod == "POST")
         let requestURL = try #require(request.url)

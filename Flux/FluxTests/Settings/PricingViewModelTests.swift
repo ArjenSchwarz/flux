@@ -135,7 +135,9 @@ struct PricingViewModelTests {
         let open = makePeriod(id: "pp-open", start: "2026-01-01", end: nil)
         apiClient.periodsToReturn = [open]
         await viewModel.refresh()
-        apiClient.replaceOpenEndedResult = makePeriod(id: "pp-new", start: "2026-08-01", end: nil)
+        let closing = makePeriod(id: "pp-open", start: "2026-01-01", end: "2026-07-31")
+        let newOpen = makePeriod(id: "pp-new", start: "2026-08-01", end: nil)
+        apiClient.replaceOpenEndedResult = ReplaceOpenEndedResult(closing: closing, newPeriod: newOpen)
         apiClient.nextCreateError = nil
 
         viewModel.beginCreate()
@@ -202,7 +204,7 @@ struct PricingViewModelTests {
 final class TestPricingAPIClient: FluxAPIClient, @unchecked Sendable {
     var periodsToReturn: [PricingPeriod] = []
     var nextCreateError: FluxAPIError?
-    var replaceOpenEndedResult: PricingPeriod?
+    var replaceOpenEndedResult: ReplaceOpenEndedResult?
 
     nonisolated func fetchStatus() async throws -> StatusResponse {
         StatusResponse(live: nil, battery: nil, rolling15min: nil, offpeak: nil, todayEnergy: nil, note: nil)
@@ -259,7 +261,10 @@ final class TestPricingAPIClient: FluxAPIClient, @unchecked Sendable {
         periodsToReturn.removeAll { $0.id == id }
     }
 
-    func replaceOpenEndedPricing(closingId _: String, with _: PricingPeriodDraft) async throws -> PricingPeriod {
+    func replaceOpenEndedPricing(
+        closingId _: String,
+        with _: PricingPeriodDraft
+    ) async throws -> ReplaceOpenEndedResult {
         if let result = replaceOpenEndedResult { return result }
         throw FluxAPIError.serverError
     }

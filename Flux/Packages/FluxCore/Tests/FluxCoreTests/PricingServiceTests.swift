@@ -99,7 +99,7 @@ struct PricingServiceTests {
         // refetch so the local list reflects the closing-row's new endDate.
         let newOpen = makePeriod(id: "pp-new", start: "2026-08-01", end: nil)
         let closed = makePeriod(id: "pp-open", start: "2026-01-01", end: "2026-07-31")
-        api.replaceOpenEndedResult = newOpen
+        api.replaceOpenEndedResult = ReplaceOpenEndedResult(closing: closed, newPeriod: newOpen)
         // After the refetch the API returns the final state.
         api.periodsToReturn = [closed, newOpen]
 
@@ -176,7 +176,7 @@ final class MockPricingAPIClient: FluxAPIClient, @unchecked Sendable {
     var periodsToReturn: [PricingPeriod] = []
     var fetchError: FluxAPIError?
     var fetchCallCount = 0
-    var replaceOpenEndedResult: PricingPeriod?
+    var replaceOpenEndedResult: ReplaceOpenEndedResult?
 
     func fetchStatus() async throws -> StatusResponse {
         StatusResponse(live: nil, battery: nil, rolling15min: nil, offpeak: nil, todayEnergy: nil, note: nil)
@@ -234,7 +234,10 @@ final class MockPricingAPIClient: FluxAPIClient, @unchecked Sendable {
         periodsToReturn.removeAll { $0.id == id }
     }
 
-    func replaceOpenEndedPricing(closingId _: String, with _: PricingPeriodDraft) async throws -> PricingPeriod {
+    func replaceOpenEndedPricing(
+        closingId _: String,
+        with _: PricingPeriodDraft
+    ) async throws -> ReplaceOpenEndedResult {
         if let result = replaceOpenEndedResult { return result }
         throw FluxAPIError.serverError
     }
