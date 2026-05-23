@@ -13,7 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Documentation
 
 - **iPad adaptive layout spec** (T-1150). Implementation spec for swapping the stretched iPhone V5 shell on iPad for a `NavigationSplitView(.balanced)` sidebar at regular size class, with compact widths (Slide Over / narrow Split View) falling back to the existing tab-bar shell. Covers Dashboard / History / Day Detail multi-column layouts above 700 / 1000 pt detail widths, midnight rollover on the Today entry via a new `DayDetailViewModel.setDate(_:)`, and a `userInterfaceIdiom == .pad && hSizeClass == .regular` gate so iPhone Plus/Max landscape stays on the iPhone shell. See `specs/ipad-adaptive-layout/`.
-
+- **Battery Can't Empty Before Off-Peak spec** (T-1327). Requirements, design, decision log, and task plan for a Dashboard hero indicator that fires when, even at the 5 kW sustained-discharge ceiling, the battery cannot reach the 5 % cutoff before the next off-peak window opens. New `pbat`-independent boolean `cantEmptyBeforeOffpeak` on `BatteryInfo` (server-computed inside the existing `liveFresh` branch, reuses `derivedstats.ParseOffpeakWindow`); Swift `BatteryInfo` gains an optional `Bool` with a defaulted memberwise init so the five existing constructors keep compiling unchanged; `DashboardHeroPanel` swaps in a `secondaryText` subview with literal VoiceOver label `"Battery won't empty before off-peak at <HH:MM>"`; iOS and macOS share the panel via FluxCore. Inherits the no-midnight-spanning-window limit from `ParseOffpeakWindow`. See `specs/battery-cant-empty-before-offpeak/`.
 ## [1.3] - 2026-05-21
 
 ### Added
