@@ -143,7 +143,7 @@ Map-based table tests for `computeCantEmptyBeforeOffpeak` and `withinOffpeakWind
 
 | Name | soc | capacity | now → opStart | hasBoundary | windowActive | want |
 |---|---|---|---|---|---|---|
-| `soc just above cutoff, short window` | 6 | 13.34 | +5min | true | false | `&true` |
+| `soc just above cutoff, short window` | 6 | 13.34 | +1min | true | false | `&true` |
 | `soc just above cutoff, long window` | 6 | 13.34 | +24h | true | false | `nil` |
 | `soc well above cutoff, short window` | 90 | 13.34 | +30min | true | false | `&true` |
 | `soc well above cutoff, long window` | 90 | 13.34 | +48h | true | false | `nil` |
