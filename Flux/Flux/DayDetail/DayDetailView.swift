@@ -78,7 +78,9 @@ struct DayDetailView: View {
         .navigationTitle(usesRegularLayout ? pageTitle : "")
         #endif
         .task(id: viewModel.date) {
-            await viewModel.loadDay()
+            async let day: Void = viewModel.loadDay()
+            async let pricing: Void = viewModel.refreshPricing()
+            _ = await (day, pricing)
         }
         // All three reactions call the same updateCompare with the same args;
         // the `.onChange(of: viewModel.date)` reaction fires unconditionally
@@ -138,6 +140,9 @@ struct DayDetailView: View {
                 DayInFiveBlocksPanel(dailyUsage: dailyUsage,
                                      compare: viewModel.comparisonState)
             }
+            if let costs = viewModel.costs {
+                CostsCard(costs: costs)
+            }
             contentSection
             summaryBlock
             batteryBlock
@@ -178,6 +183,9 @@ struct DayDetailView: View {
             if let dailyUsage {
                 DayInFiveBlocksPanel(dailyUsage: dailyUsage,
                                      compare: viewModel.comparisonState)
+            }
+            if let costs = viewModel.costs {
+                CostsCard(costs: costs)
             }
             summaryBlock
             batteryBlock

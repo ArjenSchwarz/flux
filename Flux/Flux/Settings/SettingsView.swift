@@ -118,6 +118,14 @@ struct SettingsView: View {
                 }
             }
 
+            Section("Pricing") {
+                NavigationLink {
+                    PricingPeriodsView()
+                } label: {
+                    Label("Pricing periods", systemImage: "dollarsign.circle")
+                }
+            }
+
             Section("Alerts") {
                 NavigationLink {
                     SoCAlertsView()
@@ -142,6 +150,21 @@ struct SettingsView: View {
 
     #if os(macOS)
     private static let labelWidth: CGFloat = 160
+
+    @ViewBuilder
+    private func macOSNavSection<Destination: View>(
+        title: String, rowLabel: String, icon: String, @ViewBuilder destination: () -> Destination
+    ) -> some View {
+        LiquidGlassSection(title: title) {
+            Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 16, verticalSpacing: 14) {
+                FormRow(rowLabel, labelWidth: Self.labelWidth) {
+                    NavigationLink(destination: destination) {
+                        Label("Manage…", systemImage: icon)
+                    }
+                }
+            }
+        }
+    }
 
     private var macOSForm: some View {
         ScrollView {
@@ -223,17 +246,12 @@ struct SettingsView: View {
                     .disabled(viewModel.isValidating || hasMissingRequiredFields)
                 }
 
-                LiquidGlassSection(title: "Alerts") {
-                    Grid(alignment: .leadingFirstTextBaseline,
-                         horizontalSpacing: 16, verticalSpacing: 14) {
-                        FormRow("Battery alerts", labelWidth: Self.labelWidth) {
-                            NavigationLink {
-                                SoCAlertsView()
-                            } label: {
-                                Label("Manage…", systemImage: "bell.badge")
-                            }
-                        }
-                    }
+                macOSNavSection(title: "Pricing", rowLabel: "Pricing periods", icon: "dollarsign.circle") {
+                    PricingPeriodsView()
+                }
+
+                macOSNavSection(title: "Alerts", rowLabel: "Battery alerts", icon: "bell.badge") {
+                    SoCAlertsView()
                 }
 
                 if manualWhatsNewRelease != nil {

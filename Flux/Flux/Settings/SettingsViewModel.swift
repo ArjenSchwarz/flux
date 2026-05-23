@@ -135,6 +135,10 @@ final class SettingsViewModel {
             // the switch stays exhaustive without a default that would hide
             // future cases.
             return "Rule limit reached."
+        case .notFound:
+            return "The requested item could not be found."
+        case let .pricingValidation(reason):
+            return reason.message
         }
     }
 }
