@@ -45,6 +45,9 @@ struct AdaptiveColumnsLayout<Content: View>: View {
         }
     }
 
+    // `internal` (not `private`) so AdaptiveColumnsLayoutTests can exercise
+    // the breakpoint math directly under `@testable import Flux`. Production
+    // code never calls this — go through `body`.
     func columnCount(width: CGFloat, typeSize: DynamicTypeSize) -> Int {
         let base: Int
         if width >= 1000 {

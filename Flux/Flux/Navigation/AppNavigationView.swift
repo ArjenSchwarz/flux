@@ -1,3 +1,4 @@
+import CryptoKit
 import FluxCore
 import SwiftData
 import SwiftUI
@@ -73,7 +74,9 @@ struct AppNavigationView: View {
             .task {
                 while !Task.isCancelled {
                     try? await Task.sleep(for: .seconds(60))
-                    if Task.isCancelled { return }
+                    // `try? await Task.sleep` swallows cancellation; the while
+                    // condition catches it on the next iteration. `rolloverToday`
+                    // is idempotent when the date hasn't changed.
                     rolloverToday()
                 }
             }
@@ -252,11 +255,13 @@ struct AppNavigationView: View {
         selectedScreen = apiClient == nil ? .settings : (selectedScreen ?? .dashboard)
     }
 
-    /// Joins the trimmed API URL and the keychain token into a single
-    /// string so `reloadDependencies()` can detect a credentials change
-    /// by comparison instead of by API-client reference identity (the
-    /// client is a class instance and `makeAPIClient()` returns a fresh
-    /// one every call).
+    /// Hashes the trimmed API URL and the keychain token together so
+    /// `reloadDependencies()` can detect a credentials change by comparison
+    /// instead of by API-client reference identity (the client is a class
+    /// instance and `makeAPIClient()` returns a fresh one every call). The
+    /// SHA-256 digest avoids keeping the plaintext token in `@State` for
+    /// the lifetime of the scene and removes the `|`-separator collision
+    /// risk that a raw join would have.
     private func currentCredentialFingerprint() -> String? {
         guard let urlString = UserDefaults.fluxAppGroup.apiURL?
                 .trimmingCharacters(in: .whitespacesAndNewlines),
@@ -266,7 +271,8 @@ struct AppNavigationView: View {
         else {
             return nil
         }
-        return "\(urlString)|\(token)"
+        let data = Data("\(urlString)|\(token)".utf8)
+        return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
     private func makeAPIClient() -> (any FluxAPIClient)? {
