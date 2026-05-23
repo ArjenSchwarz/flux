@@ -1,3 +1,4 @@
+import CryptoKit
 import FluxCore
 import SwiftData
 import SwiftUI
@@ -6,6 +7,9 @@ import SwiftUI
 struct AppNavigationView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
+    #if !os(macOS)
+    @Environment(\.horizontalSizeClass) private var hSizeClass
+    #endif
 
     @State private var selectedScreen: Screen? = .dashboard
     @State private var navigationPath = NavigationPath()
@@ -13,6 +17,11 @@ struct AppNavigationView: View {
     @State private var keychainService = KeychainService()
     @State private var apiClient: (any FluxAPIClient)?
     @State private var iosTab: FluxTab = .dashboard
+    @State private var today: String = DateFormatting.todayDateString()
+    @State private var dashboardViewModel: DashboardViewModel?
+    @State private var historyViewModel: HistoryViewModel?
+    @State private var todayDayDetailViewModel: DayDetailViewModel?
+    @State private var credentialFingerprint: String?
     @State private var pendingAuto: PendingAutoPresentation?
     @State private var didEvaluateAutoPresentation = false
     @State private var canonicalInstalledVersion: String = ""
@@ -42,10 +51,17 @@ struct AppNavigationView: View {
                     storedSelection = newScreen.rawValue
                 }
                 #endif
+                let mapped = mappedIosTab(for: newScreen, currentTab: iosTab)
+                if mapped != iosTab { iosTab = mapped }
+            }
+            .onChange(of: iosTab) { _, newTab in
+                let mapped = mappedSelectedScreen(for: newTab, currentSelection: selectedScreen)
+                if mapped != selectedScreen { selectedScreen = mapped }
             }
             .onChange(of: scenePhase) { _, newPhase in
                 if newPhase == .active {
                     reloadDependencies()
+                    rolloverToday()
                     // Replay any pending SoC alert registration (AC 1.7,
                     // 2.4): a failed POST in registerDeviceIfNeeded leaves
                     // the device record stashed locally; foregroundHook
@@ -53,6 +69,15 @@ struct AppNavigationView: View {
                     Task { @MainActor in
                         await SoCAlertsService.shared.foregroundHook()
                     }
+                }
+            }
+            .task {
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(60))
+                    // `try? await Task.sleep` swallows cancellation; the while
+                    // condition catches it on the next iteration. `rolloverToday`
+                    // is idempotent when the date hasn't changed.
+                    rolloverToday()
                 }
             }
             .onOpenURL { url in
@@ -148,13 +173,32 @@ struct AppNavigationView: View {
     #if !os(macOS)
     @ViewBuilder
     private var iOSRoot: some View {
-        if let apiClient {
-            FluxiOSRoot(apiClient: apiClient, tab: $iosTab)
+        if let apiClient, let dashboardViewModel, let historyViewModel, let todayDayDetailViewModel {
+            if usesPadShell {
+                FluxiPadRoot(
+                    apiClient: apiClient,
+                    selectedScreen: $selectedScreen,
+                    navigationPath: $navigationPath,
+                    dashboardViewModel: dashboardViewModel,
+                    historyViewModel: historyViewModel,
+                    todayDayDetailViewModel: todayDayDetailViewModel
+                )
                 .modelContext(modelContext)
+            } else {
+                FluxiOSRoot(
+                    apiClient: apiClient,
+                    tab: $iosTab,
+                    dashboardViewModel: dashboardViewModel,
+                    historyViewModel: historyViewModel
+                )
+                .modelContext(modelContext)
+            }
         } else {
             SettingsView(onSaved: handleSettingsSaved)
         }
     }
+
+    private var usesPadShell: Bool { IPadLayoutGate.isActive(hSizeClass: hSizeClass) }
     #endif
 
     private var effectiveScreen: Screen {
@@ -168,14 +212,67 @@ struct AppNavigationView: View {
         reloadDependencies()
     }
 
+    private func rolloverToday() {
+        let now = DateFormatting.todayDateString()
+        guard now != today else { return }
+        today = now
+        if let todayDayDetailViewModel {
+            // AppNavigationView is @MainActor, so this Task inherits MainActor
+            // isolation from the enclosing context — no explicit annotation needed.
+            Task {
+                await todayDayDetailViewModel.setDate(now)
+            }
+        }
+    }
+
     private func reloadDependencies() {
-        let client = makeAPIClient()
-        apiClient = client
+        // Fingerprint the credentials so we only rebuild the API client and
+        // the three hoisted VMs when the URL or token actually changes —
+        // otherwise every scenePhase → .active foreground would discard
+        // cached state and in-flight refresh timers (violating AC 6.4).
+        let newFingerprint = currentCredentialFingerprint()
+        let credentialsChanged = newFingerprint != credentialFingerprint
+        credentialFingerprint = newFingerprint
+
+        if credentialsChanged {
+            let client = makeAPIClient()
+            apiClient = client
+            if let client {
+                dashboardViewModel = DashboardViewModel(apiClient: client)
+                historyViewModel = HistoryViewModel(apiClient: client, modelContext: modelContext)
+                todayDayDetailViewModel = DayDetailViewModel(date: today, apiClient: client)
+            } else {
+                dashboardViewModel = nil
+                historyViewModel = nil
+                todayDayDetailViewModel = nil
+            }
+        }
+
         // Also binds SoCAlertsService so its CRUD calls don't throw .notConfigured.
-        if let client {
-            SoCAlertsService.shared.bind(apiClient: client)
+        if let apiClient {
+            SoCAlertsService.shared.bind(apiClient: apiClient)
         }
         selectedScreen = apiClient == nil ? .settings : (selectedScreen ?? .dashboard)
+    }
+
+    /// Hashes the trimmed API URL and the keychain token together so
+    /// `reloadDependencies()` can detect a credentials change by comparison
+    /// instead of by API-client reference identity (the client is a class
+    /// instance and `makeAPIClient()` returns a fresh one every call). The
+    /// SHA-256 digest avoids keeping the plaintext token in `@State` for
+    /// the lifetime of the scene and removes the `|`-separator collision
+    /// risk that a raw join would have.
+    private func currentCredentialFingerprint() -> String? {
+        guard let urlString = UserDefaults.fluxAppGroup.apiURL?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+              !urlString.isEmpty,
+              let token = keychainService.loadToken(),
+              !token.isEmpty
+        else {
+            return nil
+        }
+        let data = Data("\(urlString)|\(token)".utf8)
+        return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
     private func makeAPIClient() -> (any FluxAPIClient)? {
@@ -187,17 +284,6 @@ struct AppNavigationView: View {
         }
 
         return URLSessionAPIClient(baseURL: url, keychainService: keychainService)
-    }
-}
-
-private extension Screen {
-    var tab: FluxTab? {
-        switch self {
-        case .dashboard: .dashboard
-        case .today: .today
-        case .history: .history
-        case .settings: nil
-        }
     }
 }
 

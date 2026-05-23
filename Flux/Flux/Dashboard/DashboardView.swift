@@ -7,6 +7,7 @@ import SwiftUI
 /// the panels below.
 struct DashboardView: View {
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.horizontalSizeClass) private var hSizeClass
     @State private var viewModel: DashboardViewModel
     @State private var showingSettings = false
 
@@ -42,7 +43,13 @@ struct DashboardView: View {
         contentContainer
             .fluxScreenBackground()
         #if os(iOS)
-            .toolbar(.hidden, for: .navigationBar)
+            // Hide the system navigation bar in the iPhone V5 shell so the
+            // FluxScreenHeader tab bar is the only chrome. The iPad sidebar
+            // shell wants the system navigation bar visible so its
+            // `.primaryAction` toolbar gear renders and the sidebar toggle
+            // works.
+            .toolbar(usesRegularLayout ? .visible : .hidden, for: .navigationBar)
+            .navigationTitle(usesRegularLayout ? "Dashboard" : "")
         #endif
         #if os(macOS)
         .task {
@@ -87,60 +94,111 @@ struct DashboardView: View {
     @ViewBuilder
     private var contentContainer: some View {
         ScrollView {
-            dashboardContent
+            if usesRegularLayout {
+                dashboardContentRegular
+            } else {
+                dashboardContent
+            }
         }
         .scrollContentBackground(.hidden)
         .scrollBounceBehavior(.basedOnSize)
     }
 
+    private var usesRegularLayout: Bool { IPadLayoutGate.isActive(hSizeClass: hSizeClass) }
+
     @ViewBuilder
     private var dashboardContent: some View {
         VStack(alignment: .leading, spacing: FluxTheme.Metrics.panelGap) {
-            if let tabBinding {
-                FluxScreenHeader(
-                    selection: tabBinding,
-                    onSettingsTap: onSettingsTap,
-                    onTabActivate: onTabActivate
-                )
-            } else {
-                legacyHeader
-            }
-
+            headerSection
             if viewModel.error != nil {
                 stalenessBanner
             }
-
-            DashboardHeroPanel(
-                live: viewModel.status?.live,
-                rolling15min: viewModel.status?.rolling15min
-            )
-
-            LiveTrioPanel(live: viewModel.status?.live)
-
-            SummaryBlock(
-                todayEnergy: viewModel.status?.todayEnergy,
-                offpeakGridImport: viewModel.status?.offpeak?.gridUsageKwh,
-                showsBatteryCycle: false,
-                avgLoadWatts: viewModel.status?.rolling15min?.avgLoad
-            )
-
-            // `low24h` tracks the lowest SoC since the last off-peak end
-            // (per T-1084) — the existing "lowest since charged" signal
-            // the V4 dashboard surfaced.
-            BatteryBlock(
-                title: nil,
-                batteryCharge: viewModel.status?.todayEnergy?.eCharge,
-                batteryDischarge: viewModel.status?.todayEnergy?.eDischarge,
-                lowestSOC: viewModel.status?.battery?.low24h?.soc,
-                lowestSOCTimestamp: (viewModel.status?.battery?.low24h?.timestamp)
-                    .flatMap(DateFormatting.parseTimestamp),
-                offpeakBatteryDeltaPercent: viewModel.status?.offpeak?.batteryDeltaPercent,
-                showsOffpeakDelta: true,
-                energyLeftKwh: energyLeftKwh
-            )
+            heroPanel
+            trioPanel
+            summaryPanel
+            batteryPanel
         }
         .padding(.horizontal, FluxTheme.Metrics.screenHorizontalPadding)
         .padding(.bottom, FluxTheme.Metrics.screenBottomPadding)
+    }
+
+    @ViewBuilder
+    private var dashboardContentRegular: some View {
+        // iPad sidebar shell: the system navigation bar carries the title
+        // and the settings toolbar gear, so skip both the FluxScreenHeader
+        // tab bar and the legacyHeader eyebrow/title block.
+        VStack(alignment: .leading, spacing: FluxTheme.Metrics.panelGap) {
+            if viewModel.error != nil {
+                stalenessBanner
+            }
+            AdaptiveColumnsLayout {
+                heroPanel
+                trioPanel
+            }
+            summaryPanel
+            // `batteryPanel` is the only secondary block today; wrap inline
+            // rather than in an `AdaptiveColumnsLayout` (a 1-child grid is
+            // identical to a plain row but pays the GeometryReader cost).
+            // Switch back to `AdaptiveColumnsLayout` when a second secondary
+            // block lands.
+            batteryPanel
+        }
+        .padding(.horizontal, FluxTheme.Metrics.screenHorizontalPadding)
+        .padding(.bottom, FluxTheme.Metrics.screenBottomPadding)
+    }
+
+    @ViewBuilder
+    private var headerSection: some View {
+        if let tabBinding {
+            FluxScreenHeader(
+                selection: tabBinding,
+                onSettingsTap: onSettingsTap,
+                onTabActivate: onTabActivate
+            )
+        } else {
+            legacyHeader
+        }
+    }
+
+    @ViewBuilder
+    private var heroPanel: some View {
+        DashboardHeroPanel(
+            live: viewModel.status?.live,
+            rolling15min: viewModel.status?.rolling15min
+        )
+    }
+
+    @ViewBuilder
+    private var trioPanel: some View {
+        LiveTrioPanel(live: viewModel.status?.live)
+    }
+
+    @ViewBuilder
+    private var summaryPanel: some View {
+        SummaryBlock(
+            todayEnergy: viewModel.status?.todayEnergy,
+            offpeakGridImport: viewModel.status?.offpeak?.gridUsageKwh,
+            showsBatteryCycle: false,
+            avgLoadWatts: viewModel.status?.rolling15min?.avgLoad
+        )
+    }
+
+    // `low24h` tracks the lowest SoC since the last off-peak end (per
+    // T-1084) — the existing "lowest since charged" signal the V4
+    // dashboard surfaced.
+    @ViewBuilder
+    private var batteryPanel: some View {
+        BatteryBlock(
+            title: nil,
+            batteryCharge: viewModel.status?.todayEnergy?.eCharge,
+            batteryDischarge: viewModel.status?.todayEnergy?.eDischarge,
+            lowestSOC: viewModel.status?.battery?.low24h?.soc,
+            lowestSOCTimestamp: (viewModel.status?.battery?.low24h?.timestamp)
+                .flatMap(DateFormatting.parseTimestamp),
+            offpeakBatteryDeltaPercent: viewModel.status?.offpeak?.batteryDeltaPercent,
+            showsOffpeakDelta: true,
+            energyLeftKwh: energyLeftKwh
+        )
     }
 
     private var energyLeftKwh: Double? {
@@ -242,7 +300,13 @@ private enum DashboardEyebrowFormatter {
 }
 
 #if DEBUG
-#Preview {
+#Preview("Compact") {
     DashboardView(apiClient: MockFluxAPIClient.preview)
+}
+
+#Preview("Regular 770") {
+    DashboardView(apiClient: MockFluxAPIClient.preview)
+        .frame(width: 770)
+        .environment(\.horizontalSizeClass, .regular)
 }
 #endif

@@ -69,6 +69,7 @@ enum FluxTheme {
         static let tabBarCornerRadius: CGFloat = 10
         static let tabBarItemCornerRadius: CGFloat = 8
         static let tabBarPadding: CGFloat = 3
+        static let settingsFormMaxWidth: CGFloat = 640
     }
 
     /// V5 typography tokens. Each entry is a function that takes the optional

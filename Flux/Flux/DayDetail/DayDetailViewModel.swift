@@ -53,11 +53,11 @@ final class DayDetailViewModel {
     //
     // INVARIANT (compiler no longer enforces this): the only access to
     // this property from a non-MainActor context must be the
-    // `cancel()` call in `deinit`. All read/write paths from
-    // `updateCompare` and friends run on the main actor. If you add a
-    // new access point, audit it against this rule — `nonisolated(unsafe)`
-    // is the discipline that makes the storage safe; Swift no longer
-    // checks it for you.
+    // `cancel()` call in `deinit`. All MainActor read/write paths
+    // (`updateCompare`, `setDate`) are safe. If you add a new access
+    // point from a non-MainActor context, audit it against this rule —
+    // `nonisolated(unsafe)` is the discipline that makes the storage
+    // safe; Swift no longer checks it for you.
     @ObservationIgnored
     nonisolated(unsafe) private var comparisonTask: Task<Void, Never>?
 
@@ -81,6 +81,25 @@ final class DayDetailViewModel {
 
     var isToday: Bool {
         DateFormatting.isToday(date, now: nowProvider())
+    }
+
+    /// Used only by the iPad Today rollover path (T-1150). Reuses this VM
+    /// across midnight so view-level state (chart highlight, note draft) is
+    /// preserved; per-day fields are cleared explicitly. General date
+    /// navigation constructs a fresh VM.
+    func setDate(_ newDate: String) async {
+        guard newDate != date else { return }
+        comparisonTask?.cancel()
+        date = newDate
+        readings = []
+        parsedReadings = []
+        summary = nil
+        peakPeriods = []
+        dailyUsage = nil
+        note = nil
+        offpeakStats = .empty
+        comparisonState = .off
+        await loadDay()
     }
 
     func loadDay() async {

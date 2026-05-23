@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **iPad adaptive layout** (T-1150). At regular horizontal size class on iPad — full-screen and ≥½ Split View on any iPad in the lineup — Flux now renders a `NavigationSplitView(.balanced)` with a Dashboard / Today / History sidebar and a detail column hosting the selected screen. Settings stays as a sheet, opened via a toolbar gear in the detail column. The three screens reflow into multi-column arrangements via a new `AdaptiveColumnsLayout` helper: Dashboard puts the battery hero and live trio side by side and reflows Summary / Battery (+ future blocks) through 2-col (≥ 700pt) or 3-col (≥ 1000pt) grids; History keeps the full-width stats overview on top and grids the Solar / Grid Usage / Daily Usage / selected-day summary cards; Day Detail switches to a two-column Grid with summary panels (Day-in-Five-Blocks, Summary, Battery, Daily Usage, Peak Usage) on the left and three stacked chart panels (Power, Battery Power, State of Charge) on the right, with the day navigation header, note section, and Compare control full width above the columns. The grid drops one column at Dynamic Type ≥ AX4 so cards retain a readable per-column width. The Settings sheet on iPad regular is capped to a 640pt-wide column centred in the sheet so form rows are not stretched edge-to-edge. At compact widths (Slide Over, ⅓ Split View) iPad falls back to the existing tab-bar shell, and iPhone Plus/Max landscape (which reports `.regular` horizontal but is not iPad) stays on the tab-bar shell via a `userInterfaceIdiom == .pad` gate. iPhone and macOS layouts are unchanged.
+
+### Documentation
+
+- **iPad adaptive layout spec** (T-1150). Implementation spec for swapping the stretched iPhone V5 shell on iPad for a `NavigationSplitView(.balanced)` sidebar at regular size class, with compact widths (Slide Over / narrow Split View) falling back to the existing tab-bar shell. Covers Dashboard / History / Day Detail multi-column layouts above 700 / 1000 pt detail widths, midnight rollover on the Today entry via a new `DayDetailViewModel.setDate(_:)`, and a `userInterfaceIdiom == .pad && hSizeClass == .regular` gate so iPhone Plus/Max landscape stays on the iPhone shell. See `specs/ipad-adaptive-layout/`.
+
 ## [1.3] - 2026-05-21
 
 ### Added
