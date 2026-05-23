@@ -50,7 +50,7 @@ metadata:
 
 ## Swift
 
-- [ ] 5. Swift — APIModels decoding tests (red) <!-- id:p1ve885 -->
+- [x] 5. Swift — APIModels decoding tests (red) <!-- id:p1ve885 -->
   - Extend `Flux/Packages/FluxCore/Tests/FluxCoreTests/APIModelsTests.swift` with three decoding cases.
   - JSON containing `"cantEmptyBeforeOffpeak": true` decodes to `.cantEmptyBeforeOffpeak == true`.
   - JSON containing `"cantEmptyBeforeOffpeak": null` decodes to `nil`.
@@ -59,7 +59,7 @@ metadata:
   - Stream: 2
   - Requirements: [2.1](requirements.md#2.1), [2.2](requirements.md#2.2)
 
-- [ ] 6. Swift — add field to BatteryInfo + fixture variants (green) <!-- id:p1ve886 -->
+- [x] 6. Swift — add field to BatteryInfo + fixture variants (green) <!-- id:p1ve886 -->
   - `Flux/Packages/FluxCore/Sources/FluxCore/Models/APIModels.swift`: add `public let cantEmptyBeforeOffpeak: Bool?` to `BatteryInfo`.
   - Update the memberwise initialiser with `cantEmptyBeforeOffpeak: Bool? = nil` as the last parameter — the default keeps the five existing call sites in design.md §Pattern extension audit compiling unchanged.
   - `Flux/Flux/Services/MockFluxAPIClient.swift`: add a second fixture `statusResponseCantEmpty` with `battery.cantEmptyBeforeOffpeak == true`. The default `statusResponse` keeps it `nil`.
@@ -67,7 +67,7 @@ metadata:
   - Stream: 2
   - Requirements: [2.1](requirements.md#2.1)
 
-- [ ] 7. Swift — Dashboard hero accessibility test (red) <!-- id:p1ve887 -->
+- [x] 7. Swift — Dashboard hero accessibility test (red) <!-- id:p1ve887 -->
   - Add a Swift Testing case under `Flux/FluxTests/` that constructs `DashboardHeroPanel(live:, rolling15min:, battery:, offpeakWindowStart:)` with `battery.cantEmptyBeforeOffpeak == true` and `offpeakWindowStart == "23:00"`.
   - Assert the rendered indicator's `accessibilityLabel` is exactly `"Battery won't empty before off-peak at 23:00"`.
   - Test fails because the panel does not yet accept the new inputs.
@@ -75,7 +75,7 @@ metadata:
   - Stream: 2
   - Requirements: [3.5](requirements.md#3.5)
 
-- [ ] 8. Swift — implement hero indicator + wire DashboardView (green) <!-- id:p1ve888 -->
+- [x] 8. Swift — implement hero indicator + wire DashboardView (green) <!-- id:p1ve888 -->
   - `Flux/Flux/Dashboard/DashboardHeroPanel.swift`: add inputs `let battery: BatteryInfo?` and `let offpeakWindowStart: String?`.
   - Add a private `cantEmptyBeforeOffpeakIndicator` subview using `FluxTheme.Typography.heroSubline` and `FluxTheme.Palette.secondaryText`. Do NOT reuse `Palette.amber`; do NOT change the `Mode` enum.
   - In `body`, render the indicator when `battery?.cantEmptyBeforeOffpeak == true && offpeakWindowStart != nil`; otherwise render the existing `statusLine` exactly as today.

@@ -164,7 +164,9 @@ struct DashboardView: View {
     private var heroPanel: some View {
         DashboardHeroPanel(
             live: viewModel.status?.live,
-            rolling15min: viewModel.status?.rolling15min
+            rolling15min: viewModel.status?.rolling15min,
+            battery: viewModel.status?.battery,
+            offpeakWindowStart: viewModel.status?.offpeak?.windowStart
         )
     }
 

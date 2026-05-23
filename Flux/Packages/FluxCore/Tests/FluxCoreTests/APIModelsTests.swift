@@ -127,6 +127,57 @@ struct APIModelsTests {
     }
 
     @Test
+    func decodeBatteryInfoWithCantEmptyBeforeOffpeakTrue() throws {
+        let json = """
+        {
+          "capacityKwh": 13.34,
+          "cutoffPercent": 5,
+          "estimatedCutoffTime": null,
+          "cantEmptyBeforeOffpeak": true,
+          "low24h": null
+        }
+        """
+
+        let battery = try decoder.decode(BatteryInfo.self, from: Data(json.utf8))
+
+        #expect(battery.cantEmptyBeforeOffpeak == true)
+    }
+
+    @Test
+    func decodeBatteryInfoWithCantEmptyBeforeOffpeakNull() throws {
+        let json = """
+        {
+          "capacityKwh": 13.34,
+          "cutoffPercent": 5,
+          "estimatedCutoffTime": null,
+          "cantEmptyBeforeOffpeak": null,
+          "low24h": null
+        }
+        """
+
+        let battery = try decoder.decode(BatteryInfo.self, from: Data(json.utf8))
+
+        #expect(battery.cantEmptyBeforeOffpeak == nil)
+    }
+
+    @Test
+    func decodeBatteryInfoWithCantEmptyBeforeOffpeakKeyMissing() throws {
+        // Forward compatibility: older server payloads omit the key entirely.
+        let json = """
+        {
+          "capacityKwh": 13.34,
+          "cutoffPercent": 5,
+          "estimatedCutoffTime": null,
+          "low24h": null
+        }
+        """
+
+        let battery = try decoder.decode(BatteryInfo.self, from: Data(json.utf8))
+
+        #expect(battery.cantEmptyBeforeOffpeak == nil)
+    }
+
+    @Test
     func decodeRollingAvgWithNullCutoff() throws {
         let json = """
         {
