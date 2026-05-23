@@ -291,6 +291,19 @@ Resources:
                   - dynamodb:DeleteItem
                 Resource:
                   - !GetAtt SocFireStateTable.Arn
+              # Pricing table — Lambda is the sole writer (CRUD plus the
+              # transactional close-and-create endpoint). Scan covers
+              # ListPricing (≤50 rows). TransactWriteItems handles the
+              # sentinel-row maintenance from the daily-costs spec.
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:Scan
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                Resource:
+                  - !GetAtt PricingTable.Arn
               - Effect: Allow
                 Action:
                   - ssm:GetParameter
@@ -527,6 +540,28 @@ Resources:
         AttributeName: expiresAt
         Enabled: true
 
+  # --- Pricing table (daily-costs spec) ---
+  # User-authored rate periods, low write volume. PITR enabled because
+  # pricing is the only user-authored data introduced by this spec and
+  # there is no other recovery path. The singleton sentinel row
+  # (pricingId = "__open_ended") is created lazily on first write.
+
+  PricingTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: flux-pricing
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pricingId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pricingId
+          KeyType: HASH
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
   # --- Lambda Function and Function URL ---
 
   ApiFunction:
@@ -559,6 +594,7 @@ Resources:
           TABLE_DEVICES: !Ref DevicesTable
           TABLE_SOC_RULES: !Ref SocRulesTable
           TABLE_SOC_FIRESTATE: !Ref SocFireStateTable
+          TABLE_PRICING: !Ref PricingTable
 
   ApiFunctionUrl:
     Type: AWS::Lambda::Url

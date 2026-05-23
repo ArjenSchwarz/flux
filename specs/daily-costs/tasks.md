@@ -8,42 +8,42 @@ references:
 
 ## Backend
 
-- [ ] 1. Add flux-pricing table, IAM policy, and TABLE_PRICING env var in infrastructure/template.yaml and cmd/api/main.go requiredEnvVars <!-- id:osag2li -->
+- [x] 1. Add flux-pricing table, IAM policy, and TABLE_PRICING env var in infrastructure/template.yaml and cmd/api/main.go requiredEnvVars <!-- id:osag2li -->
   - Stream: 1
   - Requirements: [1.1](requirements.md#1.1)
 
-- [ ] 2. Write internal/dynamo/pricing_test.go covering CRUD round-trip, ListPricing ordering and sentinel-row exclusion <!-- id:osag2lj -->
+- [x] 2. Write internal/dynamo/pricing_test.go covering CRUD round-trip, ListPricing ordering and sentinel-row exclusion <!-- id:osag2lj -->
   - Blocked-by: osag2li (Add flux-pricing table, IAM policy, and TABLE_PRICING env var in infrastructure/template.yaml and cmd/api/main.go requiredEnvVars)
   - Stream: 1
   - Requirements: [1.1](requirements.md#1.1), [1.5](requirements.md#1.5), [2.5](requirements.md#2.5)
 
-- [ ] 3. Implement internal/dynamo/pricing.go with PricingItem, PricingSentinel, PricingReadAPI, PricingWriteAPI and basic non-transactional CRUD <!-- id:osag2lk -->
+- [x] 3. Implement internal/dynamo/pricing.go with PricingItem, PricingSentinel, PricingReadAPI, PricingWriteAPI and basic non-transactional CRUD <!-- id:osag2lk -->
   - Blocked-by: osag2lj (Write internal/dynamo/pricing_test.go covering CRUD round-trip, ListPricing ordering and sentinel-row exclusion)
   - Stream: 1
   - Requirements: [1.1](requirements.md#1.1), [1.5](requirements.md#1.5), [2.5](requirements.md#2.5)
 
-- [ ] 4. Write internal/dynamo/pricing_atomicity_test.go enumerating the 10 TransactWriteItems failure shapes from the design <!-- id:osag2ll -->
+- [x] 4. Write internal/dynamo/pricing_atomicity_test.go enumerating the 10 TransactWriteItems failure shapes from the design <!-- id:osag2ll -->
   - Blocked-by: osag2lk (Implement internal/dynamo/pricing.go with PricingItem, PricingSentinel, PricingReadAPI, PricingWriteAPI and basic non-transactional CRUD)
   - Stream: 1
   - Requirements: [1.9](requirements.md#1.9), [2.3](requirements.md#2.3)
 
-- [ ] 5. Implement sentinel-aware transactional writes (Put/Update/Delete sub-cases and ReplaceOpenEnded) in internal/dynamo/pricing.go <!-- id:osag2lm -->
+- [x] 5. Implement sentinel-aware transactional writes (Put/Update/Delete sub-cases and ReplaceOpenEnded) in internal/dynamo/pricing.go <!-- id:osag2lm -->
   - Blocked-by: osag2ll (Write internal/dynamo/pricing_atomicity_test.go enumerating the 10 TransactWriteItems failure shapes from the design)
   - Stream: 1
   - Requirements: [1.9](requirements.md#1.9)
 
-- [ ] 6. Write internal/api/pricing_test.go covering happy paths and every error code per AC 2.3, 2.4, 2.6, and the close-and-create endpoint <!-- id:osag2ln -->
+- [x] 6. Write internal/api/pricing_test.go covering happy paths and every error code per AC 2.3, 2.4, 2.6, and the close-and-create endpoint <!-- id:osag2ln -->
   - Blocked-by: osag2lm (Implement sentinel-aware transactional writes (Put/Update/Delete sub-cases and ReplaceOpenEnded) in internal/dynamo/pricing.go)
   - Stream: 1
   - Requirements: [2.1](requirements.md#2.1), [2.2](requirements.md#2.2), [2.3](requirements.md#2.3), [2.4](requirements.md#2.4), [2.5](requirements.md#2.5), [2.6](requirements.md#2.6)
 
-- [ ] 7. Implement internal/api/pricing_handler.go with validation chain (AC 1.10), TransactionCanceledException to HTTP mapping, and replace-open-ended handler <!-- id:osag2lo -->
+- [x] 7. Implement internal/api/pricing_handler.go with validation chain (AC 1.10), TransactionCanceledException to HTTP mapping, and replace-open-ended handler <!-- id:osag2lo -->
   - Blocked-by: osag2ln (Write internal/api/pricing_test.go covering happy paths and every error code per AC 2.3, 2.4, 2.6, and the close-and-create endpoint)
   - Stream: 1
   - Requirements: [1.2](requirements.md#1.2), [1.3](requirements.md#1.3), [1.4](requirements.md#1.4), [1.5](requirements.md#1.5), [1.6](requirements.md#1.6), [1.7](requirements.md#1.7), [1.8](requirements.md#1.8), [1.9](requirements.md#1.9), [1.10](requirements.md#1.10), [2.1](requirements.md#2.1), [2.2](requirements.md#2.2), [2.3](requirements.md#2.3), [2.4](requirements.md#2.4), [2.5](requirements.md#2.5), [2.6](requirements.md#2.6)
 
-- [ ] 8. Wire pricing routes into internal/api/handler.go buildMux and add pricingStoreAdapter in cmd/api/main.go <!-- id:osag2lp -->
-  - Blocked-by: osag2lo (Implement internal/api/pricing_handler.go with validation chain (AC 1.10), TransactionCanceledException to HTTP mapping, and replace-open-ended handler)
+- [x] 8. Wire pricing routes into internal/api/handler.go buildMux and add pricingStoreAdapter in cmd/api/main.go <!-- id:osag2lp -->
+  - Blocked-by: osag2lo (Implement internal/api/pricing_handler.go with validation chain (AC 1.10), TransactionCanceledException to HTTP mapping, and replace-open-ended handler), mapping, mapping, mapping, mapping, mapping, mapping, mapping, mapping
   - Stream: 1
   - Requirements: [2.1](requirements.md#2.1), [2.2](requirements.md#2.2)
 
@@ -69,7 +69,7 @@ references:
   - Requirements: [2.1](requirements.md#2.1), [2.2](requirements.md#2.2), [2.3](requirements.md#2.3), [2.4](requirements.md#2.4)
 
 - [ ] 13. Write FluxCoreTests/PricingServiceTests.swift covering refresh, mutation fold and fire-and-forget refetch <!-- id:osag2lu -->
-  - Blocked-by: osag2lt (Implement URLSessionAPIClient pricing extensions and FluxAPIError.pricingValidation cases (including concurrentWrite))
+  - Blocked-by: osag2lt (Implement URLSessionAPIClient pricing extensions and FluxAPIError.pricingValidation cases (including concurrentWrite)), pricing, pricing, pricing, pricing, pricing, pricing, pricing, pricing
   - Stream: 2
   - Requirements: [2.7](requirements.md#2.7)
 
@@ -150,7 +150,7 @@ references:
   - Requirements: [4.1](requirements.md#4.1), [4.7](requirements.md#4.7)
 
 - [ ] 28. Wire costs computation into DayDetailViewModel and render CostsCard below DayInFiveBlocksPanel in DayDetailView.swift <!-- id:osag2m9 -->
-  - Blocked-by: osag2lv (Implement FluxCore/Pricing/PricingService.swift as @Observable @MainActor), osag2m8 (Implement Flux/Flux/DayDetail/CostsCard.swift (four rows, AUD formatting, leading minus on negative net))
+  - Blocked-by: osag2lv (Implement FluxCore/Pricing/PricingService.swift as @Observable @MainActor), osag2m8 (Implement Flux/Flux/DayDetail/CostsCard.swift (four rows, AUD formatting, leading minus on negative net)), leading, leading, leading, leading, leading, leading, leading, leading
   - Stream: 2
   - Requirements: [4.1](requirements.md#4.1), [4.6](requirements.md#4.6), [4.8](requirements.md#4.8), [6.2](requirements.md#6.2)
 

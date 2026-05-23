@@ -25,6 +25,7 @@ type config struct {
 	devices      api.DeviceStore
 	rules        api.SocRuleStore
 	fireState    api.FireStateCleaner
+	pricing      api.PricingStore
 	apiToken     string
 	serial       string
 	offpeakStart string
@@ -42,6 +43,7 @@ var requiredEnvVars = []string{
 	"TABLE_DEVICES",
 	"TABLE_SOC_RULES",
 	"TABLE_SOC_FIRESTATE",
+	"TABLE_PRICING",
 	"OFFPEAK_START",
 	"OFFPEAK_END",
 	"API_TOKEN_PARAM",
@@ -62,6 +64,7 @@ func main() {
 	handler.SetDeviceStore(cfg.devices)
 	handler.SetSocRuleStore(cfg.rules)
 	handler.SetFireStateCleaner(cfg.fireState)
+	handler.SetPricingStore(cfg.pricing)
 	lambda.Start(handler.Handle)
 }
 
@@ -115,6 +118,7 @@ func loadConfig(ctx context.Context) (*config, error) {
 	ruleReader := dynamo.NewDynamoSocRuleReader(ddbClient, os.Getenv("TABLE_SOC_RULES"))
 	ruleWriter := dynamo.NewDynamoSocRuleWriter(ddbClient, os.Getenv("TABLE_SOC_RULES"))
 	fireState := dynamo.NewDynamoSocFireStateWriter(ddbClient, os.Getenv("TABLE_SOC_FIRESTATE"))
+	pricing := dynamo.NewDynamoPricingStore(ddbClient, os.Getenv("TABLE_PRICING"))
 
 	return &config{
 		reader:       reader,
@@ -122,6 +126,7 @@ func loadConfig(ctx context.Context) (*config, error) {
 		devices:      devices,
 		rules:        socRuleStoreAdapter{reader: ruleReader, writer: ruleWriter},
 		fireState:    fireStateCleanerAdapter{store: fireState},
+		pricing:      pricingStoreAdapter{store: pricing},
 		apiToken:     apiToken,
 		serial:       serial,
 		offpeakStart: os.Getenv("OFFPEAK_START"),
@@ -158,6 +163,42 @@ type fireStateCleanerAdapter struct {
 
 func (a fireStateCleanerAdapter) DeleteFireStateByDeviceRule(ctx context.Context, deviceID, ruleID string) (int, error) {
 	return a.store.DeleteByDeviceRule(ctx, deviceID, ruleID)
+}
+
+// pricingStoreAdapter bridges *dynamo.DynamoPricingStore to the
+// api.PricingStore interface. Identical shapes — the adapter exists
+// because the api package depends only on its local interface so test
+// fakes don't import the dynamo writer types.
+type pricingStoreAdapter struct {
+	store *dynamo.DynamoPricingStore
+}
+
+func (a pricingStoreAdapter) ListPricing(ctx context.Context) ([]dynamo.PricingItem, error) {
+	return a.store.ListPricing(ctx)
+}
+
+func (a pricingStoreAdapter) GetPricing(ctx context.Context, id string) (*dynamo.PricingItem, error) {
+	return a.store.GetPricing(ctx, id)
+}
+
+func (a pricingStoreAdapter) GetSentinel(ctx context.Context) (*dynamo.PricingSentinel, error) {
+	return a.store.GetSentinel(ctx)
+}
+
+func (a pricingStoreAdapter) PutPricing(ctx context.Context, item dynamo.PricingItem, prevOpenEndedID *string) error {
+	return a.store.PutPricing(ctx, item, prevOpenEndedID)
+}
+
+func (a pricingStoreAdapter) UpdatePricing(ctx context.Context, item dynamo.PricingItem, prevOpenEndedID *string) error {
+	return a.store.UpdatePricing(ctx, item, prevOpenEndedID)
+}
+
+func (a pricingStoreAdapter) DeletePricing(ctx context.Context, id string, prevOpenEndedID *string) error {
+	return a.store.DeletePricing(ctx, id, prevOpenEndedID)
+}
+
+func (a pricingStoreAdapter) ReplaceOpenEnded(ctx context.Context, closingID, closingEndDate string, newItem dynamo.PricingItem) error {
+	return a.store.ReplaceOpenEnded(ctx, closingID, closingEndDate, newItem)
 }
 
 // ssmAPI is the subset of the SSM client used for parameter fetching.
