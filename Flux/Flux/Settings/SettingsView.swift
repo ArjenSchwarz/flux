@@ -254,7 +254,7 @@ struct SettingsView: View {
                 #endif
             }
             .padding(28)
-            .frame(maxWidth: 640, alignment: .leading)
+            .frame(maxWidth: FluxTheme.Metrics.settingsFormMaxWidth, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
         .navigationTitle("Settings")
@@ -311,17 +311,17 @@ struct LiquidGlassSection<Content: View>: View {
 #endif
 
 #if !os(macOS)
-/// Caps the Settings form to a comfortable 640pt reading width on iPad
-/// regular size class. The double-frame trick centers the capped content
-/// inside the full sheet width. At compact size class the modifier is a
-/// no-op so iPhone retains the existing edge-to-edge form.
+/// Caps the Settings form to a comfortable reading width on iPad regular
+/// size class. The double-frame trick centers the capped content inside the
+/// full sheet width. At compact size class the modifier is a no-op so iPhone
+/// retains the existing edge-to-edge form.
 private struct IPadFormWidthCap: ViewModifier {
     let hSizeClass: UserInterfaceSizeClass?
 
     func body(content: Content) -> some View {
         if shouldApply {
             content
-                .frame(maxWidth: 640)
+                .frame(maxWidth: FluxTheme.Metrics.settingsFormMaxWidth)
                 .frame(maxWidth: .infinity)
         } else {
             content

@@ -214,7 +214,9 @@ struct AppNavigationView: View {
         guard now != today else { return }
         today = now
         if let todayDayDetailViewModel {
-            Task { @MainActor in
+            // AppNavigationView is @MainActor, so this Task inherits MainActor
+            // isolation from the enclosing context — no explicit annotation needed.
+            Task {
                 await todayDayDetailViewModel.setDate(now)
             }
         }
