@@ -14,6 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Documentation
 
 - **iPad adaptive layout spec** (T-1150). Implementation spec for swapping the stretched iPhone V5 shell on iPad for a `NavigationSplitView(.balanced)` sidebar at regular size class, with compact widths (Slide Over / narrow Split View) falling back to the existing tab-bar shell. Covers Dashboard / History / Day Detail multi-column layouts above 700 / 1000 pt detail widths, midnight rollover on the Today entry via a new `DayDetailViewModel.setDate(_:)`, and a `userInterfaceIdiom == .pad && hSizeClass == .regular` gate so iPhone Plus/Max landscape stays on the iPhone shell. See `specs/ipad-adaptive-layout/`.
+- **Daily Costs spec** (T-1326). Implementation spec for the upcoming costs/income feature on Day Detail and the History Period Overview, backed by a new `flux-pricing` DynamoDB table and tenant-wide pricing CRUD endpoints. Pins the sentinel-row + `TransactWriteItems` pattern that makes the "at most one open-ended pricing period" invariant race-safe (first transactional write usage in the repo), the client-side `DayCosts` / `PeriodCosts` computation in FluxCore that keeps `/day` and `/history` response shapes unchanged, and the off-peak-split-nil fallback to `eInput`. Adds 18 decisions and a 31-task TDD plan in two parallel streams (Go backend / Swift client). See `specs/daily-costs/`.
+
 ## [1.3] - 2026-05-21
 
 ### Added
