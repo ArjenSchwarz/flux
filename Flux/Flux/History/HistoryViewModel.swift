@@ -13,20 +13,20 @@ final class HistoryViewModel {
 
     private let apiClient: any FluxAPIClient
     private let modelContext: ModelContext
-    private let pricingService: PricingService?
+    private let pricingService: PricingService
     private let nowProvider: @Sendable () -> Date
     private let warn: (String) -> Void
 
     init(
         apiClient: any FluxAPIClient,
         modelContext: ModelContext,
-        pricingService: PricingService? = nil,
+        pricingService: PricingService = .shared,
         nowProvider: @escaping @Sendable () -> Date = { .now },
         warn: @escaping (String) -> Void = HistoryCacheLog.defaultWarn
     ) {
         self.apiClient = apiClient
         self.modelContext = modelContext
-        self.pricingService = pricingService ?? PricingService.shared
+        self.pricingService = pricingService
         self.nowProvider = nowProvider
         self.warn = warn
     }
@@ -35,14 +35,13 @@ final class HistoryViewModel {
     /// whenever the underlying `days` or `pricingService.periods` change,
     /// thanks to `@Observable` tracking on both.
     var periodCosts: PeriodCosts? {
-        guard let pricingService else { return nil }
-        return PeriodCosts.compute(days: days, pricing: pricingService.periods)
+        PeriodCosts.compute(days: days, pricing: pricingService.periods)
     }
 
     /// AC 2.7 requires a refetch on every History range change. Called from
     /// the view's task modifier and onChange handler.
     func refreshPricing() async {
-        try? await pricingService?.refresh()
+        try? await pricingService.refresh()
     }
 
     func loadHistory(days requestedDays: Int) async {

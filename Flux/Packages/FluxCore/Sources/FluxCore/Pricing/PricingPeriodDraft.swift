@@ -38,6 +38,7 @@ public struct PricingPeriodDraft: Codable, Sendable, Equatable {
     /// detection runs server-side only.
     public enum ValidationError: Error, Equatable, Sendable {
         case invalidStartDate
+        case invalidEndDate
         case invertedDates
         case rateOutOfRange
         case ratePrecision
@@ -51,7 +52,7 @@ public struct PricingPeriodDraft: Codable, Sendable, Equatable {
         }
         if let endDate {
             if !Self.isValidDate(endDate) {
-                return .invertedDates
+                return .invalidEndDate
             }
             if endDate < startDate {
                 return .invertedDates

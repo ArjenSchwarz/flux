@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -120,7 +121,10 @@ func (h *Handler) handleCreatePricing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	prevOpenEndedID := openEndedIDFromList(existing)
+	prevOpenEndedID, ok := loadPrevOpenEndedID(w, r.Context(), h.pricing, "create")
+	if !ok {
+		return
+	}
 	now := h.nowFunc().UTC().Format(time.RFC3339)
 	item := payload.toItem(h.idFunc(), now, now)
 
@@ -170,7 +174,10 @@ func (h *Handler) handleUpdatePricing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	prevOpenEndedID := openEndedIDFromList(existing)
+	prevOpenEndedID, ok := loadPrevOpenEndedID(w, r.Context(), h.pricing, "update")
+	if !ok {
+		return
+	}
 	now := h.nowFunc().UTC().Format(time.RFC3339)
 	item := payload.toItem(id, current.CreatedAt, now)
 
@@ -203,15 +210,9 @@ func (h *Handler) handleDeletePricing(w http.ResponseWriter, r *http.Request) {
 		writePricingError(w, http.StatusNotFound, pricingCodeInternal, "pricing period not found")
 		return
 	}
-	sentinel, err := h.pricing.GetSentinel(r.Context())
-	if err != nil {
-		slog.Error("get sentinel failed during delete", "error", err)
-		writePricingError(w, http.StatusInternalServerError, pricingCodeInternal, "get sentinel failed")
+	prevOpenEndedID, ok := loadPrevOpenEndedID(w, r.Context(), h.pricing, "delete")
+	if !ok {
 		return
-	}
-	var prevOpenEndedID *string
-	if sentinel != nil {
-		prevOpenEndedID = sentinel.OpenEndedID
 	}
 	if err := h.pricing.DeletePricing(r.Context(), id, prevOpenEndedID); err != nil {
 		mapPricingStoreError(w, "delete pricing", err)
@@ -473,17 +474,24 @@ func validateSecondOpenEnded(w http.ResponseWriter, p pricingPayload, existing [
 	return true
 }
 
-// openEndedIDFromList returns the unique open-ended row's id, or nil
-// when no open-ended row exists. The validator's overlap and
-// second_open_ended checks already ensure at most one is present.
-func openEndedIDFromList(rows []dynamo.PricingItem) *string {
-	for _, row := range rows {
-		if row.EndDate == nil {
-			id := row.PricingID
-			return &id
-		}
+// loadPrevOpenEndedID reads the sentinel and returns its OpenEndedID
+// value for the transactional ConditionExpression. The sentinel is the
+// authoritative source for "which row is currently open-ended" per
+// Decision 21 — the list-derived value can drift under partial-write
+// recovery, so every write path that needs prevOpenEndedID should go
+// through this helper. On read failure the response is already written;
+// the caller returns early.
+func loadPrevOpenEndedID(w http.ResponseWriter, ctx context.Context, store PricingStore, op string) (*string, bool) {
+	sentinel, err := store.GetSentinel(ctx)
+	if err != nil {
+		slog.Error("get sentinel failed", "op", op, "error", err)
+		writePricingError(w, http.StatusInternalServerError, pricingCodeInternal, "get sentinel failed")
+		return nil, false
 	}
-	return nil
+	if sentinel == nil {
+		return nil, true
+	}
+	return sentinel.OpenEndedID, true
 }
 
 // mapPricingStoreError translates typed errors from the dynamo store

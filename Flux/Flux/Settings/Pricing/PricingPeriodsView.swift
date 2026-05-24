@@ -175,10 +175,3 @@ extension PricingPeriodsView {
     static let emptyStateDetail = "Add a pricing period to see daily costs on Day Detail and totals on History."
     static let addButtonLabel = "Add pricing period"
 }
-
-#if canImport(UIKit)
-import UIKit
-#endif
-#if canImport(AppKit)
-import AppKit
-#endif

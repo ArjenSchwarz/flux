@@ -45,7 +45,7 @@ final class DayDetailViewModel {
     private(set) var comparisonState: ComparisonState = .off
 
     private let apiClient: any FluxAPIClient
-    private let pricingService: PricingService?
+    private let pricingService: PricingService
     private let nowProvider: @Sendable () -> Date
     // `nonisolated(unsafe)` so `deinit` can cancel the in-flight task
     // without crossing actor isolation. `@ObservationIgnored` opts the
@@ -65,12 +65,12 @@ final class DayDetailViewModel {
     init(
         date: String,
         apiClient: any FluxAPIClient,
-        pricingService: PricingService? = nil,
+        pricingService: PricingService = .shared,
         nowProvider: @escaping @Sendable () -> Date = { .now }
     ) {
         self.date = date
         self.apiClient = apiClient
-        self.pricingService = pricingService ?? PricingService.shared
+        self.pricingService = pricingService
         self.nowProvider = nowProvider
     }
 
@@ -108,14 +108,14 @@ final class DayDetailViewModel {
     /// Costs for the viewed day. Returns nil when no pricing period covers
     /// the day or the daily summary is missing (AC 4.6).
     var costs: DayCosts? {
-        guard let summary, let pricingService else { return nil }
+        guard let summary else { return nil }
         return summary.costs(forDate: date, in: pricingService.periods)
     }
 
     /// AC 2.7 requires a refetch on every Day Detail open. Called from the
     /// view's task modifier alongside `loadDay()`.
     func refreshPricing() async {
-        try? await pricingService?.refresh()
+        try? await pricingService.refresh()
     }
 
     func loadDay() async {

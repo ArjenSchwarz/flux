@@ -41,9 +41,9 @@ struct PricingEditor: View {
                     }
                 }
                 Section("Rates (AUD per kWh)") {
-                    rateField(label: "Peak", value: $viewModel.draft.peakRate, fieldKey: .rate)
-                    rateField(label: "Solar feed-in", value: $viewModel.draft.feedInRate, fieldKey: .rate)
-                    rateField(label: "Off-peak savings", value: $viewModel.draft.offPeakSavingsRate, fieldKey: .rate)
+                    rateField(label: "Peak", value: $viewModel.draft.peakRate)
+                    rateField(label: "Solar feed-in", value: $viewModel.draft.feedInRate)
+                    rateField(label: "Off-peak savings", value: $viewModel.draft.offPeakSavingsRate)
                 }
                 if let inlineMessage = inlineValidationMessage {
                     Section {
@@ -131,8 +131,6 @@ struct PricingEditor: View {
         }
     }
 
-    private enum FieldKey { case startDate, endDate, rate }
-
     private var navigationTitle: String {
         if case .edit = viewModel.editorMode { return "Edit pricing" }
         return "New pricing"
@@ -167,7 +165,7 @@ struct PricingEditor: View {
         return nil
     }
 
-    private func rateField(label: String, value: Binding<Double>, fieldKey _: FieldKey) -> some View {
+    private func rateField(label: String, value: Binding<Double>) -> some View {
         HStack {
             Text(label)
             Spacer()
@@ -194,6 +192,8 @@ extension PricingEditor {
         switch error {
         case .invalidStartDate:
             return "Enter a valid start date (YYYY-MM-DD)."
+        case .invalidEndDate:
+            return "Enter a valid end date (YYYY-MM-DD)."
         case .invertedDates:
             return "End date must not be before the start date."
         case .rateOutOfRange:

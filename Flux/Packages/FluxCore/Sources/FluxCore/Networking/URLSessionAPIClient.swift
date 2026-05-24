@@ -237,6 +237,11 @@ public final class URLSessionAPIClient: FluxAPIClient, Sendable {
         return .badRequest(parseErrorMessage(from: data))
     }
 
+    /// Maps an HTTP 409 response to a typed error. The only two known 409
+    /// shapes today are the alerts rule-cap exceeded (legacy) and the
+    /// pricing sentinel-race `concurrent_open_ended_write`. Anything else
+    /// falls through to `.ruleCapReached` — if a future endpoint introduces
+    /// a new 409 reason, add a branch here before adding the endpoint.
     private func mapConflict(data: Data) -> FluxAPIError {
         if let reason = parsePricingValidationReason(from: data),
            case .concurrentWrite = reason {

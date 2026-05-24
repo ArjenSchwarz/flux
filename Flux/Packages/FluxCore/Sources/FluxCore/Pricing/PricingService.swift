@@ -110,8 +110,10 @@ public final class PricingService {
         }
         do {
             let result = try await apiClient.replaceOpenEndedPricing(closingId: closingId, with: draft)
-            foldInsert(result.closing)
-            foldInsert(result.newPeriod)
+            // Sort once after both folds rather than re-sorting per insert.
+            foldInsert(result.closing, sort: false)
+            foldInsert(result.newPeriod, sort: false)
+            periods.sort { $0.startDate < $1.startDate }
             lastError = nil
             scheduleRefetch()
             return result.newPeriod
@@ -121,13 +123,15 @@ public final class PricingService {
         }
     }
 
-    private func foldInsert(_ period: PricingPeriod) {
+    private func foldInsert(_ period: PricingPeriod, sort: Bool = true) {
         if let idx = periods.firstIndex(where: { $0.id == period.id }) {
             periods[idx] = period
         } else {
             periods.append(period)
         }
-        periods.sort { $0.startDate < $1.startDate }
+        if sort {
+            periods.sort { $0.startDate < $1.startDate }
+        }
     }
 
     private func foldReplace(_ period: PricingPeriod) {
