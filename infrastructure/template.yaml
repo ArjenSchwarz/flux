@@ -302,6 +302,11 @@ Resources:
                   - dynamodb:PutItem
                   - dynamodb:UpdateItem
                   - dynamodb:DeleteItem
+                  # Required for the sentinel-row pattern: every open-ended
+                  # write path bundles a three-item transaction (sentinel +
+                  # row + companion) and the IAM action is independent of
+                  # the simpler Put/Update/Delete grants above.
+                  - dynamodb:TransactWriteItems
                 Resource:
                   - !GetAtt PricingTable.Arn
               - Effect: Allow

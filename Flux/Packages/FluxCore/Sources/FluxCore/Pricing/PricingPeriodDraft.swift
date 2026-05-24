@@ -88,7 +88,18 @@ public struct PricingPeriodDraft: Codable, Sendable, Equatable {
         guard year >= 1970, year <= 9999 else { return false }
         guard (1...12).contains(month) else { return false }
         guard (1...31).contains(day) else { return false }
-        return true
+        // Calendar-day check so 2026-02-30 fails client-side instead of
+        // round-tripping to the server and surfacing as the misleading
+        // "endDate must not precede startDate" message. Go's time.Parse
+        // on the wire already enforces this; this just keeps the pre-flight
+        // validator in agreement with the authoritative server check.
+        var calendar = Calendar(identifier: .iso8601)
+        calendar.timeZone = TimeZone(identifier: "Australia/Melbourne") ?? .gmt
+        let components = DateComponents(year: year, month: month, day: day)
+        return calendar.date(from: components).map {
+            let resolved = calendar.dateComponents([.year, .month, .day], from: $0)
+            return resolved.year == year && resolved.month == month && resolved.day == day
+        } ?? false
     }
 
     private static func fitsFourDecimalPlaces(_ rate: Double) -> Bool {

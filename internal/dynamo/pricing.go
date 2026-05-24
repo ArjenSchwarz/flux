@@ -60,7 +60,7 @@ type PricingWriteAPI interface {
 	PutPricing(ctx context.Context, item PricingItem, prevOpenEndedID *string) error
 	UpdatePricing(ctx context.Context, item PricingItem, prevOpenEndedID *string) error
 	DeletePricing(ctx context.Context, id string, prevOpenEndedID *string) error
-	ReplaceOpenEnded(ctx context.Context, closingID string, closingEndDate string, newItem PricingItem) error
+	ReplaceOpenEnded(ctx context.Context, closingID string, closingEndDate string, updatedAt string, newItem PricingItem) error
 }
 
 // PricingAPI is the subset of the DynamoDB client used by the pricing
