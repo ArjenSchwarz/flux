@@ -27,12 +27,15 @@ struct HistoryPeriodCostsCard: View {
     }
 
     var body: some View {
-        HistoryCardChrome(
-            title: "Period costs",
-            kpi: HistoryPeriodCostsCard.captionText(costs: costs) ?? "",
-            subtitle: nil
-        ) {
-            grid
+        HistoryCardChrome(title: "Period costs") {
+            VStack(alignment: .leading, spacing: 8) {
+                grid
+                if let caption = HistoryPeriodCostsCard.captionText(costs: costs) {
+                    Text(caption)
+                        .appFont(.caption)
+                        .foregroundStyle(FluxTheme.Palette.tertiaryText)
+                }
+            }
         }
     }
 

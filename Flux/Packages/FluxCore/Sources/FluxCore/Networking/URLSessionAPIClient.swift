@@ -342,7 +342,13 @@ extension URLSessionAPIClient {
         guard response.pricing.count == 2 else {
             throw FluxAPIError.decodingError("replace-open-ended expected 2 rows, got \(response.pricing.count)")
         }
-        return ReplaceOpenEndedResult(closing: response.pricing[0], newPeriod: response.pricing[1])
+        // Match by id rather than position so a server-side reorder
+        // (e.g. start-date sort) can't swap closing and new on the wire.
+        guard let closing = response.pricing.first(where: { $0.id == closingId }),
+              let newPeriod = response.pricing.first(where: { $0.id != closingId }) else {
+            throw FluxAPIError.decodingError("replace-open-ended response missing closing id \(closingId)")
+        }
+        return ReplaceOpenEndedResult(closing: closing, newPeriod: newPeriod)
     }
 
     fileprivate func parsePricingValidationReason(from data: Data) -> PricingValidationReason? {

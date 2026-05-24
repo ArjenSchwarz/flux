@@ -298,33 +298,16 @@ func (h *Handler) handleReplaceOpenEnded(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Return the resulting pair so the client can fold both rows back
-	// into its local list without a second fetch.
-	updated, err := h.pricing.ListPricing(r.Context())
-	if err != nil {
-		slog.Error("list pricing failed after replace-open-ended", "error", err)
-		writePricingError(w, http.StatusInternalServerError, pricingCodeInternal, "list pricing failed")
-		return
-	}
-	closingRow, newRow := pluckReplacedPair(updated, payload.ClosingPricingID, newItem.PricingID)
+	// Return the resulting pair from the in-memory transaction inputs so
+	// the client can fold both rows back into its local list without a
+	// second fetch. Re-scanning here would be eventually-consistent and
+	// could return stale rows for the just-committed transaction.
+	closingRow := *closing
+	closingRow.EndDate = &closingEndDate
+	closingRow.UpdatedAt = now
 	writeJSON(w, http.StatusOK, struct {
 		Pricing []dynamo.PricingItem `json:"pricing"`
-	}{Pricing: []dynamo.PricingItem{closingRow, newRow}})
-}
-
-// pluckReplacedPair returns the (closing, new) pair from the post-write
-// listing in canonical order so the response body is deterministic.
-func pluckReplacedPair(rows []dynamo.PricingItem, closingID, newID string) (dynamo.PricingItem, dynamo.PricingItem) {
-	var closing, newRow dynamo.PricingItem
-	for _, r := range rows {
-		if r.PricingID == closingID {
-			closing = r
-		}
-		if r.PricingID == newID {
-			newRow = r
-		}
-	}
-	return closing, newRow
+	}{Pricing: []dynamo.PricingItem{closingRow, newItem}})
 }
 
 // decodePricingPayload reads, size-limits, and JSON-decodes the request

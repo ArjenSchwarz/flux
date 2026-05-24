@@ -14,6 +14,7 @@ public final class PricingService {
     public private(set) var lastError: Error?
 
     private var apiClient: (any FluxAPIClient)?
+    private var refetchTask: Task<Void, Never>?
 
     public init() {}
 
@@ -32,8 +33,14 @@ public final class PricingService {
         }
         do {
             let remote = try await apiClient.fetchPricing()
+            // Bail if the task was cancelled mid-flight — a fresher
+            // refresh has already overtaken us.
+            try Task.checkCancellation()
             periods = remote.sorted { $0.startDate < $1.startDate }
             lastError = nil
+        } catch is CancellationError {
+            // Cancelled refreshes are not failures; leave state alone.
+            return
         } catch {
             lastError = error
             throw error
@@ -132,8 +139,13 @@ public final class PricingService {
         }
     }
 
+    /// Cancels any prior fire-and-forget refetch before scheduling a new
+    /// one. Stored as a single in-flight handle so a fast sequence of
+    /// mutations can't have an older response clobber a newer one, and so
+    /// the task isn't leaked across teardown.
     private func scheduleRefetch() {
-        Task { @MainActor [weak self] in
+        refetchTask?.cancel()
+        refetchTask = Task { @MainActor [weak self] in
             try? await self?.refresh()
         }
     }
