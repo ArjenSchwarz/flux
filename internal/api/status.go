@@ -17,6 +17,11 @@ const (
 	// cutoffPercent is the fixed battery cutoff threshold.
 	// Mirrored in iOS FluxCore/BatteryEnergy.swift — update both on hardware changes.
 	cutoffPercent = 5
+	// maxDischargeKW is the inverter's nameplate sustained discharge ceiling
+	// used by the pbat-independent "can't empty before off-peak" check
+	// (T-1327, Decision 1). Constant, not a parameter — there is one ceiling,
+	// set in code.
+	maxDischargeKW = 5.0
 	// liveDataStalenessThreshold bounds how old the most recent reading can
 	// be before /status stops surfacing it as live. The poller writes every
 	// 10 s, so nine consecutive missed writes (90 s) is unambiguously broken
@@ -125,6 +130,17 @@ func (h *Handler) handleStatus(ctx context.Context, _ events.LambdaFunctionURLRe
 				battery.EstimatedCutoff = &s
 			}
 		}
+		// T-1327: pbat-independent "can't empty before off-peak" indicator.
+		// Computed only on the live branch — a stale SoC would produce a
+		// misleading flag (Decision 7, mirrors EstimatedCutoff's gating).
+		battery.CantEmptyBeforeOffpeak = computeCantEmptyBeforeOffpeak(cantEmptyInput{
+			Soc:                 latest.Soc,
+			CapacityKwh:         capacity,
+			Now:                 now,
+			NextOpStart:         nextOpWindowStart,
+			HasBoundary:         hasOffpeakBoundary,
+			WithinOffpeakWindow: withinOffpeakWindow(now, h.offpeakStart, h.offpeakEnd),
+		})
 	}
 
 	// Lowest SOC since 00:00 Sydney local on now's date — see Decision 4 in

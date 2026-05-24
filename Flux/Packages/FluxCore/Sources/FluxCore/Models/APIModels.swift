@@ -61,17 +61,24 @@ public struct BatteryInfo: Codable, Sendable {
     public let cutoffPercent: Int
     public let estimatedCutoffTime: String?
     public let low24h: Low24h?
+    /// Server-computed flag: true when even at sustained max discharge the
+    /// battery cannot reach `cutoffPercent` before the next off-peak window
+    /// begins. The server emits `true` or `null`; `false` is never on the
+    /// wire (mirrors `estimatedCutoffTime`).
+    public let cantEmptyBeforeOffpeak: Bool?
 
     public init(
         capacityKwh: Double,
         cutoffPercent: Int,
         estimatedCutoffTime: String?,
-        low24h: Low24h?
+        low24h: Low24h?,
+        cantEmptyBeforeOffpeak: Bool? = nil
     ) {
         self.capacityKwh = capacityKwh
         self.cutoffPercent = cutoffPercent
         self.estimatedCutoffTime = estimatedCutoffTime
         self.low24h = low24h
+        self.cantEmptyBeforeOffpeak = cantEmptyBeforeOffpeak
     }
 }
 

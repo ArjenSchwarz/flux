@@ -7,6 +7,20 @@ import SwiftUI
 struct DashboardHeroPanel: View {
     let live: LiveData?
     let rolling15min: RollingAvg?
+    let battery: BatteryInfo?
+    let offpeakWindowStart: String?
+
+    init(
+        live: LiveData?,
+        rolling15min: RollingAvg?,
+        battery: BatteryInfo? = nil,
+        offpeakWindowStart: String? = nil
+    ) {
+        self.live = live
+        self.rolling15min = rolling15min
+        self.battery = battery
+        self.offpeakWindowStart = offpeakWindowStart
+    }
 
     var body: some View {
         FluxPanel(padding: FluxTheme.Metrics.panelHeroPadding) {
@@ -29,10 +43,43 @@ struct DashboardHeroPanel: View {
                 .padding(.top, -10)
                 .padding(.bottom, -10)
 
-                statusLine
+                subline
                     .padding(.vertical, FluxTheme.Metrics.statRowVerticalPadding)
             }
         }
+    }
+
+    /// When the server flags the battery as unable to reach the cutoff before
+    /// the next off-peak window starts, we hide the standard status line and
+    /// show the indicator instead — only one is visible at a time.
+    @ViewBuilder
+    private var subline: some View {
+        if battery?.cantEmptyBeforeOffpeak == true, let offpeakWindowStart {
+            cantEmptyBeforeOffpeakIndicator(offpeakWindowStart: offpeakWindowStart)
+        } else {
+            statusLine
+        }
+    }
+
+    private func cantEmptyBeforeOffpeakIndicator(offpeakWindowStart: String) -> some View {
+        Text(Self.cantEmptyBeforeOffpeakVisibleText(offpeakWindowStart: offpeakWindowStart))
+            .appFont(FluxTheme.Typography.heroSubline)
+            .foregroundStyle(FluxTheme.Palette.secondaryText)
+            .accessibilityLabel(
+                Self.cantEmptyBeforeOffpeakAccessibilityLabel(offpeakWindowStart: offpeakWindowStart)
+            )
+    }
+
+    /// Visible indicator text. `offpeakWindowStart` is already an `HH:MM`
+    /// string from the wire — substituted verbatim.
+    static func cantEmptyBeforeOffpeakVisibleText(offpeakWindowStart: String) -> String {
+        "Won't empty before \(offpeakWindowStart)"
+    }
+
+    /// VoiceOver announcement for the indicator. The exact string is the
+    /// requirement contract under test (see requirements.md §3.5).
+    static func cantEmptyBeforeOffpeakAccessibilityLabel(offpeakWindowStart: String) -> String {
+        "Battery won't empty before off-peak at \(offpeakWindowStart)"
     }
 
     private var heroNumber: String {
@@ -102,13 +149,23 @@ struct DashboardHeroPanel: View {
 }
 
 #if DEBUG
-#Preview {
+#Preview("Default + can't-empty indicator") {
     ZStack {
         FluxTheme.Palette.background.ignoresSafeArea()
-        DashboardHeroPanel(
-            live: MockFluxAPIClient.statusResponse.live,
-            rolling15min: MockFluxAPIClient.statusResponse.rolling15min
-        )
+        VStack(spacing: 16) {
+            DashboardHeroPanel(
+                live: MockFluxAPIClient.statusResponse.live,
+                rolling15min: MockFluxAPIClient.statusResponse.rolling15min,
+                battery: MockFluxAPIClient.statusResponse.battery,
+                offpeakWindowStart: MockFluxAPIClient.statusResponse.offpeak?.windowStart
+            )
+            DashboardHeroPanel(
+                live: MockFluxAPIClient.statusResponseCantEmpty.live,
+                rolling15min: MockFluxAPIClient.statusResponseCantEmpty.rolling15min,
+                battery: MockFluxAPIClient.statusResponseCantEmpty.battery,
+                offpeakWindowStart: MockFluxAPIClient.statusResponseCantEmpty.offpeak?.windowStart
+            )
+        }
         .padding()
     }
 }

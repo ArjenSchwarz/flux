@@ -2,6 +2,7 @@
 import FluxCore
 import Foundation
 
+// swiftlint:disable:next type_body_length
 final actor MockFluxAPIClient: FluxAPIClient {
     static let preview = MockFluxAPIClient()
     static let previewDate = "2026-04-15"
@@ -59,6 +60,24 @@ final actor MockFluxAPIClient: FluxAPIClient {
             eCharge: 5.7,
             eDischarge: 6.8
         ),
+        note: previewNote
+    )
+
+    /// Variant of `statusResponse` with the server-computed
+    /// `cantEmptyBeforeOffpeak` flag set to `true`. Used by the Dashboard
+    /// hero preview and tests to exercise the indicator subview.
+    static let statusResponseCantEmpty = StatusResponse(
+        live: statusResponse.live,
+        battery: BatteryInfo(
+            capacityKwh: 13.3,
+            cutoffPercent: 10,
+            estimatedCutoffTime: "\(previewDate)T18:30:00Z",
+            low24h: Low24h(soc: 38.2, timestamp: "\(previewDate)T08:45:00Z"),
+            cantEmptyBeforeOffpeak: true
+        ),
+        rolling15min: statusResponse.rolling15min,
+        offpeak: statusResponse.offpeak,
+        todayEnergy: statusResponse.todayEnergy,
         note: previewNote
     )
 
