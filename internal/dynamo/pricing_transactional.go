@@ -142,8 +142,8 @@ func (s *DynamoPricingStore) updateOpenEndedTransition(ctx context.Context, item
 	})
 	if err != nil {
 		return mapTransactionError(err, []reasonHandler{
-			conditionFailedAs(ErrPricingConcurrentWrite),
-			conditionFailedAs(ErrPricingConcurrentWrite),
+			conditionFailedAs(ErrPricingConcurrentWrite), // [0] sentinel race — openEndedId changed since validator scan
+			conditionFailedAs(ErrPricingConcurrentWrite), // [1] row deleted between validator scan and transaction commit
 		}, fmt.Sprintf("update pricing transition (table=%s, pricingId=%s)", s.table, item.PricingID))
 	}
 	return nil
