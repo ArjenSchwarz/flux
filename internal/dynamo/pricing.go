@@ -96,9 +96,16 @@ func pricingKey(id string) map[string]types.AttributeValue {
 // ListPricing returns every pricing row sorted by StartDate ascending.
 // The sentinel row (pricingId = "__open_ended") is filtered out so the
 // API never exposes it to clients.
+// pricingListPageLimit caps each Scan page. The spec expects ≤50 rows
+// in total over the feature's lifetime, so 200 is comfortably above
+// realistic usage while still bounding a pathological case (accidental
+// data, runaway test, etc.) from issuing an unbounded scan.
+const pricingListPageLimit = 200
+
 func (s *DynamoPricingStore) ListPricing(ctx context.Context) ([]PricingItem, error) {
 	items := make([]PricingItem, 0)
-	input := &dynamodb.ScanInput{TableName: &s.table}
+	limit := int32(pricingListPageLimit)
+	input := &dynamodb.ScanInput{TableName: &s.table, Limit: &limit}
 	for {
 		out, err := s.client.Scan(ctx, input)
 		if err != nil {

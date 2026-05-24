@@ -145,7 +145,7 @@ func (h *Handler) handleUpdatePricing(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	if id == "" {
-		writePricingError(w, http.StatusBadRequest, pricingCodeInternal, "id required")
+		writePricingError(w, http.StatusBadRequest, pricingCodeBadRequest, "id required")
 		return
 	}
 	payload, ok := decodePricingPayload(w, r)
@@ -197,7 +197,7 @@ func (h *Handler) handleDeletePricing(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	if id == "" {
-		writePricingError(w, http.StatusBadRequest, pricingCodeInternal, "id required")
+		writePricingError(w, http.StatusBadRequest, pricingCodeBadRequest, "id required")
 		return
 	}
 	existing, err := h.pricing.GetPricing(r.Context(), id)
@@ -233,16 +233,16 @@ func (h *Handler) handleReplaceOpenEnded(w http.ResponseWriter, r *http.Request)
 	r.Body = http.MaxBytesReader(w, r.Body, pricingBodyMaxBytes)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		writePricingError(w, http.StatusBadRequest, pricingCodeInternal, "malformed request body")
+		writePricingError(w, http.StatusBadRequest, pricingCodeBadRequest, "malformed request body")
 		return
 	}
 	var payload replaceOpenEndedPayload
 	if err := json.Unmarshal(body, &payload); err != nil {
-		writePricingError(w, http.StatusBadRequest, pricingCodeInternal, "malformed request body")
+		writePricingError(w, http.StatusBadRequest, pricingCodeBadRequest, "malformed request body")
 		return
 	}
 	if payload.ClosingPricingID == "" {
-		writePricingError(w, http.StatusBadRequest, pricingCodeInternal, "closingPricingId required")
+		writePricingError(w, http.StatusBadRequest, pricingCodeBadRequest, "closingPricingId required")
 		return
 	}
 
@@ -268,9 +268,19 @@ func (h *Handler) handleReplaceOpenEnded(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Format-validate the new period's startDate up front so a malformed
+	// value surfaces with the same error code the validation chain uses
+	// elsewhere, not as a muddied "newPeriod.startDate invalid". The full
+	// validation chain runs below against the projected post-write state.
+	if !validISODate(payload.NewPeriod.StartDate) {
+		writePricingError(w, http.StatusBadRequest, pricingCodeInvertedDates, "newPeriod.startDate must be YYYY-MM-DD")
+		return
+	}
 	closingEndDate, err := previousDate(payload.NewPeriod.StartDate)
 	if err != nil {
-		writePricingError(w, http.StatusBadRequest, pricingCodeInvertedDates, "newPeriod.startDate invalid")
+		// Defensive — validISODate above should have caught this.
+		slog.Error("previousDate failed on a validISODate-passing input", "startDate", payload.NewPeriod.StartDate, "error", err)
+		writePricingError(w, http.StatusInternalServerError, pricingCodeInternal, "internal error computing closing date")
 		return
 	}
 
@@ -319,12 +329,12 @@ func decodePricingPayload(w http.ResponseWriter, r *http.Request) (pricingPayloa
 	r.Body = http.MaxBytesReader(w, r.Body, pricingBodyMaxBytes)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		writePricingError(w, http.StatusBadRequest, pricingCodeInternal, "malformed request body")
+		writePricingError(w, http.StatusBadRequest, pricingCodeBadRequest, "malformed request body")
 		return pricingPayload{}, false
 	}
 	var payload pricingPayload
 	if err := json.Unmarshal(body, &payload); err != nil {
-		writePricingError(w, http.StatusBadRequest, pricingCodeInternal, "malformed request body")
+		writePricingError(w, http.StatusBadRequest, pricingCodeBadRequest, "malformed request body")
 		return pricingPayload{}, false
 	}
 	return payload, true

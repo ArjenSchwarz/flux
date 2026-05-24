@@ -29,6 +29,7 @@ const (
 	pricingCodeSecondOpenEnded = "second_open_ended"
 	pricingCodeConcurrentWrite = "concurrent_open_ended_write"
 	pricingCodeNotFound        = "not_found"
+	pricingCodeBadRequest      = "bad_request"
 	pricingCodeInternal        = "internal_error"
 )
 
