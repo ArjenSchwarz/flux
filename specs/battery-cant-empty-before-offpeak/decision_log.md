@@ -274,3 +274,36 @@ Reusing existing logic keeps a single source of truth for off-peak time math; ex
 - If a deployment ever needs a midnight-spanning window, this feature will silently not flag — explicitly documented as a Non-Goal.
 
 ---
+
+## Decision 9: VoiceOver wording is expanded for context, not identical to visible text
+
+**Date**: 2026-05-24
+**Status**: accepted
+
+### Context
+
+AC 3.5 says the indicator "SHALL be accessible via VoiceOver, exposing the same wording (including the off-peak start time) it shows visually." The implementation ships visible text `"Won't empty before HH:MM"` and AX label `"Battery won't empty before off-peak at HH:MM"`. The literal strings differ; the off-peak start time is identical.
+
+### Decision
+
+Treat AC 3.5 as satisfied. The intent is that the time and the underlying signal are the same; the AX label expands the subject ("Battery") and the qualifier ("off-peak at" vs. "before") because VoiceOver lacks the visible context (chart, panel chrome) sighted users see.
+
+### Rationale
+
+Reading the AC literally would force one of the two strings to match the other. Both lose: the visible text becomes verbose enough to wrap on the hero panel; the AX label drops the subject and reads as a fragment. The pragmatic reading — same time, same signal — gives sighted and VoiceOver users an equivalent communication without compromising either presentation.
+
+### Alternatives Considered
+
+- **Match the literal strings**: Either truncate the AX label or expand the visible text. Rejected — neither produces good UX on its own surface.
+- **Reword the requirement**: Update AC 3.5 to "VoiceOver SHALL expose the same off-peak start time and intent" before merging. Rejected — the looser reading already covers it, and editing requirements after implementation is noise.
+
+### Consequences
+
+**Positive:**
+- Both presentations read naturally on their own surface.
+- Future audits have a written rationale.
+
+**Negative:**
+- Anyone reading the AC strictly will notice the wording difference and need to find this decision.
+
+---

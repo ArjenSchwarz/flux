@@ -30,9 +30,12 @@ struct DashboardHeroPanelTests {
             low24h: nil,
             cantEmptyBeforeOffpeak: true
         )
-        // Construct the panel with the new inputs to keep the binding
-        // surface under test even though the assertion is on the static
-        // helper that drives the rendered accessibility label.
+        // Scope of this test: pin the contract string only. SwiftUI view
+        // bodies are not exercised in unit tests, so the panel construction
+        // below verifies the call-site binding compiles but does not
+        // assert that the rendered `.accessibilityLabel(...)` modifier
+        // actually uses this helper. Behavioural coverage would need
+        // ViewInspector or a UI snapshot test — out of scope here.
         _ = DashboardHeroPanel(
             live: live,
             rolling15min: nil,

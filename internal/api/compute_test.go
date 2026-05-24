@@ -707,9 +707,9 @@ func TestComputeCantEmptyBeforeOffpeak(t *testing.T) {
 	now := time.Date(2026, 4, 15, 10, 0, 0, 0, sydneyTZ)
 
 	// Boundary equality: requiredHours = (Soc - cutoffPercent)/100 * CapacityKwh / maxDischargeKW
-	// Pick Soc such that requiredHours == 1h exactly with capacity 13.34 and max 5.0:
-	// requiredHours = 1 → (Soc - 5)/100 * 13.34 / 5 = 1 → Soc - 5 = 500/13.34 → Soc = 5 + 500/13.34
-	boundarySoc := 5.0 + 500.0/13.34
+	// Pick FP-exact inputs so requiredHours == 1h without relying on IEEE 754 rounding:
+	//   (55 - 5)/100 * 10.0 / 5.0 = 0.5 * 10.0 / 5.0 = 1.0 exactly.
+	const boundarySoc, boundaryCapacityKwh = 55.0, 10.0
 
 	tests := map[string]struct {
 		in   cantEmptyInput
@@ -792,7 +792,7 @@ func TestComputeCantEmptyBeforeOffpeak(t *testing.T) {
 		},
 		"boundary equality": {
 			in: cantEmptyInput{
-				Soc: boundarySoc, CapacityKwh: 13.34,
+				Soc: boundarySoc, CapacityKwh: boundaryCapacityKwh,
 				Now: now, NextOpStart: now.Add(1 * time.Hour),
 				HasBoundary: true, WithinOffpeakWindow: false,
 			},
