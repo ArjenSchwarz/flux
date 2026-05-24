@@ -139,7 +139,17 @@ struct PricingPeriodsView: View {
         #if os(iOS)
         .swipeActions(edge: .trailing) {
             Button(role: .destructive) {
-                Task { try? await viewModel.delete(period) }
+                Task {
+                    do {
+                        try await viewModel.delete(period)
+                    } catch {
+                        // PricingService.delete already recorded the error on
+                        // service.lastError before re-throwing; the
+                        // errorBanner reads from there and surfaces it
+                        // automatically. We just need the do/catch so the
+                        // throw doesn't go unhandled.
+                    }
+                }
             } label: {
                 Label("Delete", systemImage: "trash")
             }

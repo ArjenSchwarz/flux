@@ -28,6 +28,7 @@ const (
 	pricingCodeRateOutOfRange  = "rate_out_of_range"
 	pricingCodeSecondOpenEnded = "second_open_ended"
 	pricingCodeConcurrentWrite = "concurrent_open_ended_write"
+	pricingCodeNotFound        = "not_found"
 	pricingCodeInternal        = "internal_error"
 )
 

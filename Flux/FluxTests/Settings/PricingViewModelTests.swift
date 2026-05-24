@@ -72,8 +72,9 @@ struct PricingViewModelTests {
         viewModel.beginEdit(period)
         viewModel.draft.peakRate = 0.32
         try await viewModel.save()
-        // Wait for the fire-and-forget refetch
-        try await Task.sleep(nanoseconds: 50_000_000)
+        // foldReplace runs synchronously inside service.update, so
+        // viewModel.periods reflects the new rate as soon as save() returns
+        // — no need to wait for the fire-and-forget refetch here.
         #expect(viewModel.periods.first?.peakRate == 0.32)
     }
 

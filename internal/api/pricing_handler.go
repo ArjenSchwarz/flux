@@ -167,7 +167,7 @@ func (h *Handler) handleUpdatePricing(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if current == nil {
-		writePricingError(w, http.StatusNotFound, pricingCodeInternal, "pricing period not found")
+		writePricingError(w, http.StatusNotFound, pricingCodeNotFound, "pricing period not found")
 		return
 	}
 	if !runPricingValidationChain(w, payload, existing, id) {
@@ -207,7 +207,7 @@ func (h *Handler) handleDeletePricing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if existing == nil {
-		writePricingError(w, http.StatusNotFound, pricingCodeInternal, "pricing period not found")
+		writePricingError(w, http.StatusNotFound, pricingCodeNotFound, "pricing period not found")
 		return
 	}
 	prevOpenEndedID, ok := loadPrevOpenEndedID(w, r.Context(), h.pricing, "delete")
@@ -260,7 +260,7 @@ func (h *Handler) handleReplaceOpenEnded(w http.ResponseWriter, r *http.Request)
 		}
 	}
 	if closing == nil {
-		writePricingError(w, http.StatusNotFound, pricingCodeInternal, "closing pricing period not found")
+		writePricingError(w, http.StatusNotFound, pricingCodeNotFound, "closing pricing period not found")
 		return
 	}
 	if closing.EndDate != nil {
