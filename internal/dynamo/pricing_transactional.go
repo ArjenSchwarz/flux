@@ -179,15 +179,18 @@ func (s *DynamoPricingStore) deleteOpenEndedPeriod(ctx context.Context, id strin
 // newItem.PricingID when newItem is open-ended, or cleared when newItem
 // is closed. Three items per transaction: (1) sentinel, (2) closing-row
 // update, (3) new-row insert.
-func (s *DynamoPricingStore) ReplaceOpenEnded(ctx context.Context, closingID string, closingEndDate string, newItem PricingItem) error {
+func (s *DynamoPricingStore) ReplaceOpenEnded(ctx context.Context, closingID string, closingEndDate string, updatedAt string, newItem PricingItem) error {
 	prevOpenEndedID := &closingID
 	var newOpenEndedID *string
 	if newItem.EndDate == nil {
 		newOpenEndedID = &newItem.PricingID
 	}
 
-	now := nowRFC3339()
-	sentinel := s.sentinelUpdate(newOpenEndedID, prevOpenEndedID, now)
+	// updatedAt is supplied by the caller so the handler's synthesised
+	// response carries the same timestamp DynamoDB persists. Without this
+	// the handler's response would diverge from the next GET /pricing
+	// read by however long the two time.Now() calls drifted.
+	sentinel := s.sentinelUpdate(newOpenEndedID, prevOpenEndedID, updatedAt)
 
 	// Closing-row Update: set the end date, bump updatedAt, but only if
 	// the row is still open-ended (attribute_not_exists(endDate)) and
@@ -202,7 +205,7 @@ func (s *DynamoPricingStore) ReplaceOpenEnded(ctx context.Context, closingID str
 			UpdateExpression: &closingExpr,
 			ExpressionAttributeValues: map[string]types.AttributeValue{
 				":end":       &types.AttributeValueMemberS{Value: closingEndDate},
-				":updatedAt": &types.AttributeValueMemberS{Value: now},
+				":updatedAt": &types.AttributeValueMemberS{Value: updatedAt},
 				":closingId": &types.AttributeValueMemberS{Value: closingID},
 			},
 			ConditionExpression: &closingCond,

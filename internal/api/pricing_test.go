@@ -127,7 +127,7 @@ func (s *fakePricingStore) DeletePricing(_ context.Context, id string, _ *string
 	return nil
 }
 
-func (s *fakePricingStore) ReplaceOpenEnded(_ context.Context, closingID, closingEndDate string, newItem dynamo.PricingItem) error {
+func (s *fakePricingStore) ReplaceOpenEnded(_ context.Context, closingID, closingEndDate, updatedAt string, newItem dynamo.PricingItem) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.replaceErr != nil {
@@ -139,6 +139,7 @@ func (s *fakePricingStore) ReplaceOpenEnded(_ context.Context, closingID, closin
 	}
 	end := closingEndDate
 	closing.EndDate = &end
+	closing.UpdatedAt = updatedAt
 	s.rows[closingID] = closing
 	s.rows[newItem.PricingID] = newItem
 	if newItem.EndDate == nil {

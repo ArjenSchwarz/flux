@@ -293,7 +293,7 @@ func (h *Handler) handleReplaceOpenEnded(w http.ResponseWriter, r *http.Request)
 
 	now := h.nowFunc().UTC().Format(time.RFC3339)
 	newItem := payload.NewPeriod.toItem(h.idFunc(), now, now)
-	if err := h.pricing.ReplaceOpenEnded(r.Context(), payload.ClosingPricingID, closingEndDate, newItem); err != nil {
+	if err := h.pricing.ReplaceOpenEnded(r.Context(), payload.ClosingPricingID, closingEndDate, now, newItem); err != nil {
 		mapPricingStoreError(w, "replace open-ended pricing", err)
 		return
 	}
@@ -301,7 +301,9 @@ func (h *Handler) handleReplaceOpenEnded(w http.ResponseWriter, r *http.Request)
 	// Return the resulting pair from the in-memory transaction inputs so
 	// the client can fold both rows back into its local list without a
 	// second fetch. Re-scanning here would be eventually-consistent and
-	// could return stale rows for the just-committed transaction.
+	// could return stale rows for the just-committed transaction. The
+	// `now` value is the same string the store wrote into the closing
+	// row, so the response carries the canonical updatedAt.
 	closingRow := *closing
 	closingRow.EndDate = &closingEndDate
 	closingRow.UpdatedAt = now

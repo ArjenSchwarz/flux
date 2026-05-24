@@ -16,7 +16,7 @@ type PricingStore interface {
 	PutPricing(ctx context.Context, item dynamo.PricingItem, prevOpenEndedID *string) error
 	UpdatePricing(ctx context.Context, item dynamo.PricingItem, prevOpenEndedID *string) error
 	DeletePricing(ctx context.Context, id string, prevOpenEndedID *string) error
-	ReplaceOpenEnded(ctx context.Context, closingID, closingEndDate string, newItem dynamo.PricingItem) error
+	ReplaceOpenEnded(ctx context.Context, closingID, closingEndDate, updatedAt string, newItem dynamo.PricingItem) error
 }
 
 // Pricing error codes documented in AC 2.3 and the design's

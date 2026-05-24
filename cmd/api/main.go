@@ -197,8 +197,8 @@ func (a pricingStoreAdapter) DeletePricing(ctx context.Context, id string, prevO
 	return a.store.DeletePricing(ctx, id, prevOpenEndedID)
 }
 
-func (a pricingStoreAdapter) ReplaceOpenEnded(ctx context.Context, closingID, closingEndDate string, newItem dynamo.PricingItem) error {
-	return a.store.ReplaceOpenEnded(ctx, closingID, closingEndDate, newItem)
+func (a pricingStoreAdapter) ReplaceOpenEnded(ctx context.Context, closingID, closingEndDate, updatedAt string, newItem dynamo.PricingItem) error {
+	return a.store.ReplaceOpenEnded(ctx, closingID, closingEndDate, updatedAt, newItem)
 }
 
 // ssmAPI is the subset of the SSM client used for parameter fetching.

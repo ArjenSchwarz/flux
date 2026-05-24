@@ -49,7 +49,7 @@ func TestPricingAtomicity_ReplaceOpenEnded_SentinelRace(t *testing.T) {
 	mock := newAtomicityMock(canceledWith(reasonAt(0, 3, "ConditionalCheckFailed")))
 	store := NewDynamoPricingStore(mock, pricingTestTable())
 
-	err := store.ReplaceOpenEnded(context.Background(), "open-id", "2026-06-30",
+	err := store.ReplaceOpenEnded(context.Background(), "open-id", "2026-06-30", "2026-05-24T10:00:00Z",
 		PricingItem{PricingID: "new-id", StartDate: "2026-07-01", PeakRate: 0.3})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrPricingConcurrentWrite,
@@ -61,7 +61,7 @@ func TestPricingAtomicity_ReplaceOpenEnded_ClosingRowRace(t *testing.T) {
 	mock := newAtomicityMock(canceledWith(reasonAt(1, 3, "ConditionalCheckFailed")))
 	store := NewDynamoPricingStore(mock, pricingTestTable())
 
-	err := store.ReplaceOpenEnded(context.Background(), "open-id", "2026-06-30",
+	err := store.ReplaceOpenEnded(context.Background(), "open-id", "2026-06-30", "2026-05-24T10:00:00Z",
 		PricingItem{PricingID: "new-id", StartDate: "2026-07-01", PeakRate: 0.3})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrPricingConcurrentWrite,
@@ -73,7 +73,7 @@ func TestPricingAtomicity_ReplaceOpenEnded_UUIDCollision(t *testing.T) {
 	mock := newAtomicityMock(canceledWith(reasonAt(2, 3, "ConditionalCheckFailed")))
 	store := NewDynamoPricingStore(mock, pricingTestTable())
 
-	err := store.ReplaceOpenEnded(context.Background(), "open-id", "2026-06-30",
+	err := store.ReplaceOpenEnded(context.Background(), "open-id", "2026-06-30", "2026-05-24T10:00:00Z",
 		PricingItem{PricingID: "new-id", StartDate: "2026-07-01", PeakRate: 0.3})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrPricingUUIDCollision,
@@ -87,7 +87,7 @@ func TestPricingAtomicity_EmptyReasonsFallsThroughTo500(t *testing.T) {
 	mock := newAtomicityMock(&types.TransactionCanceledException{})
 	store := NewDynamoPricingStore(mock, pricingTestTable())
 
-	err := store.ReplaceOpenEnded(context.Background(), "open-id", "2026-06-30",
+	err := store.ReplaceOpenEnded(context.Background(), "open-id", "2026-06-30", "2026-05-24T10:00:00Z",
 		PricingItem{PricingID: "new-id", StartDate: "2026-07-01", PeakRate: 0.3})
 	require.Error(t, err)
 	assert.NotErrorIs(t, err, ErrPricingConcurrentWrite,

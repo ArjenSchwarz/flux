@@ -344,9 +344,11 @@ extension URLSessionAPIClient {
         }
         // Match by id rather than position so a server-side reorder
         // (e.g. start-date sort) can't swap closing and new on the wire.
-        guard let closing = response.pricing.first(where: { $0.id == closingId }),
-              let newPeriod = response.pricing.first(where: { $0.id != closingId }) else {
-            throw FluxAPIError.decodingError("replace-open-ended response missing closing id \(closingId)")
+        guard let closing = response.pricing.first(where: { $0.id == closingId }) else {
+            throw FluxAPIError.decodingError("replace-open-ended response missing row with id \(closingId)")
+        }
+        guard let newPeriod = response.pricing.first(where: { $0.id != closingId }) else {
+            throw FluxAPIError.decodingError("replace-open-ended response: both rows share id \(closingId)")
         }
         return ReplaceOpenEndedResult(closing: closing, newPeriod: newPeriod)
     }
