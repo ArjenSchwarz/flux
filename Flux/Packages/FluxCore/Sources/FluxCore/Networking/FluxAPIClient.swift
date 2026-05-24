@@ -10,6 +10,16 @@ public protocol FluxAPIClient: Sendable {
     func createRule(deviceId: String, rule: SoCAlertRuleDraft) async throws -> SoCAlertRule
     func updateRule(deviceId: String, rule: SoCAlertRule) async throws -> SoCAlertRule
     func deleteRule(deviceId: String, ruleId: String) async throws
+
+    // Pricing — daily-costs spec.
+    func fetchPricing() async throws -> [PricingPeriod]
+    func createPricing(_ draft: PricingPeriodDraft) async throws -> PricingPeriod
+    func updatePricing(id: String, _ draft: PricingPeriodDraft) async throws -> PricingPeriod
+    func deletePricing(id: String) async throws
+    func replaceOpenEndedPricing(
+        closingId: String,
+        with draft: PricingPeriodDraft
+    ) async throws -> ReplaceOpenEndedResult
 }
 
 // Default implementations for the SoC-alert endpoints so existing test
@@ -34,6 +44,29 @@ public extension FluxAPIClient {
     }
 
     func deleteRule(deviceId _: String, ruleId _: String) async throws {
+        throw FluxAPIError.notConfigured
+    }
+
+    func fetchPricing() async throws -> [PricingPeriod] {
+        throw FluxAPIError.notConfigured
+    }
+
+    func createPricing(_: PricingPeriodDraft) async throws -> PricingPeriod {
+        throw FluxAPIError.notConfigured
+    }
+
+    func updatePricing(id _: String, _: PricingPeriodDraft) async throws -> PricingPeriod {
+        throw FluxAPIError.notConfigured
+    }
+
+    func deletePricing(id _: String) async throws {
+        throw FluxAPIError.notConfigured
+    }
+
+    func replaceOpenEndedPricing(
+        closingId _: String,
+        with _: PricingPeriodDraft
+    ) async throws -> ReplaceOpenEndedResult {
         throw FluxAPIError.notConfigured
     }
 }

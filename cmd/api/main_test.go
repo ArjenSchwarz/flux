@@ -16,6 +16,7 @@ func TestLoadConfigMissingEnv(t *testing.T) {
 	t.Setenv("TABLE_SYSTEM", "flux-system")
 	t.Setenv("TABLE_OFFPEAK", "flux-offpeak")
 	t.Setenv("TABLE_NOTES", "flux-notes")
+	t.Setenv("TABLE_PRICING", "flux-pricing")
 	t.Setenv("OFFPEAK_START", "11:00")
 	t.Setenv("OFFPEAK_END", "14:00")
 	t.Setenv("API_TOKEN_PARAM", "/flux/api-token")

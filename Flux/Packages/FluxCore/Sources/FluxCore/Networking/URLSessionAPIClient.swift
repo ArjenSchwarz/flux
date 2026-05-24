@@ -216,16 +216,38 @@ public final class URLSessionAPIClient: FluxAPIClient, Sendable {
         case 200 ... 299:
             return try decodeResponse(data)
         case 400:
-            throw FluxAPIError.badRequest(parseErrorMessage(from: data))
+            throw mapBadRequest(data: data)
         case 401, 403:
             throw FluxAPIError.unauthorized
+        case 404:
+            throw FluxAPIError.notFound
         case 409:
-            throw FluxAPIError.ruleCapReached
+            throw mapConflict(data: data)
         case 500 ... 599:
             throw FluxAPIError.serverError
         default:
             throw FluxAPIError.unexpectedStatus(httpResponse.statusCode)
         }
+    }
+
+    private func mapBadRequest(data: Data) -> FluxAPIError {
+        if let reason = parsePricingValidationReason(from: data) {
+            return .pricingValidation(reason)
+        }
+        return .badRequest(parseErrorMessage(from: data))
+    }
+
+    /// Maps an HTTP 409 response to a typed error. The only two known 409
+    /// shapes today are the alerts rule-cap exceeded (legacy) and the
+    /// pricing sentinel-race `concurrent_open_ended_write`. Anything else
+    /// falls through to `.ruleCapReached` — if a future endpoint introduces
+    /// a new 409 reason, add a branch here before adding the endpoint.
+    private func mapConflict(data: Data) -> FluxAPIError {
+        if let reason = parsePricingValidationReason(from: data),
+           case .concurrentWrite = reason {
+            return .pricingValidation(.concurrentWrite)
+        }
+        return .ruleCapReached
     }
 
     /// 204 No Content responses carry no JSON body; feed the decoder a valid
@@ -280,5 +302,99 @@ public final class URLSessionAPIClient: FluxAPIClient, Sendable {
             return "Bad request"
         }
         return response.error
+    }
+
+}
+
+// MARK: - Pricing (daily-costs spec)
+
+extension URLSessionAPIClient {
+    public func fetchPricing() async throws -> [PricingPeriod] {
+        let response: PricingListResponse = try await performRequest(path: "pricing", queryItems: [])
+        return response.pricing
+    }
+
+    public func createPricing(_ draft: PricingPeriodDraft) async throws -> PricingPeriod {
+        let body = try encoder.encode(draft)
+        return try await performRequest(path: "pricing", queryItems: [], method: "POST", body: body)
+    }
+
+    public func updatePricing(id: String, _ draft: PricingPeriodDraft) async throws -> PricingPeriod {
+        let body = try encoder.encode(draft)
+        return try await performRequest(path: "pricing/\(id)", queryItems: [], method: "PUT", body: body)
+    }
+
+    public func deletePricing(id: String) async throws {
+        let _: EmptyPricingResponse = try await performRequest(
+            path: "pricing/\(id)",
+            queryItems: [],
+            method: "DELETE"
+        )
+    }
+
+    public func replaceOpenEndedPricing(
+        closingId: String,
+        with draft: PricingPeriodDraft
+    ) async throws -> ReplaceOpenEndedResult {
+        let payload = ReplaceOpenEndedPayload(closingPricingId: closingId, newPeriod: draft)
+        let body = try encoder.encode(payload)
+        let response: PricingListResponse = try await performRequest(
+            path: "pricing/replace-open-ended",
+            queryItems: [],
+            method: "POST",
+            body: body
+        )
+        guard response.pricing.count == 2 else {
+            throw FluxAPIError.decodingError("replace-open-ended expected 2 rows, got \(response.pricing.count)")
+        }
+        // Match by id rather than position so a server-side reorder
+        // (e.g. start-date sort) can't swap closing and new on the wire.
+        guard let closing = response.pricing.first(where: { $0.id == closingId }) else {
+            throw FluxAPIError.decodingError("replace-open-ended response missing row with id \(closingId)")
+        }
+        guard let newPeriod = response.pricing.first(where: { $0.id != closingId }) else {
+            throw FluxAPIError.decodingError("replace-open-ended response: both rows share id \(closingId)")
+        }
+        return ReplaceOpenEndedResult(closing: closing, newPeriod: newPeriod)
+    }
+
+    fileprivate func parsePricingValidationReason(from data: Data) -> PricingValidationReason? {
+        guard let payload = try? decoder.decode(PricingErrorResponse.self, from: data) else {
+            return nil
+        }
+        switch payload.error {
+        case "inverted_dates":
+            return .invertedDates
+        case "overlap":
+            return .overlap(openEndedId: payload.openEndedId)
+        case "rate_precision":
+            return .ratePrecision
+        case "rate_out_of_range":
+            return .rateOutOfRange
+        case "second_open_ended":
+            return .secondOpenEnded
+        case "concurrent_open_ended_write":
+            return .concurrentWrite
+        default:
+            return nil
+        }
+    }
+
+    fileprivate struct PricingErrorResponse: Decodable {
+        let error: String
+        let openEndedId: String?
+    }
+
+    fileprivate struct PricingListResponse: Decodable {
+        let pricing: [PricingPeriod]
+    }
+
+    fileprivate struct ReplaceOpenEndedPayload: Encodable {
+        let closingPricingId: String
+        let newPeriod: PricingPeriodDraft
+    }
+
+    fileprivate struct EmptyPricingResponse: Decodable {
+        init(from _: Decoder) throws {}
     }
 }

@@ -26,6 +26,7 @@ type Handler struct {
 	devices      DeviceStore
 	rules        SocRuleStore
 	fireState    FireStateCleaner
+	pricing      PricingStore
 	serial       string
 	apiToken     string
 	offpeakStart string
@@ -79,6 +80,11 @@ func (h *Handler) buildMux() http.Handler {
 	mux.HandleFunc("POST /devices/{deviceId}/rules", h.handleCreateRule)
 	mux.HandleFunc("PUT /devices/{deviceId}/rules/{ruleId}", h.handleUpdateRule)
 	mux.HandleFunc("DELETE /devices/{deviceId}/rules/{ruleId}", h.handleDeleteRule)
+	mux.HandleFunc("GET /pricing", h.handleListPricing)
+	mux.HandleFunc("POST /pricing", h.handleCreatePricing)
+	mux.HandleFunc("PUT /pricing/{id}", h.handleUpdatePricing)
+	mux.HandleFunc("DELETE /pricing/{id}", h.handleDeletePricing)
+	mux.HandleFunc("POST /pricing/replace-open-ended", h.handleReplaceOpenEnded)
 	return bearerTokenMiddleware(h.apiToken, jsonNotFound(jsonMethodNotAllowed(mux)))
 }
 

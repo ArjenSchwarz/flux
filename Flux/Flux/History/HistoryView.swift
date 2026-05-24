@@ -99,10 +99,16 @@ struct HistoryView: View {
             }
         }
         .task {
-            await viewModel.loadHistory(days: selectedRange)
+            async let history: Void = viewModel.loadHistory(days: selectedRange)
+            async let pricing: Void = viewModel.refreshPricing()
+            _ = await (history, pricing)
         }
         .onChange(of: selectedRange) { _, newRange in
-            Task { await viewModel.loadHistory(days: newRange) }
+            Task {
+                async let history: Void = viewModel.loadHistory(days: newRange)
+                async let pricing: Void = viewModel.refreshPricing()
+                _ = await (history, pricing)
+            }
         }
         #if os(macOS)
         .macRefreshAction { [viewModel] in
@@ -136,6 +142,9 @@ struct HistoryView: View {
         let selectedDate = viewModel.selectedDay.flatMap { DateFormatting.parseDayDate($0.date) }
         VStack(alignment: .leading, spacing: 16) {
             statsOverviewCard(derived: derived)
+            if let periodCosts = viewModel.periodCosts {
+                HistoryPeriodCostsCard(costs: periodCosts)
+            }
             solarCard(derived: derived, selectedDate: selectedDate)
             gridUsageCard(derived: derived, selectedDate: selectedDate)
             dailyUsageCard(derived: derived, selectedDate: selectedDate)
@@ -153,6 +162,9 @@ struct HistoryView: View {
         let selectedDate = viewModel.selectedDay.flatMap { DateFormatting.parseDayDate($0.date) }
         VStack(alignment: .leading, spacing: 16) {
             statsOverviewCard(derived: derived)
+            if let periodCosts = viewModel.periodCosts {
+                HistoryPeriodCostsCard(costs: periodCosts)
+            }
             AdaptiveColumnsLayout {
                 solarCard(derived: derived, selectedDate: selectedDate)
                 gridUsageCard(derived: derived, selectedDate: selectedDate)
