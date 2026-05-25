@@ -334,3 +334,42 @@ The user explicitly chose this in the design-phase review to preserve the delete
 - A future request to "make all nav titles consistent" would need to pick one.
 
 ---
+
+## Decision 11: Extract macOS Toolbar to `DayDetailMacToolbar` Struct
+
+**Date**: 2026-05-25
+**Status**: accepted
+
+### Context
+
+[Task 4](tasks.md) and `design.md` specify the macOS prev/next chevron toolbar as an inline `.toolbar { ToolbarItemGroup(placement: .primaryAction) { ... } }` block inside `DayDetailView.body`. During implementation, adding the toolbar inline pushed `DayDetailView.swift` past SwiftLint's 400-line `file_length` cap. A `// swiftlint:disable file_length` would suppress the warning but the existing project convention pairs the disable with an `enable` at end-of-file (see `APIModels.swift`, `APIModelsTests.swift`), and the file was already carrying a `type_body_length` disable for similar reasons.
+
+### Decision
+
+Extract the toolbar into a new `DayDetailMacToolbar: ToolbarContent` struct in `Flux/Flux/DayDetail/DayDetailViewSupport.swift`, gated `#if os(macOS)`. `DayDetailView.body` keeps a one-line `.toolbar { DayDetailMacToolbar(viewModel: viewModel) }` call so the wiring point is still obvious. The `file_length` disable still wraps the file (paired with `enable` at EOF) because the file is 416 lines after the extraction, but the toolbar code itself lives in the support file.
+
+### Rationale
+
+The extraction is a semantics-preserving refactor — the toolbar reads `viewModel.isToday` directly and SwiftUI's Observation tracking works transparently inside `ToolbarContent.body`, so the disabled-state reactivity is identical to the inline form. Splitting the toolbar into its own struct gives it a doc comment in isolation (which the inline form would not have) and matches the existing `DayDetailViewSupport.swift` convention of housing Day Detail subviews (`DayDetailErrorPanel`, `DayDetailMessagePanel`, `DayNavigationHeader`).
+
+### Alternatives Considered
+
+- **Keep the toolbar inline and only add `// swiftlint:disable file_length`**: Matches `design.md` literally but adds another suppression to a file that's already over-budget. The extraction is the cleaner answer.
+- **Inline the toolbar and split a different chunk of `DayDetailView` out**: Would touch unrelated, working code (e.g. `dayDetailContent`, `header`, `summaryColumn`) for no benefit beyond satisfying the task description verbatim. Rejected.
+
+### Consequences
+
+**Positive:**
+- `DayDetailMacToolbar` has its own dedicated doc comment explaining the AC 4.6 disabled-state mirror.
+- `DayDetailView.body` stays readable — one line for the toolbar wiring instead of an inline `ToolbarItemGroup` with two `Button { } label: { }` blocks.
+- Follows the existing `DayDetailViewSupport.swift` convention for Day Detail subviews.
+
+**Negative:**
+- Reader has to jump to `DayDetailViewSupport.swift` to see the chevron button definitions.
+- One more cross-file dependency for the macOS chrome.
+
+### Impact
+
+`Flux/Flux/DayDetail/DayDetailView.swift` (one-line `.toolbar { DayDetailMacToolbar(viewModel: viewModel) }` call), `Flux/Flux/DayDetail/DayDetailViewSupport.swift` (new struct, ~30 lines, `#if os(macOS)` gated).
+
+---

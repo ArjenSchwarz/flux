@@ -414,3 +414,4 @@ struct DayDetailView: View {
     .environment(\.horizontalSizeClass, .regular)
 }
 #endif
+// swiftlint:enable file_length
