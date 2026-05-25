@@ -1,0 +1,27 @@
+{
+  "description": "2026-05-18 regression fixture for T-1341. The day Flux's snapshot-diff reported 1.74 kWh peak / 18.95 kWh off-peak while the meter recorded 0.17 / 20.75 kWh. The 1.57 kWh discrepancy was the last 15-30 minutes of grid-charging that AlphaESS's intraday eInput lagged. After integrating readings over [11:00, 14:00) Sydney, gridUsageKwh should land near the meter's 20.75 kWh and peak (= eInput - gridUsageKwh) drops to <=0.25 kWh.",
+  "date": "2026-05-18",
+  "windowStartSydney": "2026-05-18T11:00:00+10:00",
+  "windowEndSydney":   "2026-05-18T14:00:00+10:00",
+  "eInputDailyKwh": 20.69,
+  "meterPeakKwh": 0.17,
+  "meterOffpeakKwh": 20.75,
+  "syntheticReadings": {
+    "kind": "constant-then-rampdown-with-boundary-bracket",
+    "phaseAStart": "2026-05-18T11:00:00+10:00",
+    "phaseAEnd":   "2026-05-18T13:50:00+10:00",
+    "phaseAPgridWatts": 6900,
+    "phaseAPbatWatts":  -6600,
+    "phaseBStart": "2026-05-18T13:50:00+10:00",
+    "phaseBEnd":   "2026-05-18T14:00:00+10:00",
+    "phaseBPgridStartWatts": 6900,
+    "phaseBPgridEndWatts":   5400,
+    "phaseBPbatStartWatts":  -6600,
+    "phaseBPbatEndWatts":    -5100,
+    "intervalSeconds": 10,
+    "rightBracketAt": "2026-05-18T14:00:07+10:00",
+    "rightBracketPgridWatts": 0,
+    "rightBracketPbatWatts": 0,
+    "provenance": "Synthesised to reproduce the bug shape — actual reading values from the incident were not captured before TTL pruning. Phase A holds a realistic 6.9 kW grid-charging plateau (heavy combined inverter + EV draw). Phase B ramps down over the last 10 minutes to model the soft cutoff before the inverter physically stops at 14:00:07. The boundary-bracket reading at +7s lets the integration's right-edge synthesis correctly clip to 14:00 (AC 1.5)."
+  }
+}

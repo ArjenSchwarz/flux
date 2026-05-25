@@ -173,7 +173,7 @@ references:
 
 ## Backfill CLI and Regression Tests
 
-- [ ] 19. Test cmd/backfill-offpeak <!-- id:tyhiugb -->
+- [x] 19. Test cmd/backfill-offpeak <!-- id:tyhiugb -->
   - Test dry-run mode: no UpdateItem calls; summary printed
   - Test idempotence: re-running with same readings produces identical values for the five deltas + two count fields; integratedAt MAY differ (AC 7.3 + Decision 10)
   - Test skips today (AC 7.2): --to defaults to yesterday; today's row never processed even with explicit --to=today
@@ -185,7 +185,7 @@ references:
   - Stream: 1
   - Requirements: [7.1](requirements.md#7.1), [7.2](requirements.md#7.2), [7.3](requirements.md#7.3), [7.4](requirements.md#7.4), [7.5](requirements.md#7.5), [7.6](requirements.md#7.6), [7.7](requirements.md#7.7), [7.8](requirements.md#7.8)
 
-- [ ] 20. Implement cmd/backfill-offpeak <!-- id:tyhiugc -->
+- [x] 20. Implement cmd/backfill-offpeak <!-- id:tyhiugc -->
   - Create cmd/backfill-offpeak/main.go modelled on cmd/backfill-solar/main.go
   - Flags: --serial; --table-offpeak; --table-readings; --from; --to (default yesterday); --offpeak-start; --offpeak-end; --dry-run
   - Per day: QueryOffpeak + QueryReadings; IntegrateOffpeakDeltas; log drift; WriteOffpeakIfComplete
@@ -195,7 +195,7 @@ references:
   - Stream: 1
   - Requirements: [7.1](requirements.md#7.1), [7.2](requirements.md#7.2), [7.3](requirements.md#7.3), [7.4](requirements.md#7.4), [7.5](requirements.md#7.5), [7.6](requirements.md#7.6), [7.7](requirements.md#7.7), [7.8](requirements.md#7.8)
 
-- [ ] 21. 2026-05-18 regression fixture test <!-- id:tyhiugd -->
+- [x] 21. 2026-05-18 regression fixture test <!-- id:tyhiugd -->
   - Create a fixture in internal/derivedstats/testdata/ with the actual 2026-05-18 readings (13:50-14:10 captured plus synthesised rest of window)
   - Test asserts AC 2.1: after IntegrateOffpeakDeltas; computed gridUsageKwh leaves peak = eInput - gridUsageKwh <= 0.25 kWh
   - Test asserts AC 2.2 structural bound: gridUsageKwh <= eInput holds
@@ -204,7 +204,7 @@ references:
   - Stream: 1
   - Requirements: [2.1](requirements.md#2.1), [2.2](requirements.md#2.2)
 
-- [ ] 22. Performance benchmark and Lambda live-path test <!-- id:tyhiuge -->
+- [x] 22. Performance benchmark and Lambda live-path test <!-- id:tyhiuge -->
   - Add Go benchmark BenchmarkIntegrateOffpeakDeltas on 1080 synthetic readings — assert <2s wall clock (AC 8.1)
   - Add API integration test that exercises liveOffpeakDeltas through a /status or /day request handler with a fixture readings slice — record p95 in test output; assert <500ms warm (AC 8.2)
   - Blocked-by: tyhiufu (Implement IntegrateOffpeakDeltas and shared integrate helper), tyhiug8 (Implement liveOffpeakDeltas in api/compute.go)

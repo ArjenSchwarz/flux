@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -374,4 +375,60 @@ func TestPropertyOffpeakLenLessThanTwoFalse(t *testing.T) {
 		_, ok := IntegrateOffpeakDeltas(readings, base, base+100)
 		assert.False(t, ok)
 	})
+}
+
+// BenchmarkIntegrateOffpeakDeltas covers AC 8.1: the window-end computation
+// must complete within 2 s on a typical day. A typical day has ~1080 readings
+// (3 h × 10 s spacing). The 2 s budget is asserted at the test level so a
+// regression that adds an O(n²) pass surfaces immediately; the benchmark
+// itself is also useful for tracking changes via benchstat.
+func BenchmarkIntegrateOffpeakDeltas(b *testing.B) {
+	const (
+		n             = 1080
+		startUnix     = int64(1_700_000_000)
+		spacingSecond = 10
+	)
+	readings := make([]Reading, n)
+	for i := range n {
+		readings[i] = Reading{
+			Timestamp: startUnix + int64(i*spacingSecond),
+			Ppv:       float64(500 + i%2000),
+			Pgrid:     float64(-3000 + i%6000),
+			Pbat:      float64(-2000 + i%4000),
+		}
+	}
+	endUnix := startUnix + int64(n*spacingSecond)
+
+	for b.Loop() {
+		_, _ = IntegrateOffpeakDeltas(readings, startUnix, endUnix)
+	}
+}
+
+// TestIntegrateOffpeakDeltas_AC81_WallClock pins AC 8.1's 2 s budget on
+// 1080 synthetic readings — a regression-only test, not a microbenchmark.
+// Failure here means a pass added between the existing five integrate calls
+// has pushed the typical-day computation past the poller's window-end budget.
+func TestIntegrateOffpeakDeltas_AC81_WallClock(t *testing.T) {
+	const (
+		n             = 1080
+		startUnix     = int64(1_700_000_000)
+		spacingSecond = 10
+	)
+	readings := make([]Reading, n)
+	for i := range n {
+		readings[i] = Reading{
+			Timestamp: startUnix + int64(i*spacingSecond),
+			Ppv:       float64(500 + i%2000),
+			Pgrid:     float64(-3000 + i%6000),
+			Pbat:      float64(-2000 + i%4000),
+		}
+	}
+	endUnix := startUnix + int64(n*spacingSecond)
+
+	started := time.Now()
+	_, ok := IntegrateOffpeakDeltas(readings, startUnix, endUnix)
+	elapsed := time.Since(started)
+	require.True(t, ok)
+	t.Logf("IntegrateOffpeakDeltas over %d readings: %s", n, elapsed)
+	assert.Less(t, elapsed, 2*time.Second, "AC 8.1: window-end computation must complete within 2 s")
 }
