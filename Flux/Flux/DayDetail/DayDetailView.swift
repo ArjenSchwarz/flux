@@ -296,7 +296,9 @@ struct DayDetailView: View {
                 onTabActivate: onTabActivate
             )
         } else {
-            // macOS keeps the eyebrow + title since the sidebar handles tabs.
+            // Fallback for compact iOS call sites without a tab binding.
+            // macOS routes through `dayDetailContentRegular`, which omits
+            // `header`; the window toolbar carries the title instead.
             VStack(alignment: .leading, spacing: 2) {
                 Text(eyebrow.uppercased())
                     .appFont(FluxTheme.Typography.eyebrow)
