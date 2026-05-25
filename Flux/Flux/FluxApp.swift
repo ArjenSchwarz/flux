@@ -51,13 +51,8 @@ struct FluxApp: App {
                 // (see Decision 9).
                 .frame(minWidth: 960, minHeight: 600)
         }
-        // `.frame(minWidth:minHeight:)` alone constrains the SwiftUI
-        // content view but does NOT clamp the NSWindow resize behavior —
-        // `.windowResizability(.contentSize)` ties the window's resize
-        // limits to the content view's frame constraints. Without it the
-        // user can drag the window narrower than 960pt and the content
-        // gets clipped.
         .defaultSize(width: 1200, height: 800)
+        // .windowResizability(.contentSize) is required — .frame alone doesn't clamp NSWindow.
         .windowResizability(.contentSize)
         .modelContainer(for: CachedDayEnergy.self)
         .commands {
