@@ -45,7 +45,15 @@ struct FluxApp: App {
                 .environment(chartScopeRegistry)
                 .macOSChartExpansion(registry: chartScopeRegistry, focus: chartExpansionFocus)
                 .preferredColorScheme(preferredScheme)
+                // Content-view minimum sized so the NavigationSplitView
+                // detail column always exceeds the 700pt 2-column threshold
+                // for AdaptiveColumnsLayout and the Day Detail Grid
+                // (see Decision 9).
+                .frame(minWidth: 960, minHeight: 600)
         }
+        .defaultSize(width: 1200, height: 800)
+        // .windowResizability(.contentSize) is required — .frame alone doesn't clamp NSWindow.
+        .windowResizability(.contentSize)
         .modelContainer(for: CachedDayEnergy.self)
         .commands {
             FluxKeyboardCommands(coordinator: refreshCoordinator)

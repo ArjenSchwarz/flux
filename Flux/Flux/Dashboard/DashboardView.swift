@@ -52,6 +52,9 @@ struct DashboardView: View {
             .navigationTitle(usesRegularLayout ? "Dashboard" : "")
         #endif
         #if os(macOS)
+        // Gate flip routes through the regular branch, which excludes
+        // legacyHeader — give the window title something to show.
+        .navigationTitle("Dashboard")
         .task {
             await viewModel.runAutoRefresh()
         }

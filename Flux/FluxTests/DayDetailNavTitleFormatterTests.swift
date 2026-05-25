@@ -1,0 +1,50 @@
+#if os(macOS)
+import FluxCore
+import Foundation
+import Testing
+@testable import Flux
+
+/// Verifies `DayDetailView.macPageTitle` resolves to "Today" when the
+/// view-model reports today, otherwise to a `DayDetailEyebrow.full`
+/// formatted string for the parsed date. The fallback to raw
+/// `viewModel.date` for an unparsable date string mirrors
+/// `DayNavigationHeader.formattedDate`.
+@MainActor @Suite(.serialized)
+struct DayDetailNavTitleFormatterTests {
+    @Test
+    func returnsTodayWhenViewModelIsToday() {
+        let apiClient = StubAPIClient()
+        let now = TestDates.utc(year: 2026, month: 4, day: 15, hour: 14, minute: 30)
+        // Sydney is ahead of UTC; 14:30 UTC on Apr 15 is Apr 16 Sydney.
+        let viewModel = DayDetailViewModel(date: "2026-04-16", apiClient: apiClient, nowProvider: { now })
+
+        let view = DayDetailView(viewModel: viewModel)
+
+        #expect(view.macPageTitle == "Today")
+    }
+
+    @Test
+    func returnsFullFormattedDateForPastDay() {
+        let apiClient = StubAPIClient()
+        let now = TestDates.utc(year: 2026, month: 4, day: 15, hour: 14, minute: 30)
+        let viewModel = DayDetailViewModel(date: "2026-04-10", apiClient: apiClient, nowProvider: { now })
+
+        let view = DayDetailView(viewModel: viewModel)
+        let parsedDate = DateFormatting.parseDayDate("2026-04-10")!
+        let expected = DayDetailEyebrow.full.string(from: parsedDate)
+
+        #expect(view.macPageTitle == expected)
+    }
+
+    @Test
+    func fallsBackToRawDateStringWhenUnparseable() {
+        let apiClient = StubAPIClient()
+        let now = TestDates.utc(year: 2026, month: 4, day: 15, hour: 14, minute: 30)
+        let viewModel = DayDetailViewModel(date: "not-a-date", apiClient: apiClient, nowProvider: { now })
+
+        let view = DayDetailView(viewModel: viewModel)
+
+        #expect(view.macPageTitle == "not-a-date")
+    }
+}
+#endif
