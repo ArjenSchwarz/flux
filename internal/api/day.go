@@ -197,7 +197,7 @@ func (h *Handler) handleDay(ctx context.Context, req events.LambdaFunctionURLReq
 			summary.EDischarge = floatPtr(energy.EDischarge)
 		}
 		if opItem != nil {
-			if imp, exp, hasSplit := offpeakSplit(*opItem, energy, isToday); hasSplit {
+			if imp, exp, hasSplit := offpeakSplit(*opItem, readings, now, isToday, h.offpeakStart, h.offpeakEnd); hasSplit {
 				summary.OffpeakGridImportKwh = floatPtr(imp)
 				summary.OffpeakGridExportKwh = floatPtr(exp)
 			}

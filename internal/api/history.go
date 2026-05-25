@@ -149,7 +149,7 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 			EDischarge: energy.EDischarge,
 		}
 		if op, ok := offpeakByDate[item.Date]; ok {
-			imp, exp, hasSplit := offpeakSplit(op, energy, isItemToday)
+			imp, exp, hasSplit := offpeakSplit(op, todayReadings, now, isItemToday, h.offpeakStart, h.offpeakEnd)
 			if hasSplit {
 				day.OffpeakGridImportKwh = floatPtr(imp)
 				day.OffpeakGridExportKwh = floatPtr(exp)
@@ -197,16 +197,34 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 
 // offpeakSplit returns the off-peak grid import and export for a single day.
 //
-// Complete records carry final deltas computed at window close. A pending
-// record on today's date can be projected forward against the running daily
-// energy totals; pending records on past dates indicate a poller failure and
-// are reported as missing rather than zero. Returns hasSplit=false when the
-// data is not usable.
-func offpeakSplit(op dynamo.OffpeakItem, energy *TodayEnergy, isToday bool) (imp, exp float64, hasSplit bool) {
-	if op.Status == dynamo.OffpeakStatusPending && !isToday {
+// Complete records pass through the finalised deltas. A pending record on
+// today's date live-integrates from the readings slice over
+// [offpeak-start, min(now, offpeak-end)). Pending records on past dates
+// indicate a poller failure and are reported as missing rather than zero.
+// Returns hasSplit=false when the data is not usable (sparse readings or
+// pre-window now).
+func offpeakSplit(op dynamo.OffpeakItem, readings []dynamo.ReadingItem, now time.Time,
+	isToday bool, offpeakStart, offpeakEnd string,
+) (imp, exp float64, hasSplit bool) {
+	if op.Status == dynamo.OffpeakStatusComplete {
+		deltas, ok := offpeakDeltas(op)
+		if !ok {
+			return 0, 0, false
+		}
+		return roundEnergy(deltas.GridImport), roundEnergy(deltas.GridExport), true
+	}
+	if op.Status != dynamo.OffpeakStatusPending || !isToday {
 		return 0, 0, false
 	}
-	deltas, ok := offpeakDeltas(op, energy)
+	startMin, endMin, parsed := derivedstats.ParseOffpeakWindow(offpeakStart, offpeakEnd)
+	if !parsed {
+		return 0, 0, false
+	}
+	deltas, ok := liveOffpeakDeltas(
+		readings, now,
+		time.Duration(startMin)*time.Minute,
+		time.Duration(endMin)*time.Minute,
+	)
 	if !ok {
 		return 0, 0, false
 	}

@@ -132,7 +132,7 @@ references:
 
 ## API Live Path
 
-- [ ] 15. Test liveOffpeakDeltas function <!-- id:tyhiug7 -->
+- [x] 15. Test liveOffpeakDeltas function <!-- id:tyhiug7 -->
   - Test: now < offpeak-start returns (_; false)
   - Test: now == offpeak-start + 30min integrates the first 30 minutes
   - Test: now >= offpeak-end integrates the full window
@@ -142,7 +142,7 @@ references:
   - Stream: 1
   - Requirements: [4.1](requirements.md#4.1), [4.4](requirements.md#4.4)
 
-- [ ] 16. Implement liveOffpeakDeltas in api/compute.go <!-- id:tyhiug8 -->
+- [x] 16. Implement liveOffpeakDeltas in api/compute.go <!-- id:tyhiug8 -->
   - Add liveOffpeakDeltas(readings []dynamo.ReadingItem; now time.Time; windowStart; windowEnd time.Duration) (offpeakDeltaValues; bool)
   - Integrates over [offpeakStart; min(now; offpeakEnd))
   - Reuses IntegrateOffpeakDeltas from task 2; converts to existing offpeakDeltaValues shape
@@ -151,7 +151,7 @@ references:
   - Stream: 1
   - Requirements: [4.1](requirements.md#4.1), [4.4](requirements.md#4.4)
 
-- [ ] 17. Test buildOffpeak and offpeakSplit dispatch <!-- id:tyhiug9 -->
+- [x] 17. Test buildOffpeak and offpeakSplit dispatch <!-- id:tyhiug9 -->
   - Test buildOffpeak with pending row + live readings: calls liveOffpeakDeltas; does not read op.StartE*
   - Test buildOffpeak with complete row: returns op.GridUsageKwh etc. directly
   - Test offpeakSplit (history.go) with pending today row: same live dispatch
@@ -161,7 +161,7 @@ references:
   - Stream: 1
   - Requirements: [4.1](requirements.md#4.1), [4.2](requirements.md#4.2), [4.3](requirements.md#4.3), [5.3](requirements.md#5.3)
 
-- [ ] 18. Update api compute.go, status.go, history.go to dispatch live vs stored <!-- id:tyhiuga -->
+- [x] 18. Update api compute.go, status.go, history.go to dispatch live vs stored <!-- id:tyhiuga -->
   - Modify offpeakDeltas to handle only the complete branch — pending returns (_; false)
   - Remove all references to op.StartE* and op.EndE* from compute.go to enforce AC 5.3 at compile time
   - Modify buildOffpeak in status.go to dispatch: if pending; call liveOffpeakDeltas with today's readings slice; if complete; read row

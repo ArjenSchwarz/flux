@@ -18,41 +18,23 @@ var sydneyTZ = func() *time.Location {
 	return loc
 }()
 
-// offpeakDeltas resolves the energy deltas for an off-peak record.
+// offpeakDeltas resolves the energy deltas for a complete off-peak record.
+// Pending records return (_, false); callers needing today's in-window value
+// live-integrate via liveOffpeakDeltas.
 //
-// A complete record carries final deltas from the poller. A pending record
-// requires a current snapshot (the running totals for the same day as op)
-// to project against the start snapshot; without one the deltas are
-// unknown. Returns ok=false when the data is not usable.
-func offpeakDeltas(op dynamo.OffpeakItem, current *TodayEnergy) (deltas offpeakDeltaValues, ok bool) {
-	switch op.Status {
-	case dynamo.OffpeakStatusComplete:
-		return offpeakDeltaValues{
-			GridImport:       op.GridUsageKwh,
-			Solar:            op.SolarKwh,
-			BatteryCharge:    op.BatteryChargeKwh,
-			BatteryDischarge: op.BatteryDischargeKwh,
-			GridExport:       op.GridExportKwh,
-		}, true
-	case dynamo.OffpeakStatusPending:
-		if current == nil {
-			return offpeakDeltaValues{}, false
-		}
-		// Energy counters are monotonically non-decreasing, so deltas
-		// should never be negative. They can briefly appear negative if
-		// the running snapshot lags the start snapshot (poller writes the
-		// start record, then a later reconciliation reduces the running
-		// total). Clamp to zero so the dashboard never shows nonsense
-		// like "-0.1 kWh imported".
-		return offpeakDeltaValues{
-			GridImport:       max(0, current.EInput-op.StartEInput),
-			Solar:            max(0, current.Epv-op.StartEpv),
-			BatteryCharge:    max(0, current.ECharge-op.StartECharge),
-			BatteryDischarge: max(0, current.EDischarge-op.StartEDischarge),
-			GridExport:       max(0, current.EOutput-op.StartEOutput),
-		}, true
+// AC 5.3: this function does not read op.StartE* / op.EndE* — those fields
+// exist on the row for operator diagnostics only.
+func offpeakDeltas(op dynamo.OffpeakItem) (offpeakDeltaValues, bool) {
+	if op.Status != dynamo.OffpeakStatusComplete {
+		return offpeakDeltaValues{}, false
 	}
-	return offpeakDeltaValues{}, false
+	return offpeakDeltaValues{
+		GridImport:       op.GridUsageKwh,
+		Solar:            op.SolarKwh,
+		BatteryCharge:    op.BatteryChargeKwh,
+		BatteryDischarge: op.BatteryDischargeKwh,
+		GridExport:       op.GridExportKwh,
+	}, true
 }
 
 // offpeakDeltaValues holds the five energy deltas derived from an off-peak record.
@@ -62,6 +44,49 @@ type offpeakDeltaValues struct {
 	BatteryCharge    float64
 	BatteryDischarge float64
 	GridExport       float64
+}
+
+// liveOffpeakDeltas integrates readings over [offpeakStart, min(now, offpeakEnd))
+// for today's date in Sydney local time and returns the five energy deltas.
+//
+// windowStart and windowEnd are durations from local midnight (e.g. 11h and 14h
+// for an 11:00-14:00 window). Returns (_, false) when now is at or before the
+// window start (AC 4.3 — pre-window behaviour) or when the readings slice does
+// not contain enough usable samples to integrate (AC 1.6).
+//
+// Pure function: no state and no clock except the explicit now parameter. This
+// is the determinism contract that backs AC 4.4's monotonicity guarantee.
+func liveOffpeakDeltas(readings []dynamo.ReadingItem, now time.Time,
+	windowStart, windowEnd time.Duration,
+) (offpeakDeltaValues, bool) {
+	local := now.In(sydneyTZ)
+	dayStart := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, sydneyTZ)
+	opStart := dayStart.Add(windowStart)
+	opEnd := dayStart.Add(windowEnd)
+
+	if !local.After(opStart) {
+		return offpeakDeltaValues{}, false
+	}
+	endTime := opEnd
+	if local.Before(opEnd) {
+		endTime = local
+	}
+
+	deltas, ok := derivedstats.IntegrateOffpeakDeltas(
+		toDerivedReadings(readings),
+		opStart.Unix(),
+		endTime.Unix(),
+	)
+	if !ok {
+		return offpeakDeltaValues{}, false
+	}
+	return offpeakDeltaValues{
+		GridImport:       deltas.GridImportKwh,
+		Solar:            deltas.SolarKwh,
+		BatteryCharge:    deltas.BatteryChargeKwh,
+		BatteryDischarge: deltas.BatteryDischargeKwh,
+		GridExport:       deltas.GridExportKwh,
+	}, true
 }
 
 // computeCutoffTime estimates when the battery will reach the cutoff percentage

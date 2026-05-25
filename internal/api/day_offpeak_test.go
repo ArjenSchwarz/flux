@@ -11,28 +11,36 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestHandleDaySummaryOffpeakSplit covers the new /day off-peak split fields
-// added on DaySummary. Three paths are exercised:
+// TestHandleDaySummaryOffpeakSplit covers the /day off-peak split fields on
+// DaySummary. Three paths are exercised:
 //   - opItem with status=complete → split fields populated from the stored
-//     deltas (today's date, so the live energy reconciliation also runs).
-//   - opItem with status=pending  → split fields populated by projecting the
-//     start snapshot against the running energy totals (today only).
+//     deltas (date is today; readings drive the live energy reconciliation
+//     but the off-peak split bypasses them).
+//   - opItem with status=pending  → split fields populated by live-integrating
+//     readings over [offpeak-start, min(now, offpeak-end)).
 //   - GetOffpeak returns a hard error → handler logs and continues; both
 //     fields stay nil but the rest of the summary is unaffected.
 func TestHandleDaySummaryOffpeakSplit(t *testing.T) {
 	loc, _ := time.LoadLocation("Australia/Sydney")
-	now := fixedNow()
+	// 11:30 AEST so a 30-minute live integration is well-defined for the
+	// pending-row case (constant 3600 W → 1.8 kWh).
+	now := time.Date(2026, 4, 15, 11, 30, 0, 0, loc)
 	date := now.In(loc).Format("2006-01-02")
+	opStart := time.Date(2026, 4, 15, 11, 0, 0, 0, loc)
 
-	readings := []dynamo.ReadingItem{
-		{Timestamp: time.Date(2026, 4, 15, 8, 1, 0, 0, loc).Unix(), Ppv: 1000, Pload: 500, Pbat: 200, Pgrid: 100, Soc: 80},
-		{Timestamp: time.Date(2026, 4, 15, 9, 0, 0, 0, loc).Unix(), Ppv: 3000, Pload: 800, Pbat: -500, Pgrid: 0, Soc: 95},
+	var readings []dynamo.ReadingItem
+	for ts := opStart.Unix(); ts <= now.Unix(); ts += 10 {
+		readings = append(readings, dynamo.ReadingItem{
+			Timestamp: ts,
+			Pgrid:     3600,
+		})
 	}
 
 	tests := map[string]struct {
 		offpeakFn  func(ctx context.Context, serial, date string) (*dynamo.OffpeakItem, error)
 		wantImport *float64
 		wantExport *float64
+		delta      float64
 	}{
 		"complete record applies stored deltas": {
 			offpeakFn: func(_ context.Context, _, d string) (*dynamo.OffpeakItem, error) {
@@ -46,22 +54,23 @@ func TestHandleDaySummaryOffpeakSplit(t *testing.T) {
 			},
 			wantImport: floatPtr(3.42),
 			wantExport: floatPtr(0.71),
+			delta:      0.001,
 		},
-		"pending record projects against running totals": {
+		"pending record live-integrates from readings": {
 			offpeakFn: func(_ context.Context, _, d string) (*dynamo.OffpeakItem, error) {
 				assert.Equal(t, date, d)
 				return &dynamo.OffpeakItem{
-					Date:         date,
-					Status:       dynamo.OffpeakStatusPending,
-					StartEInput:  1.0,
-					StartEOutput: 0.5,
+					Date:   date,
+					Status: dynamo.OffpeakStatusPending,
+					// StartE* must NOT be read by the live path (AC 5.3).
+					StartEInput:  999.0,
+					StartEOutput: 999.0,
 				}, nil
 			},
-			// Projected delta = max(0, current - start). Stored row sets
-			// eInput=4.2 / eOutput=2.1; reconciliation keeps both, so
-			// import = 4.2 - 1.0 = 3.2 and export = 2.1 - 0.5 = 1.6.
-			wantImport: floatPtr(3.2),
-			wantExport: floatPtr(1.6),
+			// 30 minutes × 3600 W = 1.8 kWh; export remains 0.
+			wantImport: floatPtr(1.8),
+			wantExport: floatPtr(0.0),
+			delta:      0.01,
 		},
 		"offpeak query failure leaves fields nil and does not abort": {
 			offpeakFn: func(_ context.Context, _, _ string) (*dynamo.OffpeakItem, error) {
@@ -69,6 +78,7 @@ func TestHandleDaySummaryOffpeakSplit(t *testing.T) {
 			},
 			wantImport: nil,
 			wantExport: nil,
+			delta:      0.001,
 		},
 	}
 
@@ -104,27 +114,25 @@ func TestHandleDaySummaryOffpeakSplit(t *testing.T) {
 				assert.Nil(t, dr.Summary.OffpeakGridImportKwh, "import should be nil when split is missing")
 			} else {
 				require.NotNil(t, dr.Summary.OffpeakGridImportKwh, "import should be populated for "+name)
-				assert.InDelta(t, *tc.wantImport, *dr.Summary.OffpeakGridImportKwh, 0.001)
+				assert.InDelta(t, *tc.wantImport, *dr.Summary.OffpeakGridImportKwh, tc.delta)
 			}
 			if tc.wantExport == nil {
 				assert.Nil(t, dr.Summary.OffpeakGridExportKwh, "export should be nil when split is missing")
 			} else {
 				require.NotNil(t, dr.Summary.OffpeakGridExportKwh, "export should be populated for "+name)
-				assert.InDelta(t, *tc.wantExport, *dr.Summary.OffpeakGridExportKwh, 0.001)
+				assert.InDelta(t, *tc.wantExport, *dr.Summary.OffpeakGridExportKwh, tc.delta)
 			}
 		})
 	}
 }
 
-// TestHandleDaySummaryOffpeakSplitNilEnergy guards against a regression where
-// `offpeakSplit(*opItem, energy, isToday)` could panic if `energy` is nil.
+// TestHandleDaySummaryOffpeakSplitNilEnergy pins the off-peak split when the
+// live-compute path has no usable inputs:
+//   - complete row: passes through stored deltas regardless of readings/energy.
+//   - pending row before the off-peak window opens (AC 4.3): no split, no panic.
 //
-// `reconcileEnergy(nil, nil)` returns nil, so a today path with neither stored
-// energy nor enough readings to live-compute lands in `offpeakSplit` with
-// `energy=nil`. Today the safety lives in `offpeakDeltas`: the pending branch
-// guards `if current == nil { return …, false }` and the complete branch reads
-// from the OffpeakItem only. Pin both behaviours so a future refactor can't
-// quietly drop the guard.
+// fixedNow is 10:00 AEST — before the 11:00 window starts — and the single
+// reading is insufficient for liveOffpeakDeltas in any case.
 func TestHandleDaySummaryOffpeakSplitNilEnergy(t *testing.T) {
 	loc, _ := time.LoadLocation("Australia/Sydney")
 	now := fixedNow()
@@ -142,7 +150,7 @@ func TestHandleDaySummaryOffpeakSplitNilEnergy(t *testing.T) {
 		wantImport *float64
 		wantExport *float64
 	}{
-		"complete OffpeakItem still applies split when energy is nil": {
+		"complete OffpeakItem applies split regardless of inputs": {
 			offpeakFn: func(_ context.Context, _, _ string) (*dynamo.OffpeakItem, error) {
 				return &dynamo.OffpeakItem{
 					Date:          date,
@@ -154,7 +162,7 @@ func TestHandleDaySummaryOffpeakSplitNilEnergy(t *testing.T) {
 			wantImport: floatPtr(2.0),
 			wantExport: floatPtr(0.4),
 		},
-		"pending OffpeakItem yields no split when energy is nil": {
+		"pending OffpeakItem before window returns no split (AC 4.3)": {
 			offpeakFn: func(_ context.Context, _, _ string) (*dynamo.OffpeakItem, error) {
 				return &dynamo.OffpeakItem{
 					Date:        date,
