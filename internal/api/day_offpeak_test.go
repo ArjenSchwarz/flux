@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ArjenSchwarz/flux/internal/derivedstats"
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -108,7 +109,7 @@ func TestHandleDaySummaryOffpeakSplit(t *testing.T) {
 
 			// Energy totals stay populated regardless of off-peak split.
 			require.NotNil(t, dr.Summary.EInput, "eInput should be populated independently of offpeak")
-			assert.Equal(t, roundEnergy(4.2), *dr.Summary.EInput)
+			assert.Equal(t, derivedstats.RoundEnergy(4.2), *dr.Summary.EInput)
 
 			if tc.wantImport == nil {
 				assert.Nil(t, dr.Summary.OffpeakGridImportKwh, "import should be nil when split is missing")

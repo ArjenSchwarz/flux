@@ -187,11 +187,11 @@ func (h *Handler) handleStatus(ctx context.Context, _ events.LambdaFunctionURLRe
 	var storedEnergy *TodayEnergy
 	if deItem != nil {
 		storedEnergy = &TodayEnergy{
-			Epv:        roundEnergy(deItem.Epv),
-			EInput:     roundEnergy(deItem.EInput),
-			EOutput:    roundEnergy(deItem.EOutput),
-			ECharge:    roundEnergy(deItem.ECharge),
-			EDischarge: roundEnergy(deItem.EDischarge),
+			Epv:        derivedstats.RoundEnergy(deItem.Epv),
+			EInput:     derivedstats.RoundEnergy(deItem.EInput),
+			EOutput:    derivedstats.RoundEnergy(deItem.EOutput),
+			ECharge:    derivedstats.RoundEnergy(deItem.ECharge),
+			EDischarge: derivedstats.RoundEnergy(deItem.EDischarge),
 		}
 	}
 	resp.TodayEnergy = reconcileEnergy(computedEnergy, storedEnergy)
@@ -253,11 +253,11 @@ func buildOffpeak(item *dynamo.OffpeakItem, readings []dynamo.ReadingItem, now t
 	}
 
 	od.Status = item.Status
-	od.GridUsageKwh = floatPtr(roundEnergy(deltas.GridImport))
-	od.SolarKwh = floatPtr(roundEnergy(deltas.Solar))
-	od.BatteryChargeKwh = floatPtr(roundEnergy(deltas.BatteryCharge))
-	od.BatteryDischargeKwh = floatPtr(roundEnergy(deltas.BatteryDischarge))
-	od.GridExportKwh = floatPtr(roundEnergy(deltas.GridExport))
+	od.GridUsageKwh = floatPtr(derivedstats.RoundEnergy(deltas.GridImport))
+	od.SolarKwh = floatPtr(derivedstats.RoundEnergy(deltas.Solar))
+	od.BatteryChargeKwh = floatPtr(derivedstats.RoundEnergy(deltas.BatteryCharge))
+	od.BatteryDischargeKwh = floatPtr(derivedstats.RoundEnergy(deltas.BatteryDischarge))
+	od.GridExportKwh = floatPtr(derivedstats.RoundEnergy(deltas.GridExport))
 	if item.Status == dynamo.OffpeakStatusComplete {
 		od.BatteryDeltaPercent = floatPtr(roundPower(item.BatteryDeltaPercent))
 	}

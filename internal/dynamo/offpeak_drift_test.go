@@ -66,13 +66,19 @@ func TestLogOffpeakDrift_EmitsAllFiveDeltasAtInfo(t *testing.T) {
 	assert.Contains(t, out, "INFO", "must be emitted at INFO level (AC 6.2)")
 }
 
-func TestLogOffpeakDrift_ZeroSnapshot_NoDrift(t *testing.T) {
-	// Empty start/end snapshot — drift values match the integrated values.
+func TestLogOffpeakDrift_StartSnapshotOnly_NoDrift(t *testing.T) {
+	// Start snapshot non-zero, end snapshot non-zero (one tick over the
+	// boundary so EndE* != 0) — exercises the standard drift line on a
+	// near-zero-charge day.
 	buf, restore := captureSlogDefault()
 	defer restore()
 
 	item := OffpeakItem{
 		Date:         "2026-05-18",
+		StartEInput:  3.0,
+		EndEInput:    3.0,
+		StartEpv:     0,
+		EndEpv:       0.01, // nonzero so the recovery branch doesn't fire
 		GridUsageKwh: 5.0,
 		SolarKwh:     1.0,
 	}
@@ -80,6 +86,40 @@ func TestLogOffpeakDrift_ZeroSnapshot_NoDrift(t *testing.T) {
 	out := buf.String()
 	assert.Contains(t, out, "driftGrid")
 	assert.Contains(t, out, "snapshotGrid")
-	// Drift equals the integrated value when snapshot is zero.
 	assert.Contains(t, out, "5")
+}
+
+// TestLogOffpeakDrift_NoSnapshotPair covers the positionAfter recovery path
+// where handleEnd ran without a matching end snapshot (the row was finalised
+// from readings only). Emits a dedicated log entry to avoid the misleading
+// "snapshot = -startE*" line the standard branch would otherwise produce.
+func TestLogOffpeakDrift_NoSnapshotPair(t *testing.T) {
+	buf, restore := captureSlogDefault()
+	defer restore()
+
+	item := OffpeakItem{
+		Date:                "2026-05-18",
+		StartEInput:         10.0, // start captured but never paired with an end
+		StartEpv:            0,
+		StartECharge:        5.0,
+		GridUsageKwh:        20.42,
+		SolarKwh:            0.0,
+		BatteryChargeKwh:    12.5,
+		BatteryDischargeKwh: 0.6,
+		GridExportKwh:       0.45,
+		// EndE* all zero — recovery path.
+	}
+	LogOffpeakDrift("2026-05-18", item)
+
+	out := buf.String()
+	assert.Contains(t, out, "offpeak_drift_no_snapshot_pair")
+	assert.Contains(t, out, "positionAfterRecovery")
+	assert.NotContains(t, out, "driftGrid",
+		"recovery branch must not emit the snapshot-diff drift fields")
+	for _, key := range []string{
+		"integratedGrid", "integratedSolar",
+		"integratedCharge", "integratedDischarge", "integratedExport",
+	} {
+		assert.Contains(t, out, key)
+	}
 }

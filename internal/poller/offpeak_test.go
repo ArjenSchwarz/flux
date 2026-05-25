@@ -80,7 +80,6 @@ func TestCaptureSnapshot_SuccessOnFirstAttempt(t *testing.T) {
 }
 
 func TestCaptureSnapshot_RetryThenSucceed(t *testing.T) {
-	callCount := 0
 	mc := &mockClient{
 		lastPowerData: &alphaess.PowerData{Soc: 50.0},
 	}
@@ -96,7 +95,6 @@ func TestCaptureSnapshot_RetryThenSucceed(t *testing.T) {
 			return &alphaess.EnergyData{Epv: 10.0}, nil
 		},
 	}
-	_ = callCount
 
 	cfg := testOffpeakCfg()
 	o := &OffpeakScheduler{client: origClient, store: &mockStore{}, cfg: cfg, retryDelay: 1 * time.Millisecond, now: time.Now}
@@ -138,11 +136,10 @@ func TestOffpeak_StartSucceeds_EndFails_DeletesPending(t *testing.T) {
 	// Simulate start capture.
 	err := o.handleStart(context.Background(), "2026-04-13")
 	require.NoError(t, err)
-	assert.True(t, o.hasStart)
 
 	// Now make API fail for end capture.
 	mc.oneDateEnergyErr = errors.New("end snapshot fail")
-	err = o.handleEnd(context.Background(), "2026-04-13", nil, false)
+	err = o.handleEnd(context.Background(), "2026-04-13", nil)
 	require.Error(t, err)
 
 	assert.True(t, logContains(buf, "end snapshot fail") || logContains(buf, "3 attempts"))
@@ -172,10 +169,9 @@ func TestOffpeak_MidWindowRecovery_PendingRecordExists(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, got, "pending row present → recovery returns it for handleEnd")
 	assert.Equal(t, dynamo.OffpeakStatusPending, got.Status)
-	// startSnapshot/socStart/hasStart are no longer rebuilt from the row —
+	// startSnapshot/socStart are no longer rebuilt from the row —
 	// handleEnd reads readings, not in-memory snapshots.
-	assert.False(t, o.hasStart, "in-memory state must not be rebuilt from pending row")
-	assert.Nil(t, o.startSnapshot)
+	assert.Nil(t, o.startSnapshot, "in-memory state must not be rebuilt from pending row")
 }
 
 func TestOffpeak_MidWindowRecovery_NoRecord(t *testing.T) {
@@ -454,9 +450,8 @@ func TestHandleEnd_CallsLogOffpeakDrift(t *testing.T) {
 	}
 	o.startSnapshot = &alphaess.EnergyData{EInput: 1.0}
 	o.socStart = 20.0
-	o.hasStart = true
 
-	require.NoError(t, o.handleEnd(context.Background(), "2026-04-13", nil, false))
+	require.NoError(t, o.handleEnd(context.Background(), "2026-04-13", nil))
 	assert.Equal(t, 1, writes)
 	assert.True(t, logContains(buf, "offpeak drift"), "handleEnd must emit a drift line")
 	assert.True(t, driftSeenBeforeWrite, "drift log must be emitted before the conditional write fires")
@@ -526,9 +521,8 @@ func TestHandleEnd_HappyPath_IntegratesAndWrites(t *testing.T) {
 		ECharge: 1.0, EDischarge: 0.5, EGridCharge: 1.0,
 	}
 	o.socStart = 20.0
-	o.hasStart = true
 
-	err := o.handleEnd(context.Background(), "2026-04-13", nil, false)
+	err := o.handleEnd(context.Background(), "2026-04-13", nil)
 	require.NoError(t, err)
 	assert.Equal(t, 1, writeCalled, "WriteOffpeakIfPendingOrAbsent must be called once")
 	assert.Equal(t, dynamo.OffpeakStatusComplete, captured.Status)
@@ -578,17 +572,19 @@ func TestHandleEnd_BoundaryWaitTimeout_StillWritesRow(t *testing.T) {
 		store:      ms,
 		cfg:        cfg,
 		retryDelay: 1 * time.Millisecond,
-		now:        func() time.Time { return windowEnd.Add(1 * time.Second) },
+		// Clock pinned BEFORE windowEnd so handleEnd runs the boundary-wait
+		// step (which then times out because the fixture has no
+		// at-or-after-boundary readings).
+		now: func() time.Time { return windowEnd.Add(-1 * time.Second) },
 	}
 	o.startSnapshot = &alphaess.EnergyData{EInput: 1.0}
 	o.socStart = 20.0
-	o.hasStart = true
 
 	// Use tiny override budget so the test runs fast.
 	o.endWaitBudget = 30 * time.Millisecond
 	o.endWaitPollInterval = 10 * time.Millisecond
 
-	err := o.handleEnd(context.Background(), "2026-04-13", nil, false)
+	err := o.handleEnd(context.Background(), "2026-04-13", nil)
 	require.NoError(t, err)
 	assert.Equal(t, 1, writeCalled, "row must be written even when the boundary wait times out")
 	assert.Equal(t, dynamo.OffpeakStatusComplete, captured.Status)
@@ -624,9 +620,8 @@ func TestHandleEnd_ConditionalWriteFails_LogsWarn_NoError(t *testing.T) {
 		now: func() time.Time { return windowEnd.Add(1 * time.Second) },
 	}
 	o.startSnapshot = &alphaess.EnergyData{}
-	o.hasStart = true
 
-	err := o.handleEnd(context.Background(), "2026-04-13", nil, false)
+	err := o.handleEnd(context.Background(), "2026-04-13", nil)
 	require.NoError(t, err, "conditional-failure must be logged, not returned as error")
 	assert.True(t, logContains(buf, "conditional"), "warn log should mention the conditional failure")
 }
@@ -659,9 +654,8 @@ func TestHandleEnd_EmptyReadings_WritesRowWithZeroDeltas(t *testing.T) {
 		endWaitPollInterval: 10 * time.Millisecond,
 	}
 	o.startSnapshot = &alphaess.EnergyData{}
-	o.hasStart = true
 
-	err := o.handleEnd(context.Background(), "2026-04-13", nil, false)
+	err := o.handleEnd(context.Background(), "2026-04-13", nil)
 	require.NoError(t, err)
 	assert.Equal(t, 1, writeCalled, "row must still be written when readings are empty")
 	assert.Equal(t, 0.0, captured.GridUsageKwh)

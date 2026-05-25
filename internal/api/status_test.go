@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ArjenSchwarz/flux/internal/derivedstats"
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/stretchr/testify/assert"
@@ -117,7 +118,7 @@ func TestHandleStatusAllDataPresent(t *testing.T) {
 
 	// Today energy.
 	require.NotNil(t, sr.TodayEnergy)
-	assert.Equal(t, roundEnergy(12.345), sr.TodayEnergy.Epv)
+	assert.Equal(t, derivedstats.RoundEnergy(12.345), sr.TodayEnergy.Epv)
 }
 
 // T-1274 regression: when AlphaESS stops returning fresh data overnight, the
@@ -483,11 +484,11 @@ func TestHandleStatusSingleReadingWithDaily(t *testing.T) {
 
 	sr := parseStatusResponse(t, resp)
 	require.NotNil(t, sr.TodayEnergy, "should use DailyEnergyItem when < 2 readings")
-	assert.Equal(t, roundEnergy(10.5), sr.TodayEnergy.Epv)
-	assert.Equal(t, roundEnergy(2.3), sr.TodayEnergy.EInput)
-	assert.Equal(t, roundEnergy(1.1), sr.TodayEnergy.EOutput)
-	assert.Equal(t, roundEnergy(4.0), sr.TodayEnergy.ECharge)
-	assert.Equal(t, roundEnergy(3.5), sr.TodayEnergy.EDischarge)
+	assert.Equal(t, derivedstats.RoundEnergy(10.5), sr.TodayEnergy.Epv)
+	assert.Equal(t, derivedstats.RoundEnergy(2.3), sr.TodayEnergy.EInput)
+	assert.Equal(t, derivedstats.RoundEnergy(1.1), sr.TodayEnergy.EOutput)
+	assert.Equal(t, derivedstats.RoundEnergy(4.0), sr.TodayEnergy.ECharge)
+	assert.Equal(t, derivedstats.RoundEnergy(3.5), sr.TodayEnergy.EDischarge)
 }
 
 func TestHandleStatusSystemMissingFallbackCapacity(t *testing.T) {

@@ -338,4 +338,76 @@ The point of idempotence is "running the CLI twice doesn't corrupt the row, and 
 
 ---
 
+## Decision 11: Separate usability gate from integration math
 
+**Date**: 2026-05-25
+**Status**: accepted
+
+### Context
+
+`IntegrateOffpeakDeltas` reports `(_, false)` when fewer than two usable points can be constructed for the window (AC 1.6). The same predicate is also what each `integrate(...)` selector call needs to return zero rather than emit a spurious integral. A first draft folded these together: run one `integrate` call, inspect its construction-point count, and use that to decide the gate. That conflates "the integral is zero because there were no usable points" with "the integral is zero because every sample's clamped value was zero" — two distinct conditions with the same numerical result.
+
+### Decision
+
+Compute the construction-point count once up front (samples in `[start, end)` plus the two bracket-edge flags) in `IntegrateOffpeakDeltas`, and use that as the explicit usability gate. The shared `integrate` helper assumes its callers have already passed the gate and just does the trapezoidal math.
+
+### Rationale
+
+A window with all-zero power readings is a legitimately-integrable case (the integral is exactly 0 kWh and `SampleCount > 0`). A window with one in-window reading and no usable bracket is unusable and must report `(_, false)`. The two cases must be distinguishable to the caller — the API layer treats them differently (the first renders "0 kWh charged off-peak today", the second omits the off-peak tile). Folding the gate into the integrator loses that distinction.
+
+The single up-front pass also avoids five duplicate scans across the five selectors. The gate check (samples + edge flags) is identical for all five channels because the gap rule looks only at timestamps.
+
+### Alternatives Considered
+
+- **Probe one channel, infer gate from its construction-point count**: Cheaper at first glance but conflates the two zero conditions and adds a hidden dependency on channel ordering. Rejected.
+- **Return a third state from `integrate` (usable/unusable/zero)**: Adds a new sum type for two clear cases. Rejected for complexity.
+
+### Consequences
+
+**Positive:**
+- Adding a new metric to the integrator is a one-line addition (new selector) — the gate doesn't have to be updated.
+- Sparse-reading days are reported consistently across the five deltas; no chance of one channel saying "usable" and another "not".
+
+**Negative:**
+- The gate logic duplicates a small subset of the bracket-edge decision that `integrate` already encodes. Mitigated by both consulting the same `maxPairGapSeconds` constant and `bracketIndices` helper.
+
+### Impact
+
+Anyone adding a sixth integrated metric (e.g. a new battery channel) adds a selector to `IntegrateOffpeakDeltas` and is done; the usability gate doesn't need an update.
+
+---
+
+## Decision 12: `waitForReadingAtOrAfter` uses real clock, not the injectable scheduler clock
+
+**Date**: 2026-05-25
+**Status**: accepted
+
+### Context
+
+The `OffpeakScheduler` already injects a `now func() time.Time` so deterministic tests can pin the scheduler's notion of "when does the next thing happen". The new `waitForReadingAtOrAfter` helper (Decision 7) also looks at time — it needs to know when its budget expires and when to wake up for the next probe. Reusing `o.now` for both would superficially look more consistent.
+
+### Decision
+
+`waitForReadingAtOrAfter` uses `time.Now()` and `time.After()` directly. The scheduler's injectable clock governs orchestration ("when should the daily loop fire"); the wait-helper's clock governs live I/O against DynamoDB ("have I polled long enough for a row to arrive"). The two are kept distinct.
+
+### Rationale
+
+Tests that freeze `o.now` still need the wait-helper to advance real time when they do hit it (e.g. `TestHandleEnd_BoundaryWaitTimeout_StillWritesRow` pins `o.now` before `windowEnd` so the wait runs, but the 30 ms budget must elapse in wall time for the test to finish). If both clocks were `o.now`, the test would need a mock that advances on each poll iteration — significantly more test scaffolding for no production benefit.
+
+The wait-helper's clock is also genuinely live I/O behaviour: the test for it (`TestWaitForReadingAtOrAfter_BudgetExpires`) measures wall-clock elapsed time against the budget, which would be impossible to assert against a frozen `o.now`.
+
+### Alternatives Considered
+
+- **Pass an injectable `now` and `after` into the wait-helper**: Eliminates the wall-clock dependency at test time but doubles the surface area of the helper's signature. Rejected — the two clocks are conceptually different and the present design makes that explicit.
+- **Use `o.now` throughout**: Would require tests to drive the clock forward manually inside the wait loop. Rejected as over-engineering for a single-purpose helper.
+
+### Consequences
+
+**Positive:**
+- Tests with frozen `o.now` keep working as the boundary-wait path uses real wall time.
+- Helper signature is small (four params) and its purpose is unambiguous.
+
+**Negative:**
+- Tests that exercise the wait must accept short real-time delays (10–50 ms budgets). Acceptable — the existing helper tests already use ≤50 ms budgets.
+
+---

@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
+	"math"
 	"strconv"
 	"testing"
 	"time"
@@ -60,6 +62,27 @@ func (f *fakeDynamo) PutItem(_ context.Context, params *dynamodb.PutItemInput, _
 		return nil, f.putErr
 	}
 	return &dynamodb.PutItemOutput{}, nil
+}
+
+// The CLI now constructs a *dynamo.DynamoStore (Fix 6 of the pre-push review)
+// so the conditional-write expression lives in one place. The store's
+// interface (dynamo.DynamoAPI) requires Delete/Get/Update/BatchWrite — the CLI
+// itself never calls them, so the fake returns benign zero values.
+
+func (f *fakeDynamo) DeleteItem(_ context.Context, _ *dynamodb.DeleteItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error) {
+	return &dynamodb.DeleteItemOutput{}, nil
+}
+
+func (f *fakeDynamo) GetItem(_ context.Context, _ *dynamodb.GetItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
+	return &dynamodb.GetItemOutput{}, nil
+}
+
+func (f *fakeDynamo) UpdateItem(_ context.Context, _ *dynamodb.UpdateItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error) {
+	return &dynamodb.UpdateItemOutput{}, nil
+}
+
+func (f *fakeDynamo) BatchWriteItem(_ context.Context, _ *dynamodb.BatchWriteItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.BatchWriteItemOutput, error) {
+	return &dynamodb.BatchWriteItemOutput{}, nil
 }
 
 // readingsQueryDate inverts the :from timestamp on a readings Query back to
@@ -454,6 +477,50 @@ func TestBackfill_QueryError_PropagatedAsFatal(t *testing.T) {
 	_, err := runBackfill(context.Background(), f, opts)
 	require.Error(t, err)
 	assert.Empty(t, f.puts)
+}
+
+// TestBackfill_SummaryLine_ShowsAbsDifferencePerDelta covers AC 7.5: the
+// per-day summary line includes a |Δ|=X.XX column for each of the five
+// deltas, holding the absolute difference between the prior stored value
+// and the newly-integrated value rounded to two decimal places.
+func TestBackfill_SummaryLine_ShowsAbsDifferencePerDelta(t *testing.T) {
+	loc := sydney(t)
+	date := "2026-05-18"
+	row := existingCompleteRow(date)
+	readings := chargeReadings(t, date, loc)
+	f := &fakeDynamo{
+		location:       loc,
+		offpeakRows:    map[string][]dynamo.OffpeakItem{"*": {row}},
+		readingsByDate: map[string][]dynamo.ReadingItem{date: readings},
+	}
+	opts := backfillOptsForTest(loc, date)
+	res, err := runBackfill(context.Background(), f, opts)
+	require.NoError(t, err)
+	require.Len(t, res.Summary, 1, "expect one summary line for one row")
+	line := res.Summary[0]
+
+	// Decode the persisted row to read the new values exactly as the writer
+	// rounded them, then compute the expected |Δ| against the stored prior.
+	require.Len(t, f.puts, 1)
+	persisted := decodeOffpeakItem(t, f.puts[0].Item)
+
+	for _, c := range []struct {
+		label string
+		prev  float64
+		next  float64
+	}{
+		{"grid", row.GridUsageKwh, persisted.GridUsageKwh},
+		{"solar", row.SolarKwh, persisted.SolarKwh},
+		{"chg", row.BatteryChargeKwh, persisted.BatteryChargeKwh},
+		{"dis", row.BatteryDischargeKwh, persisted.BatteryDischargeKwh},
+		{"exp", row.GridExportKwh, persisted.GridExportKwh},
+	} {
+		want := math.Abs(c.next - c.prev)
+		// Format matches summaryLine: "label prev→next |Δ|=X.XX".
+		fragment := fmt.Sprintf("%s %.2f→%.2f |Δ|=%.2f", c.label, c.prev, c.next, want)
+		assert.Contains(t, line, fragment,
+			"summary line must contain %q. got: %s", fragment, line)
+	}
 }
 
 func TestValidateOpts_RejectsReversedDateRange(t *testing.T) {

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ArjenSchwarz/flux/internal/derivedstats"
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -661,7 +662,7 @@ func TestRoundEnergy(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := roundEnergy(tc.input)
+			got := derivedstats.RoundEnergy(tc.input)
 			assert.InDelta(t, tc.want, got, 1e-9)
 		})
 	}
@@ -734,7 +735,7 @@ func timePtr(t time.Time) *time.Time {
 
 // Verify roundEnergy and roundPower use the correct multipliers.
 func TestRoundingMultipliers(t *testing.T) {
-	assert.InDelta(t, 0.01, 1.0/math.Round(1.0/roundEnergy(0.01)), 1e-9)
+	assert.InDelta(t, 0.01, 1.0/math.Round(1.0/derivedstats.RoundEnergy(0.01)), 1e-9)
 	assert.InDelta(t, 0.1, 1.0/math.Round(1.0/roundPower(0.1)), 1e-9)
 }
 
@@ -765,10 +766,10 @@ func TestComputeTodayEnergy(t *testing.T) {
 			},
 			midnightUnix: midnight,
 			want: &TodayEnergy{
-				Epv:        roundEnergy(1000.0 * 10.0 / 3600.0 / 1000.0),
-				EInput:     roundEnergy(500.0 * 10.0 / 3600.0 / 1000.0),
+				Epv:        derivedstats.RoundEnergy(1000.0 * 10.0 / 3600.0 / 1000.0),
+				EInput:     derivedstats.RoundEnergy(500.0 * 10.0 / 3600.0 / 1000.0),
 				EOutput:    0,
-				ECharge:    roundEnergy(300.0 * 10.0 / 3600.0 / 1000.0),
+				ECharge:    derivedstats.RoundEnergy(300.0 * 10.0 / 3600.0 / 1000.0),
 				EDischarge: 0,
 			},
 		},
@@ -781,11 +782,11 @@ func TestComputeTodayEnergy(t *testing.T) {
 			},
 			midnightUnix: midnight,
 			want: &TodayEnergy{
-				Epv:        roundEnergy(2000.0 * 10.0 / 3600.0 / 1000.0),
-				EInput:     roundEnergy(1000.0 * 10.0 / 3600.0 / 1000.0),
+				Epv:        derivedstats.RoundEnergy(2000.0 * 10.0 / 3600.0 / 1000.0),
+				EInput:     derivedstats.RoundEnergy(1000.0 * 10.0 / 3600.0 / 1000.0),
 				EOutput:    0,
 				ECharge:    0,
-				EDischarge: roundEnergy(500.0 * 10.0 / 3600.0 / 1000.0),
+				EDischarge: derivedstats.RoundEnergy(500.0 * 10.0 / 3600.0 / 1000.0),
 			},
 		},
 		"gap over 60s between readings skips that pair": {
@@ -797,11 +798,11 @@ func TestComputeTodayEnergy(t *testing.T) {
 			},
 			midnightUnix: midnight,
 			want: &TodayEnergy{
-				Epv:        roundEnergy((1000.0*10.0/3600.0 + 3000.0*10.0/3600.0) / 1000.0),
-				EInput:     roundEnergy((500.0*10.0/3600.0 + 1500.0*10.0/3600.0) / 1000.0),
+				Epv:        derivedstats.RoundEnergy((1000.0*10.0/3600.0 + 3000.0*10.0/3600.0) / 1000.0),
+				EInput:     derivedstats.RoundEnergy((500.0*10.0/3600.0 + 1500.0*10.0/3600.0) / 1000.0),
 				EOutput:    0,
 				ECharge:    0,
-				EDischarge: roundEnergy((200.0*10.0/3600.0 + 600.0*10.0/3600.0) / 1000.0),
+				EDischarge: derivedstats.RoundEnergy((200.0*10.0/3600.0 + 600.0*10.0/3600.0) / 1000.0),
 			},
 		},
 		"mixed sign pgrid and pbat maps to correct fields": {
@@ -811,10 +812,10 @@ func TestComputeTodayEnergy(t *testing.T) {
 			},
 			midnightUnix: midnight,
 			want: &TodayEnergy{
-				Epv:        roundEnergy(500.0 * 10.0 / 3600.0 / 1000.0),
+				Epv:        derivedstats.RoundEnergy(500.0 * 10.0 / 3600.0 / 1000.0),
 				EInput:     0,
-				EOutput:    roundEnergy(800.0 * 10.0 / 3600.0 / 1000.0),
-				ECharge:    roundEnergy(400.0 * 10.0 / 3600.0 / 1000.0),
+				EOutput:    derivedstats.RoundEnergy(800.0 * 10.0 / 3600.0 / 1000.0),
+				ECharge:    derivedstats.RoundEnergy(400.0 * 10.0 / 3600.0 / 1000.0),
 				EDischarge: 0,
 			},
 		},
@@ -825,11 +826,11 @@ func TestComputeTodayEnergy(t *testing.T) {
 			},
 			midnightUnix: midnight,
 			want: &TodayEnergy{
-				Epv:        roundEnergy(3600.0 * 10.0 / 3600.0 / 1000.0),
-				EInput:     roundEnergy(1800.0 * 10.0 / 3600.0 / 1000.0),
+				Epv:        derivedstats.RoundEnergy(3600.0 * 10.0 / 3600.0 / 1000.0),
+				EInput:     derivedstats.RoundEnergy(1800.0 * 10.0 / 3600.0 / 1000.0),
 				EOutput:    0,
 				ECharge:    0,
-				EDischarge: roundEnergy(900.0 * 10.0 / 3600.0 / 1000.0),
+				EDischarge: derivedstats.RoundEnergy(900.0 * 10.0 / 3600.0 / 1000.0),
 			},
 		},
 	}

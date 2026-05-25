@@ -194,7 +194,7 @@ func TestHandleDay_PastDate_AllDerivedFieldsAbsent(t *testing.T) {
 	assert.Nil(t, dr.Summary.SocLowTime)
 	// Energy fields still come through.
 	require.NotNil(t, dr.Summary.Epv)
-	assert.Equal(t, roundEnergy(15.5), *dr.Summary.Epv)
+	assert.Equal(t, derivedstats.RoundEnergy(15.5), *dr.Summary.Epv)
 }
 
 func TestHandleDay_PastDate_NoDerivedStats_FallsBackToDailyPower(t *testing.T) {

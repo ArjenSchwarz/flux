@@ -36,23 +36,26 @@ type OffpeakDeltas struct {
 // Precondition: readings must be sorted by Timestamp ascending. DynamoDB
 // queries on the sort key satisfy this in production.
 func IntegrateOffpeakDeltas(readings []Reading, startUnix, endUnix int64) (OffpeakDeltas, bool) {
-	if startUnix >= endUnix {
+	if startUnix >= endUnix || len(readings) == 0 {
 		return OffpeakDeltas{}, false
 	}
 
-	// Single pass over in-window readings for sample-count and skipped-pair
-	// tallies (AC 5.4). The five integrate calls below do not recompute these
-	// counts — the gap rule looks only at timestamps, so it is identical
-	// across all five selectors.
+	iL, iR := bracketIndices(readings, startUnix, endUnix)
+
+	// Single pass over the in-window readings: tally sample count, skipped
+	// pairs, and the bracket-synthesis edge flags. Both edge flags follow the
+	// same "pair within maxPairGapSeconds" rule that integrate() applies, so
+	// the usability decision and the integration agree by construction.
 	var samples, skipped int
-	var prevIdx = -1
-	for i, r := range readings {
-		if r.Timestamp < startUnix || r.Timestamp >= endUnix {
+	prevIdx := -1
+	for i := iL + 1; i < iR; i++ {
+		t := readings[i].Timestamp
+		if t < startUnix || t >= endUnix {
 			continue
 		}
 		samples++
 		if prevIdx >= 0 {
-			gap := r.Timestamp - readings[prevIdx].Timestamp
+			gap := readings[i].Timestamp - readings[prevIdx].Timestamp
 			if gap > maxPairGapSeconds {
 				skipped++
 			}
@@ -60,68 +63,41 @@ func IntegrateOffpeakDeltas(readings []Reading, startUnix, endUnix int64) (Offpe
 		prevIdx = i
 	}
 
-	// Run the five selector integrals. The usability gate (AC 1.6) lives
-	// inside integrate(): it returns 0 with sentinel below when fewer than
-	// two construction points exist. We probe with one channel and re-check
-	// the construction count to decide ok; since integrate() returns 0 for
-	// both "no usable points" and "all zero", we run a separate gate.
-	if !hasUsablePoints(readings, startUnix, endUnix) {
-		return OffpeakDeltas{}, false
-	}
-
-	out := OffpeakDeltas{
-		GridImportKwh:       integrate(readings, startUnix, endUnix, func(r Reading) float64 { return max(r.Pgrid, 0) }),
-		GridExportKwh:       integrate(readings, startUnix, endUnix, func(r Reading) float64 { return max(-r.Pgrid, 0) }),
-		BatteryChargeKwh:    integrate(readings, startUnix, endUnix, func(r Reading) float64 { return max(-r.Pbat, 0) }),
-		BatteryDischargeKwh: integrate(readings, startUnix, endUnix, func(r Reading) float64 { return max(r.Pbat, 0) }),
-		SolarKwh:            integrate(readings, startUnix, endUnix, func(r Reading) float64 { return max(r.Ppv, 0) }),
-		SampleCount:         samples,
-		SkippedPairs:        skipped,
-	}
-	return out, true
-}
-
-// hasUsablePoints mirrors the point-construction predicate inside integrate():
-// returns true when at least two points (in-window or bracket-synthesised
-// within 60 s) would be built. This decouples the (_, false) decision from
-// the numeric result so a window that legitimately integrates to 0 W·s is
-// still reported as usable.
-func hasUsablePoints(readings []Reading, startUnix, endUnix int64) bool {
-	if len(readings) == 0 {
-		return false
-	}
-	iL, iR := bracketIndices(readings, startUnix, endUnix)
-
-	points := 0
-
-	// Left bracket synthesis: requires a reading before startUnix AND its
-	// successor strictly after startUnix AND the bracket pair within 60 s.
+	leftEdge := 0
 	if iL >= 0 && iL+1 < len(readings) {
 		next := readings[iL+1]
 		if next.Timestamp > startUnix &&
 			next.Timestamp-readings[iL].Timestamp <= maxPairGapSeconds {
-			points++
+			leftEdge = 1
 		}
 	}
-	// Interior points.
-	for i := iL + 1; i < iR; i++ {
-		t := readings[i].Timestamp
-		if t >= startUnix && t < endUnix {
-			points++
-			if points >= 2 {
-				return true
-			}
-		}
-	}
-	// Right bracket synthesis.
+	rightEdge := 0
 	if iR > 0 && iR < len(readings) {
 		prev := readings[iR-1]
 		next := readings[iR]
 		if next.Timestamp-prev.Timestamp <= maxPairGapSeconds {
-			points++
+			rightEdge = 1
 		}
 	}
-	return points >= 2
+
+	// Usability gate (AC 1.6): integrate() needs at least two construction
+	// points. samples counts only strict in-window readings; the two edge
+	// flags add synthesised boundary points when the bracketing pair is
+	// within the gap rule.
+	if samples+leftEdge+rightEdge < 2 {
+		return OffpeakDeltas{}, false
+	}
+
+	out := OffpeakDeltas{
+		GridImportKwh:       integrate(readings, iL, iR, startUnix, endUnix, func(r Reading) float64 { return max(r.Pgrid, 0) }),
+		GridExportKwh:       integrate(readings, iL, iR, startUnix, endUnix, func(r Reading) float64 { return max(-r.Pgrid, 0) }),
+		BatteryChargeKwh:    integrate(readings, iL, iR, startUnix, endUnix, func(r Reading) float64 { return max(-r.Pbat, 0) }),
+		BatteryDischargeKwh: integrate(readings, iL, iR, startUnix, endUnix, func(r Reading) float64 { return max(r.Pbat, 0) }),
+		SolarKwh:            integrate(readings, iL, iR, startUnix, endUnix, func(r Reading) float64 { return max(r.Ppv, 0) }),
+		SampleCount:         samples,
+		SkippedPairs:        skipped,
+	}
+	return out, true
 }
 
 // bracketIndices returns:
@@ -152,9 +128,9 @@ func bracketIndices(readings []Reading, startUnix, endUnix int64) (iL, iR int) {
 // per Decision 9. Control flow mirrors integratePpv / integratePload (see
 // integrate.go); two intentional differences:
 //
-//  1. Sample-count tallying is removed. IntegrateOffpeakDeltas already
-//     computes SampleCount and SkippedPairs in a single pass before calling
-//     this helper five times — duplicating that work per call would be five
+//  1. Sample-count tallying is removed. IntegrateOffpeakDeltas computes
+//     SampleCount and SkippedPairs in a single pass before calling this
+//     helper five times — duplicating that work per call would be five
 //     extra linear passes for no extra information.
 //
 //  2. The clamping (e.g. max(r.Pgrid, 0)) is the caller's responsibility via
@@ -162,20 +138,21 @@ func bracketIndices(readings []Reading, startUnix, endUnix int64) (iL, iR int) {
 //     policy lives at the call site.
 //
 // Returns kWh (watt-seconds / 3,600,000). When fewer than two construction
-// points exist, returns 0 — the caller distinguishes "unusable" from "zero"
-// via hasUsablePoints (the IntegrateOffpeakDeltas (_, false) gate above).
+// points exist, returns 0 — IntegrateOffpeakDeltas gates this case with its
+// own usability check before calling integrate() five times.
+//
+// Bracket indices (iL, iR) are supplied by the caller so the five selector
+// invocations share one bracketIndices scan instead of redoing it each time.
 //
 // Precondition: readings must be sorted by Timestamp ascending. The bracket
 // searches use first-match early-break and produce silently-wrong results on
 // unsorted input.
-func integrate(readings []Reading, startUnix, endUnix int64,
+func integrate(readings []Reading, iL, iR int, startUnix, endUnix int64,
 	selector func(Reading) float64,
 ) float64 {
 	if startUnix >= endUnix || len(readings) == 0 {
 		return 0
 	}
-
-	iL, iR := bracketIndices(readings, startUnix, endUnix)
 
 	type pt struct {
 		ts int64

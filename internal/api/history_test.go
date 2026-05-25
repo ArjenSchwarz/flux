@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ArjenSchwarz/flux/internal/derivedstats"
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/stretchr/testify/assert"
@@ -57,7 +58,7 @@ func TestHandleHistoryDefaultDays(t *testing.T) {
 	hr := parseHistoryResponse(t, resp)
 	assert.Len(t, hr.Days, 2)
 	assert.Equal(t, "2026-04-10", hr.Days[0].Date)
-	assert.Equal(t, roundEnergy(10.123), hr.Days[0].Epv)
+	assert.Equal(t, derivedstats.RoundEnergy(10.123), hr.Days[0].Epv)
 }
 
 func TestHandleHistoryExplicitDays(t *testing.T) {
@@ -184,11 +185,11 @@ func TestHandleHistoryEnergyRounding(t *testing.T) {
 
 	hr := parseHistoryResponse(t, resp)
 	require.Len(t, hr.Days, 1)
-	assert.Equal(t, roundEnergy(10.126), hr.Days[0].Epv)
-	assert.Equal(t, roundEnergy(3.455), hr.Days[0].EInput)
-	assert.Equal(t, roundEnergy(1.234), hr.Days[0].EOutput)
-	assert.Equal(t, roundEnergy(5.675), hr.Days[0].ECharge)
-	assert.Equal(t, roundEnergy(4.565), hr.Days[0].EDischarge)
+	assert.Equal(t, derivedstats.RoundEnergy(10.126), hr.Days[0].Epv)
+	assert.Equal(t, derivedstats.RoundEnergy(3.455), hr.Days[0].EInput)
+	assert.Equal(t, derivedstats.RoundEnergy(1.234), hr.Days[0].EOutput)
+	assert.Equal(t, derivedstats.RoundEnergy(5.675), hr.Days[0].ECharge)
+	assert.Equal(t, derivedstats.RoundEnergy(4.565), hr.Days[0].EDischarge)
 }
 
 // TestHandleHistoryReconcilesTodaysRow reproduces T-828: when today is part of

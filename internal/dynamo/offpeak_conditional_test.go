@@ -16,19 +16,20 @@ import (
 // when the row does not exist OR the existing row has status="pending"; it
 // must fail with ErrOffpeakConditionFailed when the row already has
 // status="complete" (the backfill CLI or a peer poller got there first).
+//
+// The mock returns the same putErr regardless of the prior row state, so
+// "absent" vs "status=pending" collapse to one test case: whether the
+// condition succeeds or fails is the only externally observable difference.
 func TestDynamoStore_WriteOffpeakIfPendingOrAbsent(t *testing.T) {
 	tests := map[string]struct {
 		putErr       error
 		wantErr      error
 		wantSentinel bool
 	}{
-		"succeeds when row absent (condition true)": {
+		"succeeds when conditional check passes": {
 			putErr: nil,
 		},
-		"succeeds when row has status=pending (condition true)": {
-			putErr: nil,
-		},
-		"fails with sentinel when row has status=complete": {
+		"fails with sentinel when conditional check fails": {
 			putErr:       &types.ConditionalCheckFailedException{},
 			wantSentinel: true,
 		},
@@ -86,20 +87,20 @@ func TestDynamoStore_WriteOffpeakIfPendingOrAbsent(t *testing.T) {
 // when the row is absent OR has status="pending" (mid-poll). The same write
 // must succeed when a previously-written complete row is re-finalised — that
 // is the AC 7.3 idempotence path.
+//
+// Per the sibling test, "absent" vs "status=pending" both surface as the
+// same ConditionalCheckFailedException at the mock layer, so they collapse
+// to one "condition fails" case.
 func TestDynamoStore_WriteOffpeakIfComplete(t *testing.T) {
 	tests := map[string]struct {
 		putErr       error
 		wantSentinel bool
 		wantErr      error
 	}{
-		"succeeds when row has status=complete (condition true)": {
+		"succeeds when conditional check passes": {
 			putErr: nil,
 		},
-		"fails with sentinel when row absent": {
-			putErr:       &types.ConditionalCheckFailedException{},
-			wantSentinel: true,
-		},
-		"fails with sentinel when row has status=pending": {
+		"fails with sentinel when conditional check fails": {
 			putErr:       &types.ConditionalCheckFailedException{},
 			wantSentinel: true,
 		},

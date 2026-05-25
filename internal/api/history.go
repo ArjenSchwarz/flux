@@ -129,11 +129,11 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 	result := make([]DayEnergy, len(items))
 	for i, item := range items {
 		stored := &TodayEnergy{
-			Epv:        roundEnergy(item.Epv),
-			EInput:     roundEnergy(item.EInput),
-			EOutput:    roundEnergy(item.EOutput),
-			ECharge:    roundEnergy(item.ECharge),
-			EDischarge: roundEnergy(item.EDischarge),
+			Epv:        derivedstats.RoundEnergy(item.Epv),
+			EInput:     derivedstats.RoundEnergy(item.EInput),
+			EOutput:    derivedstats.RoundEnergy(item.EOutput),
+			ECharge:    derivedstats.RoundEnergy(item.ECharge),
+			EDischarge: derivedstats.RoundEnergy(item.EDischarge),
 		}
 		isItemToday := item.Date == today
 		energy := stored
@@ -211,7 +211,7 @@ func offpeakSplit(op dynamo.OffpeakItem, readings []dynamo.ReadingItem, now time
 		if !ok {
 			return 0, 0, false
 		}
-		return roundEnergy(deltas.GridImport), roundEnergy(deltas.GridExport), true
+		return derivedstats.RoundEnergy(deltas.GridImport), derivedstats.RoundEnergy(deltas.GridExport), true
 	}
 	if op.Status != dynamo.OffpeakStatusPending || !isToday {
 		return 0, 0, false
@@ -220,5 +220,5 @@ func offpeakSplit(op dynamo.OffpeakItem, readings []dynamo.ReadingItem, now time
 	if !ok {
 		return 0, 0, false
 	}
-	return roundEnergy(deltas.GridImport), roundEnergy(deltas.GridExport), true
+	return derivedstats.RoundEnergy(deltas.GridImport), derivedstats.RoundEnergy(deltas.GridExport), true
 }

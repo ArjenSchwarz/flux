@@ -46,10 +46,17 @@ import (
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
 )
 
-// dynamoAPI is the subset of the DynamoDB client this CLI uses.
+// dynamoAPI is the subset of the DynamoDB client this CLI uses. It mirrors
+// dynamo.DynamoAPI so the CLI can construct a real *dynamo.DynamoStore from
+// the same client and route conditional writes through the canonical
+// condition-expression source (see writeOffpeakIfComplete in dynamostore.go).
 type dynamoAPI interface {
 	Query(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error)
 	PutItem(ctx context.Context, params *dynamodb.PutItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error)
+	DeleteItem(ctx context.Context, params *dynamodb.DeleteItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error)
+	GetItem(ctx context.Context, params *dynamodb.GetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error)
+	UpdateItem(ctx context.Context, params *dynamodb.UpdateItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error)
+	BatchWriteItem(ctx context.Context, params *dynamodb.BatchWriteItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.BatchWriteItemOutput, error)
 }
 
 type backfillOpts struct {
@@ -228,7 +235,8 @@ func runBackfill(ctx context.Context, client dynamoAPI, opts backfillOpts) (*bac
 			continue
 		}
 
-		if err := writeOffpeakIfComplete(ctx, client, opts.tableOffpeak, patched); err != nil {
+		store := dynamo.NewDynamoStore(client, dynamo.TableNames{Offpeak: opts.tableOffpeak})
+		if err := store.WriteOffpeakIfComplete(ctx, patched); err != nil {
 			if errors.Is(err, dynamo.ErrOffpeakConditionFailed) {
 				res.RowsConditionFailed++
 				slog.Warn("conditional-write rejected (row state changed); skipping", "date", row.Date)
@@ -296,40 +304,6 @@ func summaryLine(date string, prev, next dynamo.OffpeakItem) string {
 		next.IntegrationSampleCount,
 		next.IntegrationSkippedPairs,
 	)
-}
-
-// writeOffpeakIfComplete writes the patched row via DynamoDB PutItem with
-// the same conditional expression dynamo.DynamoStore.WriteOffpeakIfComplete
-// uses (#status = :complete), mapping ConditionalCheckFailedException to
-// dynamo.ErrOffpeakConditionFailed so callers can log-and-skip.
-//
-// Duplicated from internal/dynamo/dynamostore.go (rather than imported) for
-// the same reason cmd/backfill-solar reimplements queryDailyEnergyRange:
-// the CLI's tests only need to satisfy dynamoAPI (Query + PutItem), and
-// instantiating a full DynamoStore would pull in the entire Store interface.
-func writeOffpeakIfComplete(ctx context.Context, client dynamoAPI, table string, item dynamo.OffpeakItem) error {
-	av, err := attributevalue.MarshalMap(item)
-	if err != nil {
-		return fmt.Errorf("marshal offpeak (date=%s): %w", item.Date, err)
-	}
-	condition := "#status = :complete"
-	_, err = client.PutItem(ctx, &dynamodb.PutItemInput{
-		TableName:                &table,
-		Item:                     av,
-		ConditionExpression:      &condition,
-		ExpressionAttributeNames: map[string]string{"#status": "status"},
-		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":complete": &types.AttributeValueMemberS{Value: dynamo.OffpeakStatusComplete},
-		},
-	})
-	if err != nil {
-		var ccf *types.ConditionalCheckFailedException
-		if errors.As(err, &ccf) {
-			return fmt.Errorf("offpeak (date=%s): %w", item.Date, dynamo.ErrOffpeakConditionFailed)
-		}
-		return fmt.Errorf("put offpeak (table=%s, date=%s): %w", table, item.Date, err)
-	}
-	return nil
 }
 
 // queryOffpeakRange paginates flux-offpeak for one serial and a closed date

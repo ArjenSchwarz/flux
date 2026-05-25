@@ -239,7 +239,7 @@ func TestHandleHistory_TodayReadingsQueryFailure_AC4_9(t *testing.T) {
 	assert.NotNil(t, hr.Days[0].SocLow)
 
 	// Today row: energy still served, derivedStats omitted.
-	assert.Equal(t, roundEnergy(0.5), hr.Days[1].Epv, "energy still served on today row")
+	assert.Equal(t, derivedstats.RoundEnergy(0.5), hr.Days[1].Epv, "energy still served on today row")
 	assert.Nil(t, hr.Days[1].DailyUsage, "derivedStats omitted when readings query fails")
 	assert.Nil(t, hr.Days[1].SocLow)
 	assert.Nil(t, hr.Days[1].SocLowTime)

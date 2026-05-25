@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ArjenSchwarz/flux/internal/derivedstats"
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/stretchr/testify/assert"
@@ -69,7 +70,7 @@ func TestHandleDayNormalCase(t *testing.T) {
 	// Summary should have both energy and socLow.
 	require.NotNil(t, dr.Summary)
 	require.NotNil(t, dr.Summary.Epv)
-	assert.Equal(t, roundEnergy(15.5), *dr.Summary.Epv)
+	assert.Equal(t, derivedstats.RoundEnergy(15.5), *dr.Summary.Epv)
 	// socLow should be from raw data (40 at 18:00).
 	require.NotNil(t, dr.Summary.SocLow)
 	assert.Equal(t, roundPower(40), *dr.Summary.SocLow)
