@@ -181,6 +181,7 @@ func runBackfill(ctx context.Context, client dynamoAPI, opts backfillOpts) (*bac
 	}
 
 	today := opts.now().In(opts.location).Format("2006-01-02")
+	store := dynamo.NewDynamoStore(client, dynamo.TableNames{Offpeak: opts.tableOffpeak})
 
 	for _, row := range rows {
 		res.RowsScanned++
@@ -235,7 +236,6 @@ func runBackfill(ctx context.Context, client dynamoAPI, opts backfillOpts) (*bac
 			continue
 		}
 
-		store := dynamo.NewDynamoStore(client, dynamo.TableNames{Offpeak: opts.tableOffpeak})
 		if err := store.WriteOffpeakIfComplete(ctx, patched); err != nil {
 			if errors.Is(err, dynamo.ErrOffpeakConditionFailed) {
 				res.RowsConditionFailed++

@@ -119,10 +119,9 @@ func (o *OffpeakScheduler) Run(loopCtx, drainCtx context.Context, wg *sync.WaitG
 	case positionAfter:
 		// T-1341 AC 3.4: restart between offpeak-end and 24:00. If a pending
 		// row exists, finalise it now (skip boundary wait — the boundary is
-		// in the past). Otherwise log+skip.
-		if err := o.recoverAfterWindow(drainCtx, date); err != nil {
-			slog.Error("offpeak post-window recovery failed", "date", date, "error", err)
-		}
+		// in the past). Otherwise log+skip. recoverAfterWindow follows the
+		// scheduler's log-and-continue convention; failures are logged inside.
+		o.recoverAfterWindow(drainCtx, date)
 	}
 
 nextDay:
@@ -265,6 +264,10 @@ func (o *OffpeakScheduler) handleEnd(ctx context.Context, date string, pending *
 	}
 
 	deltas := integrateReadings(readings, windowStart, windowEnd)
+	if deltas.SampleCount == 0 {
+		slog.Warn("offpeak integration produced zero usable samples; writing zero-delta row",
+			"date", date, "readingsCount", len(readings))
+	}
 	item := buildOffpeakRow(o.cfg.Serial, date, startSnap, energy,
 		startSoc, soc, deltas, o.now().UTC())
 
@@ -421,24 +424,23 @@ func (o *OffpeakScheduler) recoverMidWindow(ctx context.Context, date string) (*
 // handleEnd internally skips the boundary-wait when offpeak-end is already
 // in the past (which it is by definition on this path), so there's no need
 // for an explicit override.
-func (o *OffpeakScheduler) recoverAfterWindow(ctx context.Context, date string) error {
+func (o *OffpeakScheduler) recoverAfterWindow(ctx context.Context, date string) {
 	item, err := o.store.GetOffpeak(ctx, o.cfg.Serial, date)
 	if err != nil {
 		slog.Warn("offpeak post-window recovery: store query failed", "date", date, "error", err)
-		return nil
+		return
 	}
 	if item == nil {
 		slog.Info("offpeak: past window with no pending row, skipping today", "date", date)
-		return nil
+		return
 	}
 	if item.Status == dynamo.OffpeakStatusComplete {
 		slog.Info("offpeak: past window with already-complete row, nothing to recover", "date", date)
-		return nil
+		return
 	}
 	if err := o.handleEnd(ctx, date, item); err != nil {
 		slog.Warn("offpeak post-window recovery: handleEnd failed", "date", date, "error", err)
 	}
-	return nil
 }
 
 // handleEndOrCleanup attempts the end snapshot; on failure, deletes the

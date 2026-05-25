@@ -257,8 +257,7 @@ func TestPositionAfterRecovery_PendingRow_RunsHandleEndImmediately(t *testing.T)
 		now: func() time.Time { return day.Add(cfg.OffpeakEnd + 30*time.Minute) },
 	}
 
-	err := o.recoverAfterWindow(context.Background(), "2026-04-13")
-	require.NoError(t, err)
+	o.recoverAfterWindow(context.Background(), "2026-04-13")
 	assert.Equal(t, 1, writes, "handleEnd-style integration must finalise the row")
 	assert.Equal(t, dynamo.OffpeakStatusComplete, captured.Status)
 	assert.InDelta(t, 10.0, captured.GridUsageKwh, 0.05)
@@ -273,8 +272,7 @@ func TestPositionAfterRecovery_NoRow_LogsAndSkips(t *testing.T) {
 	ms := &mockStore{getOffpeakResult: nil}
 	o := &OffpeakScheduler{store: ms, cfg: cfg, now: time.Now}
 
-	err := o.recoverAfterWindow(context.Background(), "2026-04-13")
-	require.NoError(t, err)
+	o.recoverAfterWindow(context.Background(), "2026-04-13")
 	assert.True(t, logContains(buf, "past window") || logContains(buf, "no pending"),
 		"absent row → log and skip")
 }
@@ -293,8 +291,7 @@ func TestPositionAfterRecovery_CompleteRow_LogsAndSkips(t *testing.T) {
 	}
 	o := &OffpeakScheduler{store: ms, cfg: cfg, now: time.Now}
 
-	err := o.recoverAfterWindow(context.Background(), "2026-04-13")
-	require.NoError(t, err)
+	o.recoverAfterWindow(context.Background(), "2026-04-13")
 	assert.Equal(t, 0, completeWrites, "already-complete row must not be re-written")
 }
 
