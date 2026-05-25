@@ -61,14 +61,14 @@ references:
 
 ## Poller Integration
 
-- [ ] 7. Test waitForReadingAtOrAfter helper <!-- id:tyhiufz -->
+- [x] 7. Test waitForReadingAtOrAfter helper <!-- id:tyhiufz -->
   - Test cases: reading at-or-after target exists immediately (returns true fast); reading arrives after 5s of polling (returns true); no reading after 30s budget expires (returns false); store error returned upstream; context cancellation aborts
   - Place in internal/poller/offpeak_test.go
   - Blocked-by: tyhiufy (Implement conditional-write methods and consistent-read query option)
   - Stream: 1
   - Requirements: [3.1](requirements.md#3.1)
 
-- [ ] 8. Implement waitForReadingAtOrAfter on OffpeakScheduler <!-- id:tyhiug0 -->
+- [x] 8. Implement waitForReadingAtOrAfter on OffpeakScheduler <!-- id:tyhiug0 -->
   - Add waitForReadingAtOrAfter(ctx; target time.Time; budget; pollInterval time.Duration) (found bool; err error) method on OffpeakScheduler
   - Poll the readings table every pollInterval until a reading with timestamp >= target.Unix() exists or the budget expires
   - Use the consistent-read query from task 6
@@ -77,7 +77,7 @@ references:
   - Stream: 1
   - Requirements: [3.1](requirements.md#3.1)
 
-- [ ] 9. Test handleEnd readings-integration path <!-- id:tyhiug1 -->
+- [x] 9. Test handleEnd readings-integration path <!-- id:tyhiug1 -->
   - Mock store + readings fixture for a heavy-charge day (modelled on 2026-05-18)
   - Test: happy path calls WriteOffpeakIfPendingOrAbsent with integration-sourced deltas; provenance fields populated; status=complete
   - Test: handleEnd preserves the existing handleStart snapshot capture (AC 5.1) — handleStart still runs at window-open and persists StartE* fields on the pending row
@@ -88,7 +88,7 @@ references:
   - Stream: 1
   - Requirements: [3.1](requirements.md#3.1), [3.2](requirements.md#3.2), [3.3](requirements.md#3.3), [5.1](requirements.md#5.1)
 
-- [ ] 10. Refactor poller handleEnd to integrate from readings <!-- id:tyhiug2 -->
+- [x] 10. Refactor poller handleEnd to integrate from readings <!-- id:tyhiug2 -->
   - Remove computeOffpeakDeltas from internal/poller/offpeak.go (or repurpose for snapshot capture only)
   - New handleEnd flow: capture end snapshot via AlphaESS (kept per Decision 2 for diagnostics); call waitForReadingAtOrAfter; QueryReadings with ConsistentRead; IntegrateOffpeakDeltas; write via WriteOffpeakIfPendingOrAbsent
   - Persisted OffpeakItem has integration-sourced deltas; snapshot startE*/endE* retained as diagnostic; provenance fields populated
@@ -96,7 +96,7 @@ references:
   - Stream: 1
   - Requirements: [3.1](requirements.md#3.1), [3.2](requirements.md#3.2), [3.3](requirements.md#3.3), [5.1](requirements.md#5.1), [5.2](requirements.md#5.2), [5.3](requirements.md#5.3)
 
-- [ ] 11. Test recoverMidWindow simplification and positionAfter recovery <!-- id:tyhiug3 -->
+- [x] 11. Test recoverMidWindow simplification and positionAfter recovery <!-- id:tyhiug3 -->
   - Test: poller restart in positionDuring with pending row — recoverMidWindow confirms row exists (no in-memory state); handleEnd runs at window-end as normal
   - Test: poller restart in positionAfter with pending row — new recovery path runs handleEnd-from-readings immediately without waitForReading; writes complete
   - Test: poller restart in positionAfter with no row — existing log+skip preserved
@@ -105,14 +105,14 @@ references:
   - Stream: 1
   - Requirements: [3.3](requirements.md#3.3), [3.4](requirements.md#3.4)
 
-- [ ] 12. Simplify recoverMidWindow and add positionAfter recovery <!-- id:tyhiug4 -->
+- [x] 12. Simplify recoverMidWindow and add positionAfter recovery <!-- id:tyhiug4 -->
   - Strip in-memory state rebuild from recoverMidWindow; method now confirms pending row exists so duplicate write isn't issued
   - Add recovery branch to positionAfter in Run(): GetOffpeak(today); if status=pending; run handleEnd's integration path immediately (skip waitForReading)
   - Blocked-by: tyhiug3 (Test recoverMidWindow simplification and positionAfter recovery)
   - Stream: 1
   - Requirements: [3.3](requirements.md#3.3), [3.4](requirements.md#3.4)
 
-- [ ] 13. Test drift logging output <!-- id:tyhiug5 -->
+- [x] 13. Test drift logging output <!-- id:tyhiug5 -->
   - Test LogOffpeakDrift emits a single INFO log line with date; snapshotGrid; integratedGrid; driftGrid; plus the same triple for solar/charge/discharge/export
   - Test format is CloudWatch Insights-friendly key=value
   - Test called from handleEnd before the write
@@ -120,7 +120,7 @@ references:
   - Stream: 1
   - Requirements: [6.1](requirements.md#6.1), [6.2](requirements.md#6.2)
 
-- [ ] 14. Implement LogOffpeakDrift and wire into handleEnd <!-- id:tyhiug6 -->
+- [x] 14. Implement LogOffpeakDrift and wire into handleEnd <!-- id:tyhiug6 -->
   - Create LogOffpeakDrift(date string; item dynamo.OffpeakItem) in internal/poller/ (or internal/derivedstats/)
   - Compute snapshot-diff per delta from endE*-startE*; integration value from item's existing fields; drift = abs(int - snap)
   - Emit slog.Info structured log entry
