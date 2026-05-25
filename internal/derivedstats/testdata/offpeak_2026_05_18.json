@@ -19,9 +19,9 @@
     "phaseBPbatStartWatts":  -6600,
     "phaseBPbatEndWatts":    -5100,
     "intervalSeconds": 10,
-    "rightBracketAt": "2026-05-18T14:00:07+10:00",
-    "rightBracketPgridWatts": 0,
-    "rightBracketPbatWatts": 0,
-    "provenance": "Synthesised to reproduce the bug shape — actual reading values from the incident were not captured before TTL pruning. Phase A holds a realistic 6.9 kW grid-charging plateau (heavy combined inverter + EV draw). Phase B ramps down over the last 10 minutes to model the soft cutoff before the inverter physically stops at 14:00:07. The boundary-bracket reading at +7s lets the integration's right-edge synthesis correctly clip to 14:00 (AC 1.5)."
+    "rightBoundaryAt": "2026-05-18T14:00:00+10:00",
+    "rightBoundaryPgridWatts": 0,
+    "rightBoundaryPbatWatts": 0,
+    "provenance": "Synthesised to reproduce the bug shape — actual reading values from the incident were not captured before TTL pruning. Phase A holds a realistic 6.9 kW grid-charging plateau (heavy combined inverter + EV draw). Phase B ramps down over the last 10 minutes to model the soft cutoff before the inverter physically stops at 14:00:00. Production queries flux-readings with BETWEEN [windowStart, windowEnd] (inclusive), so a sample at exactly windowEnd is what the integrator actually receives at the right boundary; the integration's right-edge synthesis (AC 1.5) clips that pair to the boundary."
   }
 }

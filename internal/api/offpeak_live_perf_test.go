@@ -27,6 +27,9 @@ import (
 // budget exists primarily to catch regressions that change algorithmic
 // complexity or add per-request I/O.
 func TestHandleStatus_LiveOffpeak_P95Under500ms(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping perf test in -short mode")
+	}
 	loc := sydneyTZ
 	now := time.Date(2026, 4, 15, 13, 30, 0, 0, loc) // 30 min before window-end
 	opStart := time.Date(2026, 4, 15, 11, 0, 0, 0, loc)

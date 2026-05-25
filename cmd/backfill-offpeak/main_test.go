@@ -284,7 +284,6 @@ func TestBackfill_Idempotent_DeltaFieldsBitEqualAcrossRuns(t *testing.T) {
 	assert.Equal(t, first.BatteryChargeKwh, second.BatteryChargeKwh)
 	assert.Equal(t, first.BatteryDischargeKwh, second.BatteryDischargeKwh)
 	assert.Equal(t, first.GridExportKwh, second.GridExportKwh)
-	assert.Equal(t, first.IntegrationSampleCount, second.IntegrationSkippedPairs+second.IntegrationSampleCount)
 	assert.Equal(t, first.IntegrationSampleCount, second.IntegrationSampleCount)
 	assert.Equal(t, first.IntegrationSkippedPairs, second.IntegrationSkippedPairs)
 	// integratedAt is excluded from the idempotence guarantee per Decision 10.

@@ -30,6 +30,7 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"strconv"
 	"time"
@@ -276,20 +277,22 @@ func patchOffpeakRow(stored dynamo.OffpeakItem, deltas derivedstats.OffpeakDelta
 
 // summaryLine formats a per-day comparison of the prior row and the patched
 // row so the operator can sanity-check the magnitude of each correction
-// before it propagates to the clients (AC 7.5).
-//
-// "peak" here is shorthand for the day's eInput peak share — the lagged
-// snapshot-diff value minus its grid-import number is undefined without the
-// eInput, so the column shows the difference in gridUsageKwh directly. The
-// label kept for operator continuity with the design.md example.
+// before it propagates to the clients (AC 7.5). Surfaces all five deltas
+// (grid import, solar, battery charge, battery discharge, grid export) with
+// the prior value, the new value, and the absolute difference so the
+// operator can see at a glance which channels moved most.
 func summaryLine(date string, prev, next dynamo.OffpeakItem) string {
-	delta := next.GridUsageKwh - prev.GridUsageKwh
+	col := func(label string, p, n float64) string {
+		return fmt.Sprintf("%s %.2f→%.2f |Δ|=%.2f", label, p, n, math.Abs(n-p))
+	}
 	return fmt.Sprintf(
-		"%s  prev: grid=%.2f off=%.2f   new: grid=%.2f off=%.2f  Δgrid=%+.2f  samples=%d  skipped=%d",
+		"%s  %s  %s  %s  %s  %s  samples=%d skipped=%d",
 		date,
-		prev.GridUsageKwh, prev.BatteryChargeKwh,
-		next.GridUsageKwh, next.BatteryChargeKwh,
-		delta,
+		col("grid", prev.GridUsageKwh, next.GridUsageKwh),
+		col("solar", prev.SolarKwh, next.SolarKwh),
+		col("chg", prev.BatteryChargeKwh, next.BatteryChargeKwh),
+		col("dis", prev.BatteryDischargeKwh, next.BatteryDischargeKwh),
+		col("exp", prev.GridExportKwh, next.GridExportKwh),
 		next.IntegrationSampleCount,
 		next.IntegrationSkippedPairs,
 	)

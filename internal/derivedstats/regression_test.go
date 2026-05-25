@@ -20,8 +20,11 @@ import (
 // TTL pruned them, so the fixture is synthesised to reproduce the bug
 // shape — a heavy 6.9 kW grid-charging plateau through Phase A and a soft
 // rampdown to 5.4 kW over the final 10 minutes before the inverter
-// physically stopped at 14:00:07. The boundary-bracket reading at +7s
-// exercises the right-edge synthesis (AC 1.5).
+// physically stopped at 14:00:00. Production queries flux-readings with
+// BETWEEN [windowStart, windowEnd] (inclusive), so the sample at exactly
+// 14:00:00 is what the integrator actually receives at the right boundary;
+// the integration's right-edge synthesis (AC 1.5) clips that pair to the
+// boundary.
 func TestRegression_20260518_PeakDropsBelow025Kwh(t *testing.T) {
 	loc, err := time.LoadLocation("Australia/Sydney")
 	require.NoError(t, err)
@@ -54,14 +57,15 @@ func TestRegression_20260518_PeakDropsBelow025Kwh(t *testing.T) {
 
 // readings20260518 builds the synthetic 2026-05-18 reading series described
 // in testdata/offpeak_2026_05_18.json. Two phases (constant plateau then
-// linear rampdown) plus a single bracketing reading 7 s past the window end
-// that mirrors the actual inverter-stop event recorded in the incident.
+// linear rampdown) plus a final reading at exactly windowEnd modelling the
+// inverter-stop event. Production queries flux-readings with BETWEEN
+// [windowStart, windowEnd] inclusive, so a sample at exactly windowEnd is
+// what the integrator actually receives from the table at the right edge.
 func readings20260518(loc *time.Location) ([]Reading, time.Time, time.Time) {
 	day := time.Date(2026, 5, 18, 0, 0, 0, 0, loc)
 	windowStart := day.Add(11 * time.Hour)               // 11:00:00 Sydney
 	phaseATail := day.Add(13*time.Hour + 50*time.Minute) // 13:50:00
-	windowEnd := day.Add(14 * time.Hour)                 // 14:00:00 Sydney (exclusive)
-	rightBracket := windowEnd.Add(7 * time.Second)       // 14:00:07 — inverter stops
+	windowEnd := day.Add(14 * time.Hour)                 // 14:00:00 Sydney (exclusive interior)
 
 	const (
 		phaseAPgrid      = 6900.0
@@ -93,9 +97,12 @@ func readings20260518(loc *time.Location) ([]Reading, time.Time, time.Time) {
 			Pbat:      phaseBStartPbat + (phaseBEndPbat-phaseBStartPbat)*frac,
 		})
 	}
-	// Right boundary bracket: the inverter physically stopped at 14:00:07.
+	// Right boundary reading at exactly windowEnd: the inverter stopped at
+	// 14:00:00. Production's BETWEEN [windowStart, windowEnd] query returns
+	// this sample, and the integrator's right-edge synthesis (AC 1.5) clips
+	// the final pair to the boundary.
 	out = append(out, Reading{
-		Timestamp: rightBracket.Unix(),
+		Timestamp: windowEnd.Unix(),
 		Pgrid:     0,
 		Pbat:      0,
 	})
