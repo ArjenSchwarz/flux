@@ -264,6 +264,11 @@ func (o *OffpeakScheduler) handleEnd(ctx context.Context, date string, pending *
 	}
 
 	deltas := integrateReadings(readings, windowStart, windowEnd)
+	// Sparse readings (<2 usable samples) yield SampleCount == 0 and zero-valued
+	// deltas. The poller writes that as a complete row anyway (AC 1.6 + AC 3.2)
+	// because there's no upstream that can defer the write — unlike the backfill
+	// CLI, which can SKIP and leave the row unchanged. A future backfill run
+	// with denser readings will overwrite via WriteOffpeakIfComplete.
 	if deltas.SampleCount == 0 {
 		slog.Warn("offpeak integration produced zero usable samples; writing zero-delta row",
 			"date", date, "readingsCount", len(readings))

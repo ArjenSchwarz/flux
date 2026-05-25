@@ -123,3 +123,24 @@ func TestLogOffpeakDrift_NoSnapshotPair(t *testing.T) {
 		assert.Contains(t, out, key)
 	}
 }
+
+// TestLogOffpeakDrift_AllZeroStartAndEnd_NoRecoveryBranch guards against a
+// brand-new day-1 install (no prior cumulative energy) being misclassified as
+// positionAfter recovery. With Start = End = 0 the standard drift branch runs
+// and reports zero snapshot deltas, which is informative.
+func TestLogOffpeakDrift_AllZeroStartAndEnd_NoRecoveryBranch(t *testing.T) {
+	buf, restore := captureSlogDefault()
+	defer restore()
+
+	item := OffpeakItem{
+		Date:         "2026-05-18",
+		GridUsageKwh: 1.0,
+		// Start* and End* all zero — day-1 install with both snapshots captured.
+	}
+	LogOffpeakDrift("2026-05-18", item)
+
+	out := buf.String()
+	assert.NotContains(t, out, "offpeak_drift_no_snapshot_pair",
+		"all-zero Start AND End is not the recovery signature")
+	assert.Contains(t, out, "offpeak drift")
+}

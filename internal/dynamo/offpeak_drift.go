@@ -21,12 +21,18 @@ import (
 //
 // When the row was finalised via positionAfter recovery the end snapshot is
 // missing (handleStart ran but handleEnd never recorded the AlphaESS end
-// values before the restart), so EndE* are all zero. In that case the
-// snapshot-diff numbers would collapse to -startE* which is misleading, so a
-// dedicated log line is emitted with the integrated values only.
+// values before the restart), so EndE* are all zero while at least one
+// StartE* is non-zero (cumulative counters carry across days). In that case
+// the snapshot-diff numbers would collapse to -startE* which is misleading,
+// so a dedicated log line is emitted with the integrated values only. The
+// StartE* > 0 guard prevents a brand-new day-1 install (Start = End = 0)
+// from incorrectly hitting this branch.
 func LogOffpeakDrift(date string, item OffpeakItem) {
-	if item.EndEInput == 0 && item.EndEpv == 0 && item.EndECharge == 0 &&
-		item.EndEDischarge == 0 && item.EndEOutput == 0 {
+	endAllZero := item.EndEInput == 0 && item.EndEpv == 0 && item.EndECharge == 0 &&
+		item.EndEDischarge == 0 && item.EndEOutput == 0
+	startAnyNonZero := item.StartEInput > 0 || item.StartEpv > 0 || item.StartECharge > 0 ||
+		item.StartEDischarge > 0 || item.StartEOutput > 0
+	if endAllZero && startAnyNonZero {
 		slog.Info("offpeak_drift_no_snapshot_pair",
 			"date", date,
 			"reason", "positionAfterRecovery",
