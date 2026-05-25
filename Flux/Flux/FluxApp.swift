@@ -45,7 +45,20 @@ struct FluxApp: App {
                 .environment(chartScopeRegistry)
                 .macOSChartExpansion(registry: chartScopeRegistry, focus: chartExpansionFocus)
                 .preferredColorScheme(preferredScheme)
+                // Content-view minimum sized so the NavigationSplitView
+                // detail column always exceeds the 700pt 2-column threshold
+                // for AdaptiveColumnsLayout and the Day Detail Grid
+                // (T-1342 AC 2.2 / Decision 9).
+                .frame(minWidth: 960, minHeight: 600)
         }
+        // `.frame(minWidth:minHeight:)` alone constrains the SwiftUI
+        // content view but does NOT clamp the NSWindow resize behavior —
+        // `.windowResizability(.contentSize)` ties the window's resize
+        // limits to the content view's frame constraints. Without it the
+        // user can drag the window narrower than 960pt and the content
+        // gets clipped, defeating AC 2.2.
+        .defaultSize(width: 1200, height: 800)
+        .windowResizability(.contentSize)
         .modelContainer(for: CachedDayEnergy.self)
         .commands {
             FluxKeyboardCommands(coordinator: refreshCoordinator)

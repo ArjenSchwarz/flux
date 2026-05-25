@@ -186,6 +186,38 @@ struct DayDetailErrorPanel: View {
     }
 }
 
+#if os(macOS)
+/// Trailing toolbar group for the macOS Day Detail window: prev/next
+/// chevrons that drive `viewModel.navigatePrevious()` /
+/// `viewModel.navigateNext()`. Extracted from `DayDetailView` to keep that
+/// file under the SwiftLint file-length cap. The next-day button mirrors
+/// `DayNavigationHeader`'s `isToday`-disabled behavior (T-1342 AC 4.6).
+struct DayDetailMacToolbar: ToolbarContent {
+    let viewModel: DayDetailViewModel
+
+    var body: some ToolbarContent {
+        ToolbarItemGroup(placement: .primaryAction) {
+            Button {
+                viewModel.navigatePrevious()
+            } label: {
+                Image(systemName: "chevron.left")
+            }
+            .accessibilityLabel("Previous day")
+            .help("Previous day")
+
+            Button {
+                viewModel.navigateNext()
+            } label: {
+                Image(systemName: "chevron.right")
+            }
+            .accessibilityLabel("Next day")
+            .help("Next day")
+            .disabled(viewModel.isToday)
+        }
+    }
+}
+#endif
+
 enum DayDetailEyebrow {
     static let formatter: DateFormatter = {
         let formatter = DateFormatter()
