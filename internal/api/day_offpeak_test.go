@@ -126,14 +126,14 @@ func TestHandleDaySummaryOffpeakSplit(t *testing.T) {
 	}
 }
 
-// TestHandleDaySummaryOffpeakSplitNilEnergy pins the off-peak split when the
+// TestHandleDaySummaryOffpeakSplitDispatch pins the off-peak split when the
 // live-compute path has no usable inputs:
 //   - complete row: passes through stored deltas regardless of readings/energy.
 //   - pending row before the off-peak window opens (AC 4.3): no split, no panic.
 //
 // fixedNow is 10:00 AEST — before the 11:00 window starts — and the single
 // reading is insufficient for liveOffpeakDeltas in any case.
-func TestHandleDaySummaryOffpeakSplitNilEnergy(t *testing.T) {
+func TestHandleDaySummaryOffpeakSplitDispatch(t *testing.T) {
 	loc, _ := time.LoadLocation("Australia/Sydney")
 	now := fixedNow()
 	date := now.In(loc).Format("2006-01-02")

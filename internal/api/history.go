@@ -216,15 +216,7 @@ func offpeakSplit(op dynamo.OffpeakItem, readings []dynamo.ReadingItem, now time
 	if op.Status != dynamo.OffpeakStatusPending || !isToday {
 		return 0, 0, false
 	}
-	startMin, endMin, parsed := derivedstats.ParseOffpeakWindow(offpeakStart, offpeakEnd)
-	if !parsed {
-		return 0, 0, false
-	}
-	deltas, ok := liveOffpeakDeltas(
-		readings, now,
-		time.Duration(startMin)*time.Minute,
-		time.Duration(endMin)*time.Minute,
-	)
+	deltas, ok := liveOffpeakDeltas(readings, now, offpeakStart, offpeakEnd)
 	if !ok {
 		return 0, 0, false
 	}

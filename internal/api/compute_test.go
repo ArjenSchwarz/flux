@@ -65,10 +65,10 @@ func TestLiveOffpeakDeltas(t *testing.T) {
 	// Sydney-local 2026-04-15. Window 11:00-14:00 (3h).
 	loc := sydneyTZ
 	dayStart := time.Date(2026, 4, 15, 0, 0, 0, 0, loc)
-	windowStart := 11 * time.Hour
-	windowEnd := 14 * time.Hour
-	opStart := dayStart.Add(windowStart)
-	opEnd := dayStart.Add(windowEnd)
+	const windowStart = "11:00"
+	const windowEnd = "14:00"
+	opStart := dayStart.Add(11 * time.Hour)
+	opEnd := dayStart.Add(14 * time.Hour)
 
 	// Build a uniform 10-second cadence reading stream covering the full
 	// off-peak window plus a 60s shoulder either side. Constant pgrid = 3600 W
@@ -141,9 +141,9 @@ func TestLiveOffpeakDeltas(t *testing.T) {
 func TestLiveOffpeakDeltasDeterminism(t *testing.T) {
 	loc := sydneyTZ
 	dayStart := time.Date(2026, 4, 15, 0, 0, 0, 0, loc)
-	windowStart := 11 * time.Hour
-	windowEnd := 14 * time.Hour
-	opStart := dayStart.Add(windowStart)
+	const windowStart = "11:00"
+	const windowEnd = "14:00"
+	opStart := dayStart.Add(11 * time.Hour)
 
 	readings := []dynamo.ReadingItem{
 		{Timestamp: opStart.Unix(), Pgrid: 1500, Ppv: 200, Pbat: -800},

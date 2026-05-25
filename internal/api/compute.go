@@ -49,20 +49,24 @@ type offpeakDeltaValues struct {
 // liveOffpeakDeltas integrates readings over [offpeakStart, min(now, offpeakEnd))
 // for today's date in Sydney local time and returns the five energy deltas.
 //
-// windowStart and windowEnd are durations from local midnight (e.g. 11h and 14h
-// for an 11:00-14:00 window). Returns (_, false) when now is at or before the
-// window start (AC 4.3 — pre-window behaviour) or when the readings slice does
-// not contain enough usable samples to integrate (AC 1.6).
+// offpeakStart and offpeakEnd are the raw "HH:MM" config values. Returns
+// (_, false) when the window is unparseable, when now is at or before the
+// window start (AC 4.3 — pre-window behaviour), or when the readings slice
+// does not contain enough usable samples to integrate (AC 1.6).
 //
 // Pure function: no state and no clock except the explicit now parameter. This
 // is the determinism contract that backs AC 4.4's monotonicity guarantee.
 func liveOffpeakDeltas(readings []dynamo.ReadingItem, now time.Time,
-	windowStart, windowEnd time.Duration,
+	offpeakStart, offpeakEnd string,
 ) (offpeakDeltaValues, bool) {
+	startMin, endMin, parsed := derivedstats.ParseOffpeakWindow(offpeakStart, offpeakEnd)
+	if !parsed {
+		return offpeakDeltaValues{}, false
+	}
 	local := now.In(sydneyTZ)
 	dayStart := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, sydneyTZ)
-	opStart := dayStart.Add(windowStart)
-	opEnd := dayStart.Add(windowEnd)
+	opStart := dayStart.Add(time.Duration(startMin) * time.Minute)
+	opEnd := dayStart.Add(time.Duration(endMin) * time.Minute)
 
 	if !local.After(opStart) {
 		return offpeakDeltaValues{}, false

@@ -246,15 +246,7 @@ func buildOffpeak(item *dynamo.OffpeakItem, readings []dynamo.ReadingItem, now t
 	case dynamo.OffpeakStatusComplete:
 		deltas, ok = offpeakDeltas(*item)
 	case dynamo.OffpeakStatusPending:
-		startMin, endMin, parsed := derivedstats.ParseOffpeakWindow(offpeakStart, offpeakEnd)
-		if !parsed {
-			return od
-		}
-		deltas, ok = liveOffpeakDeltas(
-			readings, now,
-			time.Duration(startMin)*time.Minute,
-			time.Duration(endMin)*time.Minute,
-		)
+		deltas, ok = liveOffpeakDeltas(readings, now, offpeakStart, offpeakEnd)
 	}
 	if !ok {
 		return od

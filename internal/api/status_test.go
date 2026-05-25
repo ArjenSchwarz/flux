@@ -246,7 +246,7 @@ func TestHandleStatusLow24hNoReadingsToday(t *testing.T) {
 	assert.Nil(t, sr.Battery.Low24h, "low24h should be null when no readings exist since Sydney midnight")
 }
 
-func TestHandleStatusOffpeakPendingNoDailyEnergy(t *testing.T) {
+func TestHandleStatusOffpeakPendingBeforeWindowNoSplit(t *testing.T) {
 	now := fixedNow()
 	mr := &mockReader{
 		getOffpeakFn: func(_ context.Context, _, _ string) (*dynamo.OffpeakItem, error) {
@@ -264,8 +264,8 @@ func TestHandleStatusOffpeakPendingNoDailyEnergy(t *testing.T) {
 	require.NotNil(t, sr.Offpeak)
 	assert.Equal(t, "11:00", sr.Offpeak.WindowStart)
 	assert.Equal(t, "14:00", sr.Offpeak.WindowEnd)
-	assert.Empty(t, sr.Offpeak.Status, "no status when deltas cannot be computed")
-	assert.Nil(t, sr.Offpeak.GridUsageKwh, "delta fields should be null without daily energy")
+	assert.Empty(t, sr.Offpeak.Status, "no status when pending row is before window opens (AC 4.3)")
+	assert.Nil(t, sr.Offpeak.GridUsageKwh, "delta fields should be null before window opens (AC 4.3)")
 	assert.Nil(t, sr.Offpeak.SolarKwh)
 	assert.Nil(t, sr.Offpeak.BatteryChargeKwh)
 	assert.Nil(t, sr.Offpeak.BatteryDischargeKwh)
