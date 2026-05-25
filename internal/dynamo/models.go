@@ -148,6 +148,15 @@ type OffpeakItem struct {
 	BatteryDischargeKwh float64 `dynamodbav:"batteryDischargeKwh"`
 	GridExportKwh       float64 `dynamodbav:"gridExportKwh"`
 	BatteryDeltaPercent float64 `dynamodbav:"batteryDeltaPercent"`
+
+	// Integration provenance (AC 5.4). Populated when the five deltas are
+	// computed via derivedstats.IntegrateOffpeakDeltas (poller window-end
+	// and backfill CLI). `omitempty` keeps pre-feature rows clean of zero-
+	// valued fields and lets the marshalling round-trip past rows safely.
+	// No API consumer reads these fields; they exist for operator diagnostics.
+	IntegrationSampleCount  int    `dynamodbav:"integrationSampleCount,omitempty"`
+	IntegrationSkippedPairs int    `dynamodbav:"integrationSkippedPairs,omitempty"`
+	IntegratedAt            string `dynamodbav:"integratedAt,omitempty"` // RFC3339 UTC
 }
 
 // NewReadingItem transforms AlphaESS power data into a DynamoDB reading item.

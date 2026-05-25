@@ -115,6 +115,17 @@ func (m *mockStore) WriteOffpeak(_ context.Context, _ dynamo.OffpeakItem) error 
 	return m.writeOffpeakErr
 }
 
+// WriteOffpeakIfPendingOrAbsent / WriteOffpeakIfComplete are stubs so
+// mockStore satisfies the Store interface for the offpeak-from-readings
+// foundation. Phase 2 tests in this package override these per-test.
+func (m *mockStore) WriteOffpeakIfPendingOrAbsent(_ context.Context, _ dynamo.OffpeakItem) error {
+	return m.writeOffpeakErr
+}
+
+func (m *mockStore) WriteOffpeakIfComplete(_ context.Context, _ dynamo.OffpeakItem) error {
+	return m.writeOffpeakErr
+}
+
 func (m *mockStore) DeleteOffpeak(_ context.Context, _, _ string) error {
 	return m.deleteOffpeakErr
 }
@@ -135,6 +146,13 @@ func (m *mockStore) UpdateDailyEnergyDerived(_ context.Context, _, _ string, der
 }
 
 func (m *mockStore) QueryReadings(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
+	return m.queryReadingsResult, m.queryReadingsErr
+}
+
+// QueryReadingsConsistent shares the same configurable result/err as the
+// eventually-consistent path — Phase 2 tests that need to distinguish them
+// can extend this mock; the foundation phase doesn't.
+func (m *mockStore) QueryReadingsConsistent(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
 	return m.queryReadingsResult, m.queryReadingsErr
 }
 

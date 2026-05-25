@@ -8,14 +8,14 @@ references:
 
 ## Foundation
 
-- [ ] 1. Test IntegrateOffpeakDeltas including property-based tests <!-- id:tyhiuft -->
+- [x] 1. Test IntegrateOffpeakDeltas including property-based tests <!-- id:tyhiuft -->
   - Unit tests for: happy path, single sample (returns false), bracketing sample at window edge with 60s gap rule, 90s gap inside window (SkippedPairs == 1), signed pgrid producing per-sample import/export split, reading exactly at endUnix excluded as interior but used as right-edge bracket, gridUsage+peak==eInput invariant (AC 2.3)
   - Property tests with pgregory.net/rapid: closure under window (Grid+Grid <= integral abs pgrid), monotonicity over window growth (AC 4.4), per-sample clamping symmetry, round-trip idempotence, len<2 always false
   - Place in internal/derivedstats/integrate_offpeak_test.go
   - Stream: 1
   - Requirements: [1.1](requirements.md#1.1), [1.2](requirements.md#1.2), [1.3](requirements.md#1.3), [1.4](requirements.md#1.4), [1.5](requirements.md#1.5), [1.6](requirements.md#1.6), [2.3](requirements.md#2.3)
 
-- [ ] 2. Implement IntegrateOffpeakDeltas and shared integrate helper <!-- id:tyhiufu -->
+- [x] 2. Implement IntegrateOffpeakDeltas and shared integrate helper <!-- id:tyhiufu -->
   - Create internal/derivedstats/integrate_offpeak.go
   - Export OffpeakDeltas struct with five kWh deltas + SampleCount + SkippedPairs
   - Export IntegrateOffpeakDeltas(readings, startUnix, endUnix) (OffpeakDeltas, bool)
@@ -26,21 +26,21 @@ references:
   - Stream: 1
   - Requirements: [1.1](requirements.md#1.1), [1.2](requirements.md#1.2), [1.3](requirements.md#1.3), [1.4](requirements.md#1.4), [1.5](requirements.md#1.5), [1.6](requirements.md#1.6)
 
-- [ ] 3. Add TODO breadcrumbs to existing integrate siblings <!-- id:tyhiufv -->
+- [x] 3. Add TODO breadcrumbs to existing integrate siblings <!-- id:tyhiufv -->
   - Add // TODO(offpeak-from-readings): fold into integrate() in integrate_offpeak.go at the top of integratePload and integratePpv in internal/derivedstats/
   - Decision 9 breadcrumb so the consolidation work is discoverable
   - Wiring/documentation change only; no test
   - Blocked-by: tyhiufu (Implement IntegrateOffpeakDeltas and shared integrate helper)
   - Stream: 1
 
-- [ ] 4. Add provenance fields to OffpeakItem <!-- id:tyhiufw -->
+- [x] 4. Add provenance fields to OffpeakItem <!-- id:tyhiufw -->
   - Add IntegrationSampleCount int; IntegrationSkippedPairs int; IntegratedAt string fields to dynamo.OffpeakItem in internal/dynamo/models.go
   - All three with dynamodbav:omitempty so old rows survive marshalling round-trip
   - Types-only change; no test
   - Stream: 1
   - Requirements: [5.4](requirements.md#5.4)
 
-- [ ] 5. Test conditional-write methods and consistent-read query <!-- id:tyhiufx -->
+- [x] 5. Test conditional-write methods and consistent-read query <!-- id:tyhiufx -->
   - Test WriteOffpeakIfPendingOrAbsent: succeeds when row absent; succeeds when row has status=pending; fails with ErrOffpeakConditionFailed when row has status=complete
   - Test WriteOffpeakIfComplete: succeeds when row has status=complete; fails with ErrOffpeakConditionFailed when row absent or pending
   - Test consistent-read variant of QueryReadings propagates ConsistentRead=true to the DynamoDB query input
@@ -49,7 +49,7 @@ references:
   - Stream: 1
   - Requirements: [3.5](requirements.md#3.5), [7.8](requirements.md#7.8)
 
-- [ ] 6. Implement conditional-write methods and consistent-read query option <!-- id:tyhiufy -->
+- [x] 6. Implement conditional-write methods and consistent-read query option <!-- id:tyhiufy -->
   - Add WriteOffpeakIfPendingOrAbsent and WriteOffpeakIfComplete to Store interface in internal/dynamo/store.go
   - Implement on DynamoStore with conditional expressions: attribute_not_exists(#status) OR #status=:pending; and #status=:complete
   - Add ErrOffpeakConditionFailed sentinel error

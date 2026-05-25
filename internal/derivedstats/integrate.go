@@ -7,6 +7,9 @@ const (
 	maxPairGapSeconds = 60
 )
 
+// TODO(offpeak-from-readings): fold into integrate() in integrate_offpeak.go
+// per Decision 9 of specs/offpeak-from-readings/decision_log.md.
+//
 // integratePload returns the trapezoidal integral of max(pload, 0) over the
 // half-open interval [startUnix, endUnix), expressed in kWh.
 //
