@@ -265,15 +265,20 @@ Rows with `len(readings) < 2` in the window emit `SKIPPED (sparse readings)` and
 
 ### Drift logging (Requirement 6)
 
-A shared logger function `LogOffpeakDrift(date, item dynamo.OffpeakItem)` is called from both `handleEnd` and the backfill CLI immediately before the write. Output is a single `INFO` log line:
+A shared logger function `LogOffpeakDrift(date string, item dynamo.OffpeakItem)` lives in `internal/dynamo/offpeak_drift.go` and is called from both `handleEnd` and the backfill CLI immediately before the write. It lives in the `dynamo` package so the CLI doesn't have to import `internal/poller` to call it — `OffpeakItem` is already defined there.
+
+The logical schema of one entry is:
 
 ```
-date=2026-05-18 snapshotGrid=18.95 integratedGrid=20.42 driftGrid=+1.47 \
-  snapshotSolar=... integratedSolar=... driftSolar=... \
-  (same for charge, discharge, export)
+date=<YYYY-MM-DD>
+snapshotGrid=<endE_input - startE_input>     integratedGrid=<gridUsageKwh>     driftGrid=|integrated - snapshot|
+snapshotSolar=<endEpv - startEpv>            integratedSolar=<solarKwh>        driftSolar=|...|
+snapshotCharge=<endECharge - startECharge>   integratedCharge=<chargeKwh>      driftCharge=|...|
+snapshotDischarge=...                        integratedDischarge=...           driftDischarge=...
+snapshotExport=<endEOutput - startEOutput>   integratedExport=<exportKwh>      driftExport=|...|
 ```
 
-Format is CloudWatch Logs Insights-friendly (key=value pairs). No metric/alert in scope (Decision 6).
+The actual emission goes through `slog.Info` and inherits the handler configured by the binary (JSON for the poller via `cmd/poller/logging.go`; Text for the backfill CLI per the pattern of the sibling CLIs in `cmd/backfill-*`). CloudWatch Logs Insights parses both forms via `fields date, driftGrid, …`. No metric/alert is in scope (Decision 6).
 
 ## Data Models
 

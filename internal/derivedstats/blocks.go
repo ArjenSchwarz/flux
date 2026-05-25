@@ -290,16 +290,16 @@ func buildDailyUsageBlock(p pendingBlock, unroundedSum float64) DailyUsageBlock 
 		Kind:           p.kind,
 		Start:          p.start.UTC().Format(time.RFC3339),
 		End:            p.end.UTC().Format(time.RFC3339),
-		TotalKwh:       roundEnergy(p.unroundedKwh),
+		TotalKwh:       RoundEnergy(p.unroundedKwh),
 		Status:         p.status,
 		BoundarySource: boundarySource,
 	}
 	if p.solarSampled {
-		solar := roundEnergy(p.unroundedSolarKwh)
+		solar := RoundEnergy(p.unroundedSolarKwh)
 		block.SolarKwh = &solar
 	}
 	if elapsed >= 60 {
-		avg := roundEnergy(p.unroundedKwh / (float64(elapsed) / 3600.0))
+		avg := RoundEnergy(p.unroundedKwh / (float64(elapsed) / 3600.0))
 		block.AverageKwhPerHour = &avg
 	}
 	if unroundedSum > 0 {

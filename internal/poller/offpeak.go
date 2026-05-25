@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"math"
 	"sync"
 	"time"
 
@@ -89,7 +88,8 @@ func (o *OffpeakScheduler) Run(loopCtx, drainCtx context.Context, wg *sync.WaitG
 
 	switch pos {
 	case positionBefore:
-		// Wait for start time, then handle start and end.
+		// Wait for start time, then handle start and end. handleStart
+		// populates in-memory state, so handleEnd doesn't need the pending row.
 		if !o.waitUntil(loopCtx, wallClockTime(now, o.cfg.Location, o.cfg.OffpeakStart)) {
 			return
 		}
@@ -101,18 +101,18 @@ func (o *OffpeakScheduler) Run(loopCtx, drainCtx context.Context, wg *sync.WaitG
 		if !o.waitUntil(loopCtx, wallClockTime(now, o.cfg.Location, o.cfg.OffpeakEnd)) {
 			return
 		}
-		o.handleEndOrCleanup(drainCtx, date)
+		o.handleEndOrCleanup(drainCtx, date, nil)
 
 	case positionDuring:
-		// T-1341: recovery now only confirms whether the pending row exists.
-		// In-memory state isn't rebuilt — handleEnd reads readings and the
-		// persisted start snapshot directly.
-		hasPending, _ := o.recoverMidWindow(drainCtx, date)
-		if hasPending {
+		// T-1341: recovery surfaces the pending row to the caller. In-memory
+		// state isn't rebuilt — handleEnd reads readings directly and uses
+		// the pending row's StartE* fields for diagnostic snapshot population.
+		pending, _ := o.recoverMidWindow(drainCtx, date)
+		if pending != nil {
 			if !o.waitUntil(loopCtx, wallClockTime(now, o.cfg.Location, o.cfg.OffpeakEnd)) {
 				return
 			}
-			o.handleEndOrCleanup(drainCtx, date)
+			o.handleEndOrCleanup(drainCtx, date, pending)
 		} else {
 			slog.Info("offpeak: no pending record found, skipping today", "date", date)
 		}
@@ -148,7 +148,7 @@ nextDay:
 			return
 		}
 
-		o.handleEndOrCleanup(drainCtx, date)
+		o.handleEndOrCleanup(drainCtx, date, nil)
 	}
 }
 
@@ -180,41 +180,48 @@ func (o *OffpeakScheduler) handleStart(ctx context.Context, date string) error {
 // handleEnd finalises the day's off-peak row by integrating the readings
 // table over the SSM window (specs/offpeak-from-readings T-1341).
 //
+// When pending is non-nil (post-restart recovery path) its StartE* fields
+// populate the diagnostic start snapshot; otherwise handleEnd uses the
+// in-memory state captured by handleStart in this process. One of the two
+// must be set — both nil indicates a programming error and returns immediately.
+//
+// When skipBoundaryWait is true the wait-for-reading helper is bypassed; used
+// by the positionAfter recovery path where the SSM offpeak-end is already in
+// the past so the wait would burn its budget on a moot probe.
+//
 // Flow (matches design.md "Window-end finalisation state machine"):
 //  1. Capture the AlphaESS end snapshot (Decision 2 — diagnostic only).
 //  2. Wait up to endWaitBudget for a reading at-or-after offpeak-end
-//     (AC 3.1) to land in the readings table.
+//     (AC 3.1), unless skipBoundaryWait is true.
 //  3. Strongly-consistent query of readings over [offpeak-start, offpeak-end).
 //  4. Integrate the five deltas via derivedstats.IntegrateOffpeakDeltas.
 //  5. Conditional write with WriteOffpeakIfPendingOrAbsent — fails only when
 //     a concurrent writer (backfill CLI) reached `complete` first; in that
 //     case we log+skip and accept the other writer's value (AC 3.5).
-func (o *OffpeakScheduler) handleEnd(ctx context.Context, date string) error {
+func (o *OffpeakScheduler) handleEnd(ctx context.Context, date string, pending *dynamo.OffpeakItem, skipBoundaryWait bool) error {
 	energy, soc, err := o.captureSnapshot(ctx, date)
 	if err != nil {
 		return fmt.Errorf("capture end snapshot: %w", err)
 	}
 
-	// Resolve start snapshot: prefer in-memory state (handleStart already
-	// ran this process), fall back to the persisted pending row (post-
-	// restart recovery path). Either way the value is diagnostic only
-	// (Decision 2) — the integration over readings is the source of truth.
+	// Resolve the diagnostic start snapshot. The integration over readings
+	// is the source of truth for the five deltas (Decision 2); the start
+	// snapshot is retained only for drift logging and operator forensics.
 	startSnap := o.startSnapshot
 	startSoc := o.socStart
 	if startSnap == nil {
-		if pending, getErr := o.store.GetOffpeak(ctx, o.cfg.Serial, date); getErr == nil && pending != nil {
-			startSnap = &alphaess.EnergyData{
-				Epv: pending.StartEpv, EInput: pending.StartEInput, EOutput: pending.StartEOutput,
-				ECharge: pending.StartECharge, EDischarge: pending.StartEDischarge,
-				EGridCharge: pending.StartEGridCharge,
-			}
-			startSoc = pending.SocStart
-		} else {
-			// No pending row and no in-memory state: persist zero start
-			// snapshot. Drift logging will still compare integratedGrid
-			// against (endE − 0), making the recovery case visible.
-			startSnap = &alphaess.EnergyData{}
+		if pending == nil {
+			// Unreachable in production: both Run() and recoverAfterWindow
+			// only call handleEnd with either in-memory state (handleStart
+			// ran in this process) or a non-nil pending row.
+			return fmt.Errorf("handleEnd: no start snapshot available for %s (no in-memory state, no pending row)", date)
 		}
+		startSnap = &alphaess.EnergyData{
+			Epv: pending.StartEpv, EInput: pending.StartEInput, EOutput: pending.StartEOutput,
+			ECharge: pending.StartECharge, EDischarge: pending.StartEDischarge,
+			EGridCharge: pending.StartEGridCharge,
+		}
+		startSoc = pending.SocStart
 	}
 
 	// Resolve boundary window from cfg in Sydney local time. The wall-clock
@@ -223,25 +230,27 @@ func (o *OffpeakScheduler) handleEnd(ctx context.Context, date string) error {
 	windowStart := wallClockTime(day, o.cfg.Location, o.cfg.OffpeakStart)
 	windowEnd := wallClockTime(day, o.cfg.Location, o.cfg.OffpeakEnd)
 
-	budget := o.endWaitBudget
-	if budget == 0 {
-		budget = defaultEndWaitBudget
-	}
-	pollInterval := o.endWaitPollInterval
-	if pollInterval == 0 {
-		pollInterval = defaultEndWaitPollInterval
-	}
-	found, waitErr := o.waitForReadingAtOrAfter(ctx, windowEnd, budget, pollInterval)
-	if waitErr != nil {
-		// Wait surfaced a store error — log and continue; the query below
-		// will either succeed and integrate what it sees, or fail and we
-		// propagate that error. This matches "best-effort within the 5-min
-		// deadline" (AC 3.2).
-		slog.Warn("offpeak boundary wait failed; proceeding with integration",
-			"date", date, "error", waitErr)
-	} else if !found {
-		slog.Warn("offpeak boundary wait timed out; integrating with available readings",
-			"date", date, "budget", budget)
+	if !skipBoundaryWait {
+		budget := o.endWaitBudget
+		if budget == 0 {
+			budget = defaultEndWaitBudget
+		}
+		pollInterval := o.endWaitPollInterval
+		if pollInterval == 0 {
+			pollInterval = defaultEndWaitPollInterval
+		}
+		found, waitErr := o.waitForReadingAtOrAfter(ctx, windowEnd, budget, pollInterval)
+		if waitErr != nil {
+			// Wait surfaced a store error — log and continue; the query
+			// below will either succeed and integrate what it sees, or
+			// fail and we propagate that error. This matches "best-effort
+			// within the 5-min deadline" (AC 3.2).
+			slog.Warn("offpeak boundary wait failed; proceeding with integration",
+				"date", date, "error", waitErr)
+		} else if !found {
+			slog.Warn("offpeak boundary wait timed out; integrating with available readings",
+				"date", date, "budget", budget)
+		}
 	}
 
 	readings, err := o.store.QueryReadingsConsistent(ctx, o.cfg.Serial,
@@ -254,7 +263,7 @@ func (o *OffpeakScheduler) handleEnd(ctx context.Context, date string) error {
 	item := buildOffpeakRow(o.cfg.Serial, date, startSnap, energy,
 		startSoc, soc, deltas, o.now().UTC())
 
-	LogOffpeakDrift(date, item)
+	dynamo.LogOffpeakDrift(date, item)
 
 	if err := o.store.WriteOffpeakIfPendingOrAbsent(ctx, item); err != nil {
 		if errors.Is(err, dynamo.ErrOffpeakConditionFailed) {
@@ -317,23 +326,16 @@ func buildOffpeakRow(
 		EndEpv:   end.Epv, EndEInput: end.EInput, EndEOutput: end.EOutput,
 		EndECharge: end.ECharge, EndEDischarge: end.EDischarge, EndEGridCharge: end.EGridCharge,
 		SocEnd:                  socEnd,
-		GridUsageKwh:            roundEnergy(deltas.GridImportKwh),
-		SolarKwh:                roundEnergy(deltas.SolarKwh),
-		BatteryChargeKwh:        roundEnergy(deltas.BatteryChargeKwh),
-		BatteryDischargeKwh:     roundEnergy(deltas.BatteryDischargeKwh),
-		GridExportKwh:           roundEnergy(deltas.GridExportKwh),
+		GridUsageKwh:            derivedstats.RoundEnergy(deltas.GridImportKwh),
+		SolarKwh:                derivedstats.RoundEnergy(deltas.SolarKwh),
+		BatteryChargeKwh:        derivedstats.RoundEnergy(deltas.BatteryChargeKwh),
+		BatteryDischargeKwh:     derivedstats.RoundEnergy(deltas.BatteryDischargeKwh),
+		GridExportKwh:           derivedstats.RoundEnergy(deltas.GridExportKwh),
 		BatteryDeltaPercent:     socEnd - socStart,
 		IntegrationSampleCount:  deltas.SampleCount,
 		IntegrationSkippedPairs: deltas.SkippedPairs,
 		IntegratedAt:            integratedAt.Format(time.RFC3339),
 	}
-}
-
-// roundEnergy rounds a kWh value to two decimal places (AC 7.7). Duplicated
-// from derivedstats (unexported there) and internal/api/compute.go; consolidating
-// is out of scope for T-1341 and would expand the blast radius.
-func roundEnergy(v float64) float64 {
-	return math.Round(v*100) / 100
 }
 
 // captureSnapshot calls GetOneDateEnergy + GetLastPowerData in parallel with retry.
@@ -384,26 +386,25 @@ func (o *OffpeakScheduler) captureSnapshot(ctx context.Context, date string) (*a
 	return nil, 0, fmt.Errorf("off-peak snapshot failed after %d attempts: %w", snapshotRetries, lastErr)
 }
 
-// recoverMidWindow confirms a pending row exists for the given date so the
-// caller knows whether to wait for offpeak-end and run handleEnd, or to
-// log+skip the day. Post T-1341 the method no longer rebuilds in-memory
-// snapshot/SoC state — handleEnd integrates the readings table directly and
-// re-reads the persisted start snapshot only as a diagnostic (Decision 2).
+// recoverMidWindow surfaces the pending row to the caller so handleEnd can
+// use its StartE* fields for diagnostic snapshot population. Post T-1341 the
+// method no longer rebuilds in-memory snapshot/SoC state — handleEnd
+// integrates the readings table directly (Decision 2).
 //
-// Returns (true, nil) when a row with status="pending" exists, (false, nil)
-// when the row is absent or already complete, and (false, nil) on store
-// error (logged at warn, not propagated — same defensive policy as before).
-func (o *OffpeakScheduler) recoverMidWindow(ctx context.Context, date string) (bool, error) {
+// Returns the pending row when one exists with status="pending"; nil when
+// the row is absent, already complete, or the store query fails (logged at
+// warn, not propagated — same defensive policy as before).
+func (o *OffpeakScheduler) recoverMidWindow(ctx context.Context, date string) (*dynamo.OffpeakItem, error) {
 	item, err := o.store.GetOffpeak(ctx, o.cfg.Serial, date)
 	if err != nil {
 		slog.Warn("offpeak mid-window recovery: store query failed", "date", date, "error", err)
-		return false, nil
+		return nil, nil
 	}
 	if item == nil || item.Status != dynamo.OffpeakStatusPending {
-		return false, nil
+		return nil, nil
 	}
 	slog.Info("offpeak: pending record confirmed for mid-window recovery", "date", date)
-	return true, nil
+	return item, nil
 }
 
 // recoverAfterWindow handles the positionAfter restart path (T-1341 AC 3.4):
@@ -412,9 +413,10 @@ func (o *OffpeakScheduler) recoverMidWindow(ctx context.Context, date string) (b
 // waiting another 24 hours for the next start tick. When no row exists or
 // the row is already complete, log+skip — no work to do.
 //
-// The boundary wait is intentionally skipped here: the SSM offpeak-end is
-// already in the past so the at-or-after-boundary reading either exists or
-// never will. handleEnd's wait-loop would burn its budget on a moot probe.
+// The boundary wait is bypassed via handleEnd's skipBoundaryWait parameter:
+// the SSM offpeak-end is already in the past, so the at-or-after-boundary
+// reading either exists or never will. The wait-loop would burn its budget
+// on a moot probe.
 func (o *OffpeakScheduler) recoverAfterWindow(ctx context.Context, date string) error {
 	item, err := o.store.GetOffpeak(ctx, o.cfg.Serial, date)
 	if err != nil {
@@ -429,21 +431,18 @@ func (o *OffpeakScheduler) recoverAfterWindow(ctx context.Context, date string) 
 		slog.Info("offpeak: past window with already-complete row, nothing to recover", "date", date)
 		return nil
 	}
-	// Pending row: re-run the finalisation logic, but skip the boundary wait
-	// since offpeak-end is already in the past. Set the wait budget to zero
-	// so handleEnd's wait helper short-circuits immediately to the integration.
-	prevBudget := o.endWaitBudget
-	o.endWaitBudget = 1 * time.Nanosecond
-	defer func() { o.endWaitBudget = prevBudget }()
-	if err := o.handleEnd(ctx, date); err != nil {
+	if err := o.handleEnd(ctx, date, item, true); err != nil {
 		slog.Warn("offpeak post-window recovery: handleEnd failed", "date", date, "error", err)
 	}
 	return nil
 }
 
-// handleEndOrCleanup attempts the end snapshot; on failure, deletes the pending record.
-func (o *OffpeakScheduler) handleEndOrCleanup(ctx context.Context, date string) {
-	if err := o.handleEnd(ctx, date); err != nil {
+// handleEndOrCleanup attempts the end snapshot; on failure, deletes the
+// pending record. The caller passes the pending row (from recoverMidWindow)
+// when handleStart did not run in this process; otherwise nil and handleEnd
+// uses in-memory state.
+func (o *OffpeakScheduler) handleEndOrCleanup(ctx context.Context, date string, pending *dynamo.OffpeakItem) {
+	if err := o.handleEnd(ctx, date, pending, false); err != nil {
 		slog.Warn("offpeak end failed, deleting pending record", "date", date, "error", err)
 		if delErr := o.store.DeleteOffpeak(ctx, o.cfg.Serial, date); delErr != nil {
 			slog.Error("delete pending offpeak failed", "date", date, "error", delErr)
@@ -483,28 +482,31 @@ func (o *OffpeakScheduler) waitUntil(ctx context.Context, target time.Time) bool
 // timeout, (false, err) on store error. Context cancellation returns
 // (false, ctx.Err()).
 //
-// The probe queries a narrow window around target (target-1s to
-// target+pollInterval+1s) — wide enough to catch the next reading, narrow
-// enough to keep DynamoDB cost negligible across the budget's ~15 probes.
+// The helper uses real wall time (time.Now / time.After) intentionally — it
+// polls live I/O, not orchestration state. The scheduler's injectable o.now
+// governs "what date is it / when should I wake up to do the next thing";
+// this helper's clock governs "have I waited long enough on the DB." Tests
+// that freeze o.now to skip waitUntil still need the wait-helper deadline
+// to advance, so the two clocks are kept distinct on purpose.
+//
+// The probe's upper bound slides forward each iteration to current real time
+// so late-arriving readings beyond the originally-expected window are still
+// caught. The lower bound is fixed at the target — anything older is
+// irrelevant to the at-or-after check.
 func (o *OffpeakScheduler) waitForReadingAtOrAfter(
 	ctx context.Context,
 	target time.Time,
 	budget time.Duration,
 	pollInterval time.Duration,
 ) (bool, error) {
-	// Use a real-time deadline so the wait honours the budget even when the
-	// scheduler's injectable clock is frozen (tests fix o.now to a moment
-	// past the SSM offpeak-end to skip the waitUntil pre-step). time.After
-	// drives real wall time regardless.
 	deadline := time.Now().Add(budget)
 	targetUnix := target.Unix()
 	for {
-		// Query a narrow window around the target: from just before the
-		// boundary to budget seconds past it. Ascending order means the
-		// first reading with ts >= targetUnix indicates the boundary has
-		// been crossed.
 		from := targetUnix - 1
-		to := target.Add(budget).Unix() + 1
+		to := time.Now().Unix() + 1
+		if to < from {
+			to = from
+		}
 		readings, err := o.store.QueryReadingsConsistent(ctx, o.cfg.Serial, from, to)
 		if err != nil {
 			return false, fmt.Errorf("query readings for boundary wait: %w", err)
@@ -514,8 +516,6 @@ func (o *OffpeakScheduler) waitForReadingAtOrAfter(
 				return true, nil
 			}
 		}
-		// No qualifying reading yet. Sleep until the next probe or the
-		// deadline, whichever is sooner.
 		remaining := time.Until(deadline)
 		if remaining <= 0 {
 			return false, nil
@@ -553,41 +553,4 @@ func wallClockTime(day time.Time, loc *time.Location, d time.Duration) time.Time
 	h := int(d.Hours())
 	m := int(d.Minutes()) % 60
 	return time.Date(local.Year(), local.Month(), local.Day(), h, m, 0, 0, loc)
-}
-
-// LogOffpeakDrift emits a structured INFO log entry comparing the snapshot-
-// diff value (endE* − startE*) with the readings-integrated value for each
-// of the five deltas, plus the absolute difference (T-1341 AC 6.1 / 6.2).
-//
-// Output is key=value formatted (slog default for slog.Info) so CloudWatch
-// Logs Insights can parse it with `fields date, driftGrid, …`. No metric or
-// alarm is emitted — alerting is deferred per Decision 6.
-//
-// Called by handleEnd immediately before the conditional write, and by the
-// backfill CLI per row.
-func LogOffpeakDrift(date string, item dynamo.OffpeakItem) {
-	snapGrid := item.EndEInput - item.StartEInput
-	snapSolar := item.EndEpv - item.StartEpv
-	snapCharge := item.EndECharge - item.StartECharge
-	snapDischarge := item.EndEDischarge - item.StartEDischarge
-	snapExport := item.EndEOutput - item.StartEOutput
-
-	slog.Info("offpeak drift",
-		"date", date,
-		"snapshotGrid", snapGrid,
-		"integratedGrid", item.GridUsageKwh,
-		"driftGrid", math.Abs(item.GridUsageKwh-snapGrid),
-		"snapshotSolar", snapSolar,
-		"integratedSolar", item.SolarKwh,
-		"driftSolar", math.Abs(item.SolarKwh-snapSolar),
-		"snapshotCharge", snapCharge,
-		"integratedCharge", item.BatteryChargeKwh,
-		"driftCharge", math.Abs(item.BatteryChargeKwh-snapCharge),
-		"snapshotDischarge", snapDischarge,
-		"integratedDischarge", item.BatteryDischargeKwh,
-		"driftDischarge", math.Abs(item.BatteryDischargeKwh-snapDischarge),
-		"snapshotExport", snapExport,
-		"integratedExport", item.GridExportKwh,
-		"driftExport", math.Abs(item.GridExportKwh-snapExport),
-	)
 }

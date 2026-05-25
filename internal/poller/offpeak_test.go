@@ -1,7 +1,6 @@
 package poller
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"testing"
@@ -143,7 +142,7 @@ func TestOffpeak_StartSucceeds_EndFails_DeletesPending(t *testing.T) {
 
 	// Now make API fail for end capture.
 	mc.oneDateEnergyErr = errors.New("end snapshot fail")
-	err = o.handleEnd(context.Background(), "2026-04-13")
+	err = o.handleEnd(context.Background(), "2026-04-13", nil, false)
 	require.Error(t, err)
 
 	assert.True(t, logContains(buf, "end snapshot fail") || logContains(buf, "3 attempts"))
@@ -158,21 +157,21 @@ func TestOffpeak_StartSucceeds_EndFails_DeletesPending(t *testing.T) {
 // rather than emit a "no pending row" log+skip.
 
 func TestOffpeak_MidWindowRecovery_PendingRecordExists(t *testing.T) {
-	ms := &mockStore{
-		getOffpeakResult: &dynamo.OffpeakItem{
-			SysSn: "TEST123", Date: "2026-04-13", Status: dynamo.OffpeakStatusPending,
-			StartEpv: 1.0, StartEInput: 2.0, StartEOutput: 0.5,
-			StartECharge: 3.0, StartEDischarge: 1.0, StartEGridCharge: 0.5,
-			SocStart: 20.0,
-		},
+	pending := &dynamo.OffpeakItem{
+		SysSn: "TEST123", Date: "2026-04-13", Status: dynamo.OffpeakStatusPending,
+		StartEpv: 1.0, StartEInput: 2.0, StartEOutput: 0.5,
+		StartECharge: 3.0, StartEDischarge: 1.0, StartEGridCharge: 0.5,
+		SocStart: 20.0,
 	}
+	ms := &mockStore{getOffpeakResult: pending}
 	mc := &mockClient{}
 	cfg := testOffpeakCfg()
 	o := &OffpeakScheduler{client: mc, store: ms, cfg: cfg, now: time.Now}
 
-	found, err := o.recoverMidWindow(context.Background(), "2026-04-13")
+	got, err := o.recoverMidWindow(context.Background(), "2026-04-13")
 	require.NoError(t, err)
-	assert.True(t, found, "pending row present → recovery confirms it exists")
+	require.NotNil(t, got, "pending row present → recovery returns it for handleEnd")
+	assert.Equal(t, dynamo.OffpeakStatusPending, got.Status)
 	// startSnapshot/socStart/hasStart are no longer rebuilt from the row —
 	// handleEnd reads readings, not in-memory snapshots.
 	assert.False(t, o.hasStart, "in-memory state must not be rebuilt from pending row")
@@ -185,9 +184,9 @@ func TestOffpeak_MidWindowRecovery_NoRecord(t *testing.T) {
 	cfg := testOffpeakCfg()
 	o := &OffpeakScheduler{client: mc, store: ms, cfg: cfg, now: time.Now}
 
-	found, err := o.recoverMidWindow(context.Background(), "2026-04-13")
+	got, err := o.recoverMidWindow(context.Background(), "2026-04-13")
 	require.NoError(t, err)
-	assert.False(t, found, "no row → caller logs+skips")
+	assert.Nil(t, got, "no row → caller logs+skips")
 }
 
 func TestOffpeak_MidWindowRecovery_CompleteRow(t *testing.T) {
@@ -201,9 +200,9 @@ func TestOffpeak_MidWindowRecovery_CompleteRow(t *testing.T) {
 	cfg := testOffpeakCfg()
 	o := &OffpeakScheduler{store: ms, cfg: cfg, now: time.Now}
 
-	found, err := o.recoverMidWindow(context.Background(), "2026-04-13")
+	got, err := o.recoverMidWindow(context.Background(), "2026-04-13")
 	require.NoError(t, err)
-	assert.False(t, found, "complete row → recovery returns false (no work)")
+	assert.Nil(t, got, "complete row → recovery returns nil (no work)")
 }
 
 func TestOffpeak_MidWindowRecovery_StoreError(t *testing.T) {
@@ -215,9 +214,9 @@ func TestOffpeak_MidWindowRecovery_StoreError(t *testing.T) {
 	cfg := testOffpeakCfg()
 	o := &OffpeakScheduler{client: mc, store: ms, cfg: cfg, now: time.Now}
 
-	found, err := o.recoverMidWindow(context.Background(), "2026-04-13")
+	got, err := o.recoverMidWindow(context.Background(), "2026-04-13")
 	require.NoError(t, err) // Should not return error, just log and skip.
-	assert.False(t, found)
+	assert.Nil(t, got)
 	assert.True(t, logContains(buf, "dynamo query fail"))
 }
 
@@ -415,83 +414,14 @@ func TestWaitForReadingAtOrAfter_StoreErrorPropagates(t *testing.T) {
 	assert.False(t, found)
 }
 
-// --- Tests for LogOffpeakDrift (T-1341 AC 6.1 / 6.2) ---
-
-func TestLogOffpeakDrift_EmitsAllFiveDeltasAtInfo(t *testing.T) {
-	buf, restore := captureLog()
-	defer restore()
-
-	item := dynamo.OffpeakItem{
-		Date:                "2026-05-18",
-		StartEInput:         10.0,
-		EndEInput:           28.95, // snapshotGrid = 18.95
-		StartEpv:            0,
-		EndEpv:              0, // snapshotSolar = 0
-		StartECharge:        5.0,
-		EndECharge:          18.0, // snapshotCharge = 13.0
-		StartEDischarge:     2.0,
-		EndEDischarge:       2.5, // snapshotDischarge = 0.5
-		StartEOutput:        1.0,
-		EndEOutput:          1.5,                    // snapshotExport = 0.5
-		GridUsageKwh:        20.42,                  // drift = |20.42 - 18.95| = 1.47
-		SolarKwh:            0.0,                    // drift = 0
-		BatteryChargeKwh:    12.5,                   // drift = |12.5 - 13.0| = 0.5
-		BatteryDischargeKwh: 0.6,                    // drift = 0.1
-		GridExportKwh:       0.45,                   // drift = 0.05
-		IntegratedAt:        "2026-05-18T14:00:30Z", // unused by LogOffpeakDrift but representative
-	}
-
-	LogOffpeakDrift("2026-05-18", item)
-
-	out := buf.String()
-	// Single log line covering all five deltas.
-	lines := bytes.Count(bytes.TrimSpace(buf.Bytes()), []byte("\n"))
-	assert.Equal(t, 0, lines, "LogOffpeakDrift must emit exactly one log line")
-	// Structured slog output — CloudWatch Logs Insights parses both
-	// JSON-handler and Text-handler output. The keys must be present
-	// either way (the JSON handler quotes them; the Text handler uses
-	// key=value). Check both forms so the assertion is handler-agnostic.
-	for _, key := range []string{
-		"date", "snapshotGrid", "integratedGrid", "driftGrid",
-		"snapshotSolar", "integratedSolar", "driftSolar",
-		"snapshotCharge", "integratedCharge", "driftCharge",
-		"snapshotDischarge", "integratedDischarge", "driftDischarge",
-		"snapshotExport", "integratedExport", "driftExport",
-	} {
-		assert.True(t, bytes.Contains([]byte(out), []byte(key)),
-			"output must contain key %q. got: %s", key, out)
-	}
-	// Spot-check one drift value (allow float formatting slack).
-	assert.Contains(t, out, "1.47", "driftGrid should be ~1.47. got: %s", out)
-	// Date present.
-	assert.Contains(t, out, "2026-05-18")
-	// Level == INFO.
-	assert.Contains(t, out, "INFO", "must be emitted at INFO level (AC 6.2)")
-}
-
-func TestLogOffpeakDrift_ZeroSnapshot_NoDrift(t *testing.T) {
-	// Empty start/end snapshot (e.g. recovery path where no start snapshot
-	// was captured) — drift values match the integrated values.
-	buf, restore := captureLog()
-	defer restore()
-
-	item := dynamo.OffpeakItem{
-		Date:         "2026-05-18",
-		GridUsageKwh: 5.0,
-		SolarKwh:     1.0,
-	}
-	LogOffpeakDrift("2026-05-18", item)
-	out := buf.String()
-	// JSON-handler output uses "driftGrid":5; Text-handler uses driftGrid=5.
-	// Substring check works either way.
-	assert.Contains(t, out, "driftGrid")
-	assert.Contains(t, out, "snapshotGrid")
-	// Drift equals the integrated value when snapshot is zero.
-	assert.Contains(t, out, "5")
-}
+// --- Drift logging integration (T-1341 AC 6.1) ---
+//
+// LogOffpeakDrift itself is unit-tested in internal/dynamo/offpeak_drift_test.go.
+// Here we only verify handleEnd wires it in: the "offpeak drift" line must be
+// emitted, and it must fire before the conditional write so the log is
+// visible even when the write is rejected.
 
 func TestHandleEnd_CallsLogOffpeakDrift(t *testing.T) {
-	// Sanity check that handleEnd emits the drift line before writing.
 	buf, restore := captureLog()
 	defer restore()
 
@@ -503,13 +433,13 @@ func TestHandleEnd_CallsLogOffpeakDrift(t *testing.T) {
 	readings = append(readings, dynamo.ReadingItem{Timestamp: windowEnd.Unix() + 3})
 
 	writes := 0
-	writeSeenAt := -1
+	driftSeenBeforeWrite := false
 	ms := &mockStore{
 		queryReadingsConsistentFunc: func(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
 			return readings, nil
 		},
 		writeOffpeakIfPendingOrAbsentFunc: func(_ context.Context, _ dynamo.OffpeakItem) error {
-			writeSeenAt = bytes.Count(buf.Bytes(), []byte("\n"))
+			driftSeenBeforeWrite = logContains(buf, "offpeak drift")
 			writes++
 			return nil
 		},
@@ -526,17 +456,10 @@ func TestHandleEnd_CallsLogOffpeakDrift(t *testing.T) {
 	o.socStart = 20.0
 	o.hasStart = true
 
-	require.NoError(t, o.handleEnd(context.Background(), "2026-04-13"))
+	require.NoError(t, o.handleEnd(context.Background(), "2026-04-13", nil, false))
 	assert.Equal(t, 1, writes)
-	assert.True(t, logContains(buf, "offpeak drift"),
-		"handleEnd must emit a LogOffpeakDrift line")
-
-	// Drift line must appear before the write log line. The write callback
-	// snapshotted the line count of buf when it fired; the drift line was
-	// emitted earlier and therefore appears at or before that index.
-	driftSeenAt := bytes.Count(bytes.Split(buf.Bytes(), []byte("offpeak drift"))[0], []byte("\n"))
-	assert.LessOrEqual(t, driftSeenAt, writeSeenAt,
-		"drift log must be emitted before the conditional write callback fires")
+	assert.True(t, logContains(buf, "offpeak drift"), "handleEnd must emit a drift line")
+	assert.True(t, driftSeenBeforeWrite, "drift log must be emitted before the conditional write fires")
 }
 
 // --- Tests for handleEnd readings-integration path (T-1341 tasks 9/10) ---
@@ -605,7 +528,7 @@ func TestHandleEnd_HappyPath_IntegratesAndWrites(t *testing.T) {
 	o.socStart = 20.0
 	o.hasStart = true
 
-	err := o.handleEnd(context.Background(), "2026-04-13")
+	err := o.handleEnd(context.Background(), "2026-04-13", nil, false)
 	require.NoError(t, err)
 	assert.Equal(t, 1, writeCalled, "WriteOffpeakIfPendingOrAbsent must be called once")
 	assert.Equal(t, dynamo.OffpeakStatusComplete, captured.Status)
@@ -665,7 +588,7 @@ func TestHandleEnd_BoundaryWaitTimeout_StillWritesRow(t *testing.T) {
 	o.endWaitBudget = 30 * time.Millisecond
 	o.endWaitPollInterval = 10 * time.Millisecond
 
-	err := o.handleEnd(context.Background(), "2026-04-13")
+	err := o.handleEnd(context.Background(), "2026-04-13", nil, false)
 	require.NoError(t, err)
 	assert.Equal(t, 1, writeCalled, "row must be written even when the boundary wait times out")
 	assert.Equal(t, dynamo.OffpeakStatusComplete, captured.Status)
@@ -703,7 +626,7 @@ func TestHandleEnd_ConditionalWriteFails_LogsWarn_NoError(t *testing.T) {
 	o.startSnapshot = &alphaess.EnergyData{}
 	o.hasStart = true
 
-	err := o.handleEnd(context.Background(), "2026-04-13")
+	err := o.handleEnd(context.Background(), "2026-04-13", nil, false)
 	require.NoError(t, err, "conditional-failure must be logged, not returned as error")
 	assert.True(t, logContains(buf, "conditional"), "warn log should mention the conditional failure")
 }
@@ -738,7 +661,7 @@ func TestHandleEnd_EmptyReadings_WritesRowWithZeroDeltas(t *testing.T) {
 	o.startSnapshot = &alphaess.EnergyData{}
 	o.hasStart = true
 
-	err := o.handleEnd(context.Background(), "2026-04-13")
+	err := o.handleEnd(context.Background(), "2026-04-13", nil, false)
 	require.NoError(t, err)
 	assert.Equal(t, 1, writeCalled, "row must still be written when readings are empty")
 	assert.Equal(t, 0.0, captured.GridUsageKwh)
