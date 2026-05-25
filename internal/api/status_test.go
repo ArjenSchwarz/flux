@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ArjenSchwarz/flux/internal/derivedstats"
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/stretchr/testify/assert"
@@ -117,7 +118,7 @@ func TestHandleStatusAllDataPresent(t *testing.T) {
 
 	// Today energy.
 	require.NotNil(t, sr.TodayEnergy)
-	assert.Equal(t, roundEnergy(12.345), sr.TodayEnergy.Epv)
+	assert.Equal(t, derivedstats.RoundEnergy(12.345), sr.TodayEnergy.Epv)
 }
 
 // T-1274 regression: when AlphaESS stops returning fresh data overnight, the
@@ -246,7 +247,7 @@ func TestHandleStatusLow24hNoReadingsToday(t *testing.T) {
 	assert.Nil(t, sr.Battery.Low24h, "low24h should be null when no readings exist since Sydney midnight")
 }
 
-func TestHandleStatusOffpeakPendingNoDailyEnergy(t *testing.T) {
+func TestHandleStatusOffpeakPendingBeforeWindowNoSplit(t *testing.T) {
 	now := fixedNow()
 	mr := &mockReader{
 		getOffpeakFn: func(_ context.Context, _, _ string) (*dynamo.OffpeakItem, error) {
@@ -264,8 +265,8 @@ func TestHandleStatusOffpeakPendingNoDailyEnergy(t *testing.T) {
 	require.NotNil(t, sr.Offpeak)
 	assert.Equal(t, "11:00", sr.Offpeak.WindowStart)
 	assert.Equal(t, "14:00", sr.Offpeak.WindowEnd)
-	assert.Empty(t, sr.Offpeak.Status, "no status when deltas cannot be computed")
-	assert.Nil(t, sr.Offpeak.GridUsageKwh, "delta fields should be null without daily energy")
+	assert.Empty(t, sr.Offpeak.Status, "no status when pending row is before window opens (AC 4.3)")
+	assert.Nil(t, sr.Offpeak.GridUsageKwh, "delta fields should be null before window opens (AC 4.3)")
 	assert.Nil(t, sr.Offpeak.SolarKwh)
 	assert.Nil(t, sr.Offpeak.BatteryChargeKwh)
 	assert.Nil(t, sr.Offpeak.BatteryDischargeKwh)
@@ -274,22 +275,34 @@ func TestHandleStatusOffpeakPendingNoDailyEnergy(t *testing.T) {
 }
 
 func TestHandleStatusOffpeakInProgress(t *testing.T) {
-	now := fixedNow()
+	// 11:30 AEST — 30 minutes into the 11:00-14:00 window. liveOffpeakDeltas
+	// integrates the readings over [11:00, 11:30). Constant 3600 W grid
+	// import → 1.8 kWh.
+	loc := sydneyTZ
+	now := time.Date(2026, 4, 15, 11, 30, 0, 0, loc)
+	opStart := time.Date(2026, 4, 15, 11, 0, 0, 0, loc)
+
+	var readings []dynamo.ReadingItem
+	for ts := opStart.Unix(); ts <= now.Unix(); ts += 10 {
+		readings = append(readings, dynamo.ReadingItem{
+			Timestamp: ts,
+			Pgrid:     3600,
+		})
+	}
+
 	mr := &mockReader{
+		queryReadingsFn: func(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
+			return readings, nil
+		},
 		getOffpeakFn: func(_ context.Context, _, _ string) (*dynamo.OffpeakItem, error) {
+			// StartE* / EndE* values must NOT be read by the live path (AC 5.3).
 			return &dynamo.OffpeakItem{
 				Status:          dynamo.OffpeakStatusPending,
-				StartEpv:        10.0,
-				StartEInput:     2.0,
-				StartEOutput:    0.5,
-				StartECharge:    1.0,
-				StartEDischarge: 3.0,
-			}, nil
-		},
-		getDailyEnergyFn: func(_ context.Context, serial, date string) (*dynamo.DailyEnergyItem, error) {
-			return &dynamo.DailyEnergyItem{
-				SysSn: serial, Date: date,
-				Epv: 12.5, EInput: 3.5, EOutput: 0.6, ECharge: 1.8, EDischarge: 3.4,
+				StartEpv:        999.0,
+				StartEInput:     999.0,
+				StartEOutput:    999.0,
+				StartECharge:    999.0,
+				StartEDischarge: 999.0,
 			}, nil
 		},
 	}
@@ -304,15 +317,15 @@ func TestHandleStatusOffpeakInProgress(t *testing.T) {
 	require.NotNil(t, sr.Offpeak)
 	assert.Equal(t, dynamo.OffpeakStatusPending, sr.Offpeak.Status)
 	require.NotNil(t, sr.Offpeak.GridUsageKwh)
-	assert.InDelta(t, 1.5, *sr.Offpeak.GridUsageKwh, 0.001)
+	assert.InDelta(t, 1.8, *sr.Offpeak.GridUsageKwh, 0.01)
 	require.NotNil(t, sr.Offpeak.SolarKwh)
-	assert.InDelta(t, 2.5, *sr.Offpeak.SolarKwh, 0.001)
+	assert.InDelta(t, 0, *sr.Offpeak.SolarKwh, 0.01)
 	require.NotNil(t, sr.Offpeak.BatteryChargeKwh)
-	assert.InDelta(t, 0.8, *sr.Offpeak.BatteryChargeKwh, 0.001)
+	assert.InDelta(t, 0, *sr.Offpeak.BatteryChargeKwh, 0.01)
 	require.NotNil(t, sr.Offpeak.BatteryDischargeKwh)
-	assert.InDelta(t, 0.4, *sr.Offpeak.BatteryDischargeKwh, 0.001)
+	assert.InDelta(t, 0, *sr.Offpeak.BatteryDischargeKwh, 0.01)
 	require.NotNil(t, sr.Offpeak.GridExportKwh)
-	assert.InDelta(t, 0.1, *sr.Offpeak.GridExportKwh, 0.001)
+	assert.InDelta(t, 0, *sr.Offpeak.GridExportKwh, 0.01)
 	assert.Nil(t, sr.Offpeak.BatteryDeltaPercent, "battery delta percent unavailable mid-window")
 }
 
@@ -471,11 +484,11 @@ func TestHandleStatusSingleReadingWithDaily(t *testing.T) {
 
 	sr := parseStatusResponse(t, resp)
 	require.NotNil(t, sr.TodayEnergy, "should use DailyEnergyItem when < 2 readings")
-	assert.Equal(t, roundEnergy(10.5), sr.TodayEnergy.Epv)
-	assert.Equal(t, roundEnergy(2.3), sr.TodayEnergy.EInput)
-	assert.Equal(t, roundEnergy(1.1), sr.TodayEnergy.EOutput)
-	assert.Equal(t, roundEnergy(4.0), sr.TodayEnergy.ECharge)
-	assert.Equal(t, roundEnergy(3.5), sr.TodayEnergy.EDischarge)
+	assert.Equal(t, derivedstats.RoundEnergy(10.5), sr.TodayEnergy.Epv)
+	assert.Equal(t, derivedstats.RoundEnergy(2.3), sr.TodayEnergy.EInput)
+	assert.Equal(t, derivedstats.RoundEnergy(1.1), sr.TodayEnergy.EOutput)
+	assert.Equal(t, derivedstats.RoundEnergy(4.0), sr.TodayEnergy.ECharge)
+	assert.Equal(t, derivedstats.RoundEnergy(3.5), sr.TodayEnergy.EDischarge)
 }
 
 func TestHandleStatusSystemMissingFallbackCapacity(t *testing.T) {

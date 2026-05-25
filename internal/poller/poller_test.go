@@ -86,6 +86,19 @@ type mockStore struct {
 	systemWritten      int
 	derivedUpdates     int
 
+	// queryReadingsConsistentFunc, when non-nil, overrides the static
+	// queryReadingsResult/Err response on QueryReadingsConsistent. Phase 2
+	// tests use it to simulate readings landing across successive poll
+	// iterations.
+	queryReadingsConsistentFunc func(ctx context.Context, serial string, from, to int64) ([]dynamo.ReadingItem, error)
+
+	// writeOffpeakIfPendingOrAbsentFunc / writeOffpeakIfCompleteFunc, when
+	// non-nil, override the static writeOffpeakErr response for the two
+	// conditional writes. Phase 2 tests use these to capture the written
+	// item and/or vary the error per call.
+	writeOffpeakIfPendingOrAbsentFunc func(ctx context.Context, item dynamo.OffpeakItem) error
+	writeOffpeakIfCompleteFunc        func(ctx context.Context, item dynamo.OffpeakItem) error
+
 	// lastDerived captures the most recent payload passed to
 	// UpdateDailyEnergyDerived so tests can assert on the computed shape.
 	lastDerived *dynamo.DerivedStats
@@ -115,6 +128,24 @@ func (m *mockStore) WriteOffpeak(_ context.Context, _ dynamo.OffpeakItem) error 
 	return m.writeOffpeakErr
 }
 
+// WriteOffpeakIfPendingOrAbsent / WriteOffpeakIfComplete satisfy the Store
+// interface for the offpeak-from-readings feature. When the per-method
+// function override is set, it takes precedence over the static
+// writeOffpeakErr; tests can use the override to capture the persisted item.
+func (m *mockStore) WriteOffpeakIfPendingOrAbsent(ctx context.Context, item dynamo.OffpeakItem) error {
+	if m.writeOffpeakIfPendingOrAbsentFunc != nil {
+		return m.writeOffpeakIfPendingOrAbsentFunc(ctx, item)
+	}
+	return m.writeOffpeakErr
+}
+
+func (m *mockStore) WriteOffpeakIfComplete(ctx context.Context, item dynamo.OffpeakItem) error {
+	if m.writeOffpeakIfCompleteFunc != nil {
+		return m.writeOffpeakIfCompleteFunc(ctx, item)
+	}
+	return m.writeOffpeakErr
+}
+
 func (m *mockStore) DeleteOffpeak(_ context.Context, _, _ string) error {
 	return m.deleteOffpeakErr
 }
@@ -135,6 +166,17 @@ func (m *mockStore) UpdateDailyEnergyDerived(_ context.Context, _, _ string, der
 }
 
 func (m *mockStore) QueryReadings(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
+	return m.queryReadingsResult, m.queryReadingsErr
+}
+
+// QueryReadingsConsistent calls queryReadingsConsistentFunc when set, else
+// returns the static configured result/err. The function override lets Phase
+// 2 tests vary the response across successive polls (e.g. a reading lands
+// after N seconds of waiting).
+func (m *mockStore) QueryReadingsConsistent(ctx context.Context, serial string, from, to int64) ([]dynamo.ReadingItem, error) {
+	if m.queryReadingsConsistentFunc != nil {
+		return m.queryReadingsConsistentFunc(ctx, serial, from, to)
+	}
 	return m.queryReadingsResult, m.queryReadingsErr
 }
 

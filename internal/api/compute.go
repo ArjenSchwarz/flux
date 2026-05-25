@@ -2,6 +2,7 @@ package api
 
 import (
 	"math"
+	"sort"
 	"time"
 
 	"github.com/ArjenSchwarz/flux/internal/derivedstats"
@@ -18,41 +19,23 @@ var sydneyTZ = func() *time.Location {
 	return loc
 }()
 
-// offpeakDeltas resolves the energy deltas for an off-peak record.
+// offpeakDeltas resolves the energy deltas for a complete off-peak record.
+// Pending records return (_, false); callers needing today's in-window value
+// live-integrate via liveOffpeakDeltas.
 //
-// A complete record carries final deltas from the poller. A pending record
-// requires a current snapshot (the running totals for the same day as op)
-// to project against the start snapshot; without one the deltas are
-// unknown. Returns ok=false when the data is not usable.
-func offpeakDeltas(op dynamo.OffpeakItem, current *TodayEnergy) (deltas offpeakDeltaValues, ok bool) {
-	switch op.Status {
-	case dynamo.OffpeakStatusComplete:
-		return offpeakDeltaValues{
-			GridImport:       op.GridUsageKwh,
-			Solar:            op.SolarKwh,
-			BatteryCharge:    op.BatteryChargeKwh,
-			BatteryDischarge: op.BatteryDischargeKwh,
-			GridExport:       op.GridExportKwh,
-		}, true
-	case dynamo.OffpeakStatusPending:
-		if current == nil {
-			return offpeakDeltaValues{}, false
-		}
-		// Energy counters are monotonically non-decreasing, so deltas
-		// should never be negative. They can briefly appear negative if
-		// the running snapshot lags the start snapshot (poller writes the
-		// start record, then a later reconciliation reduces the running
-		// total). Clamp to zero so the dashboard never shows nonsense
-		// like "-0.1 kWh imported".
-		return offpeakDeltaValues{
-			GridImport:       max(0, current.EInput-op.StartEInput),
-			Solar:            max(0, current.Epv-op.StartEpv),
-			BatteryCharge:    max(0, current.ECharge-op.StartECharge),
-			BatteryDischarge: max(0, current.EDischarge-op.StartEDischarge),
-			GridExport:       max(0, current.EOutput-op.StartEOutput),
-		}, true
+// AC 5.3: this function does not read op.StartE* / op.EndE* — those fields
+// exist on the row for operator diagnostics only.
+func offpeakDeltas(op dynamo.OffpeakItem) (offpeakDeltaValues, bool) {
+	if op.Status != dynamo.OffpeakStatusComplete {
+		return offpeakDeltaValues{}, false
 	}
-	return offpeakDeltaValues{}, false
+	return offpeakDeltaValues{
+		GridImport:       op.GridUsageKwh,
+		Solar:            op.SolarKwh,
+		BatteryCharge:    op.BatteryChargeKwh,
+		BatteryDischarge: op.BatteryDischargeKwh,
+		GridExport:       op.GridExportKwh,
+	}, true
 }
 
 // offpeakDeltaValues holds the five energy deltas derived from an off-peak record.
@@ -62,6 +45,63 @@ type offpeakDeltaValues struct {
 	BatteryCharge    float64
 	BatteryDischarge float64
 	GridExport       float64
+}
+
+// liveOffpeakDeltas integrates readings over [offpeakStart, min(now, offpeakEnd))
+// for today's date in Sydney local time and returns the five energy deltas.
+//
+// offpeakStart and offpeakEnd are the raw "HH:MM" config values. Returns
+// (_, false) when the window is unparseable, when now is at or before the
+// window start (AC 4.3 — pre-window behaviour), or when the readings slice
+// does not contain enough usable samples to integrate (AC 1.6).
+//
+// Pure function: no state and no clock except the explicit now parameter. This
+// is the determinism contract that backs AC 4.4's monotonicity guarantee.
+func liveOffpeakDeltas(readings []dynamo.ReadingItem, now time.Time,
+	offpeakStart, offpeakEnd string,
+) (offpeakDeltaValues, bool) {
+	startMin, endMin, parsed := derivedstats.ParseOffpeakWindow(offpeakStart, offpeakEnd)
+	if !parsed {
+		return offpeakDeltaValues{}, false
+	}
+	local := now.In(sydneyTZ)
+	dayStart := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, sydneyTZ)
+	opStart := dayStart.Add(time.Duration(startMin) * time.Minute)
+	opEnd := dayStart.Add(time.Duration(endMin) * time.Minute)
+
+	if !local.After(opStart) {
+		return offpeakDeltaValues{}, false
+	}
+	endTime := opEnd
+	if local.Before(opEnd) {
+		endTime = local
+	}
+
+	// Trim the readings slice to just the bracketed window before the
+	// derivedstats conversion. A /status request hands in ~8640 readings of
+	// which only ~1080 sit inside the off-peak window; converting the rest
+	// to []derivedstats.Reading is wasted work. The window slice keeps one
+	// reading before opStart (for left-edge synthesis) and one reading at or
+	// after endTime (for right-edge synthesis), so bracket integration in
+	// IntegrateOffpeakDeltas observes the same boundary samples it would on
+	// the full slice.
+	windowed := sliceWindow(readings, opStart.Unix(), endTime.Unix())
+
+	deltas, ok := derivedstats.IntegrateOffpeakDeltas(
+		toDerivedReadings(windowed),
+		opStart.Unix(),
+		endTime.Unix(),
+	)
+	if !ok {
+		return offpeakDeltaValues{}, false
+	}
+	return offpeakDeltaValues{
+		GridImport:       deltas.GridImportKwh,
+		Solar:            deltas.SolarKwh,
+		BatteryCharge:    deltas.BatteryChargeKwh,
+		BatteryDischarge: deltas.BatteryDischargeKwh,
+		GridExport:       deltas.GridExportKwh,
+	}, true
 }
 
 // computeCutoffTime estimates when the battery will reach the cutoff percentage
@@ -264,11 +304,11 @@ func computeTodayEnergy(readings []dynamo.ReadingItem, midnightUnix int64) *Toda
 	}
 
 	return &TodayEnergy{
-		Epv:        roundEnergy(epvWh / 1000),
-		EInput:     roundEnergy(eInputWh / 1000),
-		EOutput:    roundEnergy(eOutputWh / 1000),
-		ECharge:    roundEnergy(eChargeWh / 1000),
-		EDischarge: roundEnergy(eDischargeWh / 1000),
+		Epv:        derivedstats.RoundEnergy(epvWh / 1000),
+		EInput:     derivedstats.RoundEnergy(eInputWh / 1000),
+		EOutput:    derivedstats.RoundEnergy(eOutputWh / 1000),
+		ECharge:    derivedstats.RoundEnergy(eChargeWh / 1000),
+		EDischarge: derivedstats.RoundEnergy(eDischargeWh / 1000),
 	}
 }
 
@@ -324,14 +364,46 @@ func startOfDaySydney(now time.Time) time.Time {
 	return time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, sydneyTZ)
 }
 
-// roundEnergy rounds a kWh value to 2 decimal places.
-func roundEnergy(v float64) float64 {
-	return math.Round(v*100) / 100
-}
-
 // roundPower rounds a watts or SOC value to 1 decimal place.
 func roundPower(v float64) float64 {
 	return math.Round(v*10) / 10
+}
+
+// sliceWindow returns the contiguous sub-slice of readings spanning the
+// off-peak window, plus one bracketing reading on each side when present.
+// Readings must be sorted by Timestamp ascending (the DynamoDB sort-key
+// guarantee for /status's today query). The returned slice aliases the input
+// — callers must not mutate it.
+//
+// The conservative bracket extension (one reading before startUnix, one at or
+// after endUnix) preserves derivedstats.IntegrateOffpeakDeltas's left and
+// right edge-synthesis behaviour: it needs a neighbour outside the window to
+// interpolate the boundary points.
+func sliceWindow(readings []dynamo.ReadingItem, startUnix, endUnix int64) []dynamo.ReadingItem {
+	if len(readings) == 0 {
+		return readings
+	}
+	// First index with Timestamp >= startUnix.
+	leftIn := sort.Search(len(readings), func(i int) bool {
+		return readings[i].Timestamp >= startUnix
+	})
+	// First index with Timestamp > endUnix — anything strictly greater can
+	// only contribute as a right-edge bracket of [start, end), so we keep
+	// exactly one (the search returns the cut point; one slot beyond is
+	// outside the half-open window and any further reading is irrelevant).
+	rightOut := sort.Search(len(readings), func(i int) bool {
+		return readings[i].Timestamp > endUnix
+	})
+
+	// Extend one reading to the left for left-edge bracket synthesis.
+	if leftIn > 0 {
+		leftIn--
+	}
+	// Extend one reading to the right for right-edge bracket synthesis.
+	if rightOut < len(readings) {
+		rightOut++
+	}
+	return readings[leftIn:rightOut]
 }
 
 // toDerivedReadings converts a slice of dynamo.ReadingItem to the leaf

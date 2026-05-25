@@ -174,11 +174,11 @@ func (h *Handler) handleDay(ctx context.Context, req events.LambdaFunctionURLReq
 		var storedEnergy *TodayEnergy
 		if deItem != nil {
 			storedEnergy = &TodayEnergy{
-				Epv:        roundEnergy(deItem.Epv),
-				EInput:     roundEnergy(deItem.EInput),
-				EOutput:    roundEnergy(deItem.EOutput),
-				ECharge:    roundEnergy(deItem.ECharge),
-				EDischarge: roundEnergy(deItem.EDischarge),
+				Epv:        derivedstats.RoundEnergy(deItem.Epv),
+				EInput:     derivedstats.RoundEnergy(deItem.EInput),
+				EOutput:    derivedstats.RoundEnergy(deItem.EOutput),
+				ECharge:    derivedstats.RoundEnergy(deItem.ECharge),
+				EDischarge: derivedstats.RoundEnergy(deItem.EDischarge),
 			}
 		}
 		// Reconcile with live readings only for today: stored totals refresh
@@ -197,7 +197,7 @@ func (h *Handler) handleDay(ctx context.Context, req events.LambdaFunctionURLReq
 			summary.EDischarge = floatPtr(energy.EDischarge)
 		}
 		if opItem != nil {
-			if imp, exp, hasSplit := offpeakSplit(*opItem, energy, isToday); hasSplit {
+			if imp, exp, hasSplit := offpeakSplit(*opItem, readings, now, isToday, h.offpeakStart, h.offpeakEnd); hasSplit {
 				summary.OffpeakGridImportKwh = floatPtr(imp)
 				summary.OffpeakGridExportKwh = floatPtr(exp)
 			}

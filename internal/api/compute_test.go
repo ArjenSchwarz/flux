@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ArjenSchwarz/flux/internal/derivedstats"
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -13,11 +14,10 @@ import (
 func TestOffpeakDeltas(t *testing.T) {
 	tests := map[string]struct {
 		op       dynamo.OffpeakItem
-		today    *TodayEnergy
 		wantOK   bool
 		wantVals offpeakDeltaValues
 	}{
-		"complete: pass through final deltas regardless of today": {
+		"complete: pass through final deltas": {
 			op: dynamo.OffpeakItem{
 				Status:              dynamo.OffpeakStatusComplete,
 				GridUsageKwh:        2.5,
@@ -26,70 +26,29 @@ func TestOffpeakDeltas(t *testing.T) {
 				BatteryDischargeKwh: 0.5,
 				GridExportKwh:       0.3,
 			},
-			today:  nil,
 			wantOK: true,
 			wantVals: offpeakDeltaValues{
 				GridImport: 2.5, Solar: 5.0, BatteryCharge: 1.0,
 				BatteryDischarge: 0.5, GridExport: 0.3,
 			},
 		},
-		"pending: project deltas from running totals": {
-			op: dynamo.OffpeakItem{
-				Status:          dynamo.OffpeakStatusPending,
-				StartEpv:        10.0,
-				StartEInput:     2.0,
-				StartEOutput:    0.5,
-				StartECharge:    1.0,
-				StartEDischarge: 3.0,
-			},
-			today: &TodayEnergy{
-				Epv: 12.5, EInput: 3.5, EOutput: 0.6,
-				ECharge: 1.8, EDischarge: 3.4,
-			},
-			wantOK: true,
-			wantVals: offpeakDeltaValues{
-				GridImport: 1.5, Solar: 2.5, BatteryCharge: 0.8,
-				BatteryDischarge: 0.4, GridExport: 0.1,
-			},
-		},
-		"pending without today: not computable": {
-			op: dynamo.OffpeakItem{
-				Status: dynamo.OffpeakStatusPending, StartEInput: 2.0,
-			},
-			today:  nil,
+		"pending: not handled here; caller live-integrates": {
+			op:     dynamo.OffpeakItem{Status: dynamo.OffpeakStatusPending, StartEInput: 2.0},
 			wantOK: false,
-		},
-		"pending with snapshot lag: clamp negatives to zero": {
-			op: dynamo.OffpeakItem{
-				Status:          dynamo.OffpeakStatusPending,
-				StartEpv:        10.0,
-				StartEInput:     5.0,
-				StartEOutput:    1.0,
-				StartECharge:    2.0,
-				StartEDischarge: 3.0,
-			},
-			today: &TodayEnergy{
-				Epv: 9.5, EInput: 4.8, EOutput: 0.9,
-				ECharge: 1.7, EDischarge: 2.9,
-			},
-			wantOK:   true,
-			wantVals: offpeakDeltaValues{},
 		},
 		"unknown status: not computable": {
 			op:     dynamo.OffpeakItem{Status: "future-status"},
-			today:  &TodayEnergy{Epv: 10},
 			wantOK: false,
 		},
 		"empty status: not computable": {
 			op:     dynamo.OffpeakItem{},
-			today:  nil,
 			wantOK: false,
 		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got, ok := offpeakDeltas(tc.op, tc.today)
+			got, ok := offpeakDeltas(tc.op)
 			assert.Equal(t, tc.wantOK, ok)
 			if !ok {
 				return
@@ -101,6 +60,241 @@ func TestOffpeakDeltas(t *testing.T) {
 			assert.InDelta(t, tc.wantVals.GridExport, got.GridExport, 0.001)
 		})
 	}
+}
+
+func TestLiveOffpeakDeltas(t *testing.T) {
+	// Sydney-local 2026-04-15. Window 11:00-14:00 (3h).
+	loc := sydneyTZ
+	dayStart := time.Date(2026, 4, 15, 0, 0, 0, 0, loc)
+	const windowStart = "11:00"
+	const windowEnd = "14:00"
+	opStart := dayStart.Add(11 * time.Hour)
+	opEnd := dayStart.Add(14 * time.Hour)
+
+	// Build a uniform 10-second cadence reading stream covering the full
+	// off-peak window plus a 60s shoulder either side. Constant pgrid = 3600 W
+	// so each second contributes exactly 1 Wh; trivial to assert kWh totals.
+	const pgridW = 3600.0
+	readings := make([]dynamo.ReadingItem, 0)
+	for ts := opStart.Add(-60 * time.Second).Unix(); ts <= opEnd.Add(60*time.Second).Unix(); ts += 10 {
+		readings = append(readings, dynamo.ReadingItem{
+			Timestamp: ts,
+			Pgrid:     pgridW,
+		})
+	}
+
+	tests := map[string]struct {
+		now      time.Time
+		wantOK   bool
+		wantKwh  float64 // expected GridImport for the live window
+		approxKw float64 // tolerance in kWh
+	}{
+		"before window returns false": {
+			now:    opStart.Add(-time.Minute),
+			wantOK: false,
+		},
+		"at window start has no usable interval (zero length)": {
+			now:    opStart,
+			wantOK: false,
+		},
+		"30 minutes into window integrates first 30 minutes": {
+			now:    opStart.Add(30 * time.Minute),
+			wantOK: true,
+			// 3600 W * 1800 s = 6_480_000 J = 1.8 kWh
+			wantKwh:  1.8,
+			approxKw: 0.001,
+		},
+		"at window end integrates the full window": {
+			now:    opEnd,
+			wantOK: true,
+			// 3600 W * 3 h = 10.8 kWh
+			wantKwh:  10.8,
+			approxKw: 0.001,
+		},
+		"after window end caps at window end (full window)": {
+			now:      opEnd.Add(30 * time.Minute),
+			wantOK:   true,
+			wantKwh:  10.8,
+			approxKw: 0.001,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			got, ok := liveOffpeakDeltas(readings, tc.now, windowStart, windowEnd)
+			assert.Equal(t, tc.wantOK, ok)
+			if !ok {
+				return
+			}
+			assert.InDelta(t, tc.wantKwh, got.GridImport, tc.approxKw)
+			// All five deltas non-negative by construction (Decision 8).
+			assert.GreaterOrEqual(t, got.GridImport, 0.0)
+			assert.GreaterOrEqual(t, got.GridExport, 0.0)
+			assert.GreaterOrEqual(t, got.BatteryCharge, 0.0)
+			assert.GreaterOrEqual(t, got.BatteryDischarge, 0.0)
+			assert.GreaterOrEqual(t, got.Solar, 0.0)
+		})
+	}
+}
+
+// TestLiveOffpeakDeltasDeterminism asserts that the same inputs always produce
+// the same outputs — the basis for AC 4.4's monotonicity property test.
+func TestLiveOffpeakDeltasDeterminism(t *testing.T) {
+	loc := sydneyTZ
+	dayStart := time.Date(2026, 4, 15, 0, 0, 0, 0, loc)
+	const windowStart = "11:00"
+	const windowEnd = "14:00"
+	opStart := dayStart.Add(11 * time.Hour)
+
+	readings := []dynamo.ReadingItem{
+		{Timestamp: opStart.Unix(), Pgrid: 1500, Ppv: 200, Pbat: -800},
+		{Timestamp: opStart.Add(10 * time.Second).Unix(), Pgrid: 1600, Ppv: 250, Pbat: -900},
+		{Timestamp: opStart.Add(20 * time.Second).Unix(), Pgrid: 1700, Ppv: 300, Pbat: -1000},
+		{Timestamp: opStart.Add(30 * time.Second).Unix(), Pgrid: 1800, Ppv: 350, Pbat: -1100},
+	}
+
+	now := opStart.Add(time.Hour)
+
+	first, ok1 := liveOffpeakDeltas(readings, now, windowStart, windowEnd)
+	second, ok2 := liveOffpeakDeltas(readings, now, windowStart, windowEnd)
+
+	require.True(t, ok1)
+	require.True(t, ok2)
+	assert.Equal(t, first, second, "same inputs must produce identical outputs")
+}
+
+// TestBuildOffpeakDispatch covers the live-vs-stored dispatch in buildOffpeak.
+// Pending rows live-integrate from the readings slice; complete rows
+// pass through op.GridUsageKwh etc. The op.StartE* fields are never read.
+func TestBuildOffpeakDispatch(t *testing.T) {
+	loc := sydneyTZ
+	// In-window now: 11:30 AEST so 30 minutes of the 11:00-14:00 window have
+	// elapsed. liveOffpeakDeltas integrates over [11:00, 11:30).
+	now := time.Date(2026, 4, 15, 11, 30, 0, 0, loc)
+	opStart := time.Date(2026, 4, 15, 11, 0, 0, 0, loc)
+
+	// 30 minutes of constant 3600W grid import at 10s cadence.
+	// 3600 W * 1800 s = 1.8 kWh.
+	readings := make([]dynamo.ReadingItem, 0)
+	for ts := opStart.Unix(); ts <= now.Unix(); ts += 10 {
+		readings = append(readings, dynamo.ReadingItem{
+			Timestamp: ts,
+			Pgrid:     3600,
+		})
+	}
+
+	t.Run("pending row dispatches to live integration", func(t *testing.T) {
+		op := &dynamo.OffpeakItem{
+			Status: dynamo.OffpeakStatusPending,
+			// StartE* values must NOT be read — if they were, the test would
+			// produce values reflecting these obviously-wrong baselines.
+			StartEpv:        999.0,
+			StartEInput:     999.0,
+			StartEOutput:    999.0,
+			StartECharge:    999.0,
+			StartEDischarge: 999.0,
+		}
+		got := buildOffpeak(op, readings, now, "11:00", "14:00")
+		require.NotNil(t, got)
+		assert.Equal(t, "11:00", got.WindowStart)
+		assert.Equal(t, "14:00", got.WindowEnd)
+		require.NotNil(t, got.GridUsageKwh)
+		assert.InDelta(t, 1.8, *got.GridUsageKwh, 0.01)
+		// BatteryDeltaPercent is only set on complete rows.
+		assert.Nil(t, got.BatteryDeltaPercent)
+	})
+
+	t.Run("complete row passes through stored deltas", func(t *testing.T) {
+		op := &dynamo.OffpeakItem{
+			Status:              dynamo.OffpeakStatusComplete,
+			GridUsageKwh:        2.5,
+			SolarKwh:            5.0,
+			BatteryChargeKwh:    1.0,
+			BatteryDischargeKwh: 0.5,
+			GridExportKwh:       0.3,
+			BatteryDeltaPercent: 12.0,
+		}
+		// Readings would integrate to 1.8 if used — assert we see 2.5 instead,
+		// proving the complete branch reads from the row.
+		got := buildOffpeak(op, readings, now, "11:00", "14:00")
+		require.NotNil(t, got)
+		require.NotNil(t, got.GridUsageKwh)
+		assert.Equal(t, 2.5, *got.GridUsageKwh)
+		require.NotNil(t, got.BatteryDeltaPercent)
+		assert.Equal(t, 12.0, *got.BatteryDeltaPercent)
+	})
+
+	t.Run("nil item returns window only", func(t *testing.T) {
+		got := buildOffpeak(nil, readings, now, "11:00", "14:00")
+		require.NotNil(t, got)
+		assert.Equal(t, "11:00", got.WindowStart)
+		assert.Equal(t, "14:00", got.WindowEnd)
+		assert.Nil(t, got.GridUsageKwh)
+	})
+
+	t.Run("pending row before window returns no deltas (AC 4.3)", func(t *testing.T) {
+		beforeWindow := time.Date(2026, 4, 15, 10, 0, 0, 0, loc)
+		op := &dynamo.OffpeakItem{Status: dynamo.OffpeakStatusPending}
+		got := buildOffpeak(op, readings, beforeWindow, "11:00", "14:00")
+		require.NotNil(t, got)
+		assert.Equal(t, "11:00", got.WindowStart)
+		assert.Empty(t, got.Status, "no status before window opens")
+		assert.Nil(t, got.GridUsageKwh)
+	})
+}
+
+// TestOffpeakSplitDispatch covers the live-vs-stored dispatch in offpeakSplit.
+// The today + pending branch live-integrates; the complete branch (any date)
+// reads from the row. Past-date pending rows still return hasSplit=false.
+func TestOffpeakSplitDispatch(t *testing.T) {
+	loc := sydneyTZ
+	now := time.Date(2026, 4, 15, 11, 30, 0, 0, loc)
+	opStart := time.Date(2026, 4, 15, 11, 0, 0, 0, loc)
+
+	readings := make([]dynamo.ReadingItem, 0)
+	for ts := opStart.Unix(); ts <= now.Unix(); ts += 10 {
+		readings = append(readings, dynamo.ReadingItem{
+			Timestamp: ts,
+			Pgrid:     3600,
+		})
+	}
+
+	t.Run("pending today row dispatches to live integration", func(t *testing.T) {
+		op := dynamo.OffpeakItem{
+			Status:      dynamo.OffpeakStatusPending,
+			StartEInput: 999.0, // must not be read
+		}
+		imp, exp, hasSplit := offpeakSplit(op, readings, now, true, "11:00", "14:00")
+		require.True(t, hasSplit)
+		assert.InDelta(t, 1.8, imp, 0.01)
+		assert.InDelta(t, 0, exp, 0.01)
+	})
+
+	t.Run("complete row passes through deltas regardless of date", func(t *testing.T) {
+		op := dynamo.OffpeakItem{
+			Status:        dynamo.OffpeakStatusComplete,
+			GridUsageKwh:  2.5,
+			GridExportKwh: 0.3,
+		}
+		// Past day (isToday=false) — still a pass-through.
+		imp, exp, hasSplit := offpeakSplit(op, nil, now, false, "11:00", "14:00")
+		require.True(t, hasSplit)
+		assert.Equal(t, 2.5, imp)
+		assert.Equal(t, 0.3, exp)
+	})
+
+	t.Run("pending past-date row has no split", func(t *testing.T) {
+		op := dynamo.OffpeakItem{Status: dynamo.OffpeakStatusPending}
+		_, _, hasSplit := offpeakSplit(op, readings, now, false, "11:00", "14:00")
+		assert.False(t, hasSplit, "pending past-date row indicates poller failure, no split")
+	})
+
+	t.Run("pending today row before offpeak-start returns no split (AC 4.3)", func(t *testing.T) {
+		beforeWindow := time.Date(2026, 4, 15, 10, 0, 0, 0, loc)
+		op := dynamo.OffpeakItem{Status: dynamo.OffpeakStatusPending}
+		_, _, hasSplit := offpeakSplit(op, readings, beforeWindow, true, "11:00", "14:00")
+		assert.False(t, hasSplit)
+	})
 }
 
 func TestComputeCutoffTime(t *testing.T) {
@@ -468,7 +662,7 @@ func TestRoundEnergy(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := roundEnergy(tc.input)
+			got := derivedstats.RoundEnergy(tc.input)
 			assert.InDelta(t, tc.want, got, 1e-9)
 		})
 	}
@@ -541,7 +735,7 @@ func timePtr(t time.Time) *time.Time {
 
 // Verify roundEnergy and roundPower use the correct multipliers.
 func TestRoundingMultipliers(t *testing.T) {
-	assert.InDelta(t, 0.01, 1.0/math.Round(1.0/roundEnergy(0.01)), 1e-9)
+	assert.InDelta(t, 0.01, 1.0/math.Round(1.0/derivedstats.RoundEnergy(0.01)), 1e-9)
 	assert.InDelta(t, 0.1, 1.0/math.Round(1.0/roundPower(0.1)), 1e-9)
 }
 
@@ -572,10 +766,10 @@ func TestComputeTodayEnergy(t *testing.T) {
 			},
 			midnightUnix: midnight,
 			want: &TodayEnergy{
-				Epv:        roundEnergy(1000.0 * 10.0 / 3600.0 / 1000.0),
-				EInput:     roundEnergy(500.0 * 10.0 / 3600.0 / 1000.0),
+				Epv:        derivedstats.RoundEnergy(1000.0 * 10.0 / 3600.0 / 1000.0),
+				EInput:     derivedstats.RoundEnergy(500.0 * 10.0 / 3600.0 / 1000.0),
 				EOutput:    0,
-				ECharge:    roundEnergy(300.0 * 10.0 / 3600.0 / 1000.0),
+				ECharge:    derivedstats.RoundEnergy(300.0 * 10.0 / 3600.0 / 1000.0),
 				EDischarge: 0,
 			},
 		},
@@ -588,11 +782,11 @@ func TestComputeTodayEnergy(t *testing.T) {
 			},
 			midnightUnix: midnight,
 			want: &TodayEnergy{
-				Epv:        roundEnergy(2000.0 * 10.0 / 3600.0 / 1000.0),
-				EInput:     roundEnergy(1000.0 * 10.0 / 3600.0 / 1000.0),
+				Epv:        derivedstats.RoundEnergy(2000.0 * 10.0 / 3600.0 / 1000.0),
+				EInput:     derivedstats.RoundEnergy(1000.0 * 10.0 / 3600.0 / 1000.0),
 				EOutput:    0,
 				ECharge:    0,
-				EDischarge: roundEnergy(500.0 * 10.0 / 3600.0 / 1000.0),
+				EDischarge: derivedstats.RoundEnergy(500.0 * 10.0 / 3600.0 / 1000.0),
 			},
 		},
 		"gap over 60s between readings skips that pair": {
@@ -604,11 +798,11 @@ func TestComputeTodayEnergy(t *testing.T) {
 			},
 			midnightUnix: midnight,
 			want: &TodayEnergy{
-				Epv:        roundEnergy((1000.0*10.0/3600.0 + 3000.0*10.0/3600.0) / 1000.0),
-				EInput:     roundEnergy((500.0*10.0/3600.0 + 1500.0*10.0/3600.0) / 1000.0),
+				Epv:        derivedstats.RoundEnergy((1000.0*10.0/3600.0 + 3000.0*10.0/3600.0) / 1000.0),
+				EInput:     derivedstats.RoundEnergy((500.0*10.0/3600.0 + 1500.0*10.0/3600.0) / 1000.0),
 				EOutput:    0,
 				ECharge:    0,
-				EDischarge: roundEnergy((200.0*10.0/3600.0 + 600.0*10.0/3600.0) / 1000.0),
+				EDischarge: derivedstats.RoundEnergy((200.0*10.0/3600.0 + 600.0*10.0/3600.0) / 1000.0),
 			},
 		},
 		"mixed sign pgrid and pbat maps to correct fields": {
@@ -618,10 +812,10 @@ func TestComputeTodayEnergy(t *testing.T) {
 			},
 			midnightUnix: midnight,
 			want: &TodayEnergy{
-				Epv:        roundEnergy(500.0 * 10.0 / 3600.0 / 1000.0),
+				Epv:        derivedstats.RoundEnergy(500.0 * 10.0 / 3600.0 / 1000.0),
 				EInput:     0,
-				EOutput:    roundEnergy(800.0 * 10.0 / 3600.0 / 1000.0),
-				ECharge:    roundEnergy(400.0 * 10.0 / 3600.0 / 1000.0),
+				EOutput:    derivedstats.RoundEnergy(800.0 * 10.0 / 3600.0 / 1000.0),
+				ECharge:    derivedstats.RoundEnergy(400.0 * 10.0 / 3600.0 / 1000.0),
 				EDischarge: 0,
 			},
 		},
@@ -632,11 +826,11 @@ func TestComputeTodayEnergy(t *testing.T) {
 			},
 			midnightUnix: midnight,
 			want: &TodayEnergy{
-				Epv:        roundEnergy(3600.0 * 10.0 / 3600.0 / 1000.0),
-				EInput:     roundEnergy(1800.0 * 10.0 / 3600.0 / 1000.0),
+				Epv:        derivedstats.RoundEnergy(3600.0 * 10.0 / 3600.0 / 1000.0),
+				EInput:     derivedstats.RoundEnergy(1800.0 * 10.0 / 3600.0 / 1000.0),
 				EOutput:    0,
 				ECharge:    0,
-				EDischarge: roundEnergy(900.0 * 10.0 / 3600.0 / 1000.0),
+				EDischarge: derivedstats.RoundEnergy(900.0 * 10.0 / 3600.0 / 1000.0),
 			},
 		},
 	}

@@ -41,6 +41,21 @@ func (s *LogStore) WriteOffpeak(_ context.Context, item OffpeakItem) error {
 	return nil
 }
 
+// WriteOffpeakIfPendingOrAbsent logs the conditional write in dry-run mode.
+// There is no row state to check; the dry-run is always treated as a
+// successful write (no sentinel error returned).
+func (s *LogStore) WriteOffpeakIfPendingOrAbsent(_ context.Context, item OffpeakItem) error {
+	s.logger.Info("dry-run conditional write", "table", "flux-offpeak", "condition", "absent OR pending", "item", jsonAttr(item))
+	return nil
+}
+
+// WriteOffpeakIfComplete logs the conditional write in dry-run mode.
+// Treated as a successful write (no sentinel error returned).
+func (s *LogStore) WriteOffpeakIfComplete(_ context.Context, item OffpeakItem) error {
+	s.logger.Info("dry-run conditional write", "table", "flux-offpeak", "condition", "complete", "item", jsonAttr(item))
+	return nil
+}
+
 func (s *LogStore) DeleteOffpeak(_ context.Context, serial, date string) error {
 	s.logger.Info("dry-run delete", "table", "flux-offpeak", "sysSn", serial, "date", date)
 	return nil
@@ -65,6 +80,12 @@ func (s *LogStore) UpdateDailyEnergyDerived(_ context.Context, serial, date stri
 // QueryReadings returns an empty slice in dry-run mode — there are no
 // readings to summarise without a real DynamoDB.
 func (s *LogStore) QueryReadings(_ context.Context, _ string, _, _ int64) ([]ReadingItem, error) {
+	return []ReadingItem{}, nil
+}
+
+// QueryReadingsConsistent returns an empty slice in dry-run mode — same as
+// the eventually-consistent path. Provided to satisfy the Store interface.
+func (s *LogStore) QueryReadingsConsistent(_ context.Context, _ string, _, _ int64) ([]ReadingItem, error) {
 	return []ReadingItem{}, nil
 }
 

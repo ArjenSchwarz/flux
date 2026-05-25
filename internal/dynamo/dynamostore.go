@@ -2,6 +2,7 @@ package dynamo
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -142,16 +143,68 @@ func (s *DynamoStore) GetDailyEnergy(ctx context.Context, sysSn, date string) (*
 
 // QueryReadings paginates the flux-readings table for the given serial and
 // timestamp range. Used by the daily-derived-stats summarisation pass.
+// Reads are eventually-consistent — the poller's off-peak window-end pass
+// uses QueryReadingsConsistent instead to avoid missing the at-or-after-
+// boundary reading it has just confirmed.
 func (s *DynamoStore) QueryReadings(ctx context.Context, serial string, from, to int64) ([]ReadingItem, error) {
-	return queryAll[ReadingItem](ctx, s.client, s.tables.Readings, "readings",
-		"sysSn = :serial AND #ts BETWEEN :from AND :to",
-		map[string]string{"#ts": "timestamp"},
-		map[string]types.AttributeValue{
+	return queryReadings(ctx, s.client, s.tables.Readings, serial, from, to, false)
+}
+
+// QueryReadingsConsistent is the strongly-consistent variant used by the
+// off-peak window-end finalisation (AC 3.5). The poller has just observed
+// that a reading at or after offpeak-end exists; a strongly-consistent read
+// guarantees the integration query includes that reading.
+func (s *DynamoStore) QueryReadingsConsistent(ctx context.Context, serial string, from, to int64) ([]ReadingItem, error) {
+	return queryReadings(ctx, s.client, s.tables.Readings, serial, from, to, true)
+}
+
+// queryReadings is the shared body used by QueryReadings and
+// QueryReadingsConsistent. The ScanIndexForward and pagination behaviour
+// stay identical to queryAll's defaults; only ConsistentRead toggles.
+func queryReadings(ctx context.Context, client interface {
+	Query(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error)
+}, table, serial string, from, to int64, consistent bool,
+) ([]ReadingItem, error) {
+	forward := true
+	keyCond := "sysSn = :serial AND #ts BETWEEN :from AND :to"
+	input := &dynamodb.QueryInput{
+		TableName:                &table,
+		KeyConditionExpression:   &keyCond,
+		ExpressionAttributeNames: map[string]string{"#ts": "timestamp"},
+		ExpressionAttributeValues: map[string]types.AttributeValue{
 			":serial": &types.AttributeValueMemberS{Value: serial},
 			":from":   &types.AttributeValueMemberN{Value: fmt.Sprintf("%d", from)},
 			":to":     &types.AttributeValueMemberN{Value: fmt.Sprintf("%d", to)},
 		},
-	)
+		ScanIndexForward: &forward,
+	}
+	if consistent {
+		c := true
+		input.ConsistentRead = &c
+	}
+
+	var items []ReadingItem
+	for {
+		out, err := client.Query(ctx, input)
+		if err != nil {
+			return nil, fmt.Errorf("query readings (table=%s): %w", table, err)
+		}
+		page := make([]ReadingItem, len(out.Items))
+		for i, av := range out.Items {
+			if err := attributevalue.UnmarshalMap(av, &page[i]); err != nil {
+				return nil, fmt.Errorf("unmarshal readings (table=%s): %w", table, err)
+			}
+		}
+		items = append(items, page...)
+		if out.LastEvaluatedKey == nil {
+			break
+		}
+		input.ExclusiveStartKey = out.LastEvaluatedKey
+	}
+	if items == nil {
+		items = []ReadingItem{}
+	}
+	return items, nil
 }
 
 // formatFloat formats a float64 for a DynamoDB N attribute value.
@@ -220,6 +273,64 @@ func (s *DynamoStore) WriteSystem(ctx context.Context, item SystemItem) error {
 
 func (s *DynamoStore) WriteOffpeak(ctx context.Context, item OffpeakItem) error {
 	return s.putItem(ctx, s.tables.Offpeak, item, fmt.Sprintf("offpeak (sysSn=%s, date=%s)", item.SysSn, item.Date))
+}
+
+// WriteOffpeakIfPendingOrAbsent writes the row only when no row exists yet
+// OR the existing row has status="pending". A row with status="complete"
+// causes the put to fail with ErrOffpeakConditionFailed — the poller's
+// callers log+skip per design.md "Concurrent writer guard". The pending-row
+// write from handleStart continues to use unconditional WriteOffpeak.
+func (s *DynamoStore) WriteOffpeakIfPendingOrAbsent(ctx context.Context, item OffpeakItem) error {
+	return s.writeOffpeakConditional(ctx, item,
+		"attribute_not_exists(#status) OR #status = :pending",
+		map[string]types.AttributeValue{
+			":pending": &types.AttributeValueMemberS{Value: OffpeakStatusPending},
+		},
+	)
+}
+
+// WriteOffpeakIfComplete writes the row only when the existing row has
+// status="complete". A missing row OR status="pending" causes the put to
+// fail with ErrOffpeakConditionFailed — protects the backfill CLI against
+// overwriting a row mid-poll.
+func (s *DynamoStore) WriteOffpeakIfComplete(ctx context.Context, item OffpeakItem) error {
+	return s.writeOffpeakConditional(ctx, item,
+		"#status = :complete",
+		map[string]types.AttributeValue{
+			":complete": &types.AttributeValueMemberS{Value: OffpeakStatusComplete},
+		},
+	)
+}
+
+// writeOffpeakConditional marshals + PutItem with the given condition,
+// mapping ConditionalCheckFailedException to ErrOffpeakConditionFailed. The
+// #status alias decouples the expression text from any future rename of the
+// `status` attribute and avoids the DynamoDB reserved-word check.
+func (s *DynamoStore) writeOffpeakConditional(
+	ctx context.Context,
+	item OffpeakItem,
+	condition string,
+	values map[string]types.AttributeValue,
+) error {
+	av, err := attributevalue.MarshalMap(item)
+	if err != nil {
+		return fmt.Errorf("marshal offpeak (sysSn=%s, date=%s): %w", item.SysSn, item.Date, err)
+	}
+	_, err = s.client.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName:                 &s.tables.Offpeak,
+		Item:                      av,
+		ConditionExpression:       &condition,
+		ExpressionAttributeNames:  map[string]string{"#status": "status"},
+		ExpressionAttributeValues: values,
+	})
+	if err != nil {
+		var ccf *types.ConditionalCheckFailedException
+		if errors.As(err, &ccf) {
+			return fmt.Errorf("offpeak (sysSn=%s, date=%s): %w", item.SysSn, item.Date, ErrOffpeakConditionFailed)
+		}
+		return fmt.Errorf("put conditional offpeak (table=%s, sysSn=%s, date=%s): %w", s.tables.Offpeak, item.SysSn, item.Date, err)
+	}
+	return nil
 }
 
 func (s *DynamoStore) DeleteOffpeak(ctx context.Context, serial, date string) error {

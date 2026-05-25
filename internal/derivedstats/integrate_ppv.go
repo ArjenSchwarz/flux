@@ -1,5 +1,8 @@
 package derivedstats
 
+// TODO(offpeak-from-readings): fold into integrate() in integrate_offpeak.go
+// per Decision 9 of specs/offpeak-from-readings/decision_log.md.
+//
 // integratePpv returns the trapezoidal integral of max(ppv, 0) over the
 // half-open interval [startUnix, endUnix), expressed in kWh, plus the count
 // of readings whose Timestamp is in [startUnix, endUnix). Synthesised edge

@@ -156,8 +156,11 @@ func PeakPeriods(readings []Reading, offpeakStart, offpeakEnd string) []PeakPeri
 	return out
 }
 
-// roundEnergy rounds a kWh value to 2 decimal places.
-func roundEnergy(v float64) float64 {
+// RoundEnergy rounds a kWh value to two decimal places (AC 7.7 for off-peak
+// integration; the same policy used across derivedstats, the poller, and the
+// API live path). Exported so the poller and the backfill CLI produce
+// byte-equal persisted values for the same readings.
+func RoundEnergy(v float64) float64 {
 	return math.Round(v*100) / 100
 }
 

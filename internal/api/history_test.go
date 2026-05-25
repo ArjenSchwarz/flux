@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ArjenSchwarz/flux/internal/derivedstats"
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/stretchr/testify/assert"
@@ -57,7 +58,7 @@ func TestHandleHistoryDefaultDays(t *testing.T) {
 	hr := parseHistoryResponse(t, resp)
 	assert.Len(t, hr.Days, 2)
 	assert.Equal(t, "2026-04-10", hr.Days[0].Date)
-	assert.Equal(t, roundEnergy(10.123), hr.Days[0].Epv)
+	assert.Equal(t, derivedstats.RoundEnergy(10.123), hr.Days[0].Epv)
 }
 
 func TestHandleHistoryExplicitDays(t *testing.T) {
@@ -184,11 +185,11 @@ func TestHandleHistoryEnergyRounding(t *testing.T) {
 
 	hr := parseHistoryResponse(t, resp)
 	require.Len(t, hr.Days, 1)
-	assert.Equal(t, roundEnergy(10.126), hr.Days[0].Epv)
-	assert.Equal(t, roundEnergy(3.455), hr.Days[0].EInput)
-	assert.Equal(t, roundEnergy(1.234), hr.Days[0].EOutput)
-	assert.Equal(t, roundEnergy(5.675), hr.Days[0].ECharge)
-	assert.Equal(t, roundEnergy(4.565), hr.Days[0].EDischarge)
+	assert.Equal(t, derivedstats.RoundEnergy(10.126), hr.Days[0].Epv)
+	assert.Equal(t, derivedstats.RoundEnergy(3.455), hr.Days[0].EInput)
+	assert.Equal(t, derivedstats.RoundEnergy(1.234), hr.Days[0].EOutput)
+	assert.Equal(t, derivedstats.RoundEnergy(5.675), hr.Days[0].ECharge)
+	assert.Equal(t, derivedstats.RoundEnergy(4.565), hr.Days[0].EDischarge)
 }
 
 // TestHandleHistoryReconcilesTodaysRow reproduces T-828: when today is part of
@@ -243,16 +244,32 @@ func TestHandleHistoryReconcilesTodaysRow(t *testing.T) {
 
 // TestHandleHistoryOffpeakSplit verifies the per-day off-peak grid split:
 // complete records pass through final deltas, today's pending record is
-// projected forward against live totals, and days without an off-peak record
-// (or with a stale pending record from a poller failure) report no split.
+// live-integrated from readings, and days without an off-peak record (or
+// with a stale pending record from a poller failure) report no split.
 func TestHandleHistoryOffpeakSplit(t *testing.T) {
 	loc, _ := time.LoadLocation("Australia/Sydney")
-	now := fixedNow()
+	// 11:30 AEST — 30 minutes into the 11:00-14:00 off-peak window so
+	// today's pending row live-integrates over [11:00, 11:30).
+	now := time.Date(2026, 4, 15, 11, 30, 0, 0, loc)
 	today := now.In(loc).Format("2006-01-02")
 	yesterday := now.AddDate(0, 0, -1).In(loc).Format("2006-01-02")
 	twoDaysAgo := now.AddDate(0, 0, -2).In(loc).Format("2006-01-02")
 
+	// Synthetic readings: constant 3600 W grid import across [11:00, 11:30)
+	// → 1.8 kWh integrated import; zero export. Cadence 10s.
+	opStart := time.Date(2026, 4, 15, 11, 0, 0, 0, loc)
+	var readings []dynamo.ReadingItem
+	for ts := opStart.Unix(); ts <= now.Unix(); ts += 10 {
+		readings = append(readings, dynamo.ReadingItem{
+			Timestamp: ts,
+			Pgrid:     3600,
+		})
+	}
+
 	mr := &mockReader{
+		queryReadingsFn: func(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
+			return readings, nil
+		},
 		queryDailyEnergyFn: func(_ context.Context, _, _, _ string) ([]dynamo.DailyEnergyItem, error) {
 			return []dynamo.DailyEnergyItem{
 				{Date: twoDaysAgo, Epv: 15, EInput: 4, EOutput: 1, ECharge: 8, EDischarge: 7},
@@ -272,10 +289,11 @@ func TestHandleHistoryOffpeakSplit(t *testing.T) {
 					Date: twoDaysAgo, Status: dynamo.OffpeakStatusPending,
 					StartEInput: 1.0, StartEOutput: 0.5,
 				},
-				// Pending record for today — project against live totals.
+				// Pending today — live-integrated from the readings slice;
+				// StartE* values must NOT be read (AC 5.3).
 				{
 					Date: today, Status: dynamo.OffpeakStatusPending,
-					StartEInput: 1.7, StartEOutput: 0.4,
+					StartEInput: 999.0, StartEOutput: 999.0,
 				},
 			}, nil
 		},
@@ -303,12 +321,12 @@ func TestHandleHistoryOffpeakSplit(t *testing.T) {
 	require.NotNil(t, hr.Days[1].OffpeakGridExportKwh)
 	assert.InDelta(t, 0.6, *hr.Days[1].OffpeakGridExportKwh, 0.001)
 
-	// today: pending record projected against running totals.
+	// today: pending record live-integrated from readings → 1.8 kWh import.
 	assert.Equal(t, today, hr.Days[2].Date)
 	require.NotNil(t, hr.Days[2].OffpeakGridImportKwh)
-	assert.InDelta(t, 1.5, *hr.Days[2].OffpeakGridImportKwh, 0.001)
+	assert.InDelta(t, 1.8, *hr.Days[2].OffpeakGridImportKwh, 0.01)
 	require.NotNil(t, hr.Days[2].OffpeakGridExportKwh)
-	assert.InDelta(t, 0.3, *hr.Days[2].OffpeakGridExportKwh, 0.001)
+	assert.InDelta(t, 0.0, *hr.Days[2].OffpeakGridExportKwh, 0.01)
 }
 
 func TestHandleHistoryDynamoDBError(t *testing.T) {
