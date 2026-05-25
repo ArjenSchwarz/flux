@@ -165,8 +165,7 @@ func TestOffpeak_MidWindowRecovery_PendingRecordExists(t *testing.T) {
 	cfg := testOffpeakCfg()
 	o := &OffpeakScheduler{client: mc, store: ms, cfg: cfg, now: time.Now}
 
-	got, err := o.recoverMidWindow(context.Background(), "2026-04-13")
-	require.NoError(t, err)
+	got := o.recoverMidWindow(context.Background(), "2026-04-13")
 	require.NotNil(t, got, "pending row present → recovery returns it for handleEnd")
 	assert.Equal(t, dynamo.OffpeakStatusPending, got.Status)
 	// startSnapshot/socStart are no longer rebuilt from the row —
@@ -180,8 +179,7 @@ func TestOffpeak_MidWindowRecovery_NoRecord(t *testing.T) {
 	cfg := testOffpeakCfg()
 	o := &OffpeakScheduler{client: mc, store: ms, cfg: cfg, now: time.Now}
 
-	got, err := o.recoverMidWindow(context.Background(), "2026-04-13")
-	require.NoError(t, err)
+	got := o.recoverMidWindow(context.Background(), "2026-04-13")
 	assert.Nil(t, got, "no row → caller logs+skips")
 }
 
@@ -196,8 +194,7 @@ func TestOffpeak_MidWindowRecovery_CompleteRow(t *testing.T) {
 	cfg := testOffpeakCfg()
 	o := &OffpeakScheduler{store: ms, cfg: cfg, now: time.Now}
 
-	got, err := o.recoverMidWindow(context.Background(), "2026-04-13")
-	require.NoError(t, err)
+	got := o.recoverMidWindow(context.Background(), "2026-04-13")
 	assert.Nil(t, got, "complete row → recovery returns nil (no work)")
 }
 
@@ -210,8 +207,7 @@ func TestOffpeak_MidWindowRecovery_StoreError(t *testing.T) {
 	cfg := testOffpeakCfg()
 	o := &OffpeakScheduler{client: mc, store: ms, cfg: cfg, now: time.Now}
 
-	got, err := o.recoverMidWindow(context.Background(), "2026-04-13")
-	require.NoError(t, err) // Should not return error, just log and skip.
+	got := o.recoverMidWindow(context.Background(), "2026-04-13")
 	assert.Nil(t, got)
 	assert.True(t, logContains(buf, "dynamo query fail"))
 }

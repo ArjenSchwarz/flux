@@ -106,7 +106,7 @@ func (o *OffpeakScheduler) Run(loopCtx, drainCtx context.Context, wg *sync.WaitG
 		// T-1341: recovery surfaces the pending row to the caller. In-memory
 		// state isn't rebuilt — handleEnd reads readings directly and uses
 		// the pending row's StartE* fields for diagnostic snapshot population.
-		pending, _ := o.recoverMidWindow(drainCtx, date)
+		pending := o.recoverMidWindow(drainCtx, date)
 		if pending != nil {
 			if !o.waitUntil(loopCtx, wallClockTime(now, o.cfg.Location, o.cfg.OffpeakEnd)) {
 				return
@@ -405,19 +405,21 @@ func (o *OffpeakScheduler) captureSnapshot(ctx context.Context, date string) (*a
 // integrates the readings table directly (Decision 2).
 //
 // Returns the pending row when one exists with status="pending"; nil when
-// the row is absent, already complete, or the store query fails (logged at
-// warn, not propagated — same defensive policy as before).
-func (o *OffpeakScheduler) recoverMidWindow(ctx context.Context, date string) (*dynamo.OffpeakItem, error) {
+// the row is absent, already complete, or the store query fails. Store
+// failures are logged at Error (the day's off-peak row will be skipped
+// downstream) but not propagated — the scheduler keeps running for the
+// next day.
+func (o *OffpeakScheduler) recoverMidWindow(ctx context.Context, date string) *dynamo.OffpeakItem {
 	item, err := o.store.GetOffpeak(ctx, o.cfg.Serial, date)
 	if err != nil {
-		slog.Warn("offpeak mid-window recovery: store query failed", "date", date, "error", err)
-		return nil, nil
+		slog.Error("offpeak mid-window recovery: store query failed", "date", date, "error", err)
+		return nil
 	}
 	if item == nil || item.Status != dynamo.OffpeakStatusPending {
-		return nil, nil
+		return nil
 	}
 	slog.Info("offpeak: pending record confirmed for mid-window recovery", "date", date)
-	return item, nil
+	return item
 }
 
 // recoverAfterWindow handles the positionAfter restart path (T-1341 AC 3.4):
