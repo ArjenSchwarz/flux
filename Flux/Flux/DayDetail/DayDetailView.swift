@@ -79,9 +79,9 @@ struct DayDetailView: View {
         .navigationTitle(usesRegularLayout ? pageTitle : "")
         #endif
         #if os(macOS)
-        // Date in the window title (AC 4.2/4.3); chevrons in the trailing
-        // toolbar group via DayDetailMacToolbar (AC 4.4/4.5). No
-        // `.keyboardShortcut` here — `.onKeyPress` below covers ←/→.
+        // Date in the window title; chevrons in the trailing toolbar
+        // group via DayDetailMacToolbar. No `.keyboardShortcut` here —
+        // `.onKeyPress` below covers ←/→.
         .navigationTitle(macPageTitle)
         .toolbar { DayDetailMacToolbar(viewModel: viewModel) }
         #endif
@@ -163,8 +163,8 @@ struct DayDetailView: View {
     private var dayDetailContentRegular: some View {
         // iPad sidebar shell: navigation bar carries the title and gear,
         // so skip the FluxScreenHeader / legacy eyebrow+title block. macOS
-        // surfaces the prev/next chevrons in the window toolbar (T-1342
-        // AC 4.1, 4.4) instead of the in-content mustache.
+        // surfaces the prev/next chevrons in the window toolbar instead
+        // of the in-content mustache.
         VStack(alignment: .leading, spacing: FluxTheme.Metrics.panelGap) {
             #if !os(macOS)
             DayNavigationHeader(viewModel: viewModel)
@@ -367,7 +367,7 @@ struct DayDetailView: View {
     #if os(macOS)
     // `internal` so unit tests can read it directly — SwiftUI toolbars
     // aren't inspectable, so the test covers the formatter contract.
-    // Uses `DayDetailEyebrow.full` per Decision 10 / AC 4.2.
+    // Uses `DayDetailEyebrow.full` per Decision 10.
     var macPageTitle: String {
         if viewModel.isToday { return "Today" }
         guard let parsedDate = DateFormatting.parseDayDate(viewModel.date) else {

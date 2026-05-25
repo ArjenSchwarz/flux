@@ -52,8 +52,8 @@ struct DashboardView: View {
             .navigationTitle(usesRegularLayout ? "Dashboard" : "")
         #endif
         #if os(macOS)
-            // legacyHeader is dropped from the adaptive body on macOS
-            // (T-1342 AC 3.1/3.2); the window title carries "Dashboard".
+            // legacyHeader is dropped from the adaptive body on macOS;
+            // the window title carries "Dashboard".
             .navigationTitle("Dashboard")
         #endif
         #if os(macOS)

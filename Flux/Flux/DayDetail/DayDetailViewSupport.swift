@@ -191,7 +191,7 @@ struct DayDetailErrorPanel: View {
 /// chevrons that drive `viewModel.navigatePrevious()` /
 /// `viewModel.navigateNext()`. Extracted from `DayDetailView` to keep that
 /// file under the SwiftLint file-length cap. The next-day button mirrors
-/// `DayNavigationHeader`'s `isToday`-disabled behavior (T-1342 AC 4.6).
+/// `DayNavigationHeader`'s `isToday`-disabled behavior.
 struct DayDetailMacToolbar: ToolbarContent {
     let viewModel: DayDetailViewModel
 
