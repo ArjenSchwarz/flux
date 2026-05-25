@@ -254,5 +254,6 @@ Activate the iPad adaptive multi-column body (shipped T-1150) on macOS by flippi
 
 - [decision_log.md](better-macos-interface/decision_log.md)
 - [design.md](better-macos-interface/design.md)
+- [implementation.md](better-macos-interface/implementation.md)
 - [requirements.md](better-macos-interface/requirements.md)
 - [tasks.md](better-macos-interface/tasks.md)
