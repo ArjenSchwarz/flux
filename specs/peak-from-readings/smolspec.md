@@ -53,6 +53,13 @@ Peak Δ ≈ −offpeak Δ with gridImport Δ ≈ 0 → bucketing artifact, not a
 - Add optional `peakGridImportKwh: Double?` to `DayEnergy` and `CachedDayEnergy` (Flux/Flux/Models/CachedDayEnergy.swift:12-14 alongside the off-peak fields).
 - Update `HistoryDerivedState.gridEntry` (Flux/Flux/History/HistoryDerivedState.swift:228-239): when `day.peakGridImportKwh` is non-nil, use it directly; otherwise keep the existing `max(0, day.eInput − offpeakImport)`.
 
+### Day Detail consumption (Decision 8)
+
+- Add optional `peakGridImportKwh: Double?` to the FluxCore `DaySummary` (Flux/Packages/FluxCore/Sources/FluxCore/Models/APIModels.swift) so the `/day` field (already emitted by the Go `DaySummary`) is decoded.
+- `SummaryBlock`'s "Grid in (peak)" row prefers the server value when present and falls back to the existing `max(0, gridImport − offpeak)` residual otherwise. The Dashboard path (`/status`, today) has no server peak, so it is unaffected (falls back). `ComparisonSnapshot.peakGridImport` (the Compare overlay) prefers the comparison day's server value with the same fallback.
+- `DayCosts` (Flux/Packages/FluxCore/Sources/FluxCore/Pricing/DayCosts.swift) prices peak from the server `peakGridImportKwh` when present, falling back to the residual; off-peak savings and the "all peak when off-peak nil" rule (daily-costs Decision 23) are unchanged.
+- Scope is past days only: today's `/day` has no stored peak (Decision 4), so Day Detail for today falls back to the residual exactly as before.
+
 ### Out of scope
 
 - Only the `peakGridImportKwh` channel is added. Peak versions of solar / export / battery charge / battery discharge are deliberately not computed (see Decision 5).
@@ -61,7 +68,8 @@ Peak Δ ≈ −offpeak Δ with gridImport Δ ≈ 0 → bucketing artifact, not a
 - No persistence beyond the 30-day `flux-readings` TTL; rows older than 30 days at deploy never get peak populated (see Decision 4).
 - No change to `derivedstats.PeakPeriods` (top-3 high-load clusters — unrelated to peak grid import).
 - No change to AlphaESS polling cadence, API authentication, or response envelope shape.
-- No display changes beyond switching `gridEntry`'s source field; chart axes, colours, and labels stay as they are.
+- iOS display changes are limited to the *source* of the peak grid import number on History (`gridEntry`) and Day Detail (the "Grid in (peak)" summary row, its Compare overlay, and the peak-imports cost line). Chart axes, colours, labels, and row layout stay as they are.
+- The Dashboard ("today so far") is not changed: today has no server peak (Decision 4), so it keeps the residual. Whether today's residual warrants a real-time peak path is deferred to a separate spec (it requires reversing Decision 4 and adding `/status` surface).
 
 ## Risks and Assumptions
 

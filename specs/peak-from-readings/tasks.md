@@ -48,3 +48,14 @@ references:
   - Verify with tests asserting the server value is used when present and the residual is used when the field is nil.
   - Blocked-by: 1am185a (The /day and /history responses expose peakGridImportKwh)
   - References: specs/peak-from-readings/smolspec.md
+
+- [x] 7. Day Detail Power summary shows server peak grid import with residual fallback
+  - Decode the existing /day peakGridImportKwh on the FluxCore DaySummary, and have the Day Detail Power summary row (SummaryBlock 'Grid in (peak)') and its Compare overlay (ComparisonSnapshot) prefer the server value, falling back to max(0, eInput − offpeak) when absent.
+  - The Dashboard (/status, today) has no server peak and must keep its current residual behaviour unchanged. Past days only; today falls back (Decision 4).
+  - Verify with tests: DaySummary decodes the field (present / omitted); ComparisonSnapshot prefers server value and falls back when nil. No display/layout changes beyond the peak number source.
+  - References: specs/peak-from-readings/smolspec.md, specs/peak-from-readings/decision_log.md
+
+- [x] 8. Day Detail peak-imports cost uses server peak grid import with residual fallback
+  - DayCosts prices peak from the server peakGridImportKwh when present, falling back to the residual; off-peak savings and the all-peak-when-offpeak-nil rule (daily-costs Decision 23) are unchanged. The DayEnergy.costs forwarder passes the field into the transient DaySummary it builds.
+  - Verify with tests: peak cost uses the server value when present and the residual when nil; off-peak savings unchanged.
+  - References: specs/peak-from-readings/smolspec.md, specs/peak-from-readings/decision_log.md

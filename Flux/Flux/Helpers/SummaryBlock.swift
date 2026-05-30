@@ -12,6 +12,11 @@ struct SummaryBlock: View {
     let gridImport: Double?
     let gridExport: Double?
     let offpeakGridImport: Double?
+    /// Server-computed peak grid import (peak-from-readings). When non-nil the
+    /// "Grid in (peak)" row uses it directly; when nil the row falls back to
+    /// the `gridImport − offpeak` residual. Today / Dashboard has no server
+    /// value and stays on the residual.
+    var serverPeakGridImport: Double?
     let batteryCharge: Double?
     let batteryDischarge: Double?
     var showsBatteryCycle: Bool = true
@@ -171,6 +176,7 @@ struct SummaryBlock: View {
     }
 
     private var peakGridImport: Double? {
+        if let serverPeakGridImport { return serverPeakGridImport }
         guard let total = gridImport else { return nil }
         guard let offpeak = offpeakGridImport else { return total }
         return max(0, total - offpeak)
@@ -272,6 +278,7 @@ extension SummaryBlock {
             gridImport: summary?.eInput,
             gridExport: summary?.eOutput,
             offpeakGridImport: offpeakGridImport,
+            serverPeakGridImport: summary?.peakGridImportKwh,
             batteryCharge: summary?.eCharge,
             batteryDischarge: summary?.eDischarge,
             showsBatteryCycle: showsBatteryCycle,
@@ -292,6 +299,7 @@ extension SummaryBlock {
             gridImport: day.eInput,
             gridExport: day.eOutput,
             offpeakGridImport: day.offpeakGridImportKwh,
+            serverPeakGridImport: day.peakGridImportKwh,
             batteryCharge: day.eCharge,
             batteryDischarge: day.eDischarge,
             showsBatteryCycle: showsBatteryCycle

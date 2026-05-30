@@ -259,3 +259,46 @@ One operator command for both readings-derived grid quantities over the same day
 `cmd/backfill-offpeak` → `cmd/backfill-grid` (package, docs, tests). Reuses `derivedstats.IntegratePeakGridImportKwh`, `dynamo.UpdateDailyEnergyDerived`, and `dynamo.GetDailyEnergy`. The CLI gains a `--table-daily-energy` flag.
 
 ---
+
+## Decision 8: Extend iOS consumption to Day Detail (past days); defer the Dashboard
+
+**Date**: 2026-05-30
+**Status**: accepted
+
+### Context
+
+The original iOS scope was History only. Day Detail (the "Grid in (peak)" summary row, its Compare overlay, and the peak-imports cost line) and the Dashboard still compute peak as the `eInput − offpeak` residual — the exact method this spec replaced for History — so they carry the same inaccuracy.
+
+The `/day` response *already* carries `peakGridImportKwh` (the Go `DaySummary` emits it; the Swift `DaySummary` simply did not decode it), so Day Detail for past days needs no backend change — only client wiring.
+
+The Dashboard is different: it always shows today via `/status`, and Decision 4 deliberately excluded a real-time peak path for today. A verification pass on today's `/status` confirmed the residual there is *conditionally* inaccurate: `eInput` is `max(stored, computed)` (`reconcileEnergy`) while off-peak is always a trapezoidal integration, so when the stored AlphaESS counter wins the reconcile the off-peak sampling loss lands on the peak residual (the same pathology as history); when the live-integrated `eInput` wins, both sides use the same method and the error largely cancels. Which side wins varies through the day, so today's Dashboard peak is not reliably accurate, but making it so requires reversing Decision 4 and adding `/status` surface.
+
+### Decision
+
+Extend this spec's iOS consumption to Day Detail for past days: decode `peakGridImportKwh` on the Swift `DaySummary`, and have `SummaryBlock`, `ComparisonSnapshot`, and `DayCosts` prefer the server value with the existing residual fallback. Leave the Dashboard unchanged here; treat real-time today peak as a separate future spec.
+
+### Rationale
+
+Day Detail is a one-field, client-only change reusing data already on the wire and the same `?? residual` pattern already shipped for History — low risk, high consistency. The Dashboard needs a backend design change (real-time integration, a new `/status` field, partial-evening-window semantics) that is out of proportion to a smolspec and reverses an accepted decision, so it belongs in its own spec where those trade-offs can be weighed against the bounded, self-cancelling-in-part error.
+
+### Alternatives Considered
+
+- **Do Day Detail and the Dashboard together now.** Rejected: the Dashboard requires reversing Decision 4 and new API surface — a full design change, not a wiring change; bundling them would blow smolspec scope and muddy a reviewed branch.
+- **Day Detail as its own follow-up spec.** Rejected (per user direction): it is the same field and pattern as History, so it sits naturally in this spec; a separate spec would be ceremony for a ~one-field change.
+- **Leave Day Detail on the residual.** Rejected: the user explicitly wants Day Detail accurate, and the data is already available.
+
+### Consequences
+
+**Positive:**
+- Day Detail's peak row, Compare overlay, and peak cost become accurate for past days with no backend change.
+- DayCosts peak pricing stops inheriting the residual error.
+
+**Negative:**
+- Peak and off-peak no longer sum exactly to `eInput` on the Day Detail rows (they differ by ~1.5%, the shared sampling artifact); the two rows are each individually more accurate but no longer reconcile to the total. Operator/observer-visible only.
+- The Dashboard remains on the residual, so today's peak can still be off until a future spec addresses it — an intentional, documented gap.
+
+### Impact
+
+FluxCore `DaySummary` (`APIModels.swift`), `DayCosts.swift`; app-side `SummaryBlock.swift`, `ComparisonSnapshot.swift`. No backend or `/status` change. `DayEnergy.costs` forwarder must pass the new field into the transient `DaySummary` it builds.
+
+---

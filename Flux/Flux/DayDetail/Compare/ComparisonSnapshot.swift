@@ -13,6 +13,11 @@ struct ComparisonSnapshot: Sendable, Equatable {
     let batteryCharge: Double?
     let batteryDischarge: Double?
     let offpeakGridImport: Double?
+    /// Server-computed peak grid import for the comparison day (past days).
+    /// nil for today or gate-failed days → the computed `peakGridImport` falls
+    /// back to the residual. `var` so the memberwise initialiser treats it as
+    /// optional (omittable) for existing call sites.
+    var peakGridImportServer: Double?
     let dailyUsage: DailyUsage?
 
     var houseUsed: Double? {
@@ -25,11 +30,13 @@ struct ComparisonSnapshot: Sendable, Equatable {
         )
     }
 
-    /// Production data always carries the off-peak split (Decision 10), but
-    /// the wire type is optional, so the guard is defensive: when the field
-    /// is unexpectedly nil this returns nil and the per-row fallback handles
-    /// the Grid in (peak) row.
+    /// Prefers the server-computed peak (peak-from-readings Decision 8) for the
+    /// comparison day. Production data always carries the off-peak split
+    /// (Decision 10), but the wire type is optional, so the residual guard is
+    /// defensive: when both are unexpectedly nil this returns nil and the
+    /// per-row fallback handles the Grid in (peak) row.
     var peakGridImport: Double? {
+        if let peakGridImportServer { return peakGridImportServer }
         guard let gridImport, let offpeakGridImport else { return nil }
         return max(0, gridImport - offpeakGridImport)
     }
@@ -52,6 +59,7 @@ struct ComparisonSnapshot: Sendable, Equatable {
             batteryCharge: response.summary?.eCharge,
             batteryDischarge: response.summary?.eDischarge,
             offpeakGridImport: response.summary?.offpeakGridImportKwh,
+            peakGridImportServer: response.summary?.peakGridImportKwh,
             dailyUsage: response.dailyUsage
         )
     }

@@ -389,6 +389,10 @@ public struct DaySummary: Codable, Sendable {
     public let socLowTime: String?
     public let offpeakGridImportKwh: Double?
     public let offpeakGridExportKwh: Double?
+    /// Server-computed peak grid import for past days (peak-from-readings).
+    /// Absent for today and for days the integration's usability gate failed;
+    /// callers fall back to the `eInput − offpeakGridImportKwh` residual.
+    public let peakGridImportKwh: Double?
 
     public init(
         epv: Double?,
@@ -399,7 +403,8 @@ public struct DaySummary: Codable, Sendable {
         socLow: Double?,
         socLowTime: String?,
         offpeakGridImportKwh: Double? = nil,
-        offpeakGridExportKwh: Double? = nil
+        offpeakGridExportKwh: Double? = nil,
+        peakGridImportKwh: Double? = nil
     ) {
         self.epv = epv
         self.eInput = eInput
@@ -410,6 +415,7 @@ public struct DaySummary: Codable, Sendable {
         self.socLowTime = socLowTime
         self.offpeakGridImportKwh = offpeakGridImportKwh
         self.offpeakGridExportKwh = offpeakGridExportKwh
+        self.peakGridImportKwh = peakGridImportKwh
     }
 }
 
