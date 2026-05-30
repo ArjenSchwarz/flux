@@ -129,7 +129,6 @@ func TestIntegratePeakGridImportKwh(t *testing.T) {
 		var readings []Reading
 		var trueWattSeconds float64
 		prev := -1.0
-		var prevTS int64
 		for ts := dayStart.Unix(); ts < dayEnd.Unix(); ts += 10 {
 			p := 400.0 + 300.0*float64((ts/10)%5) // 400..1600 W
 			readings = append(readings, Reading{Timestamp: ts, Pgrid: p})
@@ -137,9 +136,7 @@ func TestIntegratePeakGridImportKwh(t *testing.T) {
 				trueWattSeconds += (prev + p) / 2 * 10
 			}
 			prev = p
-			prevTS = ts
 		}
-		_ = prevTS
 		dayKwh := trueWattSeconds / 3_600_000
 
 		peak, _, _, ok := IntegratePeakGridImportKwh(readings, dayStart.Unix(), offStart.Unix(), offEnd.Unix(), dayEnd.Unix())

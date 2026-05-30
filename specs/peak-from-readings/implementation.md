@@ -185,11 +185,15 @@ history in one operator run, matching the established `backfill-offpeak` /
   by ~1.5% of eInput (the shared sampling artifact). The 3% tolerance bound is
   asserted in tests; no UI shows all three side-by-side, so this is operator-
   visible only.
-- **Day Detail / DayCosts unchanged**: `DayCosts` and `ComparisonSnapshot` still
-  compute peak as their own residual and `DaySummary` (Swift) does not decode the
-  new field. This is within the spec's iOS scope (History only). If a future
-  Day-Detail peak/cost view wants the accurate figure, add the field to the Swift
-  `DaySummary` and route `DayCosts` through it — worth a follow-up ticket.
+- **Today is still the residual everywhere, and the breakdown is gated on
+  off-peak**: per Decision 4 there is no server peak for today, so the Dashboard,
+  Day Detail, and History all fall back to the `eInput − offpeak` residual for
+  today — and before the off-peak window opens (no off-peak split yet) today
+  shows no peak/off-peak breakdown at all. This violates the `CLAUDE.md` Data
+  Consistency rule for *today's* values. Tracked as follow-ups: T-1420 (live
+  data into Day Detail/History today) and T-1421 (real-time peak on the
+  Dashboard). Past-day Day Detail (summary row, Compare overlay, peak cost) was
+  brought onto the server value in this spec via Decision 8.
 - **Redundant channel work**: `IntegratePeakGridImportKwh` computes all five
   energy channels twice and uses only grid import. Bounded daily volume makes it
   negligible; it is the first target if this ever moves off the per-day cadence.
