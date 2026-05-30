@@ -34,9 +34,15 @@ references:
   - Blocked-by: 1am1859 (The hourly summarisation pass backfills peak grid import via an independent sentinel)
   - References: specs/peak-from-readings/smolspec.md
 
+- [x] 5. Historical peak grid import is backfilled by the renamed backfill-grid CLI
+  - Rename cmd/backfill-offpeak to cmd/backfill-grid (Decision 7) and extend its per-date loop so that, alongside the unchanged flux-offpeak recompute, it computes peakGridImportKwh via derivedstats.IntegratePeakGridImportKwh over the two windows bracketing off-peak and writes peakGridImportKwh + peakComputedAt to the corresponding flux-daily-energy row through UpdateDailyEnergyDerived (peak group only).
+  - The CLI must GET the daily-energy row first and skip the date for peak when it is absent (no phantom-row creation); today is skipped on both sides; off-peak recompute behaviour is unchanged. Add a --table-daily-energy flag.
+  - Verify with CLI-core tests: a date with a present daily-energy row gets peak written; an absent daily-energy row is skipped for peak without creating a row; dry-run writes nothing to either table; off-peak recompute still works.
+  - References: specs/peak-from-readings/smolspec.md, specs/peak-from-readings/decision_log.md
+
 ## iOS
 
-- [ ] 5. The History grid entry prefers server peak grid import with a residual fallback <!-- id:1am185b -->
+- [ ] 6. The History grid entry prefers server peak grid import with a residual fallback <!-- id:1am185b -->
   - The iOS day-energy model and its cached form decode the optional peakGridImportKwh field.
   - The History card grid entry uses the server value when non-nil and falls back to max(0, eInput − offpeakImport) when absent; no display changes beyond the source of the peak number.
   - Verify with tests asserting the server value is used when present and the residual is used when the field is nil.

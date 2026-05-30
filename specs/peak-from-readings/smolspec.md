@@ -25,7 +25,7 @@ Peak Δ ≈ −offpeak Δ with gridImport Δ ≈ 0 → bucketing artifact, not a
 - The system **MUST** produce `peakGridImportKwh + offpeakGridImportKwh` within 3% of `eInput` on any day where all three are populated, reflecting that both integrations use the same numerical method with the same ~1.5% per-window sampling artifact.
 - The system **MUST** omit `peakGridImportKwh` from the DynamoDB row and from the API JSON on days where the integration's usability gate fails for either sub-window.
 - The system **MUST** expose `peakGridImportKwh` at JSON key `peakGridImportKwh` (omitted when absent) on both `/day` and `/history` responses, alongside the existing `offpeakGridImportKwh`.
-- The system **MUST** populate `peakGridImportKwh` on existing rows automatically via the next eligible hourly summarisation pass after deploy, with no operator-run backfill step. (See Decision 3.)
+- The system **MUST** forward-fill `peakGridImportKwh` on each day's row as it becomes "yesterday" via the hourly summarisation pass, gated on an independent `peakComputedAt` sentinel (Decision 3), and **MUST** provide a one-shot operator CLI that backfills the pre-deploy historical window within the `flux-readings` TTL (Decision 7).
 - The iOS app **SHOULD** prefer the server-provided `peakGridImportKwh` when non-nil and fall back to `max(0, day.eInput − offpeakImport)` otherwise.
 - The system **MAY** emit a structured log entry per peak write comparing the integrated value against the `eInput − offpeakGridImportKwh` residual, analogous to the existing `offpeak drift` line (internal/dynamo/offpeak_drift.go), for ongoing drift visibility.
 
@@ -34,10 +34,14 @@ Peak Δ ≈ −offpeak Δ with gridImport Δ ≈ 0 → bucketing artifact, not a
 ### Compute & store (Go, server)
 
 - Add helper `IntegratePeakGridImportKwh(readings []Reading, dayStartUnix, offpeakStartUnix, offpeakEndUnix, dayEndUnix int64) (kwh float64, sampleCount int, skippedPairs int, ok bool)` in `internal/derivedstats/integrate_offpeak.go`. Calls the existing single-window integrator twice (over `[dayStart, offpeakStart)` and `[offpeakEnd, dayEnd)`), each with selector `max(Pgrid, 0)`, and returns sum + combined provenance + true iff both sub-windows pass the usability gate.
-- Window args are unix timestamps to match the existing `IntegrateOffpeakDeltas` signature; the caller converts the HH:MM SSM config exactly as `cmd/backfill-offpeak/main.go:offpeakBoundaries` already does.
+- Window args are unix timestamps to match the existing `IntegrateOffpeakDeltas` signature; the caller converts the HH:MM SSM config exactly as `cmd/backfill-grid/main.go:offpeakBoundaries` (renamed from `backfill-offpeak`, Decision 7) already does.
 - Add `PeakGridImportKwh *float64 dynamodbav:"peakGridImportKwh,omitempty"` to `dynamo.DailyEnergyItem` (internal/dynamo/models.go:37) and `PeakComputedAt string` (idempotency sentinel; see Decision 3).
 - Add matching fields to `dynamo.DerivedStats`. Extend `UpdateDailyEnergyDerived` (internal/dynamo/dynamostore.go:92) to set both attributes when non-nil.
-- In `poller.runSummarisationPass` (internal/poller/dailysummary.go:41), gate the existing derived-stats block on `item.DerivedStatsComputedAt == ""` (as today) and add a parallel block gated on `item.PeakComputedAt == ""` that calls the new helper and writes `PeakGridImportKwh` + `PeakComputedAt`. Skip-result returns only when **both** sentinels are set.
+- In `poller.runSummarisationPass` (internal/poller/dailysummary.go:41), gate the existing derived-stats block on `item.DerivedStatsComputedAt == ""` (as today) and add a parallel block gated on `item.PeakComputedAt == ""` that calls the new helper and writes `PeakGridImportKwh` + `PeakComputedAt`. Skip-result returns only when **both** sentinels are set. The pass runs for yesterday only, so this forward-fills each day's row as it rolls; it does not reach pre-deploy historical rows (those are the CLI's job — see below).
+
+### Historical backfill (Go, server)
+
+- Rename `cmd/backfill-offpeak` → `cmd/backfill-grid` (Decision 7) and extend its per-date loop so that, alongside recomputing the `flux-offpeak` row (unchanged), it computes peak via `IntegratePeakGridImportKwh` over the two windows bracketing off-peak and writes `peakGridImportKwh` + `peakComputedAt` to the corresponding `flux-daily-energy` row through `dynamo.UpdateDailyEnergyDerived` (peak group only). The CLI must GET the daily-energy row first and skip the date for peak if it is absent (no phantom-row creation). Add a `--table-daily-energy` flag. Today is skipped on both sides; off-peak behaviour is unchanged.
 
 ### API surface
 
@@ -52,7 +56,7 @@ Peak Δ ≈ −offpeak Δ with gridImport Δ ≈ 0 → bucketing artifact, not a
 ### Out of scope
 
 - Only the `peakGridImportKwh` channel is added. Peak versions of solar / export / battery charge / battery discharge are deliberately not computed (see Decision 5).
-- Off-peak computation and storage are unchanged; `flux-offpeak` row shape, the off-peak CLI, and the `flux-offpeak.GridUsageKwh` field name (see Decision 6) are all untouched.
+- Off-peak computation and storage are unchanged; the `flux-offpeak` row shape and the `flux-offpeak.GridUsageKwh` field name (see Decision 6) are untouched. The off-peak backfill CLI is renamed `cmd/backfill-offpeak` → `cmd/backfill-grid` and extended to also write peak to `flux-daily-energy`, but its off-peak recompute behaviour is unchanged (Decision 7).
 - No real-time peak computation path for today; today's row uses the iOS fallback (see Decision 4).
 - No persistence beyond the 30-day `flux-readings` TTL; rows older than 30 days at deploy never get peak populated (see Decision 4).
 - No change to `derivedstats.PeakPeriods` (top-3 high-load clusters — unrelated to peak grid import).

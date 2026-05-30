@@ -1,27 +1,42 @@
-// Package main is the standalone backfill CLI for the off-peak from readings
-// feature (T-1341).
+// Package main is the standalone backfill CLI for the two readings-derived
+// grid-import channels: off-peak (off-peak from readings, T-1341) and peak
+// (peak from readings; Decision 7 renamed this tool from backfill-offpeak).
 //
-// It walks flux-offpeak rows in a date range and recomputes the five energy
-// deltas (gridUsageKwh, solarKwh, batteryChargeKwh, batteryDischargeKwh,
-// gridExportKwh) by integrating the corresponding power channels from
-// flux-readings over the SSM off-peak window. Writes use
-// WriteOffpeakIfComplete so a row mid-poll (pending or absent) is never
-// overwritten (AC 7.8). Today's row is always skipped — the poller is the
-// single authoritative writer for today (AC 7.2).
+// For each non-today date in a range it does two things:
+//
+//  1. Off-peak (unchanged): recomputes the five flux-offpeak energy deltas
+//     (gridUsageKwh, solarKwh, batteryChargeKwh, batteryDischargeKwh,
+//     gridExportKwh) by integrating the power channels from flux-readings over
+//     the SSM off-peak window, writing via WriteOffpeakIfComplete so a row
+//     mid-poll (pending or absent) is never overwritten (AC 7.8).
+//
+//  2. Peak: computes peakGridImportKwh by integrating max(pgrid,0) over the
+//     two windows bracketing off-peak ([dayStart, offpeakStart) and
+//     [offpeakEnd, dayEnd)) and writes it plus the peakComputedAt sentinel to
+//     the corresponding flux-daily-energy row via UpdateDailyEnergyDerived
+//     (peak group only — the derived-stats group is left untouched). The
+//     daily-energy row is fetched first; if it is absent the date is skipped
+//     for peak (no phantom-row creation, Decision 7). If the integration's
+//     usability gate fails for either sub-window the date keeps the iOS
+//     fallback (Decision 4).
+//
+// Today's row is always skipped on both sides — the poller is the single
+// authoritative writer for today (AC 7.2 / Decision 4).
 //
 // Usage (with operator AWS credentials):
 //
-//	go run ./cmd/backfill-offpeak \
+//	go run ./cmd/backfill-grid \
 //	    --serial=AB1234 \
 //	    --from=2026-04-19 --to=2026-05-18 \
 //	    --offpeak-start=11:00 --offpeak-end=14:00 \
 //	    --table-offpeak=flux-offpeak \
 //	    --table-readings=flux-readings \
+//	    --table-daily-energy=flux-daily-energy \
 //	    [--dry-run]
 //
 // Defaults: from = today - 30d, to = yesterday (the practical readings TTL
 // window). Set --dry-run to log intended writes and print summaries without
-// invoking PutItem.
+// invoking any DynamoDB writes.
 package main
 
 import (
@@ -60,16 +75,17 @@ type dynamoAPI interface {
 }
 
 type backfillOpts struct {
-	serial        string
-	tableOffpeak  string
-	tableReadings string
-	from          string
-	to            string
-	offpeakStart  string
-	offpeakEnd    string
-	location      *time.Location
-	dryRun        bool
-	now           func() time.Time
+	serial           string
+	tableOffpeak     string
+	tableReadings    string
+	tableDailyEnergy string
+	from             string
+	to               string
+	offpeakStart     string
+	offpeakEnd       string
+	location         *time.Location
+	dryRun           bool
+	now              func() time.Time
 }
 
 type backfillResult struct {
@@ -79,7 +95,15 @@ type backfillResult struct {
 	RowsDryRun          int
 	RowsSparseSkipped   int // <2 usable readings in window per AC 7.4
 	RowsConditionFailed int // WriteOffpeakIfComplete condition rejected
-	Summary             []string
+
+	// Peak accounting (Decision 7). Independent of the off-peak counters
+	// above: a date can have its off-peak row written and its peak skipped, or
+	// vice versa.
+	PeakWritten       int // peakGridImportKwh written (or would be, in dry-run)
+	PeakSkippedAbsent int // flux-daily-energy row absent — skipped (no phantom row)
+	PeakSkippedSparse int // peak integration usability gate failed for a sub-window
+
+	Summary []string
 }
 
 func main() {
@@ -98,6 +122,7 @@ func main() {
 	flag.StringVar(&opts.serial, "serial", os.Getenv("SYSTEM_SERIAL"), "AlphaESS system serial number (or env SYSTEM_SERIAL)")
 	flag.StringVar(&opts.tableOffpeak, "table-offpeak", os.Getenv("TABLE_OFFPEAK"), "flux-offpeak table name (or env TABLE_OFFPEAK)")
 	flag.StringVar(&opts.tableReadings, "table-readings", os.Getenv("TABLE_READINGS"), "flux-readings table name (or env TABLE_READINGS)")
+	flag.StringVar(&opts.tableDailyEnergy, "table-daily-energy", os.Getenv("TABLE_DAILY_ENERGY"), "flux-daily-energy table name (or env TABLE_DAILY_ENERGY)")
 	flag.StringVar(&opts.from, "from", defaultFrom, "start date inclusive (YYYY-MM-DD, Sydney TZ)")
 	flag.StringVar(&opts.to, "to", defaultTo, "end date inclusive (YYYY-MM-DD, Sydney TZ)")
 	flag.StringVar(&opts.offpeakStart, "offpeak-start", os.Getenv("OFFPEAK_START"), "off-peak window start HH:MM (or env OFFPEAK_START)")
@@ -133,6 +158,9 @@ func main() {
 		"todaySkipped", res.RowsSkipped,
 		"sparseSkipped", res.RowsSparseSkipped,
 		"conditionFailed", res.RowsConditionFailed,
+		"peakWritten", res.PeakWritten,
+		"peakSkippedAbsentRow", res.PeakSkippedAbsent,
+		"peakSkippedSparse", res.PeakSkippedSparse,
 	)
 }
 
@@ -145,6 +173,9 @@ func validateOpts(o backfillOpts) error {
 	}
 	if o.tableReadings == "" {
 		return fmt.Errorf("--table-readings is required")
+	}
+	if o.tableDailyEnergy == "" {
+		return fmt.Errorf("--table-daily-energy is required")
 	}
 	if o.offpeakStart == "" || o.offpeakEnd == "" {
 		return fmt.Errorf("--offpeak-start and --offpeak-end are required")
@@ -173,6 +204,14 @@ func validateOpts(o backfillOpts) error {
 // row (per Sydney-local opts.now) is always skipped (AC 7.2). Days with
 // fewer than two usable readings in the window emit a SKIPPED summary line
 // and are left unchanged (AC 7.4).
+//
+// For each non-today date it also backfills peakGridImportKwh on the
+// corresponding flux-daily-energy row (Decision 7): it queries the full
+// Sydney-local day's readings, integrates max(pgrid,0) over the two windows
+// bracketing off-peak, and — only when the daily-energy row already exists —
+// writes the peak group via UpdateDailyEnergyDerived. An absent row is skipped
+// for peak (no phantom-row creation); a failed usability gate leaves the date
+// on the iOS fallback (Decision 4). The off-peak recompute above is unchanged.
 func runBackfill(ctx context.Context, client dynamoAPI, opts backfillOpts) (*backfillResult, error) {
 	res := &backfillResult{}
 	rows, err := queryOffpeakRange(ctx, client, opts.tableOffpeak, opts.serial, opts.from, opts.to)
@@ -181,7 +220,10 @@ func runBackfill(ctx context.Context, client dynamoAPI, opts backfillOpts) (*bac
 	}
 
 	today := opts.now().In(opts.location).Format("2006-01-02")
-	store := dynamo.NewDynamoStore(client, dynamo.TableNames{Offpeak: opts.tableOffpeak})
+	store := dynamo.NewDynamoStore(client, dynamo.TableNames{
+		Offpeak:     opts.tableOffpeak,
+		DailyEnergy: opts.tableDailyEnergy,
+	})
 
 	for _, row := range rows {
 		res.RowsScanned++
@@ -205,52 +247,140 @@ func runBackfill(ctx context.Context, client dynamoAPI, opts backfillOpts) (*bac
 			continue
 		}
 
-		readings, err := queryReadingsRange(ctx, client, opts.tableReadings, opts.serial,
-			windowStart.Unix(), windowEnd.Unix())
-		if err != nil {
-			return res, fmt.Errorf("query readings (date=%s): %w", row.Date, err)
+		// Off-peak recompute (unchanged behaviour). Its own query, its own
+		// usability gate, its own conditional write — none of which gate the
+		// peak side below (Decision 7).
+		if err := backfillOffpeak(ctx, store, client, opts, row, windowStart, windowEnd, res); err != nil {
+			return res, err
 		}
 
-		deltas, ok := derivedstats.IntegrateOffpeakDeltas(
-			toDerivedReadings(readings), windowStart.Unix(), windowEnd.Unix())
-		if !ok {
-			res.RowsSparseSkipped++
-			line := fmt.Sprintf("%s  SKIPPED (sparse readings; <2 usable samples in window)", row.Date)
-			res.Summary = append(res.Summary, line)
-			slog.Info("skip: sparse readings", "date", row.Date, "readings", len(readings))
-			continue
+		// Peak backfill. Independent of the off-peak outcome above: a sparse or
+		// condition-rejected off-peak row does not stop peak from being written
+		// (and vice versa). dayStart is Sydney-local midnight, dayEnd the next
+		// local midnight (DST-correct via AddDate).
+		dayStart := time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, opts.location)
+		dayEnd := dayStart.AddDate(0, 0, 1)
+		if err := backfillPeak(ctx, store, client, opts, row.Date,
+			dayStart, windowStart, windowEnd, dayEnd, res); err != nil {
+			return res, err
 		}
-
-		patched := patchOffpeakRow(row, deltas, opts.now().UTC())
-		summary := summaryLine(row.Date, row, patched)
-		res.Summary = append(res.Summary, summary)
-
-		dynamo.LogOffpeakDrift(row.Date, patched)
-
-		if opts.dryRun {
-			res.RowsDryRun++
-			slog.Info("dry-run patch", "date", row.Date,
-				"gridUsageKwh", patched.GridUsageKwh,
-				"solarKwh", patched.SolarKwh,
-				"sampleCount", patched.IntegrationSampleCount)
-			continue
-		}
-
-		if err := store.WriteOffpeakIfComplete(ctx, patched); err != nil {
-			if errors.Is(err, dynamo.ErrOffpeakConditionFailed) {
-				res.RowsConditionFailed++
-				slog.Warn("conditional-write rejected (row state changed); skipping", "date", row.Date)
-				continue
-			}
-			return res, fmt.Errorf("write offpeak (date=%s): %w", row.Date, err)
-		}
-		res.RowsWritten++
-		slog.Info("patched offpeak deltas", "date", row.Date,
-			"gridUsageKwh", patched.GridUsageKwh,
-			"sampleCount", patched.IntegrationSampleCount)
 	}
 
 	return res, nil
+}
+
+// backfillOffpeak recomputes the five off-peak deltas for one date and writes
+// the patched flux-offpeak row via WriteOffpeakIfComplete. Behaviour is
+// unchanged from the original backfill-offpeak CLI: sparse readings and
+// conditional-write rejections are recorded on res and skipped (not fatal);
+// only a readings-query error is fatal.
+func backfillOffpeak(ctx context.Context, store *dynamo.DynamoStore, client dynamoAPI,
+	opts backfillOpts, row dynamo.OffpeakItem, windowStart, windowEnd time.Time, res *backfillResult,
+) error {
+	readings, err := queryReadingsRange(ctx, client, opts.tableReadings, opts.serial,
+		windowStart.Unix(), windowEnd.Unix())
+	if err != nil {
+		return fmt.Errorf("query readings (date=%s): %w", row.Date, err)
+	}
+
+	deltas, ok := derivedstats.IntegrateOffpeakDeltas(
+		toDerivedReadings(readings), windowStart.Unix(), windowEnd.Unix())
+	if !ok {
+		res.RowsSparseSkipped++
+		line := fmt.Sprintf("%s  SKIPPED (sparse readings; <2 usable samples in window)", row.Date)
+		res.Summary = append(res.Summary, line)
+		slog.Info("skip: sparse readings", "date", row.Date, "readings", len(readings))
+		return nil
+	}
+
+	patched := patchOffpeakRow(row, deltas, opts.now().UTC())
+	summary := summaryLine(row.Date, row, patched)
+	res.Summary = append(res.Summary, summary)
+
+	dynamo.LogOffpeakDrift(row.Date, patched)
+
+	if opts.dryRun {
+		res.RowsDryRun++
+		slog.Info("dry-run patch", "date", row.Date,
+			"gridUsageKwh", patched.GridUsageKwh,
+			"solarKwh", patched.SolarKwh,
+			"sampleCount", patched.IntegrationSampleCount)
+		return nil
+	}
+
+	if err := store.WriteOffpeakIfComplete(ctx, patched); err != nil {
+		if errors.Is(err, dynamo.ErrOffpeakConditionFailed) {
+			res.RowsConditionFailed++
+			slog.Warn("conditional-write rejected (row state changed); skipping", "date", row.Date)
+			return nil
+		}
+		return fmt.Errorf("write offpeak (date=%s): %w", row.Date, err)
+	}
+	res.RowsWritten++
+	slog.Info("patched offpeak deltas", "date", row.Date,
+		"gridUsageKwh", patched.GridUsageKwh,
+		"sampleCount", patched.IntegrationSampleCount)
+	return nil
+}
+
+// backfillPeak computes peakGridImportKwh over the two windows bracketing
+// off-peak ([dayStart, offpeakStart) and [offpeakEnd, dayEnd)) and writes it,
+// plus the peakComputedAt sentinel, to the flux-daily-energy row for date — but
+// only when that row already exists (GET first; an absent row is skipped, never
+// created, per Decision 7). When the integration's usability gate fails for
+// either sub-window the date is skipped for peak and keeps the iOS fallback
+// (Decision 4). Only the peak group is written (DerivedStatsComputedAt left
+// empty), so the derived-stats group is untouched. Honours --dry-run.
+func backfillPeak(ctx context.Context, store *dynamo.DynamoStore, client dynamoAPI,
+	opts backfillOpts, date string, dayStart, offpeakStart, offpeakEnd, dayEnd time.Time, res *backfillResult,
+) error {
+	readings, err := queryReadingsRange(ctx, client, opts.tableReadings, opts.serial,
+		dayStart.Unix(), dayEnd.Unix())
+	if err != nil {
+		return fmt.Errorf("query readings for peak (date=%s): %w", date, err)
+	}
+
+	kwh, sampleCount, skippedPairs, ok := derivedstats.IntegratePeakGridImportKwh(
+		toDerivedReadings(readings), dayStart.Unix(), offpeakStart.Unix(), offpeakEnd.Unix(), dayEnd.Unix())
+	if !ok {
+		res.PeakSkippedSparse++
+		slog.Info("skip peak: sparse readings in a bracketing window", "date", date, "readings", len(readings))
+		return nil
+	}
+
+	// GET the daily-energy row first: peak must never create a phantom row
+	// (Decision 7). An absent row is skipped and keeps the iOS fallback.
+	existing, err := store.GetDailyEnergy(ctx, opts.serial, date)
+	if err != nil {
+		return fmt.Errorf("get daily energy for peak (date=%s): %w", date, err)
+	}
+	if existing == nil {
+		res.PeakSkippedAbsent++
+		slog.Info("skip peak: flux-daily-energy row absent (no phantom-row creation)", "date", date)
+		return nil
+	}
+
+	peakKwh := derivedstats.RoundEnergy(kwh)
+	res.Summary = append(res.Summary, peakSummaryLine(date, existing.PeakGridImportKwh, peakKwh, sampleCount, skippedPairs))
+
+	if opts.dryRun {
+		res.PeakWritten++
+		slog.Info("dry-run peak", "date", date, "peakGridImportKwh", peakKwh,
+			"sampleCount", sampleCount, "skippedPairs", skippedPairs)
+		return nil
+	}
+
+	stats := dynamo.DerivedStats{
+		PeakGridImportKwh: &peakKwh,
+		PeakComputedAt:    opts.now().UTC().Format(time.RFC3339),
+	}
+	if err := store.UpdateDailyEnergyDerived(ctx, opts.serial, date, stats); err != nil {
+		return fmt.Errorf("write peak (date=%s): %w", date, err)
+	}
+	res.PeakWritten++
+	slog.Info("wrote peak grid import", "date", date, "peakGridImportKwh", peakKwh,
+		"sampleCount", sampleCount, "skippedPairs", skippedPairs)
+	return nil
 }
 
 // offpeakBoundaries returns the absolute Sydney-local times of the off-peak
@@ -304,6 +434,22 @@ func summaryLine(date string, prev, next dynamo.OffpeakItem) string {
 		next.IntegrationSampleCount,
 		next.IntegrationSkippedPairs,
 	)
+}
+
+// peakSummaryLine formats a per-day peak line: the prior stored
+// peakGridImportKwh (or "none" when the row had no peak yet), the newly
+// integrated value, and the combined provenance counts across the two
+// bracketing windows. Mirrors summaryLine's prev→new shape so the operator
+// can scan peak alongside the off-peak deltas.
+func peakSummaryLine(date string, prev *float64, next float64, sampleCount, skippedPairs int) string {
+	prevStr := "none"
+	if prev != nil {
+		prevStr = fmt.Sprintf("%.2f", *prev)
+		return fmt.Sprintf("%s  peak %s→%.2f |Δ|=%.2f  samples=%d skipped=%d",
+			date, prevStr, next, math.Abs(next-*prev), sampleCount, skippedPairs)
+	}
+	return fmt.Sprintf("%s  peak %s→%.2f  samples=%d skipped=%d",
+		date, prevStr, next, sampleCount, skippedPairs)
 }
 
 // queryOffpeakRange paginates flux-offpeak for one serial and a closed date
@@ -373,7 +519,7 @@ func paginate[T any](
 
 // toDerivedReadings mirrors api.toDerivedReadings / poller.summaryToDerivedReadings
 // — kept duplicated for the same Decision 9 reason: derivedstats must not
-// import dynamo, and this is the only consumer in cmd/backfill-offpeak.
+// import dynamo, and this is the only consumer in cmd/backfill-grid.
 func toDerivedReadings(in []dynamo.ReadingItem) []derivedstats.Reading {
 	out := make([]derivedstats.Reading, len(in))
 	for i, r := range in {

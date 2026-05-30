@@ -82,28 +82,33 @@ The summarisation pass uses `derivedStatsComputedAt` as an idempotency sentinel 
 
 ### Decision
 
-Add a second sentinel field `PeakComputedAt` to `DailyEnergyItem`. The pass's skip-result check becomes "both `DerivedStatsComputedAt != ""` AND `PeakComputedAt != ""`". The existing derived-stats block stays gated on the existing sentinel; a new peak-compute block is gated on the new sentinel. Rows that already have `DerivedStatsComputedAt` set but no peak data get peak populated on the next hourly tick without redoing any other work.
+Add a second sentinel field `PeakComputedAt` to `DailyEnergyItem`. The pass's skip-result check becomes "both `DerivedStatsComputedAt != ""` AND `PeakComputedAt != ""`". The existing derived-stats block stays gated on the existing sentinel; a new peak-compute block is gated on the new sentinel.
+
+The hourly pass runs for "yesterday" only (Decision 4), so the second sentinel makes the pass **forward-fill** peak onto each day's row as it becomes yesterday, independently of the derived-stats block. It does **not** reach rows that are already older than yesterday at deploy time — those are covered by a one-shot backfill CLI (Decision 7). The sentinel also keeps both writers (hourly pass and CLI) idempotent and lets either write the peak group without clobbering the derived-stats group.
 
 ### Rationale
 
-This makes the backfill automatic and per-field. No operator runbook, no one-off scripts, no risk of stale-derived-stats getting re-overwritten with field-equivalent data. The two sentinels remain orthogonal so future "derived field X with independent lifecycle" additions follow the same pattern.
+The two sentinels are orthogonal: peak can be written on a row that already has derived stats (and vice versa) without re-doing or clobbering the other group, so the same write path (`UpdateDailyEnergyDerived`) serves both the hourly forward-fill and the historical CLI. Future "derived field X with independent lifecycle" additions follow the same pattern.
+
+The original framing of this decision claimed the hourly pass would backfill the whole 30-day window automatically. That was wrong: the pass only ever processes yesterday (Decision 4), so historical rows older than yesterday at deploy would never be visited. Historical coverage is therefore delegated to the CLI of Decision 7; the sentinel's role here is forward-fill plus cross-writer idempotency, not historical backfill.
 
 ### Alternatives Considered
 
-- **Operator runbook: one-off `UpdateItem` to clear `DerivedStatsComputedAt` on each row.** Rejected: ~30 days × hourly rows is non-trivial operational work, the runbook becomes another artifact to maintain, and there is no safety against re-clearing and re-running.
-- **Auto-clear `DerivedStatsComputedAt` when peak is missing.** Rejected: introduces a "what is this pass actually idempotent on" ambiguity and causes the other derived stats (DailyUsage, SocLow, PeakPeriods) to be unnecessarily recomputed on every row indefinitely.
+- **Make the hourly pass scan the whole TTL window each tick** and fill peak wherever `PeakComputedAt` is empty. Rejected: adds a per-tick range scan to a pass that is otherwise a single-row operation, and diverges from how every other readings-derived field in this repo is backfilled (one-shot CLI — see `cmd/backfill-offpeak`, `cmd/backfill-solar`).
+- **Operator runbook: one-off `UpdateItem` to clear `DerivedStatsComputedAt` on each row.** Rejected: clearing the derived-stats sentinel forces the other stats (DailyUsage, SocLow, PeakPeriods) to be recomputed unnecessarily, and there is no safety against re-clearing and re-running. (`flux-daily-energy` is one row per day, ~30 rows in the TTL window — the operational concern is correctness, not row count.)
 - **Repurpose `derivedStatsComputedAt` to mean "all derived stats including peak".** Rejected: would require either a coordinated deploy (clear all sentinels on rollout) or a versioning field. The two-sentinel design avoids both.
 
 ### Consequences
 
 **Positive:**
-- Fully automatic backfill within the `flux-readings` TTL window.
-- No operator action required at deploy.
+- Peak is written independently of derived stats by both the hourly pass and the backfill CLI, with no clobbering and idempotent re-runs.
+- Forward-fill of each new day is automatic.
 - Pattern generalises to future per-field derived stats.
 
 **Negative:**
 - One more sentinel field on `DailyEnergyItem`.
 - The pass's skip-result logic is slightly more complex (two conditions instead of one).
+- Historical rows (older than yesterday at deploy) are not filled by the pass; they require the one-shot CLI of Decision 7. Until it is run — or those rows age out of the TTL — those days use the iOS residual fallback (Decision 4).
 
 ---
 
@@ -207,5 +212,50 @@ Renaming `OffpeakItem.GridUsageKwh` is out of scope: it touches the table, the o
 
 **Negative:**
 - Storage layer has two synonyms for "grid import" depending on which feature wrote them. Implementation notes will document.
+
+---
+
+## Decision 7: Backfill the historical window by extending and renaming the off-peak CLI to `cmd/backfill-grid`
+
+**Date**: 2026-05-30
+**Status**: accepted
+
+### Context
+
+The hourly summarisation pass only ever processes "yesterday" (Decision 4), so the `PeakComputedAt` sentinel forward-fills peak from deploy day onward but never reaches rows that are already older than yesterday at deploy time. Those are the bulk of the History view — and historical days are exactly the user-visible problem this spec set out to fix. Decision 3 originally assumed the hourly pass would backfill them; it does not.
+
+The repo already has the right pattern for "populate a new readings-derived field on existing rows": `cmd/backfill-offpeak` (modelled on `cmd/backfill-solar`) walks the daily rows over a `today-30d → yesterday` range in a single operator-run invocation, recomputing from `flux-readings` and skipping today. Off-peak deltas and peak grid import are both readings-derived quantities over the same set of days, computed from the same `Pgrid` series.
+
+### Decision
+
+Rename `cmd/backfill-offpeak` → `cmd/backfill-grid` and extend it so that, for each date in the range, in addition to recomputing the off-peak `flux-offpeak` row (unchanged behaviour), it computes `peakGridImportKwh` over the two windows bracketing off-peak and writes it (plus `peakComputedAt`) to the corresponding `flux-daily-energy` row via the same `UpdateDailyEnergyDerived` peak-group write the hourly pass uses.
+
+To avoid creating a phantom `flux-daily-energy` row, the CLI MUST confirm the daily-energy row exists (GET) before writing peak; if it is absent the date is skipped for peak. The off-peak side keeps its existing `WriteOffpeakIfComplete` conditional write. Today is skipped on both sides.
+
+### Rationale
+
+One operator command for both readings-derived grid quantities over the same days is less surface than a second near-identical CLI, and the name `backfill-grid` describes what it now does (both grid-import channels). It matches the established T-1341 backfill pattern, so operators already know the flag shape (`--from`/`--to`/`--dry-run`/table names). The peak write reuses the independent-sentinel write path from Decision 3, so there is no new write semantics.
+
+### Alternatives Considered
+
+- **A separate `cmd/backfill-peak`.** Rejected: duplicates the date-range walk, readings query, Sydney-TZ handling, and flag parsing already in the off-peak CLI for two fields computed from the same readings over the same days. The user directed consolidation.
+- **No CLI; accept that only yesterday-onward gets peak** and amend the requirement to drop pre-deploy historical coverage. Rejected: leaves the History view — the feature's whole motivation — on the noisy residual for ~30 days after deploy.
+- **Scan the TTL window inside the hourly pass.** Rejected for the reasons in Decision 3's alternatives (per-tick scan, diverges from repo norm).
+
+### Consequences
+
+**Positive:**
+- The pre-deploy historical window gets accurate peak in one operator run, matching the off-peak rollout flow.
+- No new CLI to learn or maintain; one tool covers both grid-import channels.
+- Reuses the Decision 3 write path and the existing readings/date-range machinery.
+
+**Negative:**
+- The CLI name no longer mentions off-peak; the rename touches the package, its usage docs, and its tests. (No Makefile/infra target references it — it is a `go run ./cmd/...` tool.)
+- The CLI now reads two tables and writes two tables, so its result accounting and summary output grow to cover peak alongside the five off-peak deltas.
+- A `flux-daily-energy` row missing at backfill time is skipped for peak (no phantom-row creation); that day stays on the iOS fallback until re-run.
+
+### Impact
+
+`cmd/backfill-offpeak` → `cmd/backfill-grid` (package, docs, tests). Reuses `derivedstats.IntegratePeakGridImportKwh`, `dynamo.UpdateDailyEnergyDerived`, and `dynamo.GetDailyEnergy`. The CLI gains a `--table-daily-energy` flag.
 
 ---
