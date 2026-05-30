@@ -227,7 +227,7 @@ extension HistoryViewModel {
 
         private static func gridEntry(day: DayEnergy, parsedDate: Date, isToday: Bool) -> GridEntry? {
             guard let offpeakImport = day.offpeakGridImportKwh else { return nil }
-            let peak = max(0, day.eInput - offpeakImport)
+            let peak = day.peakGridImportKwh ?? max(0, day.eInput - offpeakImport)
             return GridEntry(
                 date: parsedDate,
                 dayID: day.date,

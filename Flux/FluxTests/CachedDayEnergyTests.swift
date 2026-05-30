@@ -23,6 +23,7 @@ struct CachedDayEnergyTests {
             eDischarge: 6.8,
             offpeakGridImportKwh: 0.5,
             offpeakGridExportKwh: 0.1,
+            peakGridImportKwh: 0.42,
             note: "sunny day",
             dailyUsage: DailyUsage(blocks: [
                 DailyUsageBlock(
@@ -66,6 +67,7 @@ struct CachedDayEnergyTests {
         #expect(roundTripped.note == original.note)
         #expect(roundTripped.socLow == 18.0)
         #expect(roundTripped.socLowTime == "2026-04-14T19:45:00Z")
+        #expect(roundTripped.peakGridImportKwh == 0.42)
 
         let dailyUsage = try #require(roundTripped.dailyUsage)
         #expect(dailyUsage.blocks.count == 2)
@@ -102,6 +104,7 @@ struct CachedDayEnergyTests {
         #expect(roundTripped.socLow == nil)
         #expect(roundTripped.socLowTime == nil)
         #expect(roundTripped.peakPeriods == nil)
+        #expect(roundTripped.peakGridImportKwh == nil)
     }
 
     // AC 5.4: persisting and re-fetching through SwiftData preserves the
@@ -188,6 +191,9 @@ struct CachedDayEnergyTests {
         #expect(restored.socLow == nil)
         #expect(restored.socLowTime == nil)
         #expect(restored.peakPeriods == nil)
+        // New optional defaults to nil on a row stored before the field existed
+        // (SwiftData lightweight migration / no-op).
+        #expect(restored.peakGridImportKwh == nil)
         // Pre-feature properties still decode unchanged.
         #expect(restored.date == "2026-04-14")
         #expect(restored.eInput == 0.25)

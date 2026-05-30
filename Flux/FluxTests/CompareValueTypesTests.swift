@@ -234,6 +234,32 @@ struct ComparisonSnapshotDerivedFieldTests {
     }
 
     @Test
+    func peakGridImportPrefersServerValueOverResidual() {
+        // Server value (2.5) deliberately differs from the residual
+        // (4.2 - 1.2 = 3.0) so the assertion proves it's used, not the residual.
+        let snapshot = ComparisonSnapshot(
+            date: "2026-05-09",
+            solar: nil,
+            gridImport: 4.2,
+            gridExport: nil,
+            batteryCharge: nil,
+            batteryDischarge: nil,
+            offpeakGridImport: 1.2,
+            peakGridImportServer: 2.5,
+            dailyUsage: nil
+        )
+        #expect(snapshot.peakGridImport == 2.5)
+    }
+
+    @Test
+    func fromResponseCarriesServerPeak() {
+        let response = makeResponse(summary: makeSummary(values: .all), dailyUsage: nil)
+        let snapshot = ComparisonSnapshot.from(date: "2026-05-09", response: response)
+        // makeSummary(.all) sets peakGridImportKwh = 0.45; snapshot prefers it.
+        #expect(snapshot?.peakGridImport == 0.45)
+    }
+
+    @Test
     func peakGridImportClampsToZeroWhenOffpeakExceedsTotal() {
         // Defensive: shouldn't happen in practice but DayEnergy.peakGridImportKwh
         // uses max(0, ...). Stay consistent.
@@ -355,7 +381,8 @@ private func makeSummary(values: SummaryFieldShape) -> DaySummary {
             epv: 14.8, eInput: 4.2, eOutput: 1.1,
             eCharge: 6.0, eDischarge: 3.5,
             socLow: nil, socLowTime: nil,
-            offpeakGridImportKwh: 0.6, offpeakGridExportKwh: nil
+            offpeakGridImportKwh: 0.6, offpeakGridExportKwh: nil,
+            peakGridImportKwh: 0.45
         )
     case .allNil:
         return DaySummary(

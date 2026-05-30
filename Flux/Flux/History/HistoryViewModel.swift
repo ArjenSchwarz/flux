@@ -102,6 +102,7 @@ final class HistoryViewModel {
                 cached.eDischarge = day.eDischarge
                 cached.offpeakGridImportKwh = day.offpeakGridImportKwh
                 cached.offpeakGridExportKwh = day.offpeakGridExportKwh
+                cached.peakGridImportKwh = day.peakGridImportKwh
                 cached.note = day.note
                 warnIfClearing(cached: cached, day: day)
                 cached.dailyUsage = day.dailyUsage

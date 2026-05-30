@@ -29,6 +29,13 @@ public extension DaySummary {
     /// Zero kWh fields produce zero cost lines and do NOT make the day
     /// unpriced (Decision 18). When `offpeakGridImportKwh` is `nil`, all of
     /// `eInput` is billed as peak (Decision 23) and off-peak savings is `0`.
+    ///
+    /// Peak kWh prefers the server-computed `peakGridImportKwh` when present
+    /// (peak-from-readings Decision 8); otherwise it falls back to the
+    /// `eInput − offpeak` residual. Off-peak savings always price the measured
+    /// off-peak kWh, so with the server peak the two no longer sum to `eInput`
+    /// (they differ by ~1.5%, the shared sampling artifact) — each is priced on
+    /// what was actually measured for that window.
     func costs(forDate date: String, in pricing: [PricingPeriod]) -> DayCosts? {
         guard let period = pricing.first(where: { $0.covers(date: date) }) else {
             return nil
@@ -39,10 +46,10 @@ public extension DaySummary {
         let offPeakKwh: Double
         if let off = offpeakGridImportKwh {
             offPeakKwh = off
-            peakKwh = max(0, (eInput ?? 0) - off)
+            peakKwh = peakGridImportKwh ?? max(0, (eInput ?? 0) - off)
         } else {
             offPeakKwh = 0
-            peakKwh = eInput ?? 0
+            peakKwh = peakGridImportKwh ?? (eInput ?? 0)
         }
 
         let peakCost = peakKwh * period.peakRate
@@ -71,7 +78,8 @@ public extension DayEnergy {
             socLow: socLow,
             socLowTime: socLowTime,
             offpeakGridImportKwh: offpeakGridImportKwh,
-            offpeakGridExportKwh: offpeakGridExportKwh
+            offpeakGridExportKwh: offpeakGridExportKwh,
+            peakGridImportKwh: peakGridImportKwh
         )
         return summary.costs(forDate: date, in: pricing)
     }

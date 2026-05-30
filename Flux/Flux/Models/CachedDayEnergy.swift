@@ -11,6 +11,7 @@ final class CachedDayEnergy {
     var eDischarge: Double
     var offpeakGridImportKwh: Double?
     var offpeakGridExportKwh: Double?
+    var peakGridImportKwh: Double?
     var note: String?
 
     // Derived stats persisted as optional Codable values (per
@@ -32,6 +33,7 @@ final class CachedDayEnergy {
         eDischarge = dayEnergy.eDischarge
         offpeakGridImportKwh = dayEnergy.offpeakGridImportKwh
         offpeakGridExportKwh = dayEnergy.offpeakGridExportKwh
+        peakGridImportKwh = dayEnergy.peakGridImportKwh
         note = dayEnergy.note
         dailyUsage = dayEnergy.dailyUsage
         socLow = dayEnergy.socLow
@@ -49,6 +51,7 @@ final class CachedDayEnergy {
             eDischarge: eDischarge,
             offpeakGridImportKwh: offpeakGridImportKwh,
             offpeakGridExportKwh: offpeakGridExportKwh,
+            peakGridImportKwh: peakGridImportKwh,
             note: note,
             dailyUsage: dailyUsage,
             socLow: socLow,

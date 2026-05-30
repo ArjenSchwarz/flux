@@ -180,6 +180,8 @@ func TestWriteDailyEnergy_StructTagCoverage(t *testing.T) {
 		"socLow":                 true,
 		"peakPeriods":            true,
 		"derivedStatsComputedAt": true,
+		"peakGridImportKwh":      true,
+		"peakComputedAt":         true,
 	}
 	keyTags := map[string]bool{
 		"sysSn": true,
@@ -200,9 +202,8 @@ func TestWriteDailyEnergy_StructTagCoverage(t *testing.T) {
 	require.NotNil(t, gotInput.UpdateExpression)
 	expr := *gotInput.UpdateExpression
 
-	rt := reflect.TypeOf(DailyEnergyItem{})
-	for i := range rt.NumField() {
-		fld := rt.Field(i)
+	rt := reflect.TypeFor[DailyEnergyItem]()
+	for fld := range rt.Fields() {
 		tag := fld.Tag.Get("dynamodbav")
 		if tag == "" {
 			continue
@@ -218,6 +219,114 @@ func TestWriteDailyEnergy_StructTagCoverage(t *testing.T) {
 			"struct field %s (tag=%q) is missing from WriteDailyEnergy SET expression — adding it without updating WriteDailyEnergy would silently drop the field on every write",
 			fld.Name, tag)
 	}
+}
+
+// TestDynamoStore_UpdateDailyEnergyDerived_Peak covers the independent peak
+// group (Decision 3): peak written without derivedStats, derivedStats written
+// without peak, and an absent peak value (nil pointer) marshalled as NULL.
+func TestDynamoStore_UpdateDailyEnergyDerived_Peak(t *testing.T) {
+	t.Run("peak only — derivedStats attributes absent", func(t *testing.T) {
+		peak := 0.42
+		var gotInput *dynamodb.UpdateItemInput
+		mock := &fakeDynamoAPIv2{
+			updateItemFn: func(_ context.Context, params *dynamodb.UpdateItemInput) (*dynamodb.UpdateItemOutput, error) {
+				gotInput = params
+				return &dynamodb.UpdateItemOutput{}, nil
+			},
+		}
+		store := NewDynamoStore(mock, testTables())
+		require.NoError(t, store.UpdateDailyEnergyDerived(context.Background(), "AB1234", "2026-04-12", DerivedStats{
+			PeakGridImportKwh: &peak,
+			PeakComputedAt:    "2026-04-13T00:30:00Z",
+		}))
+
+		require.NotNil(t, gotInput)
+		expr := *gotInput.UpdateExpression
+		assert.Contains(t, expr, "peakGridImportKwh")
+		assert.Contains(t, expr, "peakComputedAt")
+		// derivedStats attributes must NOT appear when that group is absent.
+		for _, name := range []string{"dailyUsage", "socLow", "peakPeriods", "derivedStatsComputedAt"} {
+			assert.NotContains(t, expr, name, "derivedStats attribute %s must be absent when its sentinel is unset", name)
+		}
+		// The peak value marshals as a number.
+		_, isNum := gotInput.ExpressionAttributeValues[":pk"].(*types.AttributeValueMemberN)
+		assert.True(t, isNum, "non-nil peak must marshal as a number")
+	})
+
+	t.Run("derivedStats only — peak attributes absent", func(t *testing.T) {
+		var gotInput *dynamodb.UpdateItemInput
+		mock := &fakeDynamoAPIv2{
+			updateItemFn: func(_ context.Context, params *dynamodb.UpdateItemInput) (*dynamodb.UpdateItemOutput, error) {
+				gotInput = params
+				return &dynamodb.UpdateItemOutput{}, nil
+			},
+		}
+		store := NewDynamoStore(mock, testTables())
+		require.NoError(t, store.UpdateDailyEnergyDerived(context.Background(), "AB1234", "2026-04-12", DerivedStats{
+			DerivedStatsComputedAt: "2026-04-13T00:30:00Z",
+		}))
+
+		require.NotNil(t, gotInput)
+		expr := *gotInput.UpdateExpression
+		assert.Contains(t, expr, "derivedStatsComputedAt")
+		assert.NotContains(t, expr, "peakGridImportKwh")
+		assert.NotContains(t, expr, "peakComputedAt")
+	})
+
+	t.Run("nil peak with sentinel set marshals as NULL", func(t *testing.T) {
+		var gotInput *dynamodb.UpdateItemInput
+		mock := &fakeDynamoAPIv2{
+			updateItemFn: func(_ context.Context, params *dynamodb.UpdateItemInput) (*dynamodb.UpdateItemOutput, error) {
+				gotInput = params
+				return &dynamodb.UpdateItemOutput{}, nil
+			},
+		}
+		store := NewDynamoStore(mock, testTables())
+		require.NoError(t, store.UpdateDailyEnergyDerived(context.Background(), "AB1234", "2026-04-12", DerivedStats{
+			PeakComputedAt: "2026-04-13T00:30:00Z",
+		}))
+		require.NotNil(t, gotInput)
+		_, isNull := gotInput.ExpressionAttributeValues[":pk"].(*types.AttributeValueMemberNULL)
+		assert.True(t, isNull, "nil peak must marshal as NULL")
+	})
+}
+
+// TestDailyEnergyItem_PeakRoundTrip confirms the peakGridImportKwh attribute
+// is present after marshalling when set, and absent (omitempty) when nil.
+func TestDailyEnergyItem_PeakRoundTrip(t *testing.T) {
+	t.Run("set field present in marshalled item and round-trips", func(t *testing.T) {
+		peak := 0.37
+		in := DailyEnergyItem{
+			SysSn: "AB1234", Date: "2026-04-12", EInput: 4.2,
+			PeakGridImportKwh: &peak,
+			PeakComputedAt:    "2026-04-13T00:30:00Z",
+		}
+		av, err := attributevalue.MarshalMap(in)
+		require.NoError(t, err)
+		_, present := av["peakGridImportKwh"]
+		assert.True(t, present, "peakGridImportKwh must be present when set")
+
+		var out DailyEnergyItem
+		require.NoError(t, attributevalue.UnmarshalMap(av, &out))
+		require.NotNil(t, out.PeakGridImportKwh)
+		assert.InDelta(t, peak, *out.PeakGridImportKwh, 1e-9)
+		assert.Equal(t, "2026-04-13T00:30:00Z", out.PeakComputedAt)
+	})
+
+	t.Run("nil field omitted from marshalled item", func(t *testing.T) {
+		in := DailyEnergyItem{SysSn: "AB1234", Date: "2026-04-12", EInput: 4.2}
+		av, err := attributevalue.MarshalMap(in)
+		require.NoError(t, err)
+		_, present := av["peakGridImportKwh"]
+		assert.False(t, present, "peakGridImportKwh must be omitted when nil (omitempty)")
+		_, tsPresent := av["peakComputedAt"]
+		assert.False(t, tsPresent, "peakComputedAt must be omitted when empty")
+
+		var out DailyEnergyItem
+		require.NoError(t, attributevalue.UnmarshalMap(av, &out))
+		assert.Nil(t, out.PeakGridImportKwh)
+		assert.Empty(t, out.PeakComputedAt)
+	})
 }
 
 // TestLogStore_DerivedStatsStubs verifies the dry-run LogStore implements

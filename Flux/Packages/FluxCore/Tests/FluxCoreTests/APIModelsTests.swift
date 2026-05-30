@@ -315,6 +315,33 @@ struct APIModelsTests {
         #expect(detail.readings[0].pgrid == -50)
         #expect(detail.summary?.socLow == 38.2)
         #expect(detail.summary?.socLowTime == "2026-04-14T18:45:00Z")
+        // peakGridImportKwh omitted from this payload → nil (fallback applies).
+        #expect(detail.summary?.peakGridImportKwh == nil)
+    }
+
+    @Test
+    func decodeDaySummaryPeakGridImportPresent() throws {
+        let json = """
+        {
+          "date": "2026-04-14",
+          "readings": [],
+          "summary": {
+            "epv": 14.3,
+            "eInput": 1.20,
+            "eOutput": 5.94,
+            "eCharge": 5.7,
+            "eDischarge": 6.8,
+            "socLow": 38.2,
+            "socLowTime": "2026-04-14T18:45:00Z",
+            "offpeakGridImportKwh": 0.80,
+            "peakGridImportKwh": 0.45
+          }
+        }
+        """
+
+        let detail = try decoder.decode(DayDetailResponse.self, from: Data(json.utf8))
+        #expect(detail.summary?.peakGridImportKwh == 0.45)
+        #expect(detail.summary?.offpeakGridImportKwh == 0.80)
     }
 
     @Test

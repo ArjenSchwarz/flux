@@ -22,9 +22,10 @@ import (
 )
 
 const (
-	testSerial        = "TEST123"
-	testOffpeakTable  = "flux-offpeak-test"
-	testReadingsTable = "flux-readings-test"
+	testSerial           = "TEST123"
+	testOffpeakTable     = "flux-offpeak-test"
+	testReadingsTable    = "flux-readings-test"
+	testDailyEnergyTable = "flux-daily-energy-test"
 )
 
 // fakeDynamo is a lightweight in-memory stand-in for the DynamoDB client.
@@ -32,13 +33,15 @@ const (
 // PutItem call so tests can assert on the persisted payload and condition
 // expression.
 type fakeDynamo struct {
-	offpeakRows      map[string][]dynamo.OffpeakItem // keyed by "*"
-	readingsByDate   map[string][]dynamo.ReadingItem // keyed by Sydney YYYY-MM-DD
-	location         *time.Location
-	queries          []*dynamodb.QueryInput
-	puts             []*dynamodb.PutItemInput
-	queryErrForTable map[string]error
-	putErr           error
+	offpeakRows       map[string][]dynamo.OffpeakItem   // keyed by "*"
+	readingsByDate    map[string][]dynamo.ReadingItem   // keyed by Sydney YYYY-MM-DD
+	dailyEnergyByDate map[string]dynamo.DailyEnergyItem // keyed by Sydney YYYY-MM-DD; absent = no row
+	location          *time.Location
+	queries           []*dynamodb.QueryInput
+	puts              []*dynamodb.PutItemInput
+	updates           []*dynamodb.UpdateItemInput // records UpdateDailyEnergyDerived calls
+	queryErrForTable  map[string]error
+	putErr            error
 }
 
 func (f *fakeDynamo) Query(_ context.Context, params *dynamodb.QueryInput, _ ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
@@ -73,11 +76,27 @@ func (f *fakeDynamo) DeleteItem(_ context.Context, _ *dynamodb.DeleteItemInput, 
 	return &dynamodb.DeleteItemOutput{}, nil
 }
 
-func (f *fakeDynamo) GetItem(_ context.Context, _ *dynamodb.GetItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
-	return &dynamodb.GetItemOutput{}, nil
+// GetItem serves the daily-energy GET the peak path issues before writing.
+// The date is read from the key; a missing fixture entry returns an empty
+// Item (DynamoDB's "not found"), which GetDailyEnergy maps to nil.
+func (f *fakeDynamo) GetItem(_ context.Context, params *dynamodb.GetItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
+	date := ""
+	if d, ok := params.Key["date"].(*types.AttributeValueMemberS); ok {
+		date = d.Value
+	}
+	row, ok := f.dailyEnergyByDate[date]
+	if !ok {
+		return &dynamodb.GetItemOutput{}, nil
+	}
+	av, err := attributevalue.MarshalMap(row)
+	if err != nil {
+		return nil, err
+	}
+	return &dynamodb.GetItemOutput{Item: av}, nil
 }
 
-func (f *fakeDynamo) UpdateItem(_ context.Context, _ *dynamodb.UpdateItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error) {
+func (f *fakeDynamo) UpdateItem(_ context.Context, params *dynamodb.UpdateItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error) {
+	f.updates = append(f.updates, params)
 	return &dynamodb.UpdateItemOutput{}, nil
 }
 
@@ -131,6 +150,41 @@ func chargeReadings(t *testing.T, date string, loc *time.Location) []dynamo.Read
 		})
 	}
 	return out
+}
+
+// fullDayReadings builds dense (10s) readings across the entire Sydney-local
+// day [00:00, 24:00) with a constant 1 kW grid import. Both bracketing peak
+// sub-windows ([00:00, 11:00) and [14:00, 24:00)) are densely covered so the
+// peak usability gate passes. Peak energy = 1 kW over 11h + 10h = 21 kWh.
+func fullDayReadings(t *testing.T, date string, loc *time.Location) []dynamo.ReadingItem {
+	t.Helper()
+	day, err := time.ParseInLocation("2006-01-02", date, loc)
+	require.NoError(t, err)
+	end := day.AddDate(0, 0, 1)
+	out := make([]dynamo.ReadingItem, 0, 24*60*60/10)
+	for ts := day.Unix(); ts < end.Unix(); ts += 10 {
+		out = append(out, dynamo.ReadingItem{
+			SysSn:     testSerial,
+			Timestamp: ts,
+			Pgrid:     1000,
+			Pbat:      0,
+			Ppv:       0,
+			Soc:       50,
+		})
+	}
+	return out
+}
+
+// existingDailyEnergyRow returns a populated flux-daily-energy row for date,
+// with no peak yet (PeakGridImportKwh nil). The peak backfill writes peak onto
+// this row.
+func existingDailyEnergyRow(date string) dynamo.DailyEnergyItem {
+	return dynamo.DailyEnergyItem{
+		SysSn:                  testSerial,
+		Date:                   date,
+		EInput:                 20.0,
+		DerivedStatsComputedAt: "2026-05-19T03:00:00Z",
+	}
 }
 
 // existingPendingRow returns a row in pending state — must NOT be overwritten
@@ -190,15 +244,16 @@ func backfillOptsForTest(loc *time.Location, dates ...string) backfillOpts {
 	// 2026-05-20 here so the historical dates 2026-05-18/19 are past.
 	now := time.Date(2026, 5, 20, 12, 0, 0, 0, loc)
 	return backfillOpts{
-		serial:        testSerial,
-		tableOffpeak:  testOffpeakTable,
-		tableReadings: testReadingsTable,
-		from:          from,
-		to:            to,
-		offpeakStart:  "11:00",
-		offpeakEnd:    "14:00",
-		location:      loc,
-		now:           func() time.Time { return now },
+		serial:           testSerial,
+		tableOffpeak:     testOffpeakTable,
+		tableReadings:    testReadingsTable,
+		tableDailyEnergy: testDailyEnergyTable,
+		from:             from,
+		to:               to,
+		offpeakStart:     "11:00",
+		offpeakEnd:       "14:00",
+		location:         loc,
+		now:              func() time.Time { return now },
 	}
 }
 
@@ -521,6 +576,164 @@ func TestBackfill_SummaryLine_ShowsAbsDifferencePerDelta(t *testing.T) {
 		assert.Contains(t, line, fragment,
 			"summary line must contain %q. got: %s", fragment, line)
 	}
+}
+
+func TestBackfill_Peak_PresentDailyEnergyRow_WritesPeak(t *testing.T) {
+	// Decision 7: a date whose flux-daily-energy row exists gets
+	// peakGridImportKwh written via UpdateDailyEnergyDerived (peak group only).
+	loc := sydney(t)
+	date := "2026-05-18"
+	f := &fakeDynamo{
+		location:    loc,
+		offpeakRows: map[string][]dynamo.OffpeakItem{"*": {existingCompleteRow(date)}},
+		readingsByDate: map[string][]dynamo.ReadingItem{
+			date: fullDayReadings(t, date, loc),
+		},
+		dailyEnergyByDate: map[string]dynamo.DailyEnergyItem{
+			date: existingDailyEnergyRow(date),
+		},
+	}
+	opts := backfillOptsForTest(loc, date)
+	res, err := runBackfill(context.Background(), f, opts)
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, res.PeakWritten)
+	assert.Zero(t, res.PeakSkippedAbsent)
+	assert.Zero(t, res.PeakSkippedSparse)
+	require.Len(t, f.updates, 1, "peak must be written via exactly one UpdateItem")
+
+	up := f.updates[0]
+	require.NotNil(t, up.UpdateExpression)
+	// Peak group only: the derived-stats group must NOT be touched.
+	assert.Contains(t, *up.UpdateExpression, "peakGridImportKwh")
+	assert.Contains(t, *up.UpdateExpression, "peakComputedAt")
+	assert.NotContains(t, *up.UpdateExpression, "derivedStatsComputedAt")
+	assert.NotContains(t, *up.UpdateExpression, "dailyUsage")
+
+	// 1 kW over the 21h of peak window (24h minus the 3h off-peak) = 21.0 kWh.
+	peakAV, ok := up.ExpressionAttributeValues[":pk"]
+	require.True(t, ok, "peak update must set :pk")
+	var peak float64
+	require.NoError(t, attributevalue.Unmarshal(peakAV, &peak))
+	assert.InDelta(t, 21.0, peak, 0.01)
+}
+
+func TestBackfill_Peak_AbsentDailyEnergyRow_SkippedNoWrite(t *testing.T) {
+	// Decision 7: an absent flux-daily-energy row must be skipped for peak with
+	// no write — no phantom-row creation.
+	loc := sydney(t)
+	date := "2026-05-18"
+	f := &fakeDynamo{
+		location:    loc,
+		offpeakRows: map[string][]dynamo.OffpeakItem{"*": {existingCompleteRow(date)}},
+		readingsByDate: map[string][]dynamo.ReadingItem{
+			date: fullDayReadings(t, date, loc),
+		},
+		dailyEnergyByDate: map[string]dynamo.DailyEnergyItem{}, // no row for date
+	}
+	opts := backfillOptsForTest(loc, date)
+	res, err := runBackfill(context.Background(), f, opts)
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, res.PeakSkippedAbsent)
+	assert.Zero(t, res.PeakWritten)
+	assert.Empty(t, f.updates, "absent daily-energy row must not produce an UpdateItem (no phantom row)")
+}
+
+func TestBackfill_Peak_SparseBracketingWindow_SkippedNoWrite(t *testing.T) {
+	// When a bracketing sub-window fails the usability gate the date is skipped
+	// for peak (keeps the iOS fallback). chargeReadings covers only 11:00-14:00,
+	// so both peak sub-windows are empty.
+	loc := sydney(t)
+	date := "2026-05-18"
+	f := &fakeDynamo{
+		location:    loc,
+		offpeakRows: map[string][]dynamo.OffpeakItem{"*": {existingCompleteRow(date)}},
+		readingsByDate: map[string][]dynamo.ReadingItem{
+			date: chargeReadings(t, date, loc),
+		},
+		dailyEnergyByDate: map[string]dynamo.DailyEnergyItem{
+			date: existingDailyEnergyRow(date),
+		},
+	}
+	opts := backfillOptsForTest(loc, date)
+	res, err := runBackfill(context.Background(), f, opts)
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, res.PeakSkippedSparse)
+	assert.Zero(t, res.PeakWritten)
+	assert.Empty(t, f.updates, "sparse bracketing window must not write peak")
+}
+
+func TestBackfill_Peak_DryRun_NoWriteToEitherTable(t *testing.T) {
+	// --dry-run must issue no PutItem (off-peak) and no UpdateItem (peak), while
+	// still counting and summarising the intended peak write.
+	loc := sydney(t)
+	date := "2026-05-18"
+	f := &fakeDynamo{
+		location:    loc,
+		offpeakRows: map[string][]dynamo.OffpeakItem{"*": {existingCompleteRow(date)}},
+		readingsByDate: map[string][]dynamo.ReadingItem{
+			date: fullDayReadings(t, date, loc),
+		},
+		dailyEnergyByDate: map[string]dynamo.DailyEnergyItem{
+			date: existingDailyEnergyRow(date),
+		},
+	}
+	opts := backfillOptsForTest(loc, date)
+	opts.dryRun = true
+	res, err := runBackfill(context.Background(), f, opts)
+	require.NoError(t, err)
+
+	assert.Empty(t, f.puts, "dry-run must not write off-peak")
+	assert.Empty(t, f.updates, "dry-run must not write peak")
+	assert.Equal(t, 1, res.PeakWritten, "dry-run still counts the intended peak write")
+	hasPeakLine := false
+	for _, line := range res.Summary {
+		if bytes.Contains([]byte(line), []byte("peak")) {
+			hasPeakLine = true
+		}
+	}
+	assert.True(t, hasPeakLine, "dry-run summary should include a peak line. got: %v", res.Summary)
+}
+
+func TestBackfill_Peak_OffpeakRecomputeStillWorks(t *testing.T) {
+	// Adding the peak side must not change off-peak behaviour: the off-peak row
+	// is still written with the recomputed deltas alongside the peak write.
+	loc := sydney(t)
+	date := "2026-05-18"
+	f := &fakeDynamo{
+		location:    loc,
+		offpeakRows: map[string][]dynamo.OffpeakItem{"*": {existingCompleteRow(date)}},
+		readingsByDate: map[string][]dynamo.ReadingItem{
+			date: fullDayReadings(t, date, loc),
+		},
+		dailyEnergyByDate: map[string]dynamo.DailyEnergyItem{
+			date: existingDailyEnergyRow(date),
+		},
+	}
+	opts := backfillOptsForTest(loc, date)
+	res, err := runBackfill(context.Background(), f, opts)
+	require.NoError(t, err)
+
+	require.Len(t, f.puts, 1, "off-peak row must still be written")
+	assert.Equal(t, 1, res.RowsWritten)
+	persisted := decodeOffpeakItem(t, f.puts[0].Item)
+	// 1 kW over the 3h off-peak window (11:00-14:00) = 3.0 kWh.
+	assert.InDelta(t, 3.0, persisted.GridUsageKwh, 0.01)
+	// And peak was written independently.
+	assert.Equal(t, 1, res.PeakWritten)
+	require.Len(t, f.updates, 1)
+}
+
+func TestValidateOpts_RejectsMissingDailyEnergyTable(t *testing.T) {
+	loc := sydney(t)
+	opts := backfillOptsForTest(loc, "2026-05-18")
+	opts.tableDailyEnergy = ""
+
+	err := validateOpts(opts)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "table-daily-energy")
 }
 
 func TestValidateOpts_RejectsReversedDateRange(t *testing.T) {

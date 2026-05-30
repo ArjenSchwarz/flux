@@ -74,6 +74,13 @@ The V1 plan (`docs/flux-v1.md`) is the authoritative product spec covering both 
 - **DynamoDB on-demand billing** — low volume (~260K writes/month), on-demand is cheaper than provisioned
 - **DeletionPolicy: Retain** on DynamoDB tables, **Delete** on log groups
 
+## Data Consistency
+
+A value that appears on more than one screen MUST be computed the same way and show the same number on every screen. This applies to today's live values as much as to historical ones — there is no acceptable reason for today's peak grid import (or any other shared metric) to read differently on the Dashboard, Day Detail, and History.
+
+- Compute a shared metric once — server-side where possible, otherwise in a single FluxCore helper — and have every view consume that one source rather than re-deriving it locally.
+- If a metric can only be approximated when the canonical value is absent (a fallback), every screen showing that metric MUST use the same fallback, so the screens never disagree.
+
 ## iOS App
 
 - iOS 26+ with Liquid Glass styling

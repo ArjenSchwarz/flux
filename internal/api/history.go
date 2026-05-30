@@ -155,6 +155,11 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 				day.OffpeakGridExportKwh = floatPtr(exp)
 			}
 		}
+		// Peak grid import is the stored server-computed value only (Decision 4):
+		// today's row has no stored peak, so the iOS fallback applies there.
+		if item.PeakGridImportKwh != nil {
+			day.PeakGridImportKwh = floatPtr(*item.PeakGridImportKwh)
+		}
 		if note, ok := notesByDate[item.Date]; ok {
 			n := note
 			day.Note = &n

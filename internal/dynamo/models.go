@@ -48,6 +48,21 @@ type DailyEnergyItem struct {
 	SocLow                 *SocLowAttr      `dynamodbav:"socLow,omitempty"`
 	PeakPeriods            []PeakPeriodAttr `dynamodbav:"peakPeriods,omitempty"`
 	DerivedStatsComputedAt string           `dynamodbav:"derivedStatsComputedAt,omitempty"`
+
+	// PeakGridImportKwh is the trapezoidal integration of max(pgrid,0) over the
+	// two windows bracketing off-peak (peak-from-readings spec). It is computed
+	// independently of the derivedStats block above and gated on its own
+	// PeakComputedAt sentinel (Decision 3): the hourly pass forward-fills it
+	// onto each day's row as that day becomes "yesterday", and the
+	// cmd/backfill-grid CLI fills pre-deploy historical rows within the readings
+	// TTL (Decision 7) — neither redoes the other derived stats. Absent when the
+	// integration's usability gate fails for either sub-window.
+	//
+	// Storage naming note (Decision 6): the off-peak counterpart is stored as
+	// OffpeakItem.GridUsageKwh; this field uses "Import" to match the API key
+	// peakGridImportKwh. The divergence is intentional and not worth a rename.
+	PeakGridImportKwh *float64 `dynamodbav:"peakGridImportKwh,omitempty"`
+	PeakComputedAt    string   `dynamodbav:"peakComputedAt,omitempty"`
 }
 
 // DailyUsageAttr is the storage shape for derivedstats.DailyUsage.
@@ -92,6 +107,15 @@ type DerivedStats struct {
 	SocLow                 *SocLowAttr
 	PeakPeriods            []PeakPeriodAttr
 	DerivedStatsComputedAt string
+
+	// PeakGridImportKwh / PeakComputedAt carry the peak-from-readings result.
+	// They have an independent lifecycle from the four fields above: the
+	// summarisation pass may set only these (on a row that already has derived
+	// stats) or only the four above (on a row whose readings fail the peak
+	// usability gate). UpdateDailyEnergyDerived writes each group only when its
+	// sentinel is non-empty.
+	PeakGridImportKwh *float64
+	PeakComputedAt    string
 }
 
 // DailyPowerItem represents a row in the flux-daily-power table.

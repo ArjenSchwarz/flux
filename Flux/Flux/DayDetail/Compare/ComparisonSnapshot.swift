@@ -13,7 +13,36 @@ struct ComparisonSnapshot: Sendable, Equatable {
     let batteryCharge: Double?
     let batteryDischarge: Double?
     let offpeakGridImport: Double?
+    /// Server-computed peak grid import for the comparison day (past days).
+    /// nil for today or gate-failed days → the computed `peakGridImport` falls
+    /// back to the residual.
+    let peakGridImportServer: Double?
     let dailyUsage: DailyUsage?
+
+    /// Explicit memberwise init with `peakGridImportServer` defaulted so the
+    /// field can stay `let` (immutable) yet remain omittable by existing call
+    /// sites that predate it.
+    init(
+        date: String,
+        solar: Double?,
+        gridImport: Double?,
+        gridExport: Double?,
+        batteryCharge: Double?,
+        batteryDischarge: Double?,
+        offpeakGridImport: Double?,
+        peakGridImportServer: Double? = nil,
+        dailyUsage: DailyUsage?
+    ) {
+        self.date = date
+        self.solar = solar
+        self.gridImport = gridImport
+        self.gridExport = gridExport
+        self.batteryCharge = batteryCharge
+        self.batteryDischarge = batteryDischarge
+        self.offpeakGridImport = offpeakGridImport
+        self.peakGridImportServer = peakGridImportServer
+        self.dailyUsage = dailyUsage
+    }
 
     var houseUsed: Double? {
         HouseholdLoad.kwh(
@@ -25,11 +54,13 @@ struct ComparisonSnapshot: Sendable, Equatable {
         )
     }
 
-    /// Production data always carries the off-peak split (Decision 10), but
-    /// the wire type is optional, so the guard is defensive: when the field
-    /// is unexpectedly nil this returns nil and the per-row fallback handles
-    /// the Grid in (peak) row.
+    /// Prefers the server-computed peak (peak-from-readings Decision 8) for the
+    /// comparison day. Production data always carries the off-peak split
+    /// (Decision 10), but the wire type is optional, so the residual guard is
+    /// defensive: when both are unexpectedly nil this returns nil and the
+    /// per-row fallback handles the Grid in (peak) row.
     var peakGridImport: Double? {
+        if let peakGridImportServer { return peakGridImportServer }
         guard let gridImport, let offpeakGridImport else { return nil }
         return max(0, gridImport - offpeakGridImport)
     }
@@ -52,6 +83,7 @@ struct ComparisonSnapshot: Sendable, Equatable {
             batteryCharge: response.summary?.eCharge,
             batteryDischarge: response.summary?.eDischarge,
             offpeakGridImport: response.summary?.offpeakGridImportKwh,
+            peakGridImportServer: response.summary?.peakGridImportKwh,
             dailyUsage: response.dailyUsage
         )
     }

@@ -96,6 +96,27 @@ struct DayCostsTests {
     }
 
     @Test
+    func costsPrefersServerPeakOverResidualWhenPresent() throws {
+        // Server peak (6.5) deliberately differs from the residual eInput-offpeak
+        // (10-3=7) so the assertion proves the server value is used, not the residual.
+        let pricing = [period(start: "2026-04-01", end: nil, peak: 0.30, feedIn: 0.05, offPeak: 0.10)]
+        let summary = makeSummary(eInput: 10, eOutput: 4, offpeakKwh: 3, peakKwh: 6.5)
+        let costs = try #require(summary.costs(forDate: "2026-04-15", in: pricing))
+        #expect(costs.peakImportsCost == 6.5 * 0.30)
+        // Off-peak savings still price the measured off-peak kWh unchanged.
+        #expect(costs.offPeakSavings == 3 * 0.10)
+        #expect(costs.net == 6.5 * 0.30 - 4 * 0.05)
+    }
+
+    @Test
+    func costsFallsBackToResidualWhenServerPeakNil() throws {
+        let pricing = [period(start: "2026-04-01", end: nil, peak: 0.30, feedIn: 0.05, offPeak: 0.10)]
+        let summary = makeSummary(eInput: 10, eOutput: 4, offpeakKwh: 3, peakKwh: nil)
+        let costs = try #require(summary.costs(forDate: "2026-04-15", in: pricing))
+        #expect(costs.peakImportsCost == 7 * 0.30)
+    }
+
+    @Test
     func peakImportsKwhClampedAtZeroWhenOffpeakExceedsEInput() throws {
         // Off-peak should never exceed eInput in real data, but the
         // computation must not produce a negative peak-imports value.
@@ -121,6 +142,22 @@ struct DayCostsTests {
         #expect(costs.peakImportsCost == 7 * 0.30)
         #expect(costs.solarFeedInIncome == 4 * 0.05)
         #expect(costs.offPeakSavings == 3 * 0.10)
+    }
+
+    @Test
+    func dayEnergyForwardsServerPeakIntoCosts() throws {
+        let pricing = [period(start: "2026-04-01", end: nil, peak: 0.30, feedIn: 0.05, offPeak: 0.10)]
+        let day = DayEnergy(
+            date: "2026-04-15",
+            epv: 0, eInput: 10, eOutput: 4,
+            eCharge: 0, eDischarge: 0,
+            offpeakGridImportKwh: 3, offpeakGridExportKwh: nil,
+            peakGridImportKwh: 6.5,
+            note: nil
+        )
+        let costs = try #require(day.costs(in: pricing))
+        // Forwarder must carry the server peak into the transient DaySummary.
+        #expect(costs.peakImportsCost == 6.5 * 0.30)
     }
 
     @Test
@@ -165,7 +202,12 @@ struct DayCostsTests {
         )
     }
 
-    private func makeSummary(eInput: Double?, eOutput: Double?, offpeakKwh: Double?) -> DaySummary {
+    private func makeSummary(
+        eInput: Double?,
+        eOutput: Double?,
+        offpeakKwh: Double?,
+        peakKwh: Double? = nil
+    ) -> DaySummary {
         DaySummary(
             epv: nil,
             eInput: eInput,
@@ -175,7 +217,8 @@ struct DayCostsTests {
             socLow: nil,
             socLowTime: nil,
             offpeakGridImportKwh: offpeakKwh,
-            offpeakGridExportKwh: nil
+            offpeakGridExportKwh: nil,
+            peakGridImportKwh: peakKwh
         )
     }
 }
