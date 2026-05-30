@@ -234,3 +234,26 @@ history in one operator run, matching the established `backfill-offpeak` /
 After deploying the new Lambda + poller image, run `cmd/backfill-grid` once
 (with `--table-daily-energy`) to populate peak on the existing 30-day history.
 Until then those days display the iOS residual fallback.
+
+## Addendum: live peak for today across all three screens (T-1420 / T-1421, Decision 9)
+
+Decision 4a deferred a real-time peak path for today and Decision 8 deferred the
+Dashboard; both are superseded by **Decision 9**. The follow-up work adds a single
+server-side `api.livePeakGridImport(readings, now, offpeakStart, offpeakEnd)` that
+integrates `max(pgrid,0)` directly over the two windows bracketing off-peak —
+morning `[00:00, min(now, opStart))` and evening `[opEnd, min(now, dayEnd))` —
+clamped to `now`, **gated on the morning window only** (the evening window is empty
+before 14:00, so `IntegratePeakGridImportKwh`'s both-windows gate can't serve the
+partial day). It trims to the Sydney day internally so `/status` (rolling 24h) and
+`/day` / `/history` (today-only) return an identical value, independent of
+`reconcileEnergy`.
+
+`peakGridImportKwh` is now exposed for **today** on `/status` (new `StatusResponse`
+field), `/day`, and `/history`; past days keep the stored value. On iOS, the
+History `gridEntry` and `SummaryBlock.gridInRows` render the peak/off-peak split
+whenever a peak value is present (off-peak shown as `0` before the window opens),
+falling back to the residual and collapsing to a combined row only when neither a
+server peak nor an off-peak value is known (pre-30-day rows, **Decision 4b
+retained**). Cross-screen equality is locked in by
+`TestTodayPeakGridImportConsistentAcrossEndpoints`. Full detail in
+`specs/bugfixes/today-peak-grid-import/report.md`.

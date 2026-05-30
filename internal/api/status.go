@@ -200,6 +200,15 @@ func (h *Handler) handleStatus(ctx context.Context, _ events.LambdaFunctionURLRe
 	// complete (from the finalised row) or pending today (live-integrated
 	// from the readings already in memory for live compute).
 	resp.Offpeak = buildOffpeak(opItem, allReadings, now, h.offpeakStart, h.offpeakEnd)
+
+	// Peak grid import so far today: integrated directly from readings over the
+	// two windows bracketing off-peak, independent of reconcileEnergy so the
+	// off-peak sampling artifact never lands on peak (T-1421). Absent until the
+	// morning window has enough samples; iOS then uses its residual fallback.
+	if peak, ok := livePeakGridImport(allReadings, now, h.offpeakStart, h.offpeakEnd); ok {
+		resp.PeakGridImportKwh = floatPtr(derivedstats.RoundEnergy(peak))
+	}
+
 	resp.Note = noteText
 
 	return jsonResponse(resp)

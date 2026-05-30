@@ -53,12 +53,14 @@ struct APIModelsTests {
             "eOutput": 5.94,
             "eCharge": 5.7,
             "eDischarge": 6.8
-          }
+          },
+          "peakGridImportKwh": 1.85
         }
         """
 
         let status = try decoder.decode(StatusResponse.self, from: Data(json.utf8))
 
+        #expect(status.peakGridImportKwh == 1.85)
         #expect(status.live?.ppv == 2400)
         #expect(status.live?.soc == 62.4)
         #expect(status.live?.pgridSustained == false)
@@ -92,6 +94,7 @@ struct APIModelsTests {
         #expect(status.rolling15min == nil)
         #expect(status.offpeak == nil)
         #expect(status.todayEnergy == nil)
+        #expect(status.peakGridImportKwh == nil)
     }
 
     @Test

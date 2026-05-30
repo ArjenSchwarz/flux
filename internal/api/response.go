@@ -10,7 +10,12 @@ type StatusResponse struct {
 	Rolling15m  *RollingAvg  `json:"rolling15min"`
 	Offpeak     *OffpeakData `json:"offpeak"`
 	TodayEnergy *TodayEnergy `json:"todayEnergy"`
-	Note        *string      `json:"note"`
+	// PeakGridImportKwh is today's peak (non-off-peak) grid import so far,
+	// integrated directly from Pgrid over the windows bracketing off-peak
+	// (T-1421). Absent when the morning window is not yet integrable; the iOS
+	// Dashboard then falls back to the eInput − offpeak residual.
+	PeakGridImportKwh *float64 `json:"peakGridImportKwh,omitempty"`
+	Note              *string  `json:"note"`
 }
 
 // LiveData contains the most recent power readings.

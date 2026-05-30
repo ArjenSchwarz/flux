@@ -226,13 +226,27 @@ extension HistoryViewModel {
         }
 
         private static func gridEntry(day: DayEnergy, parsedDate: Date, isToday: Bool) -> GridEntry? {
-            guard let offpeakImport = day.offpeakGridImportKwh else { return nil }
-            let peak = day.peakGridImportKwh ?? max(0, day.eInput - offpeakImport)
+            // Prefer the server peak (today's live value or a stored past day) so
+            // the split renders even before the off-peak window opens, where
+            // off-peak is genuinely 0, not missing (T-1420). Else use the
+            // eInput − off-peak residual; else omit (no split info — never imply
+            // a misleading off-peak 0).
+            let peak: Double
+            let offpeak: Double
+            if let serverPeak = day.peakGridImportKwh {
+                peak = serverPeak
+                offpeak = day.offpeakGridImportKwh ?? 0
+            } else if let offpeakImport = day.offpeakGridImportKwh {
+                peak = max(0, day.eInput - offpeakImport)
+                offpeak = offpeakImport
+            } else {
+                return nil
+            }
             return GridEntry(
                 date: parsedDate,
                 dayID: day.date,
                 peakImportKwh: peak,
-                offpeakImportKwh: offpeakImport,
+                offpeakImportKwh: offpeak,
                 exportKwh: day.eOutput,
                 isToday: isToday
             )
