@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
@@ -92,27 +93,53 @@ func (s *DynamoStore) WriteDailyEnergy(ctx context.Context, item DailyEnergyItem
 func (s *DynamoStore) UpdateDailyEnergyDerived(ctx context.Context, sysSn, date string, stats DerivedStats) error {
 	tableName := s.tables.DailyEnergy
 
-	dailyUsageAV, err := attributevalue.Marshal(stats.DailyUsage)
-	if err != nil {
-		return fmt.Errorf("marshal dailyUsage (sysSn=%s, date=%s): %w", sysSn, date, err)
-	}
-	socLowAV, err := attributevalue.Marshal(stats.SocLow)
-	if err != nil {
-		return fmt.Errorf("marshal socLow (sysSn=%s, date=%s): %w", sysSn, date, err)
-	}
-	peakPeriodsAV, err := attributevalue.Marshal(stats.PeakPeriods)
-	if err != nil {
-		return fmt.Errorf("marshal peakPeriods (sysSn=%s, date=%s): %w", sysSn, date, err)
+	// The derivedStats group and the peak group have independent lifecycles
+	// (Decision 3). Each is written only when its own sentinel is non-empty,
+	// so the summarisation pass can fill peak on a row that already has derived
+	// stats — and vice versa — without clobbering the other group with zero
+	// values. At least one group is always present in a real call; an empty
+	// stats produces a no-op write guarded below.
+	sets := make([]string, 0, 6)
+	values := map[string]types.AttributeValue{}
+
+	if stats.DerivedStatsComputedAt != "" {
+		dailyUsageAV, err := attributevalue.Marshal(stats.DailyUsage)
+		if err != nil {
+			return fmt.Errorf("marshal dailyUsage (sysSn=%s, date=%s): %w", sysSn, date, err)
+		}
+		socLowAV, err := attributevalue.Marshal(stats.SocLow)
+		if err != nil {
+			return fmt.Errorf("marshal socLow (sysSn=%s, date=%s): %w", sysSn, date, err)
+		}
+		peakPeriodsAV, err := attributevalue.Marshal(stats.PeakPeriods)
+		if err != nil {
+			return fmt.Errorf("marshal peakPeriods (sysSn=%s, date=%s): %w", sysSn, date, err)
+		}
+		sets = append(sets, "dailyUsage = :du", "socLow = :sl", "peakPeriods = :pp", "derivedStatsComputedAt = :ts")
+		values[":du"] = dailyUsageAV
+		values[":sl"] = socLowAV
+		values[":pp"] = peakPeriodsAV
+		values[":ts"] = &types.AttributeValueMemberS{Value: stats.DerivedStatsComputedAt}
 	}
 
-	updateExpr := "SET dailyUsage = :du, socLow = :sl, peakPeriods = :pp, derivedStatsComputedAt = :ts"
-	values := map[string]types.AttributeValue{
-		":du": dailyUsageAV,
-		":sl": socLowAV,
-		":pp": peakPeriodsAV,
-		":ts": &types.AttributeValueMemberS{Value: stats.DerivedStatsComputedAt},
+	if stats.PeakComputedAt != "" {
+		peakAV, err := attributevalue.Marshal(stats.PeakGridImportKwh)
+		if err != nil {
+			return fmt.Errorf("marshal peakGridImportKwh (sysSn=%s, date=%s): %w", sysSn, date, err)
+		}
+		sets = append(sets, "peakGridImportKwh = :pk", "peakComputedAt = :pkts")
+		values[":pk"] = peakAV
+		values[":pkts"] = &types.AttributeValueMemberS{Value: stats.PeakComputedAt}
 	}
-	_, err = s.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+
+	if len(sets) == 0 {
+		// Nothing to write — neither sentinel set. Treat as a no-op rather
+		// than issuing an empty UpdateExpression (which DynamoDB rejects).
+		return nil
+	}
+
+	updateExpr := "SET " + strings.Join(sets, ", ")
+	_, err := s.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
 		TableName: &tableName,
 		Key: map[string]types.AttributeValue{
 			"sysSn": &types.AttributeValueMemberS{Value: sysSn},
@@ -221,10 +248,7 @@ func (s *DynamoStore) WriteDailyPower(ctx context.Context, items []DailyPowerIte
 	}
 
 	for i := 0; i < len(items); i += batchWriteMax {
-		end := i + batchWriteMax
-		if end > len(items) {
-			end = len(items)
-		}
+		end := min(i+batchWriteMax, len(items))
 
 		requests := make([]types.WriteRequest, 0, end-i)
 		for _, item := range items[i:end] {

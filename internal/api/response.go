@@ -106,6 +106,7 @@ type DayEnergy struct {
 	EDischarge           float64                   `json:"eDischarge"`
 	OffpeakGridImportKwh *float64                  `json:"offpeakGridImportKwh,omitempty"`
 	OffpeakGridExportKwh *float64                  `json:"offpeakGridExportKwh,omitempty"`
+	PeakGridImportKwh    *float64                  `json:"peakGridImportKwh,omitempty"`
 	DailyUsage           *derivedstats.DailyUsage  `json:"dailyUsage,omitempty"`
 	SocLow               *float64                  `json:"socLow,omitempty"`
 	SocLowTime           *string                   `json:"socLowTime,omitempty"`
@@ -175,4 +176,5 @@ type DaySummary struct {
 	SocLowTime           *string  `json:"socLowTime"`
 	OffpeakGridImportKwh *float64 `json:"offpeakGridImportKwh,omitempty"`
 	OffpeakGridExportKwh *float64 `json:"offpeakGridExportKwh,omitempty"`
+	PeakGridImportKwh    *float64 `json:"peakGridImportKwh,omitempty"`
 }

@@ -202,6 +202,12 @@ func (h *Handler) handleDay(ctx context.Context, req events.LambdaFunctionURLReq
 				summary.OffpeakGridExportKwh = floatPtr(exp)
 			}
 		}
+		// Peak grid import is the stored server-computed value only — no
+		// real-time compute path for today (Decision 4); today's row is absent
+		// and the iOS fallback applies.
+		if deItem != nil && deItem.PeakGridImportKwh != nil {
+			summary.PeakGridImportKwh = floatPtr(*deItem.PeakGridImportKwh)
+		}
 		resp.Summary = summary
 	}
 

@@ -110,17 +110,19 @@ func TestSummarisation_NoRow(t *testing.T) {
 }
 
 func TestSummarisation_AlreadyPopulated(t *testing.T) {
+	// Both sentinels present → the pass skips entirely (Decision 3).
 	ms := &mockStore{
 		getDailyEnergyResult: &dynamo.DailyEnergyItem{
 			SysSn: "TEST123", Date: "2026-04-14",
 			DerivedStatsComputedAt: "2026-04-14T22:00:00Z",
+			PeakComputedAt:         "2026-04-14T22:00:00Z",
 		},
 	}
 	p, _ := summarisationFixturePoller(t, ms)
 
 	result := p.runSummarisationPass(context.Background(), "2026-04-14")
 	assert.Equal(t, PassResultSkippedAlreadyDone, result)
-	// Critical: must NOT issue a readings query when sentinel is present
+	// Critical: must NOT issue a readings query when both sentinels are present
 	// (per AC 1.10 and the design — the precheck saves the query cost).
 	assert.Nil(t, ms.queryReadingsResult, "queryReadingsResult unset means QueryReadings must not have been called for default")
 }
@@ -298,6 +300,7 @@ func TestSummarisation_PrecheckShortCircuits_NoReadingsQuery(t *testing.T) {
 		getDailyEnergyResult: &dynamo.DailyEnergyItem{
 			SysSn: "TEST123", Date: "2026-04-14",
 			DerivedStatsComputedAt: "2026-04-14T22:00:00Z",
+			PeakComputedAt:         "2026-04-14T22:00:00Z",
 		},
 	}
 	p, _ := summarisationFixturePoller(t, ms)

@@ -7,27 +7,27 @@ references:
 
 ## Backend
 
-- [ ] 1. Peak grid import is computed from readings over the two windows bracketing off-peak <!-- id:1am1857 -->
+- [x] 1. Peak grid import is computed from readings over the two windows bracketing off-peak <!-- id:1am1857 -->
   - A new integration helper sums max(Pgrid,0) over [day-start, offpeak-start) and [offpeak-end, next-day-start) using the same trapezoidal method and usability gate as the existing off-peak integrator.
   - Returns a combined value plus provenance and a usable flag that is true only when both sub-windows pass the gate.
   - Verify with unit tests: both sub-windows summed correctly; gate failure when one sub-window has sparse readings yields not-usable; DST-length (23h/25h) days handled via the unix-timestamp window args; peak+offpeak lands within 3% of eInput on a representative full day.
   - References: specs/peak-from-readings/smolspec.md
 
-- [ ] 2. The daily-energy row carries and persists the peak grid import value <!-- id:1am1858 -->
+- [x] 2. The daily-energy row carries and persists the peak grid import value <!-- id:1am1858 -->
   - The stored daily-energy item gains an optional peak grid import field plus an independent compute sentinel; the daily-energy write path persists both when set and omits them when nil.
   - Storage naming divergence with the off-peak field is intentional (Decision 6).
   - Verify with a store-layer test that round-trips a row with the field set and a row with it unset, confirming the attribute is absent from the persisted item when nil.
   - Blocked-by: 1am1857 (Peak grid import is computed from readings over the two windows bracketing off-peak)
   - References: specs/peak-from-readings/smolspec.md
 
-- [ ] 3. The hourly summarisation pass backfills peak grid import via an independent sentinel <!-- id:1am1859 -->
+- [x] 3. The hourly summarisation pass backfills peak grid import via an independent sentinel <!-- id:1am1859 -->
   - The pass populates peak grid import on eligible rows gated on its own sentinel, leaving the existing derived-stats block and its sentinel untouched (Decision 3).
   - A row that already has derived stats but no peak gets peak written on the next tick; a row is skipped only when both sentinels are set; a sub-window gate failure leaves the field absent.
   - Verify with pass-level tests: a row with derived stats but no peak gets peak written; a row with both sentinels set is skipped; a gate failure leaves the field unwritten.
   - Blocked-by: 1am1858 (The daily-energy row carries and persists the peak grid import value)
   - References: specs/peak-from-readings/smolspec.md
 
-- [ ] 4. The /day and /history responses expose peakGridImportKwh <!-- id:1am185a -->
+- [x] 4. The /day and /history responses expose peakGridImportKwh <!-- id:1am185a -->
   - Both the day-summary and history-day responses include peakGridImportKwh sourced from the stored value, at JSON key peakGridImportKwh alongside offpeakGridImportKwh, omitted when absent.
   - No real-time compute path for today (Decision 4).
   - Verify with API tests asserting the field appears with the stored value when present and is absent from the JSON when unset, on both endpoints.

@@ -100,6 +100,41 @@ func IntegrateOffpeakDeltas(readings []Reading, startUnix, endUnix int64) (Offpe
 	return out, true
 }
 
+// IntegratePeakGridImportKwh returns the grid-import energy (∫ max(pgrid, 0))
+// over the two windows bracketing the off-peak window: [dayStartUnix,
+// offpeakStartUnix) and [offpeakEndUnix, dayEndUnix). It is the peak-tariff
+// complement of the off-peak grid import IntegrateOffpeakDeltas computes for
+// the [offpeakStart, offpeakEnd) window.
+//
+// Window args are unix timestamps to match IntegrateOffpeakDeltas; the caller
+// converts the HH:MM SSM config to absolute boundaries (DST-correct because
+// the boundaries are derived from time.ParseInLocation / AddDate). DST-length
+// (23h / 25h) days are handled naturally — the helper only sees timestamps.
+//
+// Returns the summed kWh plus combined provenance (sampleCount, skippedPairs)
+// across both sub-windows. ok is true only when BOTH sub-windows pass the
+// usability gate of IntegrateOffpeakDeltas; if either is unusable (e.g. sparse
+// readings on an overnight poller outage), ok is false and the caller omits
+// the field. Both windows reuse the same trapezoidal integrator — no new
+// numerical method is introduced.
+//
+// Precondition: readings must be sorted by Timestamp ascending (same as
+// IntegrateOffpeakDeltas).
+func IntegratePeakGridImportKwh(readings []Reading, dayStartUnix, offpeakStartUnix, offpeakEndUnix, dayEndUnix int64) (kwh float64, sampleCount int, skippedPairs int, ok bool) {
+	morning, mornOK := IntegrateOffpeakDeltas(readings, dayStartUnix, offpeakStartUnix)
+	if !mornOK {
+		return 0, 0, 0, false
+	}
+	evening, evenOK := IntegrateOffpeakDeltas(readings, offpeakEndUnix, dayEndUnix)
+	if !evenOK {
+		return 0, 0, 0, false
+	}
+	return morning.GridImportKwh + evening.GridImportKwh,
+		morning.SampleCount + evening.SampleCount,
+		morning.SkippedPairs + evening.SkippedPairs,
+		true
+}
+
 // bracketIndices returns:
 //   - iL: largest index with readings[iL].Timestamp < startUnix, or -1 when none.
 //   - iR: smallest index > iL with readings[iR].Timestamp >= endUnix, or len(readings).
