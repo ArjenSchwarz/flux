@@ -105,8 +105,9 @@ struct DashboardHeroPanel: View {
         }
     }
 
-    /// Single source for the power-flow label shared by `powerFlowPrefix` and
-    /// the status line, so the two cannot drift on wording or formatting.
+    // Single source for the power-flow labels — consumed by both
+    // `powerFlowPrefix` and the status line so the two cannot drift on wording
+    // or formatting.
     static func dischargingLabel(_ watts: Double) -> String {
         "Discharging · \(PowerFormatting.format(watts))"
     }

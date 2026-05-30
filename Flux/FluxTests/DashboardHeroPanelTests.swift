@@ -72,4 +72,14 @@ struct DashboardHeroPanelTests {
             ) == "Won't empty before 11:00"
         )
     }
+
+    // Pin the shared power-flow labels: the "·" separator and the W/kW
+    // threshold are part of the assembled indicator and status-line strings,
+    // so a formatting change here must be a deliberate one.
+    @Test
+    func powerFlowLabelsFormatWattsAndKilowatts() {
+        #expect(DashboardHeroPanel.dischargingLabel(400) == "Discharging · 400 W")
+        #expect(DashboardHeroPanel.dischargingLabel(2400) == "Discharging · 2.40 kW")
+        #expect(DashboardHeroPanel.chargingLabel(1200) == "Charging · 1.20 kW")
+    }
 }
