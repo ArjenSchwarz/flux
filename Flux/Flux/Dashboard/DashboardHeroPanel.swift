@@ -61,19 +61,58 @@ struct DashboardHeroPanel: View {
         }
     }
 
+    /// Leads with the live power-flow rate (when discharging or charging) so
+    /// the indicator carries the same context as the "empty by" line, then
+    /// states the off-peak floor. Rendered entirely in `secondaryText` — the
+    /// time is deliberately not amber (Decision 9: this is an informational
+    /// state, not a cutoff warning).
     private func cantEmptyBeforeOffpeakIndicator(offpeakWindowStart: String) -> some View {
-        Text(Self.cantEmptyBeforeOffpeakVisibleText(offpeakWindowStart: offpeakWindowStart))
-            .appFont(FluxTheme.Typography.heroSubline)
-            .foregroundStyle(FluxTheme.Palette.secondaryText)
-            .accessibilityLabel(
-                Self.cantEmptyBeforeOffpeakAccessibilityLabel(offpeakWindowStart: offpeakWindowStart)
+        Text(
+            Self.cantEmptyBeforeOffpeakVisibleText(
+                prefix: powerFlowPrefix,
+                offpeakWindowStart: offpeakWindowStart
             )
+        )
+        .appFont(FluxTheme.Typography.heroSubline)
+        .foregroundStyle(FluxTheme.Palette.secondaryText)
+        .accessibilityLabel(
+            Self.cantEmptyBeforeOffpeakAccessibilityLabel(offpeakWindowStart: offpeakWindowStart)
+        )
     }
 
-    /// Visible indicator text. `offpeakWindowStart` is already an `HH:MM`
-    /// string from the wire — substituted verbatim.
-    static func cantEmptyBeforeOffpeakVisibleText(offpeakWindowStart: String) -> String {
-        "Won't empty before \(offpeakWindowStart)"
+    /// Visible indicator text. When the battery is discharging or charging the
+    /// line leads with the rate prefix; otherwise it falls back to the bare
+    /// form. `offpeakWindowStart` is already an `HH:MM` string from the wire —
+    /// substituted verbatim.
+    static func cantEmptyBeforeOffpeakVisibleText(prefix: String?, offpeakWindowStart: String) -> String {
+        if let prefix {
+            return "\(prefix) · won't empty before \(offpeakWindowStart)"
+        }
+        return "Won't empty before \(offpeakWindowStart)"
+    }
+
+    /// The leading `Discharging · 2.40 kW` / `Charging · 1.20 kW` segment shared
+    /// with the status line. Nil when idle or awaiting data — there is no
+    /// meaningful rate to show, so the indicator falls back to bare text.
+    private var powerFlowPrefix: String? {
+        switch mode {
+        case .discharging(let watts, _):
+            return Self.dischargingLabel(watts)
+        case .charging(let watts):
+            return Self.chargingLabel(watts)
+        case .idle, .unknown:
+            return nil
+        }
+    }
+
+    /// Single source for the power-flow label shared by `powerFlowPrefix` and
+    /// the status line, so the two cannot drift on wording or formatting.
+    static func dischargingLabel(_ watts: Double) -> String {
+        "Discharging · \(PowerFormatting.format(watts))"
+    }
+
+    static func chargingLabel(_ watts: Double) -> String {
+        "Charging · \(PowerFormatting.format(watts))"
     }
 
     /// VoiceOver announcement for the indicator. The exact string is the
@@ -100,7 +139,7 @@ struct DashboardHeroPanel: View {
         case .discharging(let watts, let cutoff):
             HStack(spacing: 4) {
                 if let cutoff {
-                    Text("Discharging · \(PowerFormatting.format(watts)) · ")
+                    Text("\(Self.dischargingLabel(watts)) · ")
                         .foregroundStyle(FluxTheme.Palette.secondaryText)
                     Text("empty by ")
                         .foregroundStyle(FluxTheme.Palette.secondaryText)
@@ -108,13 +147,13 @@ struct DashboardHeroPanel: View {
                         .foregroundStyle(FluxTheme.Palette.amber)
                         .monospacedDigit()
                 } else {
-                    Text("Discharging · \(PowerFormatting.format(watts))")
+                    Text(Self.dischargingLabel(watts))
                         .foregroundStyle(FluxTheme.Palette.secondaryText)
                 }
             }
             .appFont(FluxTheme.Typography.heroSubline)
         case .charging(let watts):
-            Text("Charging · \(PowerFormatting.format(watts))")
+            Text(Self.chargingLabel(watts))
                 .appFont(FluxTheme.Typography.heroSubline)
                 .foregroundStyle(FluxTheme.Palette.secondaryText)
         case .idle:

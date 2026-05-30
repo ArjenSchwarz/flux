@@ -48,4 +48,28 @@ struct DashboardHeroPanelTests {
                 == "Battery won't empty before off-peak at 23:00"
         )
     }
+
+    // The visible indicator leads with the live power-flow rate so it carries
+    // the same context as the "empty by" status line. With a prefix the line
+    // continues mid-sentence ("… · won't empty before …"); without one (idle /
+    // awaiting data) it stands alone with a leading capital.
+    @Test
+    func visibleTextLeadsWithPowerFlowPrefixWhenPresent() {
+        #expect(
+            DashboardHeroPanel.cantEmptyBeforeOffpeakVisibleText(
+                prefix: "Discharging · 400 W",
+                offpeakWindowStart: "11:00"
+            ) == "Discharging · 400 W · won't empty before 11:00"
+        )
+    }
+
+    @Test
+    func visibleTextFallsBackToBareFormWithoutPrefix() {
+        #expect(
+            DashboardHeroPanel.cantEmptyBeforeOffpeakVisibleText(
+                prefix: nil,
+                offpeakWindowStart: "11:00"
+            ) == "Won't empty before 11:00"
+        )
+    }
 }

@@ -307,3 +307,36 @@ Reading the AC literally would force one of the two strings to match the other. 
 - Anyone reading the AC strictly will notice the wording difference and need to find this decision.
 
 ---
+
+## Decision 10: Lead the indicator with the live power-flow rate, but keep it in secondary text
+
+**Date**: 2026-05-30
+**Status**: accepted
+
+### Context
+
+As first shipped (Decision 5), the indicator replaced the "empty by HH:MM" status line with a bare "Won't empty before HH:MM". In use, this dropped the live charge/discharge rate the standard status line always carries ("Discharging · 2.40 kW · empty by HH:MM"), so the hero lost the at-a-glance power context whenever the flag was set — the user reported the indicator should show the rate "similar to the empty-by message".
+
+### Decision
+
+Prefix the indicator with the same power-flow segment the status line uses — "Discharging · <rate>" / "Charging · <rate>" — yielding "Discharging · 400 W · won't empty before 11:00". When the battery is idle or live data is missing there is no meaningful rate, so the indicator falls back to the bare "Won't empty before HH:MM". The off-peak time stays in `secondaryText`; it is deliberately **not** rendered in amber, preserving the Decision 9 / feature intent that this is an informational state rather than a cutoff warning (amber on the status line signals an imminent empty, which is the opposite of what this indicator means).
+
+### Rationale
+
+Showing the rate restores parity with the status line the indicator replaces, so swapping between the two states no longer drops information. Keeping the time grey avoids the false-urgency signal amber would imply. The power-flow label string is now produced by a single shared helper (`dischargingLabel` / `chargingLabel` on `DashboardHeroPanel`) consumed by both the status line and the indicator, so the two cannot drift on wording or formatting.
+
+### Alternatives Considered
+
+- **Render the off-peak time in amber to match the status line's cutoff time**: Visually consistent with "empty by" — Rejected because amber connotes an approaching-empty warning; this indicator means the opposite (plenty of charge), so amber would mislead. (This was briefly implemented during the change and reverted on review.)
+- **Leave the indicator rate-free**: Less code — Rejected because it is the exact gap the user reported.
+
+### Consequences
+
+**Positive:**
+- The hero keeps the live power context in both the "empty by" and "won't empty before" states.
+- One shared helper for the power-flow label removes the duplication this change would otherwise introduce.
+
+**Negative:**
+- The VoiceOver label (Decision 9) still omits the rate now shown visually, so sighted and VoiceOver users get slightly different detail. Acceptable for now — the off-peak time and intent (the AC 3.5 contract) are still exposed — and noted as a candidate for a future a11y refinement.
+
+---
