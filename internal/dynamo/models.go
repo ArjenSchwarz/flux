@@ -52,10 +52,11 @@ type DailyEnergyItem struct {
 	// PeakGridImportKwh is the trapezoidal integration of max(pgrid,0) over the
 	// two windows bracketing off-peak (peak-from-readings spec). It is computed
 	// independently of the derivedStats block above and gated on its own
-	// PeakComputedAt sentinel (Decision 3), so a row populated before this
-	// feature shipped gets peak filled on the next hourly tick without redoing
-	// the other derived stats. Absent when the integration's usability gate
-	// fails for either sub-window.
+	// PeakComputedAt sentinel (Decision 3): the hourly pass forward-fills it
+	// onto each day's row as that day becomes "yesterday", and the
+	// cmd/backfill-grid CLI fills pre-deploy historical rows within the readings
+	// TTL (Decision 7) — neither redoes the other derived stats. Absent when the
+	// integration's usability gate fails for either sub-window.
 	//
 	// Storage naming note (Decision 6): the off-peak counterpart is stored as
 	// OffpeakItem.GridUsageKwh; this field uses "Import" to match the API key

@@ -52,15 +52,16 @@ func (p *Poller) runSummarisationPass(ctx context.Context, date string) string {
 		return PassResultSkippedNoRow
 	}
 
-	// Two orthogonal sentinels gate two independent compute blocks (Decision 3).
-	// Skip the whole pass only when BOTH are set; otherwise compute whichever
-	// group is still missing. A row with derived stats but no peak (e.g.
-	// pre-feature row picked up after deploy) gets only peak written.
+	// Two orthogonal sentinels gate two independent compute blocks
+	// (peak-from-readings Decision 3). Skip the whole pass only when BOTH are
+	// set; otherwise compute whichever group is still missing. A row with
+	// derived stats but no peak (e.g. pre-feature row picked up after deploy)
+	// gets only peak written.
 	needDerived := item.DerivedStatsComputedAt == ""
 	needPeak := item.PeakComputedAt == ""
 	if !needDerived && !needPeak {
-		// AC 1.10 / Decision 8 — both sentinels present means a prior pass
-		// computed everything.
+		// AC 1.10 / daily-derived-stats Decision 8 — both sentinels present
+		// means a prior pass computed everything.
 		return PassResultSkippedAlreadyDone
 	}
 

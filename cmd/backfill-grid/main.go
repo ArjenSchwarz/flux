@@ -334,6 +334,10 @@ func backfillOffpeak(ctx context.Context, store *dynamo.DynamoStore, client dyna
 func backfillPeak(ctx context.Context, store *dynamo.DynamoStore, client dynamoAPI,
 	opts backfillOpts, date string, dayStart, offpeakStart, offpeakEnd, dayEnd time.Time, res *backfillResult,
 ) error {
+	// Separate full-day readings query, kept independent of backfillOffpeak's
+	// off-peak-window query on purpose: peak integrates the two windows
+	// bracketing off-peak, so it needs the whole day. Off-peak recompute stays
+	// byte-for-byte the original tool's behaviour (its own query, own write).
 	readings, err := queryReadingsRange(ctx, client, opts.tableReadings, opts.serial,
 		dayStart.Unix(), dayEnd.Unix())
 	if err != nil {
