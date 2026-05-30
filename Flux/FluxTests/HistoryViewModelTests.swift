@@ -105,6 +105,51 @@ struct HistoryViewModelTests {
     }
 
     @Test
+    func gridSeriesIncludesTodayWithServerPeakBeforeOffpeakWindow() async throws {
+        let modelContext = try makeModelContext()
+        let apiClient = MockHistoryAPIClient()
+        // now = 00:30 AEST 2026-04-16 — before the 11:00 off-peak window, so
+        // there is no off-peak split yet, but the server provides a live peak.
+        // The grid entry must still render, with off-peak shown as 0 (T-1420);
+        // pre-fix this row was dropped because off-peak was nil.
+        apiClient.historyResult = .success(HistoryResponse(days: [
+            DayEnergy(
+                date: "2026-04-16", epv: 1.0, eInput: 2.4, eOutput: 0.0, eCharge: 0.5, eDischarge: 0.3,
+                peakGridImportKwh: 2.4
+            )
+        ]))
+
+        let now = makeUTCDate(year: 2026, month: 4, day: 15, hour: 14, minute: 30)
+        let viewModel = HistoryViewModel(apiClient: apiClient, modelContext: modelContext, nowProvider: { now })
+        await viewModel.loadHistory(days: 7)
+
+        #expect(viewModel.gridSeries.count == 1, "today renders even without an off-peak split")
+        let gridEntry = try #require(viewModel.gridSeries.first)
+        #expect(gridEntry.dayID == "2026-04-16")
+        #expect(gridEntry.isToday)
+        #expect(abs(gridEntry.peakImportKwh - 2.4) < 0.001, "peak uses the server value")
+        #expect(abs(gridEntry.offpeakImportKwh - 0.0) < 0.001, "off-peak shown as 0 before the window opens")
+    }
+
+    @Test
+    func gridSeriesOmitsDayWithNeitherPeakNorOffpeak() async throws {
+        let modelContext = try makeModelContext()
+        let apiClient = MockHistoryAPIClient()
+        // A past row with no server peak and no off-peak (e.g. a pre-30-day row
+        // under the readings TTL) must stay omitted — showing "off-peak 0"
+        // there would be misleading, not merely a not-yet-open window.
+        apiClient.historyResult = .success(HistoryResponse(days: [
+            DayEnergy(date: "2026-04-10", epv: 5.0, eInput: 4.0, eOutput: 1.0, eCharge: 2.0, eDischarge: 1.5)
+        ]))
+
+        let now = makeUTCDate(year: 2026, month: 4, day: 15, hour: 14, minute: 30)
+        let viewModel = HistoryViewModel(apiClient: apiClient, modelContext: modelContext, nowProvider: { now })
+        await viewModel.loadHistory(days: 7)
+
+        #expect(viewModel.gridSeries.isEmpty, "no split info — entry omitted, not rendered with off-peak 0")
+    }
+
+    @Test
     func summaryExcludesTodayFromAveragesButCountsOffpeakAlways() async throws {
         let modelContext = try makeModelContext()
         let apiClient = MockHistoryAPIClient()

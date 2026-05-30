@@ -183,6 +183,7 @@ struct DashboardView: View {
         SummaryBlock(
             todayEnergy: viewModel.status?.todayEnergy,
             offpeakGridImport: viewModel.status?.offpeak?.gridUsageKwh,
+            serverPeakGridImport: viewModel.status?.peakGridImportKwh,
             showsBatteryCycle: false,
             avgLoadWatts: viewModel.status?.rolling15min?.avgLoad
         )

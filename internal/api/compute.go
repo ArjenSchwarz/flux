@@ -104,6 +104,87 @@ func liveOffpeakDeltas(readings []dynamo.ReadingItem, now time.Time,
 	}, true
 }
 
+// livePeakGridImport integrates max(pgrid, 0) over today's two peak windows —
+// the spans bracketing the off-peak window — each clamped to now:
+//
+//	morning = [00:00, min(now, opStart))
+//	evening = [opEnd,  min(now, dayEnd))   (empty until now passes opEnd)
+//
+// It is the "peak so far today" complement of liveOffpeakDeltas, computed
+// directly from readings (independent of reconcileEnergy) so the off-peak
+// sampling artifact is never dumped onto the peak residual (T-1421).
+// offpeakStart and offpeakEnd are the raw "HH:MM" config values.
+//
+// Returns (_, false) when the window is unparseable or the morning window has
+// too few usable samples to integrate — the same <2-point usability gate
+// liveOffpeakDeltas uses. The evening window is additive-when-usable: before
+// now passes opEnd, or when it is too sparse to integrate on its own, it
+// contributes zero rather than failing the whole result. This is why
+// derivedstats.IntegratePeakGridImportKwh cannot be reused here — it requires
+// BOTH windows to pass the gate, which is wrong for the partial "today so far"
+// case (the evening window is empty before opEnd).
+//
+// Pure function: no state and no clock except the explicit now parameter.
+func livePeakGridImport(readings []dynamo.ReadingItem, now time.Time,
+	offpeakStart, offpeakEnd string,
+) (float64, bool) {
+	startMin, endMin, parsed := derivedstats.ParseOffpeakWindow(offpeakStart, offpeakEnd)
+	if !parsed {
+		return 0, false
+	}
+	local := now.In(sydneyTZ)
+	dayStart := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, sydneyTZ)
+	opStart := dayStart.Add(time.Duration(startMin) * time.Minute)
+	opEnd := dayStart.Add(time.Duration(endMin) * time.Minute)
+	dayEnd := dayStart.AddDate(0, 0, 1)
+
+	// Trim to today's readings so the result is identical regardless of whether
+	// the caller's slice carries pre-midnight samples (/status reads a rolling
+	// 24h window; /day and /history read today only). Without this the morning
+	// window would synthesise a pre-midnight left edge for /status but not the
+	// others, so the same instant could read differently across screens. This
+	// matches computeTodayEnergy, which integrates from the first post-midnight
+	// sample. Readings are sorted ascending (the DynamoDB sort-key guarantee).
+	if i := sort.Search(len(readings), func(i int) bool {
+		return readings[i].Timestamp >= dayStart.Unix()
+	}); i > 0 {
+		readings = readings[i:]
+	}
+
+	// Morning window [00:00, min(now, opStart)). The usability gate hangs off
+	// this window: before there are two usable post-midnight samples there is
+	// no peak to report.
+	mornEnd := opStart
+	if local.Before(opStart) {
+		mornEnd = local
+	}
+	mornWin := sliceWindow(readings, dayStart.Unix(), mornEnd.Unix())
+	morning, ok := derivedstats.IntegrateOffpeakDeltas(
+		toDerivedReadings(mornWin), dayStart.Unix(), mornEnd.Unix(),
+	)
+	if !ok {
+		return 0, false
+	}
+	peak := morning.GridImportKwh
+
+	// Evening window [opEnd, min(now, dayEnd)). Only contributes once now is
+	// past the off-peak window end; additive-when-usable so a brief sparse
+	// patch right after opEnd does not discard the morning value.
+	if local.After(opEnd) {
+		evenEnd := dayEnd
+		if local.Before(dayEnd) {
+			evenEnd = local
+		}
+		evenWin := sliceWindow(readings, opEnd.Unix(), evenEnd.Unix())
+		if evening, evOK := derivedstats.IntegrateOffpeakDeltas(
+			toDerivedReadings(evenWin), opEnd.Unix(), evenEnd.Unix(),
+		); evOK {
+			peak += evening.GridImportKwh
+		}
+	}
+	return peak, true
+}
+
 // computeCutoffTime estimates when the battery will reach the cutoff percentage
 // using linear extrapolation. Returns nil if the battery is not discharging or
 // SOC is already at/below cutoff.

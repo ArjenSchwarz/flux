@@ -115,7 +115,7 @@ The original framing of this decision claimed the hourly pass would backfill the
 ## Decision 4: Today and pre-30-day rows use the iOS fallback
 
 **Date**: 2026-05-30
-**Status**: accepted
+**Status**: accepted; clause 4a (no real-time today peak path) superseded by Decision 9. Clause 4b (pre-30-day rows keep the iOS residual fallback) retained.
 
 ### Context
 
@@ -263,7 +263,7 @@ One operator command for both readings-derived grid quantities over the same day
 ## Decision 8: Extend iOS consumption to Day Detail (past days); defer the Dashboard
 
 **Date**: 2026-05-30
-**Status**: accepted
+**Status**: accepted; the Dashboard deferral is superseded by Decision 9 (today's real-time peak now ships across all three screens).
 
 ### Context
 
@@ -300,5 +300,51 @@ Day Detail is a one-field, client-only change reusing data already on the wire a
 ### Impact
 
 FluxCore `DaySummary` (`APIModels.swift`), `DayCosts.swift`; app-side `SummaryBlock.swift`, `ComparisonSnapshot.swift`. No backend or `/status` change. `DayEnergy.costs` forwarder must pass the new field into the transient `DaySummary` it builds.
+
+---
+
+## Decision 9: Live peak grid import for today across all three screens (supersedes Decision 4a and the Decision 8 Dashboard deferral)
+
+**Date**: 2026-05-30
+**Status**: accepted (T-1420, T-1421)
+
+### Context
+
+Decision 4a deliberately left today's peak grid import as the iOS `eInput − offpeak` residual, and Decision 8 deferred the Dashboard for the same reason. Two follow-up tickets reopened this:
+
+- **T-1420** found today's peak/off-peak breakdown was not just inaccurate but frequently *absent* on Day Detail and History. The iOS rendering was parasitic on off-peak presence (`gridEntry` guarded on `offpeakGridImportKwh`; `SummaryBlock.gridInRows` gated on `offpeakGridImport != nil`), and today's off-peak split only exists once the `flux-offpeak` row is created at the 11:00 window start. So from 00:00–11:00 the breakdown vanished entirely, and after 11:00 peak showed the cross-source residual.
+- **T-1421** required the Dashboard's today peak to be accurate and, per the new CLAUDE.md "Data Consistency" rule, to read identically to Day Detail and History.
+
+`derivedstats.IntegratePeakGridImportKwh` (Decision 1) cannot be reused for "today so far": it requires **both** windows bracketing off-peak to pass the usability gate, which is wrong for the partial day where the evening window is empty before 14:00.
+
+### Decision
+
+Add a single server-side live peak path, `api.livePeakGridImport`, that integrates `max(pgrid, 0)` directly over the two windows bracketing off-peak — morning `[00:00, min(now, opStart))` and evening `[opEnd, min(now, dayEnd))` — each clamped to `now`, gated on the **morning** window only (evening is additive-when-usable). It mirrors `liveOffpeakDeltas` and is independent of `reconcileEnergy`, so the off-peak sampling artifact never lands on peak. It trims to the Sydney day internally so the value is identical whether the caller passes a rolling-24h slice (`/status`) or today-only readings (`/day`, `/history`).
+
+Expose `peakGridImportKwh` for **today** on `/status` (new `StatusResponse` field), `/day`, and `/history`; past days keep the stored value. On iOS, decode the `/status` field and have the History `gridEntry` and `SummaryBlock.gridInRows` render the peak/off-peak split whenever a peak value is present — server peak (today live, or a stored past day) or an off-peak value for the residual — showing off-peak as `0` (not "missing") before the window opens. Where neither exists (pre-30-day rows, Decision 4b), keep the combined "Grid in" row so a genuinely-unknown split is never shown as off-peak `0`.
+
+### Rationale
+
+Computing the live peak once server-side and consuming it on all three screens is exactly what the Data Consistency rule mandates: one source, identical numbers everywhere. Direct integration carries peak's own ~1.5% sampling artifact proportional to its own kWh rather than stacking the whole day's reconcile mismatch onto the residual. Gating on the morning window (not both) is what makes the partial-day case work, and the internal day-trim removes the only cross-caller divergence (a pre-midnight bracket present on `/status` but not `/day`/`/history`).
+
+### Alternatives Considered
+
+- **iOS rendering decouple only, keep the residual.** Rejected: fixes the "missing breakdown before 11:00" but leaves today's peak on the cross-source residual, so the three screens can still disagree — violating the Data Consistency rule.
+- **Reuse `IntegratePeakGridImportKwh` as-is.** Rejected: its both-windows-must-pass gate returns `false` for today before 14:00, so it can never produce a partial-day value.
+- **Persist a live peak hourly like past days.** Rejected: today's row is a moving target; live compute on demand is cheaper and avoids cache-invalidation churn (same reasoning as off-peak-from-readings Decision 2/3).
+
+### Consequences
+
+**Positive:**
+- Today's peak/off-peak breakdown is present and accurate on Day Detail, History, and the Dashboard at any time of day, and reads identically across them.
+- The shared `livePeakGridImport` is built once and consumed by all three endpoints.
+
+**Negative:**
+- Peak and off-peak no longer sum exactly to today's displayed `eInput` (which is `max(stored, computed)`); each row is individually accurate but they reconcile to the readings-integrated total, not the `max()`. Observer-visible only, and consistent with the same Day Detail trade-off in Decision 8.
+- The iOS `?? residual` fallback paths must stay for pre-30-day rows (Decision 4b retained).
+
+### Impact
+
+Backend: `internal/api/compute.go` (`livePeakGridImport`), `status.go`, `day.go`, `history.go`, `response.go` (new `StatusResponse.PeakGridImportKwh`). iOS: FluxCore `StatusResponse` (`APIModels.swift`), app-side `SummaryBlock.swift`, `HistoryDerivedState.swift`, `DashboardView.swift`.
 
 ---

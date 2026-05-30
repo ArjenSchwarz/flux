@@ -69,41 +69,50 @@ struct SummaryBlock: View {
 
     @ViewBuilder
     private var gridInRows: some View {
-        if offpeakGridImport != nil {
+        if showsGridSplit, let peak = peakGridImport {
+            // Off-peak is shown as 0 (not "missing") when a peak value exists
+            // but the off-peak window hasn't opened yet — today before 11:00
+            // (T-1420). `showsGridSplit` keeps this branch off when neither a
+            // server peak nor an off-peak value is available, so we never imply
+            // a misleading "off-peak 0" on a day with genuinely unknown split.
+            let offpeak = offpeakGridImport ?? 0
             compareRow(
                 label: "Grid in (peak)",
-                value: kwh(peakGridImport),
+                value: kwh(peak),
                 sub: "paid",
                 accent: FluxTheme.Palette.grid,
                 last: false,
-                current: peakGridImport,
+                current: peak,
                 comparison: snapshot?.peakGridImport
             )
             compareRow(
                 label: "Grid in (off-peak)",
-                value: kwh(offpeakGridImport),
+                value: kwh(offpeak),
                 sub: "free",
                 accent: FluxTheme.Palette.offpeak,
                 last: false,
-                current: offpeakGridImport,
+                current: offpeak,
                 comparison: snapshot?.offpeakGridImport
             )
         } else {
-            // Without a peak/off-peak split (DaySummary currently doesn't
-            // carry one) showing it all under "peak" would be misleading.
-            // Render a single combined row instead.
-            //
-            // No `valueSub` / `accessibilityOverride` here — Decision 10
-            // (`specs/stat-comparisons/decision_log.md`) guarantees the
-            // split is always present in production data, so this branch
-            // never fires when Compare is on. If that guarantee ever
-            // changes, this row needs its own compare wiring.
+            // No split information at all (no server peak, no off-peak value):
+            // showing it all under "peak" would be misleading, so render a
+            // single combined row instead.
             FluxStatRow(
                 label: "Grid in",
                 value: kwh(gridImport),
                 accent: FluxTheme.Palette.grid
             )
         }
+    }
+
+    /// Whether to render the peak/off-peak split. True when the server gives an
+    /// authoritative peak (today's live value or a stored past day) or when an
+    /// off-peak value is present to derive the residual. False leaves only the
+    /// combined "Grid in" row, so a day with a genuinely unknown split never
+    /// implies an off-peak of 0.
+    private var showsGridSplit: Bool {
+        serverPeakGridImport != nil || offpeakGridImport != nil
     }
 
     private var gridOutRow: some View {
@@ -246,6 +255,7 @@ extension SummaryBlock {
         trailing: String? = nil,
         todayEnergy: TodayEnergy?,
         offpeakGridImport: Double?,
+        serverPeakGridImport: Double? = nil,
         showsBatteryCycle: Bool = true,
         avgLoadWatts: Double? = nil
     ) {
@@ -256,6 +266,7 @@ extension SummaryBlock {
             gridImport: todayEnergy?.eInput,
             gridExport: todayEnergy?.eOutput,
             offpeakGridImport: offpeakGridImport,
+            serverPeakGridImport: serverPeakGridImport,
             batteryCharge: todayEnergy?.eCharge,
             batteryDischarge: todayEnergy?.eDischarge,
             showsBatteryCycle: showsBatteryCycle,

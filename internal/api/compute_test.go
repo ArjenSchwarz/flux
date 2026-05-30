@@ -163,6 +163,94 @@ func TestLiveOffpeakDeltasDeterminism(t *testing.T) {
 	assert.Equal(t, first, second, "same inputs must produce identical outputs")
 }
 
+// TestLivePeakGridImport covers the "peak so far today" integration: the two
+// windows bracketing off-peak, each clamped to now, gated on the morning
+// window only (T-1420 / T-1421). Window 11:00-14:00, so peak windows are
+// [00:00, 11:00) and [14:00, 24:00).
+func TestLivePeakGridImport(t *testing.T) {
+	loc := sydneyTZ
+	dayStart := time.Date(2026, 4, 15, 0, 0, 0, 0, loc)
+	const windowStart = "11:00"
+	const windowEnd = "14:00"
+	opStart := dayStart.Add(11 * time.Hour)
+	opEnd := dayStart.Add(14 * time.Hour)
+
+	// Uniform 10-second cadence covering the whole day plus a 60s shoulder
+	// before midnight (for left-edge synthesis). Constant pgrid = 3600 W so
+	// each second contributes exactly 1 Wh: kWh == hours integrated.
+	const pgridW = 3600.0
+	readings := make([]dynamo.ReadingItem, 0)
+	for ts := dayStart.Add(-60 * time.Second).Unix(); ts <= dayStart.Add(24*time.Hour).Unix(); ts += 10 {
+		readings = append(readings, dynamo.ReadingItem{Timestamp: ts, Pgrid: pgridW})
+	}
+
+	tests := map[string]struct {
+		now     time.Time
+		wantOK  bool
+		wantKwh float64 // expected peak grid import so far
+	}{
+		"before off-peak: whole day so far is peak": {
+			// 05:00 -> [00:00, 05:00) = 5 h.
+			now: dayStart.Add(5 * time.Hour), wantOK: true, wantKwh: 18.0,
+		},
+		"at off-peak start: full morning, no evening": {
+			// [00:00, 11:00) = 11 h.
+			now: opStart, wantOK: true, wantKwh: 39.6,
+		},
+		"during off-peak: morning only, evening still zero": {
+			// 12:30 -> morning 11 h, evening not yet open.
+			now: dayStart.Add(12*time.Hour + 30*time.Minute), wantOK: true, wantKwh: 39.6,
+		},
+		"at off-peak end: morning only (evening zero-length)": {
+			now: opEnd, wantOK: true, wantKwh: 39.6,
+		},
+		"after off-peak end: morning plus partial evening": {
+			// 14:30 -> morning 11 h + evening 0.5 h = 11.5 h.
+			now: opEnd.Add(30 * time.Minute), wantOK: true, wantKwh: 41.4,
+		},
+		"late evening: morning plus most of evening": {
+			// 23:00 -> morning 11 h + evening [14:00, 23:00) = 9 h = 20 h total.
+			now: dayStart.Add(23 * time.Hour), wantOK: true, wantKwh: 72.0,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			got, ok := livePeakGridImport(readings, tc.now, windowStart, windowEnd)
+			assert.Equal(t, tc.wantOK, ok)
+			if !ok {
+				return
+			}
+			assert.InDelta(t, tc.wantKwh, got, 0.01)
+			assert.GreaterOrEqual(t, got, 0.0)
+		})
+	}
+}
+
+// TestLivePeakGridImportGates covers the not-usable paths: an unparseable
+// window and a morning window with too few samples to integrate.
+func TestLivePeakGridImportGates(t *testing.T) {
+	loc := sydneyTZ
+	dayStart := time.Date(2026, 4, 15, 0, 0, 0, 0, loc)
+
+	t.Run("unparseable window returns false", func(t *testing.T) {
+		readings := []dynamo.ReadingItem{
+			{Timestamp: dayStart.Add(time.Hour).Unix(), Pgrid: 1000},
+			{Timestamp: dayStart.Add(time.Hour + 10*time.Second).Unix(), Pgrid: 1000},
+		}
+		_, ok := livePeakGridImport(readings, dayStart.Add(2*time.Hour), "nope", "14:00")
+		assert.False(t, ok)
+	})
+
+	t.Run("single morning sample is not integrable", func(t *testing.T) {
+		readings := []dynamo.ReadingItem{
+			{Timestamp: dayStart.Add(time.Hour).Unix(), Pgrid: 1000},
+		}
+		_, ok := livePeakGridImport(readings, dayStart.Add(2*time.Hour), "11:00", "14:00")
+		assert.False(t, ok)
+	})
+}
+
 // TestBuildOffpeakDispatch covers the live-vs-stored dispatch in buildOffpeak.
 // Pending rows live-integrate from the readings slice; complete rows
 // pass through op.GridUsageKwh etc. The op.StartE* fields are never read.

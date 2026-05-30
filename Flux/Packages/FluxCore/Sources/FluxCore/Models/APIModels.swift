@@ -9,6 +9,11 @@ public struct StatusResponse: Codable, Sendable {
     public let rolling15min: RollingAvg?
     public let offpeak: OffpeakData?
     public let todayEnergy: TodayEnergy?
+    /// Server-computed peak (non-off-peak) grid import so far today, integrated
+    /// directly from Pgrid over the windows bracketing off-peak (T-1421). Nil
+    /// when the morning window is not yet integrable; the Dashboard then falls
+    /// back to the eInput − offpeak residual.
+    public let peakGridImportKwh: Double?
     public let note: String?
 
     public init(
@@ -17,6 +22,7 @@ public struct StatusResponse: Codable, Sendable {
         rolling15min: RollingAvg?,
         offpeak: OffpeakData?,
         todayEnergy: TodayEnergy?,
+        peakGridImportKwh: Double? = nil,
         note: String? = nil
     ) {
         self.live = live
@@ -24,6 +30,7 @@ public struct StatusResponse: Codable, Sendable {
         self.rolling15min = rolling15min
         self.offpeak = offpeak
         self.todayEnergy = todayEnergy
+        self.peakGridImportKwh = peakGridImportKwh
         self.note = note
     }
 }

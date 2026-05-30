@@ -202,10 +202,16 @@ func (h *Handler) handleDay(ctx context.Context, req events.LambdaFunctionURLReq
 				summary.OffpeakGridExportKwh = floatPtr(exp)
 			}
 		}
-		// Peak grid import is the stored server-computed value only — no
-		// real-time compute path for today (Decision 4); today's row is absent
-		// and the iOS fallback applies.
-		if deItem != nil && deItem.PeakGridImportKwh != nil {
+		// Peak grid import: today is integrated live from readings (T-1420,
+		// superseding peak-from-readings Decision 4a), independent of the
+		// off-peak split so it renders before the window opens. Past days use
+		// the stored server-computed value. Absent on either path falls through
+		// to the iOS residual fallback (e.g. pre-30-day rows, Decision 4b).
+		if isToday {
+			if peak, ok := livePeakGridImport(readings, now, h.offpeakStart, h.offpeakEnd); ok {
+				summary.PeakGridImportKwh = floatPtr(derivedstats.RoundEnergy(peak))
+			}
+		} else if deItem != nil && deItem.PeakGridImportKwh != nil {
 			summary.PeakGridImportKwh = floatPtr(*deItem.PeakGridImportKwh)
 		}
 		resp.Summary = summary
