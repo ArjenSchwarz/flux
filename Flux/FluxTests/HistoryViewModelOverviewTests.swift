@@ -263,6 +263,33 @@ struct HistoryViewModelOverviewTests {
         #expect(derived.summary.gridDayCount == 1)
     }
 
+    @Test("(l′) server peakGridImportKwh present → used directly, not the eInput residual")
+    func serverPeakUsedWhenPresent() throws {
+        // Residual would be max(0, 2.0 − 0.5) = 1.5; the server value 0.9 must win.
+        let dayA = day(
+            "2026-04-14", epv: 5.0, eInput: 2.0, eOutput: 0.5, eCharge: 1.0, eDischarge: 0.5,
+            offpeakGridImportKwh: 0.5,
+            peakGridImportKwh: 0.9
+        )
+        let derived = HistoryViewModel.DerivedState(days: [dayA], now: now(month: 4, day: 16))
+        let entry = try #require(derived.grid.first)
+        #expect(entry.peakImportKwh == 0.9)
+        #expect(derived.summary.peakImportTotalKwh == 0.9)
+    }
+
+    @Test("(l″) server peakGridImportKwh nil → falls back to max(0, eInput − offpeak) residual")
+    func residualUsedWhenServerPeakNil() throws {
+        let dayA = day(
+            "2026-04-14", epv: 5.0, eInput: 2.0, eOutput: 0.5, eCharge: 1.0, eDischarge: 0.5,
+            offpeakGridImportKwh: 0.5,
+            peakGridImportKwh: nil
+        )
+        let derived = HistoryViewModel.DerivedState(days: [dayA], now: now(month: 4, day: 16))
+        let entry = try #require(derived.grid.first)
+        #expect(entry.peakImportKwh == 1.5)
+        #expect(derived.summary.peakImportTotalKwh == 1.5)
+    }
+
     @Test("(m) dailyUsage present but no offpeak → contributes to usage cohort, not grid")
     func dailyUsageWithoutOffpeakMixedCohort() {
         let mixed = day(
@@ -324,6 +351,7 @@ struct HistoryViewModelOverviewTests {
         eCharge: Double,
         eDischarge: Double,
         offpeakGridImportKwh: Double? = nil,
+        peakGridImportKwh: Double? = nil,
         socLow: Double? = nil,
         socLowTime: String? = nil,
         dailyUsage: DailyUsage? = nil
@@ -337,6 +365,7 @@ struct HistoryViewModelOverviewTests {
             eDischarge: eDischarge,
             offpeakGridImportKwh: offpeakGridImportKwh,
             offpeakGridExportKwh: nil,
+            peakGridImportKwh: peakGridImportKwh,
             note: nil,
             dailyUsage: dailyUsage,
             socLow: socLow,

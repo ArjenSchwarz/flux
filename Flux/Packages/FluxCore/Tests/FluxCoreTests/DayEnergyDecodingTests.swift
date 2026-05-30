@@ -25,6 +25,7 @@ struct DayEnergyDecodingTests {
           "eDischarge": 6.8,
           "socLow": 18.0,
           "socLowTime": "2026-04-14T19:45:00Z",
+          "peakGridImportKwh": 0.42,
           "dailyUsage": {
             "blocks": [
               {
@@ -64,6 +65,7 @@ struct DayEnergyDecodingTests {
 
         #expect(day.socLow == 18.0)
         #expect(day.socLowTime == "2026-04-14T19:45:00Z")
+        #expect(day.peakGridImportKwh == 0.42)
 
         let dailyUsage = try #require(day.dailyUsage)
         #expect(dailyUsage.blocks.count == 2)
@@ -97,6 +99,8 @@ struct DayEnergyDecodingTests {
         #expect(day.socLow == nil)
         #expect(day.socLowTime == nil)
         #expect(day.peakPeriods == nil)
+        // Omitted peak field decodes to nil so the iOS residual fallback applies.
+        #expect(day.peakGridImportKwh == nil)
         // Existing fields still decode correctly (AC 5.3).
         #expect(day.date == "2026-04-14")
         #expect(day.eInput == 0.25)
@@ -116,6 +120,7 @@ struct DayEnergyDecodingTests {
           "eDischarge": 6.8,
           "socLow": null,
           "socLowTime": null,
+          "peakGridImportKwh": null,
           "dailyUsage": null,
           "peakPeriods": null
         }
@@ -127,6 +132,7 @@ struct DayEnergyDecodingTests {
         #expect(day.socLow == nil)
         #expect(day.socLowTime == nil)
         #expect(day.peakPeriods == nil)
+        #expect(day.peakGridImportKwh == nil)
     }
 
     // Existing init must still accept callers that omit the new params (AC 5.3

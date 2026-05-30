@@ -188,6 +188,13 @@ public struct DayEnergy: Codable, Sendable, Identifiable {
     /// off-peak portion. Kept on the model so the field is available for a
     /// future "off-peak vs peak export" view without another schema change.
     public let offpeakGridExportKwh: Double?
+    /// Server-computed peak (non-off-peak) grid import for the day, integrated
+    /// directly from `Pgrid` readings over the windows bracketing off-peak.
+    /// Omitted from the wire payload (and so `nil` here) for today, pre-30-day
+    /// rows, and any day where the integration's usability gate failed — those
+    /// fall back to the `eInput − offpeakGridImportKwh` residual at the call
+    /// site (see `HistoryDerivedState.gridEntry`).
+    public let peakGridImportKwh: Double?
     public let note: String?
 
     // Derived per-day stats, populated by the daily-derived-stats backend pass
@@ -203,15 +210,6 @@ public struct DayEnergy: Codable, Sendable, Identifiable {
 
     public var id: String { date }
 
-    /// Grid imports outside the off-peak window, derived by subtracting the
-    /// off-peak portion from the day's total. Returns `nil` when no off-peak
-    /// data is available for the day, so callers can distinguish "unknown"
-    /// from a true zero.
-    public var peakGridImportKwh: Double? {
-        guard let offpeak = offpeakGridImportKwh else { return nil }
-        return max(0, eInput - offpeak)
-    }
-
     public init(
         date: String,
         epv: Double,
@@ -221,6 +219,7 @@ public struct DayEnergy: Codable, Sendable, Identifiable {
         eDischarge: Double,
         offpeakGridImportKwh: Double? = nil,
         offpeakGridExportKwh: Double? = nil,
+        peakGridImportKwh: Double? = nil,
         note: String? = nil,
         dailyUsage: DailyUsage? = nil,
         socLow: Double? = nil,
@@ -235,6 +234,7 @@ public struct DayEnergy: Codable, Sendable, Identifiable {
         self.eDischarge = eDischarge
         self.offpeakGridImportKwh = offpeakGridImportKwh
         self.offpeakGridExportKwh = offpeakGridExportKwh
+        self.peakGridImportKwh = peakGridImportKwh
         self.note = note
         self.dailyUsage = dailyUsage
         self.socLow = socLow

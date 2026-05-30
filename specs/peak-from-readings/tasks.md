@@ -42,7 +42,7 @@ references:
 
 ## iOS
 
-- [ ] 6. The History grid entry prefers server peak grid import with a residual fallback <!-- id:1am185b -->
+- [x] 6. The History grid entry prefers server peak grid import with a residual fallback <!-- id:1am185b -->
   - The iOS day-energy model and its cached form decode the optional peakGridImportKwh field.
   - The History card grid entry uses the server value when non-nil and falls back to max(0, eInput − offpeakImport) when absent; no display changes beyond the source of the peak number.
   - Verify with tests asserting the server value is used when present and the residual is used when the field is nil.
