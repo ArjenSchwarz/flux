@@ -3,6 +3,37 @@ import Foundation
 public enum WhatsNewCatalogue {
     public static let releases: [WhatsNewRelease] = [
         WhatsNewRelease(
+            version: "1.4",
+            date: dateOf(year: 2026, month: 5),
+            highlights: [
+                Highlight(
+                    category: .new,
+                    title: "Daily costs",
+                    detail: "See what each day cost you — peak imports, solar feed-in, and off-peak savings — on Day Detail, plus totals for the whole range on History. Set your rates in Settings → Pricing."
+                ),
+                Highlight(
+                    category: .new,
+                    title: "iPad layout",
+                    detail: "On iPad, Flux now uses a sidebar with multi-column screens instead of the stretched iPhone layout."
+                ),
+                Highlight(
+                    category: .new,
+                    title: "Won't empty before off-peak",
+                    detail: "When your battery can't run down before the off-peak window opens, the Dashboard says so — and shows the current charge or discharge rate."
+                ),
+                Highlight(
+                    category: .improved,
+                    title: "Mac app layout",
+                    detail: "The Mac app gets the same multi-column layout, with the day's date in the window title and previous/next-day navigation in the toolbar."
+                ),
+                Highlight(
+                    category: .fixed,
+                    title: "Accurate grid import",
+                    detail: "Your peak and off-peak grid import is now measured from the live readings rather than lagging snapshots, so the split is correct — including today's, updated through the day."
+                )
+            ]
+        ),
+        WhatsNewRelease(
             version: "1.3",
             date: dateOf(year: 2026, month: 5),
             highlights: [
