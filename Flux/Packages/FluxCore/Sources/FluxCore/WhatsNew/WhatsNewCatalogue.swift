@@ -3,6 +3,17 @@ import Foundation
 public enum WhatsNewCatalogue {
     public static let releases: [WhatsNewRelease] = [
         WhatsNewRelease(
+            version: "1.5",
+            date: dateOf(year: 2026, month: 6),
+            highlights: [
+                Highlight(
+                    category: .fixed,
+                    title: "Large values fit",
+                    detail: "When your solar, house, or grid power tops 10 kW, the Dashboard reading no longer wraps onto a second line — it shrinks slightly to stay on one line."
+                )
+            ]
+        ),
+        WhatsNewRelease(
             version: "1.4",
             date: dateOf(year: 2026, month: 5),
             highlights: [
