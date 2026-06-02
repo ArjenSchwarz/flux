@@ -58,6 +58,13 @@ struct LiveTrioPanel: View {
         showsLeftDivider: Bool
     ) -> some View {
         let parts = watts.map(PowerFormatting.split)
+        // Drop to a slightly smaller value font once the numeric portion runs
+        // past four characters — values ≥ 10 kW render five characters
+        // (e.g. "10.00", "11.51") — so the value plus unit stays on one line
+        // instead of wrapping in the column.
+        let valueFont = (parts?.value.count ?? 0) > 4
+            ? FluxTheme.Typography.trioValueCompact
+            : FluxTheme.Typography.trioValue
         HStack(spacing: 0) {
             if showsLeftDivider {
                 Rectangle()
@@ -71,8 +78,9 @@ struct LiveTrioPanel: View {
                     .foregroundStyle(FluxTheme.Palette.tertiaryText)
                 HStack(alignment: .firstTextBaseline, spacing: 2) {
                     Text(parts?.value ?? "—")
-                        .appFont(FluxTheme.Typography.trioValue)
+                        .appFont(valueFont)
                         .foregroundStyle(valueColor)
+                        .lineLimit(1)
                     Text(parts?.unit ?? "kW")
                         .appFont(FluxTheme.Typography.trioUnit)
                         .foregroundStyle(FluxTheme.Palette.tertiaryText)

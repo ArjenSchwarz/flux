@@ -106,6 +106,13 @@ enum FluxTheme {
         nonisolated static func trioValue(family: String?) -> Font {
             AppFontResolver.resolve(size: 26, weight: .medium, family: family).monospacedDigit()
         }
+        /// Slightly smaller trio value used when the numeric portion runs long
+        /// (values ≥ 10 kW render five characters, e.g. "10.00", "11.51"), so
+        /// the value plus its unit fits on one line instead of wrapping in the
+        /// column.
+        nonisolated static func trioValueCompact(family: String?) -> Font {
+            AppFontResolver.resolve(size: 22, weight: .medium, family: family).monospacedDigit()
+        }
         nonisolated static func trioUnit(family: String?) -> Font {
             AppFontResolver.resolve(size: 11, weight: .regular, family: family)
         }
