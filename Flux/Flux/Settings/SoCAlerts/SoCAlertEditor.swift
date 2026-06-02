@@ -106,17 +106,17 @@ struct SoCAlertEditor: View {
         )
     }
 
-    private func dateFromHHMM(_ s: String) -> Date? {
-        let parts = s.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
-        guard parts.count == 2, let h = Int(parts[0]), let m = Int(parts[1]) else { return nil }
+    private func dateFromHHMM(_ hhmm: String) -> Date? {
+        let parts = hhmm.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
+        guard parts.count == 2, let hour = Int(parts[0]), let minute = Int(parts[1]) else { return nil }
         var components = DateComponents()
-        components.hour = h
-        components.minute = m
+        components.hour = hour
+        components.minute = minute
         return Calendar.current.date(from: components)
     }
 
-    private func hhmmFromDate(_ d: Date) -> String {
-        let comps = Calendar.current.dateComponents([.hour, .minute], from: d)
+    private func hhmmFromDate(_ date: Date) -> String {
+        let comps = Calendar.current.dateComponents([.hour, .minute], from: date)
         return String(format: "%02d:%02d", comps.hour ?? 0, comps.minute ?? 0)
     }
 }

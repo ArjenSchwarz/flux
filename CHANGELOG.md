@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Changed
+
+- **SwiftLint now passes `--strict` cleanly.** Added `Flux/.swiftlint.yml` (the project had none, so the linter was scanning test targets and `.build-xc/` artifacts): build directories (`.build`, `.build-xc`, `DerivedData`) and the `FluxTests` / `FluxUITests` / `FluxCore/Tests` targets are now excluded. The 26 remaining production violations were fixed rather than suppressed — short identifiers renamed to meaningful names (including the `registerDeviceIfNeeded` `tz:` → `timeZone:` label), three over-length lines reflowed, a scoped `line_length` exception around the release-note copy in `WhatsNewCatalogue`, and a per-file `file_length` disable on `HistoryDerivedState` matching the convention already used by `DayDetailView` and `APIModels`. No app behaviour changes.
+
 ## [1.5] - 2026-06-02
 
 ### Fixed

@@ -56,7 +56,9 @@ struct DayInFiveBlocksPanel: View {
                     .frame(maxHeight: .infinity)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(label(for: block.kind))
-                        .appFont { FluxTheme.Typography.touName(family: $0).weight(isHighlighted ? .semibold : .regular) }
+                        .appFont {
+                            FluxTheme.Typography.touName(family: $0).weight(isHighlighted ? .semibold : .regular)
+                        }
                         .foregroundStyle(isHighlighted ? FluxTheme.Palette.offpeak : FluxTheme.Palette.primaryText)
                     Text(timeRange(block))
                         .appFont(FluxTheme.Typography.touTime)

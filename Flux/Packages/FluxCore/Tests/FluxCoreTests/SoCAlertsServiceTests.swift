@@ -10,7 +10,7 @@ struct SoCAlertsServiceTests {
         let api = TestAPIClient()
         let svc = makeService(api: api)
 
-        try await svc.registerDeviceIfNeeded(token: Data([0xde, 0xad, 0xbe, 0xef]), tz: TimeZone(identifier: "Australia/Sydney")!)
+        try await svc.registerDeviceIfNeeded(token: Data([0xde, 0xad, 0xbe, 0xef]), timeZone: TimeZone(identifier: "Australia/Sydney")!)
         #expect(await api.registrationCalls.count == 1)
         let call = try #require(await api.registrationCalls.first)
         #expect(call.apnsToken == "deadbeef")
@@ -23,8 +23,8 @@ struct SoCAlertsServiceTests {
         let svc = makeService(api: api)
 
         let token = Data([0xde, 0xad, 0xbe, 0xef])
-        try await svc.registerDeviceIfNeeded(token: token, tz: TimeZone(identifier: "Australia/Sydney")!)
-        try await svc.registerDeviceIfNeeded(token: token, tz: TimeZone(identifier: "Australia/Sydney")!)
+        try await svc.registerDeviceIfNeeded(token: token, timeZone: TimeZone(identifier: "Australia/Sydney")!)
+        try await svc.registerDeviceIfNeeded(token: token, timeZone: TimeZone(identifier: "Australia/Sydney")!)
         #expect(await api.registrationCalls.count == 1,
                 "second call with same token+tz must not POST again")
     }
@@ -34,8 +34,8 @@ struct SoCAlertsServiceTests {
         let api = TestAPIClient()
         let svc = makeService(api: api)
 
-        try await svc.registerDeviceIfNeeded(token: Data([0x01, 0x02]), tz: TimeZone(identifier: "Australia/Sydney")!)
-        try await svc.registerDeviceIfNeeded(token: Data([0x03, 0x04]), tz: TimeZone(identifier: "Australia/Sydney")!)
+        try await svc.registerDeviceIfNeeded(token: Data([0x01, 0x02]), timeZone: TimeZone(identifier: "Australia/Sydney")!)
+        try await svc.registerDeviceIfNeeded(token: Data([0x03, 0x04]), timeZone: TimeZone(identifier: "Australia/Sydney")!)
         #expect(await api.registrationCalls.count == 2)
     }
 
@@ -43,7 +43,7 @@ struct SoCAlertsServiceTests {
     func registerDeviceIfNeededPostsWithoutToken() async throws {
         let api = TestAPIClient()
         let svc = makeService(api: api)
-        try await svc.registerDeviceIfNeeded(token: nil, tz: TimeZone(identifier: "Australia/Sydney")!)
+        try await svc.registerDeviceIfNeeded(token: nil, timeZone: TimeZone(identifier: "Australia/Sydney")!)
         let call = try #require(await api.registrationCalls.first)
         #expect(call.apnsToken == nil, "denial path: backend gets the row without a token")
     }
@@ -52,7 +52,7 @@ struct SoCAlertsServiceTests {
     func createRuleIsOptimisticAndAppendsToLocalRules() async throws {
         let api = TestAPIClient()
         let svc = makeService(api: api)
-        try await svc.registerDeviceIfNeeded(token: Data([0xab]), tz: TimeZone(identifier: "UTC")!)
+        try await svc.registerDeviceIfNeeded(token: Data([0xab]), timeZone: TimeZone(identifier: "UTC")!)
 
         let draft = SoCAlertRuleDraft(thresholdPercent: 30, windowStart: "17:00", windowEnd: "18:00", enabled: true)
         let created = try await svc.create(draft)
@@ -64,7 +64,7 @@ struct SoCAlertsServiceTests {
         let api = TestAPIClient()
         api.createRuleResult = .failure(FluxAPIError.ruleCapReached)
         let svc = makeService(api: api)
-        try await svc.registerDeviceIfNeeded(token: Data([0xab]), tz: TimeZone(identifier: "UTC")!)
+        try await svc.registerDeviceIfNeeded(token: Data([0xab]), timeZone: TimeZone(identifier: "UTC")!)
 
         do {
             _ = try await svc.create(SoCAlertRuleDraft(thresholdPercent: 30, windowStart: "17:00", windowEnd: "18:00", enabled: true))
@@ -82,7 +82,7 @@ struct SoCAlertsServiceTests {
             SoCAlertRule(id: "r1", thresholdPercent: 30, windowStart: "17:00", windowEnd: "18:00", enabled: true, label: nil, createdAt: now, updatedAt: now)
         ]
         let svc = makeService(api: api)
-        try await svc.registerDeviceIfNeeded(token: Data([0x01]), tz: TimeZone(identifier: "UTC")!)
+        try await svc.registerDeviceIfNeeded(token: Data([0x01]), timeZone: TimeZone(identifier: "UTC")!)
         try await svc.refresh()
         #expect(svc.rules.count == 1)
         #expect(svc.rules.first?.id == "r1")
@@ -94,7 +94,7 @@ struct SoCAlertsServiceTests {
         api.registerFailures = 1
         let svc = makeService(api: api)
         do {
-            try await svc.registerDeviceIfNeeded(token: Data([0x01]), tz: TimeZone(identifier: "UTC")!)
+            try await svc.registerDeviceIfNeeded(token: Data([0x01]), timeZone: TimeZone(identifier: "UTC")!)
         } catch {
             // expected
         }
@@ -111,7 +111,7 @@ struct SoCAlertsServiceTests {
         let api = TestAPIClient()
         api.createRuleResult = .failure(.serverError)
         let svc = makeService(api: api)
-        try await svc.registerDeviceIfNeeded(token: Data([0x01]), tz: TimeZone(identifier: "UTC")!)
+        try await svc.registerDeviceIfNeeded(token: Data([0x01]), timeZone: TimeZone(identifier: "UTC")!)
         _ = try? await svc.create(SoCAlertRuleDraft(thresholdPercent: 30, windowStart: "17:00", windowEnd: "18:00", enabled: true))
         #expect(svc.lastError != nil)
         svc.clearError()

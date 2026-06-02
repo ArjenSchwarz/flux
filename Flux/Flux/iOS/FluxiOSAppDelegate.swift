@@ -26,7 +26,7 @@ final class FluxiOSAppDelegate: NSObject, UIApplicationDelegate {
         Task { @MainActor in
             try? await SoCAlertsService.shared.registerDeviceIfNeeded(
                 token: deviceToken,
-                tz: .current
+                timeZone: .current
             )
         }
     }

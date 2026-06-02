@@ -65,11 +65,11 @@ public struct SoCAlertRuleDraft: Sendable, Equatable {
         return nil
     }
 
-    private static func isValidHHMM(_ s: String) -> Bool {
-        let parts = s.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
+    private static func isValidHHMM(_ hhmm: String) -> Bool {
+        let parts = hhmm.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
         guard parts.count == 2,
-              let h = Int(parts[0]), let m = Int(parts[1]),
-              (0...23).contains(h), (0...59).contains(m)
+              let hour = Int(parts[0]), let minute = Int(parts[1]),
+              (0...23).contains(hour), (0...59).contains(minute)
         else { return false }
         return true
     }

@@ -38,7 +38,9 @@ public enum WidgetAccessibility {
             return "Battery \(socInt) percent, \(verb)."
         case .systemMedium, .systemLarge:
             if let live {
-                return "Battery \(socInt) percent, \(verb). Solar \(watts(live.ppv)), load \(watts(live.pload)), grid \(gridPhrase(live))."
+                let solar = watts(live.ppv)
+                let load = watts(live.pload)
+                return "Battery \(socInt) percent, \(verb). Solar \(solar), load \(load), grid \(gridPhrase(live))."
             }
             return "Battery \(socInt) percent, \(verb)."
         default:

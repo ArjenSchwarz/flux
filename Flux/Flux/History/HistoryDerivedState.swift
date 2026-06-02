@@ -1,6 +1,11 @@
 import FluxCore
 import Foundation
 
+// The period-accumulator logic (DayRecordValue + Totals) is kept in one file
+// alongside the derivations it serves; splitting it only to fit would fragment
+// tightly-coupled code with intentionally file-private types.
+// swiftlint:disable file_length
+
 extension HistoryViewModel {
     struct SolarEntry: Identifiable, Equatable {
         let date: Date
