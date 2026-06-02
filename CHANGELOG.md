@@ -4,11 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [1.5] - 2026-06-02
 
 ### Fixed
 
-- **Dashboard live trio no longer wraps large grid values.** When grid import (or any Solar/House/Grid column) reached 10 kW or more, the value rendered "11.51 kW" with the trailing digit wrapping onto a second line. The numeric value now drops to a slightly smaller font (22 pt instead of 26 pt) once it runs past four characters, keeping the value and unit on one line; values under 10 kW are unchanged.
+- **Dashboard live trio no longer wraps large grid values.** When Solar, House, or Grid power reached 10 kW or more (e.g. "11.51 kW"), the trailing digit wrapped onto a second line. Large values now use a slightly smaller font so the value and its unit stay on one line; values under 10 kW are unchanged.
 
 ## [1.4] - 2026-05-31
 
