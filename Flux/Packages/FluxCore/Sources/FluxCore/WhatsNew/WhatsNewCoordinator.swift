@@ -55,11 +55,11 @@ public struct WhatsNewCoordinator: Sendable {
         catalogue: [WhatsNewRelease] = WhatsNewCatalogue.releases
     ) -> WhatsNewCoordinator? {
         guard let raw = bundle.infoDictionary?["CFBundleShortVersionString"] as? String else {
-            Self.logger.debug("forCurrentInstall: CFBundleShortVersionString missing — skipping")
+            Self.logger.debug("forCurrentInstall: CFBundleShortVersionString missing")
             return nil
         }
         guard let installed = WhatsNewVersion(raw) else {
-            Self.logger.debug("forCurrentInstall: CFBundleShortVersionString \(raw, privacy: .public) unparseable — skipping")
+            Self.logger.debug("forCurrentInstall: CFBundleShortVersionString \(raw, privacy: .public) unparseable")
             return nil
         }
         return WhatsNewCoordinator(

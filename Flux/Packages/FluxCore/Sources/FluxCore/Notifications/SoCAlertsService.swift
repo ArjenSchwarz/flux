@@ -37,7 +37,7 @@ public final class SoCAlertsService {
 
     /// Pending registration retained when the backend POST fails so the next
     /// foreground hook can replay it.
-    private var pendingRegistration: (token: Data?, tz: TimeZone)?
+    private var pendingRegistration: (token: Data?, timeZone: TimeZone)?
 
     public init(
         deviceIdentifier: DeviceIdentifier = .shared,
@@ -76,7 +76,7 @@ public final class SoCAlertsService {
             // Denied or undetermined-after-prompt: still POST a device row
             // (without a token) so the backend knows about the device and
             // the next foreground after granting can attach the token.
-            try await registerDeviceIfNeeded(token: nil, tz: .current)
+            try await registerDeviceIfNeeded(token: nil, timeZone: .current)
         }
     }
 
@@ -85,7 +85,7 @@ public final class SoCAlertsService {
     /// The env value comes from this build's `aps-environment` entitlement
     /// so a TestFlight install on the same backend as a Dev install
     /// registers under its own host.
-    public func registerDeviceIfNeeded(token: Data?, tz: TimeZone) async throws {
+    public func registerDeviceIfNeeded(token: Data?, timeZone: TimeZone) async throws {
         guard let apiClient else { return }
         let tokenHex = token.map { hexString($0) }
         let env = APNsEnvironment.current()
@@ -93,7 +93,7 @@ public final class SoCAlertsService {
         if let cached,
            cached.apnsToken == tokenHex,
            cached.apnsEnvironment == env,
-           cached.tzIdentifier == tz.identifier {
+           cached.tzIdentifier == timeZone.identifier {
             // Nothing changed since the last successful POST.
             return
         }
@@ -102,7 +102,7 @@ public final class SoCAlertsService {
             platform: currentPlatform,
             apnsToken: tokenHex,
             apnsEnvironment: env,
-            tzIdentifier: tz.identifier,
+            tzIdentifier: timeZone.identifier,
             tzUpdatedAt: Int64(Date().timeIntervalSince1970)
         )
         do {
@@ -110,13 +110,13 @@ public final class SoCAlertsService {
             saveLastRegistration(LastRegistration(
                 apnsToken: tokenHex,
                 apnsEnvironment: env,
-                tzIdentifier: tz.identifier,
+                tzIdentifier: timeZone.identifier,
                 tzUpdatedAt: registration.tzUpdatedAt
             ))
             pendingRegistration = nil
             lastError = nil
         } catch {
-            pendingRegistration = (token, tz)
+            pendingRegistration = (token, timeZone)
             lastError = error
             throw error
         }
@@ -127,7 +127,7 @@ public final class SoCAlertsService {
     public func foregroundHook() async {
         if let pending = pendingRegistration {
             do {
-                try await registerDeviceIfNeeded(token: pending.token, tz: pending.tz)
+                try await registerDeviceIfNeeded(token: pending.token, timeZone: pending.timeZone)
             } catch {
                 // Stored already in lastError; nothing to do.
             }

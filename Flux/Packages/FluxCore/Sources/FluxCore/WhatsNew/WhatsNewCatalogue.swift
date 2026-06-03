@@ -1,6 +1,10 @@
 import Foundation
 
 public enum WhatsNewCatalogue {
+    // Each release note is authored as a single line of prose so it stays easy
+    // to read and edit. Line length is not meaningful for this copy, so the
+    // rule is disabled across the catalogue and re-enabled right after it.
+    // swiftlint:disable line_length
     public static let releases: [WhatsNewRelease] = [
         WhatsNewRelease(
             version: "1.5",
@@ -123,6 +127,7 @@ public enum WhatsNewCatalogue {
             ]
         )
     ]
+    // swiftlint:enable line_length
 
     private static func dateOf(year: Int, month: Int) -> Date {
         var components = DateComponents()

@@ -1,0 +1,15 @@
+# SwiftLint configuration for the Flux iOS/macOS app.
+# Run from the Flux/ directory: `swiftlint lint --strict`
+# (see the ios-lint / macos-lint targets in the Makefile).
+
+excluded:
+  # Build artifacts — mirror .gitignore so generated sources never get linted.
+  - .build
+  - .build-xc
+  - DerivedData
+  - Packages/FluxCore/.build
+  # Test targets. Style rules (line length, identifier names, body length)
+  # add noise without value in test code, so they are not linted.
+  - FluxTests
+  - FluxUITests
+  - Packages/FluxCore/Tests

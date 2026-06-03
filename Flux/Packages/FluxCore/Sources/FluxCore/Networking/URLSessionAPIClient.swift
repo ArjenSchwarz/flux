@@ -37,15 +37,15 @@ public final class URLSessionAPIClient: FluxAPIClient, Sendable {
     /// `Date` field (rule timestamps, future endpoints) lands on the
     /// success path.
     private static func makeDecoder() -> JSONDecoder {
-        let d = JSONDecoder()
-        d.dateDecodingStrategy = .iso8601
-        return d
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
     }
 
     private static func makeEncoder() -> JSONEncoder {
-        let e = JSONEncoder()
-        e.dateEncodingStrategy = .iso8601
-        return e
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
     }
 
     public func fetchStatus() async throws -> StatusResponse {
