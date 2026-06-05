@@ -6,14 +6,14 @@ references:
 ---
 # History Month and Week to Date
 
-- [ ] 1. Write Go table test for /history days validation (1-31) <!-- id:i6257bv -->
+- [x] 1. Write Go table test for /history days validation (1-31) <!-- id:i6257bv -->
   - internal/api/history_test.go: days 1/7/31 accepted (window length = days), 0/32/-1/x -> 400 "between 1 and 31", absent -> 7.
   - Red: fails against the current {7,14,30} allowlist and old message.
   - Stream: 1
   - Requirements: [4.1](requirements.md#4.1)
   - References: internal/api/history.go
 
-- [ ] 2. Widen /history days bounds in history.go <!-- id:i6257bw -->
+- [x] 2. Widen /history days bounds in history.go <!-- id:i6257bw -->
   - history.go: replace validDays with `if err != nil || parsed < 1 || parsed > 31`, message "invalid days parameter, must be between 1 and 31".
   - Keep default 7 inside the d != empty block; startDate math unchanged.
   - Blocked-by: i6257bv (Write Go table test for /history days validation (1-31)), history
@@ -21,14 +21,14 @@ references:
   - Requirements: [4.1](requirements.md#4.1)
   - References: internal/api/history.go
 
-- [ ] 3. Write unit + property tests for FluxCore date helpers <!-- id:i6257bx -->
+- [x] 3. Write unit + property tests for FluxCore date helpers <!-- id:i6257bx -->
   - Edges: month lengths 28/29/30/31; firstWeekday 1(Sun)/2(Mon)/7(Sat); single-day (1st of month, week-start day -> count 1); Sydney DST days (early Apr/Oct) same counts.
   - Property tests over seeded dates (no Date.now): wk count 1-7, mo count 1-31, startOfWeek weekday == firstWeekday, start <= now.
   - Stream: 2
   - Requirements: [1.1](requirements.md#1.1), [1.2](requirements.md#1.2), [1.3](requirements.md#1.3), [2.1](requirements.md#2.1), [2.2](requirements.md#2.2), [3.1](requirements.md#3.1), [3.2](requirements.md#3.2)
   - References: Flux/Packages/FluxCore/Sources/FluxCore/Helpers/DateFormatting.swift
 
-- [ ] 4. Implement DateFormatting month/week/day-count helpers <!-- id:i6257by -->
+- [x] 4. Implement DateFormatting month/week/day-count helpers <!-- id:i6257by -->
   - DateFormatting.swift: startOfMonth via dateInterval(.month); startOfWeek mutates a COPY of sydneyCalendar (never the shared static let) then dateInterval(.weekOfYear).
   - inclusiveDayCount via dateComponents([.day]) on Sydney-midnight-normalised dates +1 (no interval division).
   - Blocked-by: i6257bx (Write unit + property tests for FluxCore date helpers)
