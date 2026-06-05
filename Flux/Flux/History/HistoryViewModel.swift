@@ -9,12 +9,17 @@ final class HistoryViewModel {
     private(set) var selectedDay: DayEnergy?
     private(set) var isLoading = false
     private(set) var error: FluxAPIError?
-    private(set) var lastRequestedDays: Int = 7
+    private(set) var lastRequestedRange: HistoryRange = .days(7)
+    /// Inclusive day-count resolved from `lastRequestedRange` on the last load.
+    /// Read by `HistoryView` for the cards' `rangeDays:` (which carries the
+    /// expansion scope's `N`).
+    private(set) var resolvedRangeDays: Int = 7
 
     private let apiClient: any FluxAPIClient
     private let modelContext: ModelContext
     private let pricingService: PricingService
     private let nowProvider: @Sendable () -> Date
+    private let firstWeekdayProvider: @Sendable () -> Int
     private let warn: (String) -> Void
 
     init(
@@ -22,12 +27,14 @@ final class HistoryViewModel {
         modelContext: ModelContext,
         pricingService: PricingService = .shared,
         nowProvider: @escaping @Sendable () -> Date = { .now },
+        firstWeekdayProvider: @escaping @Sendable () -> Int = { Calendar.current.firstWeekday },
         warn: @escaping (String) -> Void = HistoryCacheLog.defaultWarn
     ) {
         self.apiClient = apiClient
         self.modelContext = modelContext
         self.pricingService = pricingService
         self.nowProvider = nowProvider
+        self.firstWeekdayProvider = firstWeekdayProvider
         self.warn = warn
     }
 
@@ -44,21 +51,40 @@ final class HistoryViewModel {
         try? await pricingService.refresh()
     }
 
-    func loadHistory(days requestedDays: Int) async {
+    func loadHistory(range: HistoryRange) async {
+        // Record the latest selection before the guard so a range chosen during
+        // an in-flight load is not dropped — the in-flight load coalesces to it.
+        lastRequestedRange = range
         guard !isLoading else { return }
 
-        lastRequestedDays = requestedDays
         isLoading = true
         defer { isLoading = false }
 
+        // Loop so a newer range selected mid-load is honoured: after each fetch
+        // we re-check `lastRequestedRange` and reload if it changed. The latest
+        // selection always wins, so the picker and the rendered data agree.
+        var loadedRange = range
+        while true {
+            await load(loadedRange)
+            if lastRequestedRange == loadedRange { break }
+            loadedRange = lastRequestedRange
+        }
+    }
+
+    private func load(_ range: HistoryRange) async {
+        let now = nowProvider()
+        let resolvedDays = range.resolvedDays(now: now, firstWeekday: firstWeekdayProvider())
+        resolvedRangeDays = resolvedDays
+
         do {
-            let response = try await apiClient.fetchHistory(days: requestedDays)
+            let response = try await apiClient.fetchHistory(days: resolvedDays)
             days = response.days
             error = nil
             selectDefaultDayIfNeeded()
             try cacheHistoricalDays(response.days)
         } catch {
-            let fallbackDays = loadCachedDays(limit: requestedDays)
+            let startDate = startDateString(days: resolvedDays, now: now)
+            let fallbackDays = loadCachedDays(onOrAfter: startDate)
             if fallbackDays.isEmpty {
                 self.error = FluxAPIError.from(error)
                 days = []
@@ -76,7 +102,7 @@ final class HistoryViewModel {
     }
 
     func reload() async {
-        await loadHistory(days: lastRequestedDays)
+        await loadHistory(range: lastRequestedRange)
     }
 
     private func cacheHistoricalDays(_ dayEnergies: [DayEnergy]) throws {
@@ -136,17 +162,35 @@ final class HistoryViewModel {
         }
     }
 
-    private func loadCachedDays(limit: Int) -> [DayEnergy] {
-        var descriptor = FetchDescriptor<CachedDayEnergy>(
-            sortBy: [SortDescriptor(\CachedDayEnergy.date, order: .reverse)]
+    /// Offline fallback bounded by the resolved window's start date. The dates
+    /// are zero-padded `YYYY-MM-DD`, so a lexicographic `>=` matches chronological
+    /// order. Returned ascending to mirror the online response shape, so
+    /// `selectDefaultDayIfNeeded` auto-selects the newest (today) day from
+    /// `days.last` just as it does online.
+    private func loadCachedDays(onOrAfter startDate: String) -> [DayEnergy] {
+        // Captured as a `let` so the macro can embed it in the predicate.
+        let lowerBound = startDate
+        let descriptor = FetchDescriptor<CachedDayEnergy>(
+            predicate: #Predicate<CachedDayEnergy> { cached in
+                cached.date >= lowerBound
+            },
+            sortBy: [SortDescriptor(\CachedDayEnergy.date, order: .forward)]
         )
-        descriptor.fetchLimit = limit
 
         guard let cachedDays = try? modelContext.fetch(descriptor), !cachedDays.isEmpty else {
             return []
         }
 
         return cachedDays.map(\.asDayEnergy)
+    }
+
+    /// Sydney-calendar `YYYY-MM-DD` for `today-(N-1)`, the inclusive window
+    /// start matching the backend's `startDate = now.AddDate(0,0,-(days-1))`.
+    private func startDateString(days: Int, now: Date) -> String {
+        let calendar = DateFormatting.sydneyCalendar
+        let today = calendar.startOfDay(for: now)
+        let start = calendar.date(byAdding: .day, value: -(days - 1), to: today) ?? today
+        return DateFormatting.dayDateString(from: start)
     }
 
     private func selectDefaultDayIfNeeded() {

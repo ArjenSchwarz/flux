@@ -38,7 +38,7 @@ struct HistoryViewModelCacheUpsertTests {
             nowProvider: { now },
             warn: { sink.record($0) }
         )
-        await viewModel.loadHistory(days: 7)
+        await viewModel.loadHistory(range: .days(7))
 
         let cached = try modelContext.fetch(FetchDescriptor<CachedDayEnergy>())
         let row = try #require(cached.first)
@@ -80,7 +80,7 @@ struct HistoryViewModelCacheUpsertTests {
             nowProvider: { now },
             warn: { sink.record($0) }
         )
-        await viewModel.loadHistory(days: 7)
+        await viewModel.loadHistory(range: .days(7))
 
         let cached = try modelContext.fetch(FetchDescriptor<CachedDayEnergy>())
         let row = try #require(cached.first)

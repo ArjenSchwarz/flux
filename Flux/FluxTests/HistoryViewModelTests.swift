@@ -17,7 +17,7 @@ struct HistoryViewModelTests {
 
         let viewModel = HistoryViewModel(apiClient: apiClient, modelContext: modelContext)
 
-        await viewModel.loadHistory(days: 7)
+        await viewModel.loadHistory(range: .days(7))
 
         #expect(viewModel.days.count == 1)
         #expect(viewModel.days.first?.date == expectedDay.date)
@@ -35,7 +35,7 @@ struct HistoryViewModelTests {
         let now = makeUTCDate(year: 2026, month: 4, day: 15, hour: 14, minute: 30)
         let viewModel = HistoryViewModel(apiClient: apiClient, modelContext: modelContext, nowProvider: { now })
 
-        await viewModel.loadHistory(days: 7)
+        await viewModel.loadHistory(range: .days(7))
 
         let cached = try modelContext.fetch(
             FetchDescriptor<CachedDayEnergy>(sortBy: [SortDescriptor(\CachedDayEnergy.date)])
@@ -46,6 +46,9 @@ struct HistoryViewModelTests {
     @Test
     func loadHistoryFallsBackToCacheWhenNetworkFails() async throws {
         let modelContext = try makeModelContext()
+        // Cache row must fall inside the resolved window. now = 04:30 AEST on
+        // 2026-04-15 (Sydney "today" = 2026-04-15), so a 7-day window covers
+        // 2026-04-09…2026-04-15 and the 2026-04-14 row is included.
         modelContext.insert(CachedDayEnergy(from: DayEnergy(
             date: "2026-04-14", epv: 5.2, eInput: 0.9, eOutput: 0.3, eCharge: 1.8, eDischarge: 2.7
         )))
@@ -54,9 +57,10 @@ struct HistoryViewModelTests {
         let apiClient = MockHistoryAPIClient()
         apiClient.historyResult = .failure(FluxAPIError.networkError("offline"))
 
-        let viewModel = HistoryViewModel(apiClient: apiClient, modelContext: modelContext)
+        let now = makeUTCDate(year: 2026, month: 4, day: 14, hour: 18, minute: 30)
+        let viewModel = HistoryViewModel(apiClient: apiClient, modelContext: modelContext, nowProvider: { now })
 
-        await viewModel.loadHistory(days: 7)
+        await viewModel.loadHistory(range: .days(7))
 
         #expect(viewModel.days.count == 1)
         #expect(viewModel.days.first?.date == "2026-04-14")
@@ -71,7 +75,7 @@ struct HistoryViewModelTests {
 
         let viewModel = HistoryViewModel(apiClient: apiClient, modelContext: modelContext)
 
-        await viewModel.loadHistory(days: 7)
+        await viewModel.loadHistory(range: .days(7))
 
         #expect(viewModel.days.isEmpty)
         #expect(viewModel.error == .serverError)
@@ -93,7 +97,7 @@ struct HistoryViewModelTests {
 
         let now = makeUTCDate(year: 2026, month: 4, day: 15, hour: 14, minute: 30)
         let viewModel = HistoryViewModel(apiClient: apiClient, modelContext: modelContext, nowProvider: { now })
-        await viewModel.loadHistory(days: 7)
+        await viewModel.loadHistory(range: .days(7))
 
         #expect(viewModel.solarSeries.count == 2, "solar shows every day")
         #expect(viewModel.batterySeries.count == 2, "battery shows every day")
@@ -121,7 +125,7 @@ struct HistoryViewModelTests {
 
         let now = makeUTCDate(year: 2026, month: 4, day: 15, hour: 14, minute: 30)
         let viewModel = HistoryViewModel(apiClient: apiClient, modelContext: modelContext, nowProvider: { now })
-        await viewModel.loadHistory(days: 7)
+        await viewModel.loadHistory(range: .days(7))
 
         #expect(viewModel.gridSeries.count == 1, "today renders even without an off-peak split")
         let gridEntry = try #require(viewModel.gridSeries.first)
@@ -144,7 +148,7 @@ struct HistoryViewModelTests {
 
         let now = makeUTCDate(year: 2026, month: 4, day: 15, hour: 14, minute: 30)
         let viewModel = HistoryViewModel(apiClient: apiClient, modelContext: modelContext, nowProvider: { now })
-        await viewModel.loadHistory(days: 7)
+        await viewModel.loadHistory(range: .days(7))
 
         #expect(viewModel.gridSeries.isEmpty, "no split info — entry omitted, not rendered with off-peak 0")
     }
@@ -168,7 +172,7 @@ struct HistoryViewModelTests {
 
         let now = makeUTCDate(year: 2026, month: 4, day: 15, hour: 14, minute: 30)
         let viewModel = HistoryViewModel(apiClient: apiClient, modelContext: modelContext, nowProvider: { now })
-        await viewModel.loadHistory(days: 7)
+        await viewModel.loadHistory(range: .days(7))
 
         let summary = viewModel.summary
         #expect(summary.solarDayCount == 1, "today is excluded from completed-day count")
@@ -192,7 +196,7 @@ struct HistoryViewModelTests {
         apiClient.historyResult = .success(HistoryResponse(days: [dayWithNote, dayWithoutNote]))
 
         let viewModel = HistoryViewModel(apiClient: apiClient, modelContext: modelContext)
-        await viewModel.loadHistory(days: 7)
+        await viewModel.loadHistory(range: .days(7))
 
         viewModel.selectDay(dayWithNote)
         #expect(viewModel.selectedDay?.note == "Away in Bali")
@@ -220,6 +224,9 @@ struct HistoryViewModelTests {
     @Test
     func cacheFallbackPathRendersNotes() async throws {
         let modelContext = try makeModelContext()
+        // 18:30 UTC on 2026-04-14 = 04:30 AEST on 2026-04-15, so the Sydney
+        // "today" is 2026-04-15 and the 2026-04-14 cache row is inside a 7-day
+        // window.
         modelContext.insert(CachedDayEnergy(from: DayEnergy(
             date: "2026-04-14", epv: 5.2, eInput: 0.9, eOutput: 0.3, eCharge: 1.8, eDischarge: 2.7,
             note: "Cached note"
@@ -229,8 +236,9 @@ struct HistoryViewModelTests {
         let apiClient = MockHistoryAPIClient()
         apiClient.historyResult = .failure(FluxAPIError.networkError("offline"))
 
-        let viewModel = HistoryViewModel(apiClient: apiClient, modelContext: modelContext)
-        await viewModel.loadHistory(days: 7)
+        let now = makeUTCDate(year: 2026, month: 4, day: 14, hour: 18, minute: 30)
+        let viewModel = HistoryViewModel(apiClient: apiClient, modelContext: modelContext, nowProvider: { now })
+        await viewModel.loadHistory(range: .days(7))
 
         #expect(viewModel.days.count == 1)
         #expect(viewModel.days.first?.note == "Cached note")
@@ -248,7 +256,7 @@ struct HistoryViewModelTests {
         apiClient.historyResult = .success(HistoryResponse(days: [firstDay, secondDay]))
 
         let viewModel = HistoryViewModel(apiClient: apiClient, modelContext: modelContext)
-        await viewModel.loadHistory(days: 7)
+        await viewModel.loadHistory(range: .days(7))
         viewModel.selectDay(secondDay)
 
         #expect(viewModel.selectedDay?.date == secondDay.date)
@@ -275,13 +283,15 @@ struct HistoryViewModelTests {
 
 private final class MockHistoryAPIClient: FluxAPIClient, @unchecked Sendable {
     var historyResult: Result<HistoryResponse, Error> = .failure(FluxAPIError.notConfigured)
+    private(set) var requestedDays: [Int] = []
 
     func fetchStatus() async throws -> StatusResponse {
         throw FluxAPIError.notConfigured
     }
 
-    func fetchHistory(days _: Int) async throws -> HistoryResponse {
-        try historyResult.get()
+    func fetchHistory(days: Int) async throws -> HistoryResponse {
+        requestedDays.append(days)
+        return try historyResult.get()
     }
 
     func fetchDay(date _: String) async throws -> DayDetailResponse {

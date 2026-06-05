@@ -4,9 +4,12 @@ import SwiftUI
 
 // swiftlint:disable type_body_length
 struct HistoryView: View {
+    /// Range control segments, in the order required by the spec ([6.1]).
+    static let rangeOptions: [HistoryRange] = [.days(7), .days(14), .days(30), .weekToDate, .monthToDate]
+
     @Environment(\.horizontalSizeClass) private var hSizeClass
     @State private var viewModel: HistoryViewModel
-    @State private var selectedRange: Int = 7
+    @State private var selectedRange: HistoryRange = .days(7)
     @State private var showingSettings = false
 
     private let makeDayDetailViewModel: (String) -> DayDetailViewModel
@@ -57,9 +60,9 @@ struct HistoryView: View {
                 }
 
                 Picker("Range", selection: $selectedRange) {
-                    Text("7d").tag(7)
-                    Text("14d").tag(14)
-                    Text("30d").tag(30)
+                    ForEach(HistoryView.rangeOptions, id: \.self) { range in
+                        Text(range.pickerLabel).tag(range)
+                    }
                 }
                 .pickerStyle(.segmented)
 
@@ -99,13 +102,13 @@ struct HistoryView: View {
             }
         }
         .task {
-            async let history: Void = viewModel.loadHistory(days: selectedRange)
+            async let history: Void = viewModel.loadHistory(range: selectedRange)
             async let pricing: Void = viewModel.refreshPricing()
             _ = await (history, pricing)
         }
         .onChange(of: selectedRange) { _, newRange in
             Task {
-                async let history: Void = viewModel.loadHistory(days: newRange)
+                async let history: Void = viewModel.loadHistory(range: newRange)
                 async let pricing: Void = viewModel.refreshPricing()
                 _ = await (history, pricing)
             }
@@ -116,7 +119,7 @@ struct HistoryView: View {
         }
         #endif
         .refreshable {
-            await viewModel.loadHistory(days: selectedRange)
+            await viewModel.loadHistory(range: selectedRange)
         }
         #if !os(macOS)
         .sheet(isPresented: $showingSettings) {
@@ -193,7 +196,7 @@ struct HistoryView: View {
             entries: derived.solar,
             summary: derived.summary,
             selectedDate: selectedDate,
-            rangeDays: selectedRange,
+            rangeDays: viewModel.resolvedRangeDays,
             onSelect: selectDay
         )
     }
@@ -204,7 +207,7 @@ struct HistoryView: View {
             entries: derived.grid,
             summary: derived.summary,
             selectedDate: selectedDate,
-            rangeDays: selectedRange,
+            rangeDays: viewModel.resolvedRangeDays,
             onSelect: selectDay
         )
     }
@@ -215,7 +218,7 @@ struct HistoryView: View {
             entries: derived.dailyUsage,
             summary: derived.summary,
             selectedDate: selectedDate,
-            rangeDays: selectedRange,
+            rangeDays: viewModel.resolvedRangeDays,
             onSelect: selectDay
         )
     }
@@ -286,7 +289,7 @@ struct HistoryView: View {
                 .foregroundStyle(.secondary)
             HStack {
                 Button("Retry") {
-                    Task { await viewModel.loadHistory(days: selectedRange) }
+                    Task { await viewModel.loadHistory(range: selectedRange) }
                 }
                 .buttonStyle(.borderedProminent)
 
