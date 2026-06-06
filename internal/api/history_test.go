@@ -61,23 +61,38 @@ func TestHandleHistoryDefaultDays(t *testing.T) {
 	assert.Equal(t, derivedstats.RoundEnergy(10.123), hr.Days[0].Epv)
 }
 
-func TestHandleHistoryExplicitDays(t *testing.T) {
+// TestHandleHistoryDaysValidation covers the widened days bounds (1-31). The
+// to-date ranges resolve to any inclusive day-count from 1 through 31, so the
+// backend accepts that whole range and rejects anything outside it (or
+// non-numeric) with the bounds error message. An absent param defaults to 7.
+func TestHandleHistoryDaysValidation(t *testing.T) {
 	now := fixedNow()
 
 	tests := map[string]struct {
-		days         string
-		expectedDays int
+		days       string // query value; empty string means the param is absent
+		wantStatus int
+		// wantDays is the expected inclusive window length when wantStatus is
+		// 200; the startDate is now-(wantDays-1).
+		wantDays int
 	}{
-		"14 days": {days: "14", expectedDays: 13},
-		"30 days": {days: "30", expectedDays: 29},
+		"absent defaults to 7": {days: "", wantStatus: 200, wantDays: 7},
+		"one day":              {days: "1", wantStatus: 200, wantDays: 1},
+		"seven days":           {days: "7", wantStatus: 200, wantDays: 7},
+		"fourteen days":        {days: "14", wantStatus: 200, wantDays: 14},
+		"thirty days":          {days: "30", wantStatus: 200, wantDays: 30},
+		"thirty-one days":      {days: "31", wantStatus: 200, wantDays: 31},
+		"zero rejected":        {days: "0", wantStatus: 400},
+		"thirty-two rejected":  {days: "32", wantStatus: 400},
+		"negative rejected":    {days: "-1", wantStatus: 400},
+		"non-numeric rejected": {days: "x", wantStatus: 400},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			mr := &mockReader{
 				queryDailyEnergyFn: func(_ context.Context, _, start, end string) ([]dynamo.DailyEnergyItem, error) {
-					expectedStart := now.AddDate(0, 0, -tc.expectedDays).Format("2006-01-02")
-					assert.Equal(t, expectedStart, start)
+					expectedStart := now.AddDate(0, 0, -(tc.wantDays - 1)).Format("2006-01-02")
+					assert.Equal(t, expectedStart, start, "window start should be now-(days-1)")
 					assert.Equal(t, now.Format("2006-01-02"), end)
 					return []dynamo.DailyEnergyItem{}, nil
 				},
@@ -86,38 +101,20 @@ func TestHandleHistoryExplicitDays(t *testing.T) {
 			h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
 			h.nowFunc = func() time.Time { return now }
 
-			resp, err := h.Handle(context.Background(), historyRequest(map[string]string{"days": tc.days}))
+			var params map[string]string
+			if tc.days != "" {
+				params = map[string]string{"days": tc.days}
+			}
+
+			resp, err := h.Handle(context.Background(), historyRequest(params))
 			require.NoError(t, err)
-			assert.Equal(t, 200, resp.StatusCode)
-		})
-	}
-}
+			assert.Equal(t, tc.wantStatus, resp.StatusCode)
 
-func TestHandleHistoryInvalidDays(t *testing.T) {
-	now := fixedNow()
-
-	tests := map[string]struct {
-		days string
-	}{
-		"invalid number": {days: "5"},
-		"zero":           {days: "0"},
-		"negative":       {days: "-1"},
-		"non-numeric":    {days: "abc"},
-		"too large":      {days: "60"},
-	}
-
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			h := NewHandler(&mockReader{}, nil, testSerial, testToken, "11:00", "14:00")
-			h.nowFunc = func() time.Time { return now }
-
-			resp, err := h.Handle(context.Background(), historyRequest(map[string]string{"days": tc.days}))
-			require.NoError(t, err)
-			assert.Equal(t, 400, resp.StatusCode)
-
-			var body map[string]string
-			require.NoError(t, json.Unmarshal([]byte(resp.Body), &body))
-			assert.Equal(t, "invalid days parameter, must be 7, 14, or 30", body["error"])
+			if tc.wantStatus == 400 {
+				var body map[string]string
+				require.NoError(t, json.Unmarshal([]byte(resp.Body), &body))
+				assert.Equal(t, "invalid days parameter, must be between 1 and 31", body["error"])
+			}
 		})
 	}
 }

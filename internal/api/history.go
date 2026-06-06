@@ -12,19 +12,18 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// validDays is the set of accepted values for the days query parameter.
-var validDays = map[int]bool{7: true, 14: true, 30: true}
-
 func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionURLRequest) events.LambdaFunctionURLResponse {
 	now := h.nowFunc().In(sydneyTZ)
 	today := now.Format("2006-01-02")
 
-	// Parse and validate days parameter (default 7).
+	// Parse and validate days parameter (default 7). To-date ranges resolve
+	// to any inclusive day-count from 1 through 31, so accept that whole
+	// range; a non-numeric value still 400s via the err check.
 	days := 7
 	if d := req.QueryStringParameters["days"]; d != "" {
 		parsed, err := strconv.Atoi(d)
-		if err != nil || !validDays[parsed] {
-			return errorResponse(400, "invalid days parameter, must be 7, 14, or 30")
+		if err != nil || parsed < 1 || parsed > 31 {
+			return errorResponse(400, "invalid days parameter, must be between 1 and 31")
 		}
 		days = parsed
 	}

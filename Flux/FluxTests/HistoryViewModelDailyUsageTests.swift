@@ -18,7 +18,7 @@ struct HistoryViewModelDailyUsageTests {
 
         let now = makeUTCDate(year: 2026, month: 4, day: 15, hour: 14, minute: 30)
         let viewModel = HistoryViewModel(apiClient: apiClient, modelContext: modelContext, nowProvider: { now })
-        await viewModel.loadHistory(days: 7)
+        await viewModel.loadHistory(range: .days(7))
 
         let entries = viewModel.derived.dailyUsage
         #expect(entries.count == 1)
@@ -44,7 +44,7 @@ struct HistoryViewModelDailyUsageTests {
 
         let now = makeUTCDate(year: 2026, month: 4, day: 15, hour: 14, minute: 30)
         let viewModel = HistoryViewModel(apiClient: apiClient, modelContext: modelContext, nowProvider: { now })
-        await viewModel.loadHistory(days: 7)
+        await viewModel.loadHistory(range: .days(7))
 
         let entry = try #require(viewModel.derived.dailyUsage.first)
         #expect(entry.blocks.map(\.kind) == DailyUsageBlock.Kind.chronologicalOrder)
@@ -63,7 +63,7 @@ struct HistoryViewModelDailyUsageTests {
 
         let now = makeUTCDate(year: 2026, month: 4, day: 15, hour: 14, minute: 30)
         let viewModel = HistoryViewModel(apiClient: apiClient, modelContext: modelContext, nowProvider: { now })
-        await viewModel.loadHistory(days: 7)
+        await viewModel.loadHistory(range: .days(7))
 
         let entry = try #require(viewModel.derived.dailyUsage.first)
         #expect(entry.blocks.map(\.kind) == [.night, .evening])
@@ -85,7 +85,7 @@ struct HistoryViewModelDailyUsageTests {
 
         let now = makeUTCDate(year: 2026, month: 4, day: 15, hour: 14, minute: 30)
         let viewModel = HistoryViewModel(apiClient: apiClient, modelContext: modelContext, nowProvider: { now })
-        await viewModel.loadHistory(days: 7)
+        await viewModel.loadHistory(range: .days(7))
 
         let entries = viewModel.derived.dailyUsage
         #expect(entries.count == 1)
@@ -103,7 +103,7 @@ struct HistoryViewModelDailyUsageTests {
 
         let now = makeUTCDate(year: 2026, month: 4, day: 15, hour: 14, minute: 30)
         let viewModel = HistoryViewModel(apiClient: apiClient, modelContext: modelContext, nowProvider: { now })
-        await viewModel.loadHistory(days: 7)
+        await viewModel.loadHistory(range: .days(7))
 
         let derived = viewModel.derived
         #expect(derived.dailyUsage.isEmpty)
@@ -125,7 +125,7 @@ struct HistoryViewModelDailyUsageTests {
 
         let now = makeUTCDate(year: 2026, month: 4, day: 15, hour: 14, minute: 30)
         let viewModel = HistoryViewModel(apiClient: apiClient, modelContext: modelContext, nowProvider: { now })
-        await viewModel.loadHistory(days: 7)
+        await viewModel.loadHistory(range: .days(7))
 
         let derived = viewModel.derived
         #expect(derived.dailyUsage.count == 1)
@@ -148,7 +148,7 @@ struct HistoryViewModelDailyUsageTests {
 
         let now = makeUTCDate(year: 2026, month: 4, day: 15, hour: 14, minute: 30)
         let viewModel = HistoryViewModel(apiClient: apiClient, modelContext: modelContext, nowProvider: { now })
-        await viewModel.loadHistory(days: 7)
+        await viewModel.loadHistory(range: .days(7))
 
         #expect(viewModel.derived.dailyUsage.map(\.dayID) == ["2026-04-13"])
     }
@@ -170,7 +170,7 @@ struct HistoryViewModelDailyUsageTests {
 
         let now = makeUTCDate(year: 2026, month: 4, day: 15, hour: 14, minute: 30)
         let viewModel = HistoryViewModel(apiClient: apiClient, modelContext: modelContext, nowProvider: { now })
-        await viewModel.loadHistory(days: 7)
+        await viewModel.loadHistory(range: .days(7))
 
         let derived = viewModel.derived
         #expect(derived.dailyUsage.count == 2)
@@ -197,7 +197,7 @@ struct HistoryViewModelDailyUsageTests {
 
         let now = makeUTCDate(year: 2026, month: 4, day: 15, hour: 14, minute: 30)
         let viewModel = HistoryViewModel(apiClient: apiClient, modelContext: modelContext, nowProvider: { now })
-        await viewModel.loadHistory(days: 7)
+        await viewModel.loadHistory(range: .days(7))
 
         let entry = try #require(viewModel.derived.dailyUsage.first)
         let night = try #require(entry.blocks.first(where: { $0.kind == .night }))
@@ -232,7 +232,7 @@ struct HistoryViewModelDailyUsageTests {
 
         let now = makeUTCDate(year: 2026, month: 4, day: 15, hour: 14, minute: 30)
         let viewModel = HistoryViewModel(apiClient: apiClient, modelContext: modelContext, nowProvider: { now })
-        await viewModel.loadHistory(days: 7)
+        await viewModel.loadHistory(range: .days(7))
 
         #expect(viewModel.derived.summary.dailyUsageLargestKind == .night)
     }

@@ -202,7 +202,7 @@ struct HistoryStatsOverviewCardTests {
         )
         let apiClient = StaticHistoryClient(days: [today])
         let viewModel = HistoryViewModel(apiClient: apiClient, modelContext: modelContext)
-        await viewModel.loadHistory(days: 7)
+        await viewModel.loadHistory(range: .days(7))
 
         let action = HistoryStatsOverviewCard.tapAction(
             for: .lowestSoc, summary: viewModel.summary,

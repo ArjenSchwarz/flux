@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Week-to-date and month-to-date History ranges** (T-1361). The History range control adds two calendar-anchored options — **Wk** (this week so far) and **Mo** (this month so far) — alongside the fixed 7/14/30-day ranges, giving a five-segment control in the order 7d / 14d / 30d / Wk / Mo with 7d still the default. Boundaries are computed against the same Sydney calendar that keys the stored data, with the week's first day taken from the device locale, and are recomputed on every load (range switch, pull-to-refresh, screen appearance). The `/history` endpoint now accepts any range from 1 to 31 days, so a full month-to-date on the 31st of a 31-day month is no longer clipped to 30. The offline cache fallback is bounded by the computed week/month start, so a gappy cache never surfaces a day before the period start, and it now auto-selects the newest cached day (matching the online behaviour) instead of the oldest.
+
 ### Changed
 
 - **SwiftLint now passes `--strict` cleanly.** Added `Flux/.swiftlint.yml` (the project had none, so the linter was scanning test targets and `.build-xc/` artifacts): build directories (`.build`, `.build-xc`, `DerivedData`) and the `FluxTests` / `FluxUITests` / `FluxCore/Tests` targets are now excluded. The 26 remaining production violations were fixed rather than suppressed — short identifiers renamed to meaningful names (including the `registerDeviceIfNeeded` `tz:` → `timeZone:` label), three over-length lines reflowed, a scoped `line_length` exception around the release-note copy in `WhatsNewCatalogue`, and a per-file `file_length` disable on `HistoryDerivedState` matching the convention already used by `DayDetailView` and `APIModels`. No app behaviour changes.

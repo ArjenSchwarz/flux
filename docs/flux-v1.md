@@ -20,7 +20,7 @@ Hybrid layout combining a centred battery hero section, a three-column power rea
 
 ### History Layout
 
-Grouped vertical bar chart (5 bars per day) with a tappable day detail. Segmented control for 7/14/30 day ranges.
+Grouped vertical bar chart (5 bars per day) with a tappable day detail. Segmented control for 7/14/30 day ranges plus week-to-date (Wk) and month-to-date (Mo).
 
 ### Day Detail Layout
 
@@ -326,7 +326,7 @@ Accessed via navigation from Dashboard. Shows daily energy totals.
 
 ### Display
 
-Grouped vertical bar chart showing the last 7 days (default), with a segmented control to switch to 14 or 30 days.
+Grouped vertical bar chart showing the last 7 days (default), with a segmented control offering 7d / 14d / 30d plus two calendar-anchored to-date ranges: Wk (week to date) and Mo (month to date). The to-date ranges resolve to an inclusive day-count (1–31) against the Sydney calendar, with the week's first weekday taken from the device locale, and load over the same `/history?days=N` contract.
 
 Each day shows 5 side-by-side bars:
 

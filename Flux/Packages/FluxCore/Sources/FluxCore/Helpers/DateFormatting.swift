@@ -103,4 +103,53 @@ public enum DateFormatting {
     public static func isToday(_ dateString: String, now: Date = .now) -> Bool {
         dateString == todayDateString(now: now)
     }
+
+    /// Sydney-calendar 00:00 on the 1st of the month containing `now`.
+    public static func startOfMonth(now: Date) -> Date {
+        guard let start = sydneyCalendar.dateInterval(of: .month, for: now)?.start else {
+            assertionFailure("dateInterval(of: .month) returned nil for a valid date")
+            return now
+        }
+        return start
+    }
+
+    /// Sydney-calendar 00:00 on the week start containing `now`.
+    /// `firstWeekday` follows Calendar's convention (1 = Sunday … 7 = Saturday);
+    /// only the weekday is locale-driven — the date arithmetic is Sydney.
+    ///
+    /// Mutates a copy of `sydneyCalendar`, never the shared `static let`, which
+    /// would corrupt every other date computation.
+    public static func startOfWeek(now: Date, firstWeekday: Int) -> Date {
+        var calendar = sydneyCalendar
+        calendar.firstWeekday = firstWeekday
+        guard let start = calendar.dateInterval(of: .weekOfYear, for: now)?.start else {
+            assertionFailure("dateInterval(of: .weekOfYear) returned nil for a valid date")
+            return now
+        }
+        return start
+    }
+
+    /// Inclusive count of Sydney calendar days from `start` through `end`.
+    /// Computed by calendar-day difference (both normalised to Sydney midnight),
+    /// never by dividing an elapsed interval, so 23/25-hour DST days don't shift it.
+    public static func inclusiveDayCount(from start: Date, through end: Date) -> Int {
+        let startMidnight = sydneyCalendar.startOfDay(for: start)
+        let endMidnight = sydneyCalendar.startOfDay(for: end)
+        let days = sydneyCalendar.dateComponents([.day], from: startMidnight, to: endMidnight).day ?? 0
+        return days + 1
+    }
+
+    /// Sydney-calendar `YYYY-MM-DD` for the inclusive window start `count` days
+    /// back from `now` — i.e. `today-(count-1)`. Single-sources the window-start
+    /// formula so the app's offline cache bound matches the backend's
+    /// `startDate = now.AddDate(0, 0, -(days-1))`. `count` is an inclusive
+    /// day-count (1…31).
+    public static func windowStartDateString(inclusiveDays count: Int, now: Date) -> String {
+        let today = sydneyCalendar.startOfDay(for: now)
+        guard let start = sydneyCalendar.date(byAdding: .day, value: -(count - 1), to: today) else {
+            assertionFailure("date(byAdding: .day) returned nil for a valid date")
+            return dayDateString(from: today)
+        }
+        return dayDateString(from: start)
+    }
 }
