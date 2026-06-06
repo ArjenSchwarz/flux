@@ -83,7 +83,7 @@ final class HistoryViewModel {
             selectDefaultDayIfNeeded()
             try cacheHistoricalDays(response.days)
         } catch {
-            let startDate = startDateString(days: resolvedDays, now: now)
+            let startDate = DateFormatting.windowStartDateString(inclusiveDays: resolvedDays, now: now)
             let fallbackDays = loadCachedDays(onOrAfter: startDate)
             if fallbackDays.isEmpty {
                 self.error = FluxAPIError.from(error)
@@ -182,15 +182,6 @@ final class HistoryViewModel {
         }
 
         return cachedDays.map(\.asDayEnergy)
-    }
-
-    /// Sydney-calendar `YYYY-MM-DD` for `today-(N-1)`, the inclusive window
-    /// start matching the backend's `startDate = now.AddDate(0,0,-(days-1))`.
-    private func startDateString(days: Int, now: Date) -> String {
-        let calendar = DateFormatting.sydneyCalendar
-        let today = calendar.startOfDay(for: now)
-        let start = calendar.date(byAdding: .day, value: -(days - 1), to: today) ?? today
-        return DateFormatting.dayDateString(from: start)
     }
 
     private func selectDefaultDayIfNeeded() {

@@ -251,6 +251,40 @@ import Testing
         #expect(count <= 31)
     }
 
+    // MARK: - windowStartDateString
+
+    @Test
+    func windowStartDateStringMatchesInclusiveWindow() {
+        // 7 inclusive days ending 2026-04-15 → today-(7-1) = 2026-04-09.
+        let now = makeSydneyDate(year: 2026, month: 4, day: 15, hour: 13, minute: 37)
+        #expect(DateFormatting.windowStartDateString(inclusiveDays: 7, now: now) == "2026-04-09")
+    }
+
+    @Test
+    func windowStartDateStringForSingleDayIsToday() {
+        // A 1-day window is today itself, even just after Sydney midnight.
+        let now = makeSydneyDate(year: 2026, month: 4, day: 1, hour: 0, minute: 5)
+        #expect(DateFormatting.windowStartDateString(inclusiveDays: 1, now: now) == "2026-04-01")
+    }
+
+    @Test
+    func windowStartDateStringCrossesMonthBoundary() {
+        // 5 inclusive days ending 2026-03-03 → 2026-02-27.
+        let now = makeSydneyDate(year: 2026, month: 3, day: 3, hour: 9, minute: 0)
+        #expect(DateFormatting.windowStartDateString(inclusiveDays: 5, now: now) == "2026-02-27")
+    }
+
+    /// The window-start string is the exact inverse of `inclusiveDayCount`:
+    /// for any resolved count N, counting from the window start back to `now`
+    /// must return N again. Guards the app/backend window-agreement contract.
+    @Test(arguments: [1, 2, 7, 14, 28, 30, 31])
+    func windowStartDateStringInvertsInclusiveDayCount(count: Int) {
+        let now = makeSydneyDate(year: 2026, month: 5, day: 20, hour: 8, minute: 0)
+        let startString = DateFormatting.windowStartDateString(inclusiveDays: count, now: now)
+        let start = DateFormatting.parseDayDate(startString)!
+        #expect(DateFormatting.inclusiveDayCount(from: start, through: now) == count)
+    }
+
     // MARK: - Helpers
 
     private var sydneyCalendar: Calendar { Self.makeSydneyCalendar() }

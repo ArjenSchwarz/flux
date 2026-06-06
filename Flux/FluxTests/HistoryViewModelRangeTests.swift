@@ -6,6 +6,18 @@ import Testing
 
 @MainActor @Suite(.serialized)
 struct HistoryViewModelRangeTests {
+    // MARK: - Default selection
+
+    @Test
+    func defaultRangeResolvesToSevenDays() throws {
+        // [6.4] Before any load, the view model defaults to the 7d range.
+        let modelContext = try makeModelContext()
+        let viewModel = HistoryViewModel(apiClient: RecordingHistoryAPIClient(), modelContext: modelContext)
+
+        #expect(viewModel.lastRequestedRange == .days(7))
+        #expect(viewModel.resolvedRangeDays == 7)
+    }
+
     // MARK: - Wk / Mo resolution
 
     @Test

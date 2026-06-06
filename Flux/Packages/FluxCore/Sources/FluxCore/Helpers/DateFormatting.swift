@@ -130,4 +130,15 @@ public enum DateFormatting {
         let days = sydneyCalendar.dateComponents([.day], from: startMidnight, to: endMidnight).day ?? 0
         return days + 1
     }
+
+    /// Sydney-calendar `YYYY-MM-DD` for the inclusive window start `count` days
+    /// back from `now` — i.e. `today-(count-1)`. Single-sources the window-start
+    /// formula so the app's offline cache bound matches the backend's
+    /// `startDate = now.AddDate(0, 0, -(days-1))`. `count` is an inclusive
+    /// day-count (1…31).
+    public static func windowStartDateString(inclusiveDays count: Int, now: Date) -> String {
+        let today = sydneyCalendar.startOfDay(for: now)
+        let start = sydneyCalendar.date(byAdding: .day, value: -(count - 1), to: today) ?? today
+        return dayDateString(from: start)
+    }
 }

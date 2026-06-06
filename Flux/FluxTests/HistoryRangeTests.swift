@@ -81,6 +81,21 @@ struct HistoryRangeTests {
         #expect(HistoryRange.weekToDate.resolvedDays(now: now, firstWeekday: 1) == 1)
     }
 
+    // MARK: - Range control presentation
+
+    @Test
+    func rangeOptionsMatchSpecOrder() {
+        // [6.1] The segmented control presents exactly 7d, 14d, 30d, Wk, Mo in
+        // this order; locking it guards against accidental reordering.
+        #expect(HistoryView.rangeOptions == [.days(7), .days(14), .days(30), .weekToDate, .monthToDate])
+    }
+
+    @Test
+    func defaultRangeOptionIsSevenDays() {
+        // [6.4] The default selected range is 7d.
+        #expect(HistoryView.rangeOptions.first == .days(7))
+    }
+
     // MARK: - Helpers
 
     /// A `Date` at 12:00 Sydney time on the given calendar date, so it sits
