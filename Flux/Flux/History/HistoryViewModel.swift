@@ -62,7 +62,10 @@ final class HistoryViewModel {
 
         // Loop so a newer range selected mid-load is honoured: after each fetch
         // we re-check `lastRequestedRange` and reload if it changed. The latest
-        // selection always wins, so the picker and the rendered data agree.
+        // selection always wins, so the picker and the rendered data agree. The
+        // loop terminates as soon as no newer range arrived during the last
+        // fetch; each iteration is a real network round-trip, so it can only
+        // keep looping while selections keep arriving faster than they complete.
         var loadedRange = range
         while true {
             await load(loadedRange)

@@ -106,7 +106,11 @@ public enum DateFormatting {
 
     /// Sydney-calendar 00:00 on the 1st of the month containing `now`.
     public static func startOfMonth(now: Date) -> Date {
-        sydneyCalendar.dateInterval(of: .month, for: now)?.start ?? now
+        guard let start = sydneyCalendar.dateInterval(of: .month, for: now)?.start else {
+            assertionFailure("dateInterval(of: .month) returned nil for a valid date")
+            return now
+        }
+        return start
     }
 
     /// Sydney-calendar 00:00 on the week start containing `now`.
@@ -118,7 +122,11 @@ public enum DateFormatting {
     public static func startOfWeek(now: Date, firstWeekday: Int) -> Date {
         var calendar = sydneyCalendar
         calendar.firstWeekday = firstWeekday
-        return calendar.dateInterval(of: .weekOfYear, for: now)?.start ?? now
+        guard let start = calendar.dateInterval(of: .weekOfYear, for: now)?.start else {
+            assertionFailure("dateInterval(of: .weekOfYear) returned nil for a valid date")
+            return now
+        }
+        return start
     }
 
     /// Inclusive count of Sydney calendar days from `start` through `end`.
@@ -138,7 +146,10 @@ public enum DateFormatting {
     /// day-count (1…31).
     public static func windowStartDateString(inclusiveDays count: Int, now: Date) -> String {
         let today = sydneyCalendar.startOfDay(for: now)
-        let start = sydneyCalendar.date(byAdding: .day, value: -(count - 1), to: today) ?? today
+        guard let start = sydneyCalendar.date(byAdding: .day, value: -(count - 1), to: today) else {
+            assertionFailure("date(byAdding: .day) returned nil for a valid date")
+            return dayDateString(from: today)
+        }
         return dayDateString(from: start)
     }
 }
