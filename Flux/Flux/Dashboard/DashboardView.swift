@@ -10,6 +10,11 @@ struct DashboardView: View {
     @Environment(\.horizontalSizeClass) private var hSizeClass
     @State private var viewModel: DashboardViewModel
     @State private var showingSettings = false
+    /// Source of selectable presets for the Simulate menu. The shared service
+    /// is bound at app startup (AppNavigationView); reading it here keeps the
+    /// menu in sync with edits/deletes made in Settings or via cross-device
+    /// sync.
+    private var simulationService: SimulationPresetsService { .shared }
 
     private var tabBinding: Binding<FluxTab>?
     private var onSettingsTap: (() -> Void)?
@@ -113,8 +118,9 @@ struct DashboardView: View {
     private var dashboardContent: some View {
         VStack(alignment: .leading, spacing: FluxTheme.Metrics.panelGap) {
             headerSection
+            simulationBanner
             if viewModel.error != nil {
-                stalenessBanner
+                DashboardStalenessBanner(viewModel: viewModel, onSettingsTap: openSettings)
             }
             heroPanel
             trioPanel
@@ -131,8 +137,9 @@ struct DashboardView: View {
         // and the settings toolbar gear, so skip both the FluxScreenHeader
         // tab bar and the legacyHeader eyebrow/title block.
         VStack(alignment: .leading, spacing: FluxTheme.Metrics.panelGap) {
+            simulationBanner
             if viewModel.error != nil {
-                stalenessBanner
+                DashboardStalenessBanner(viewModel: viewModel, onSettingsTap: openSettings)
             }
             AdaptiveColumnsLayout {
                 heroPanel
@@ -156,10 +163,44 @@ struct DashboardView: View {
             FluxScreenHeader(
                 selection: tabBinding,
                 onSettingsTap: onSettingsTap,
-                onTabActivate: onTabActivate
+                onTabActivate: onTabActivate,
+                trailingAccessory: AnyView(simulateMenu)
             )
         } else {
-            legacyHeader
+            HStack(alignment: .top) {
+                legacyHeader
+                Spacer()
+                simulateMenu
+            }
+        }
+    }
+
+    private var simulateMenu: some View {
+        DashboardSimulateMenu(
+            viewModel: viewModel,
+            presets: simulationService.presets,
+            onAddPreset: openSettings
+        )
+    }
+
+    @ViewBuilder
+    private var simulationBanner: some View {
+        if viewModel.isSimulating,
+           let name = viewModel.activeSimulationName,
+           let delta = viewModel.activeSimulationDeltaWatts {
+            SimulationBanner(presetName: name, deltaWatts: delta) {
+                Task { await viewModel.stopSimulation() }
+            }
+        }
+    }
+
+    private func openSettings() {
+        if let onSettingsTap {
+            onSettingsTap()
+        } else {
+            #if !os(macOS)
+            showingSettings = true
+            #endif
         }
     }
 
@@ -169,13 +210,14 @@ struct DashboardView: View {
             live: viewModel.status?.live,
             rolling15min: viewModel.status?.rolling15min,
             battery: viewModel.status?.battery,
-            offpeakWindowStart: viewModel.status?.offpeak?.windowStart
+            offpeakWindowStart: viewModel.status?.offpeak?.windowStart,
+            isSimulating: viewModel.isSimulating
         )
     }
 
     @ViewBuilder
     private var trioPanel: some View {
-        LiveTrioPanel(live: viewModel.status?.live)
+        LiveTrioPanel(live: viewModel.status?.live, isSimulating: viewModel.isSimulating)
     }
 
     @ViewBuilder
@@ -243,11 +285,18 @@ struct DashboardView: View {
         .padding(.top, 6)
     }
 
-    @ViewBuilder
-    private var stalenessBanner: some View {
+}
+
+/// The Dashboard's stale/error banner. Extracted from `DashboardView` so that
+/// view stays under the type-body-length limit.
+private struct DashboardStalenessBanner: View {
+    let viewModel: DashboardViewModel
+    let onSettingsTap: () -> Void
+
+    var body: some View {
         FluxPanel {
             VStack(alignment: .leading, spacing: 8) {
-                Label(stalenessTitle, systemImage: "exclamationmark.triangle.fill")
+                Label(title, systemImage: "exclamationmark.triangle.fill")
                     .appFont(.subheadline, weight: .semibold)
                     .foregroundStyle(.orange)
 
@@ -275,17 +324,15 @@ struct DashboardView: View {
                     }
                     .buttonStyle(.bordered)
                     #else
-                    Button("Settings") {
-                        showingSettings = true
-                    }
-                    .buttonStyle(.bordered)
+                    Button("Settings", action: onSettingsTap)
+                        .buttonStyle(.bordered)
                     #endif
                 }
             }
         }
     }
 
-    private var stalenessTitle: String {
+    private var title: String {
         if case .some(.unauthorized) = viewModel.error {
             return "Authentication required"
         }

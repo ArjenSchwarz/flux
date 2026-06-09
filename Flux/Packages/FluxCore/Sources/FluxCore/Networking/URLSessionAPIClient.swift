@@ -5,7 +5,7 @@ public final class URLSessionAPIClient: FluxAPIClient, Sendable {
     private let baseURL: URL
     private let tokenProvider: @Sendable () -> String?
     private let decoder: JSONDecoder
-    private let encoder: JSONEncoder
+    let encoder: JSONEncoder  // internal: used by the simulation extension's own file
 
     private static let noCacheSession: URLSession = {
         let config = URLSessionConfiguration.default
@@ -159,7 +159,7 @@ public final class URLSessionAPIClient: FluxAPIClient, Sendable {
         init(from _: Decoder) throws {}
     }
 
-    private func performRequest<T: Decodable>(
+    func performRequest<T: Decodable>(  // internal: used by the simulation extension's file
         path: String,
         queryItems: [URLQueryItem],
         method: String = "GET",

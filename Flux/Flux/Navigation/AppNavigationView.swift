@@ -248,11 +248,12 @@ struct AppNavigationView: View {
             }
         }
 
-        // Also binds SoCAlertsService / PricingService so their CRUD calls
-        // don't throw .notConfigured.
+        // Also binds SoCAlertsService / PricingService / SimulationPresetsService
+        // so their CRUD calls don't throw .notConfigured.
         if let apiClient {
             SoCAlertsService.shared.bind(apiClient: apiClient)
             PricingService.shared.bind(apiClient: apiClient)
+            SimulationPresetsService.shared.bind(apiClient: apiClient)
         }
         selectedScreen = apiClient == nil ? .settings : (selectedScreen ?? .dashboard)
     }
