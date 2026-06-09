@@ -26,6 +26,7 @@ type config struct {
 	rules        api.SocRuleStore
 	fireState    api.FireStateCleaner
 	pricing      api.PricingStore
+	presets      api.SimulationPresetStore
 	apiToken     string
 	serial       string
 	offpeakStart string
@@ -44,6 +45,7 @@ var requiredEnvVars = []string{
 	"TABLE_SOC_RULES",
 	"TABLE_SOC_FIRESTATE",
 	"TABLE_PRICING",
+	"TABLE_SIMULATION_PRESETS",
 	"OFFPEAK_START",
 	"OFFPEAK_END",
 	"API_TOKEN_PARAM",
@@ -65,6 +67,7 @@ func main() {
 	handler.SetSocRuleStore(cfg.rules)
 	handler.SetFireStateCleaner(cfg.fireState)
 	handler.SetPricingStore(cfg.pricing)
+	handler.SetSimulationPresetStore(cfg.presets)
 	lambda.Start(handler.Handle)
 }
 
@@ -119,6 +122,7 @@ func loadConfig(ctx context.Context) (*config, error) {
 	ruleWriter := dynamo.NewDynamoSocRuleWriter(ddbClient, os.Getenv("TABLE_SOC_RULES"))
 	fireState := dynamo.NewDynamoSocFireStateWriter(ddbClient, os.Getenv("TABLE_SOC_FIRESTATE"))
 	pricing := dynamo.NewDynamoPricingStore(ddbClient, os.Getenv("TABLE_PRICING"))
+	presets := dynamo.NewDynamoSimulationPresetStore(ddbClient, os.Getenv("TABLE_SIMULATION_PRESETS"))
 
 	return &config{
 		reader:       reader,
@@ -127,6 +131,7 @@ func loadConfig(ctx context.Context) (*config, error) {
 		rules:        socRuleStoreAdapter{reader: ruleReader, writer: ruleWriter},
 		fireState:    fireStateCleanerAdapter{store: fireState},
 		pricing:      pricingStoreAdapter{store: pricing},
+		presets:      presets,
 		apiToken:     apiToken,
 		serial:       serial,
 		offpeakStart: os.Getenv("OFFPEAK_START"),

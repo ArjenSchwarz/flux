@@ -309,6 +309,16 @@ Resources:
                   - dynamodb:TransactWriteItems
                 Resource:
                   - !GetAtt PricingTable.Arn
+              # Simulation presets table — Lambda is the sole writer. Scan
+              # covers ListPresets (capped at 20 rows); no TransactWriteItems
+              # because presets are independent rows (no sentinel).
+              - Effect: Allow
+                Action:
+                  - dynamodb:Scan
+                  - dynamodb:PutItem
+                  - dynamodb:DeleteItem
+                Resource:
+                  - !GetAtt SimulationPresetsTable.Arn
               - Effect: Allow
                 Action:
                   - ssm:GetParameter
@@ -567,6 +577,28 @@ Resources:
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
 
+  # --- Simulation presets table (dashboard-simulation spec) ---
+  # User-authored load presets (label + watts), system-wide and synced across
+  # devices. Mirrors flux-pricing: id-only key (no partition), low write
+  # volume, PITR enabled because presets are user-authored with no other
+  # recovery path. Unlike flux-pricing there is no sentinel row (Decision 10).
+
+  SimulationPresetsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: flux-simulation-presets
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: presetId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: presetId
+          KeyType: HASH
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
   # --- Lambda Function and Function URL ---
 
   ApiFunction:
@@ -600,6 +632,7 @@ Resources:
           TABLE_SOC_RULES: !Ref SocRulesTable
           TABLE_SOC_FIRESTATE: !Ref SocFireStateTable
           TABLE_PRICING: !Ref PricingTable
+          TABLE_SIMULATION_PRESETS: !Ref SimulationPresetsTable
 
   ApiFunctionUrl:
     Type: AWS::Lambda::Url
