@@ -118,21 +118,7 @@ struct SettingsView: View {
                 }
             }
 
-            Section("Pricing") {
-                NavigationLink {
-                    PricingPeriodsView()
-                } label: {
-                    Label("Pricing periods", systemImage: "dollarsign.circle")
-                }
-            }
-
-            Section("Alerts") {
-                NavigationLink {
-                    SoCAlertsView()
-                } label: {
-                    Label("Battery alerts", systemImage: "bell.badge")
-                }
-            }
+            SettingsFeatureSections()
 
             if manualWhatsNewRelease != nil {
                 Section("About") {
@@ -254,6 +240,10 @@ struct SettingsView: View {
                     SoCAlertsView()
                 }
 
+                macOSNavSection(title: "Simulation", rowLabel: "Load presets", icon: "bolt.badge.clock") {
+                    SimulationPresetsView()
+                }
+
                 if manualWhatsNewRelease != nil {
                     LiquidGlassSection(title: "About") {
                         Grid(alignment: .leadingFirstTextBaseline,
@@ -329,6 +319,39 @@ struct LiquidGlassSection<Content: View>: View {
 #endif
 
 #if !os(macOS)
+/// The Pricing / Alerts / Simulation navigation sections of the iOS settings
+/// form. Extracted to a standalone view so `SettingsView` stays under the
+/// type-body-length limit.
+private struct SettingsFeatureSections: View {
+    var body: some View {
+        Group {
+            Section("Pricing") {
+                NavigationLink {
+                    PricingPeriodsView()
+                } label: {
+                    Label("Pricing periods", systemImage: "dollarsign.circle")
+                }
+            }
+
+            Section("Alerts") {
+                NavigationLink {
+                    SoCAlertsView()
+                } label: {
+                    Label("Battery alerts", systemImage: "bell.badge")
+                }
+            }
+
+            Section("Simulation") {
+                NavigationLink {
+                    SimulationPresetsView()
+                } label: {
+                    Label("Load presets", systemImage: "bolt.badge.clock")
+                }
+            }
+        }
+    }
+}
+
 /// Caps the Settings form to a comfortable reading width on iPad regular
 /// size class. The double-frame trick centers the capped content inside the
 /// full sheet width. At compact size class the modifier is a no-op so iPhone

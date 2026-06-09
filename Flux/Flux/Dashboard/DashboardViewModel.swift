@@ -16,7 +16,20 @@ final class DashboardViewModel {
     private(set) var isLoading = false
     private(set) var activityTier: ActivityTier = .active
 
+    /// Active simulation preset id, or nil when not simulating. In-memory only
+    /// (transient session state, Decision 5): nil on cold launch, survives
+    /// auto-refresh and tab navigation, never persisted.
+    private(set) var activeSimulationPresetID: String?
+
+    /// The watts that produced the *currently displayed* simulated status.
+    /// The banner sources its name/delta from this (not from the live presets
+    /// list) so the banner and the figures always describe the same watts even
+    /// across a cross-device edit ([2.7]).
+    private(set) var activeSimulationDeltaWatts: Int?
+    private(set) var activeSimulationName: String?
+
     private let apiClient: any FluxAPIClient
+    private let simulationService: SimulationPresetsService
     private let nowProvider: @Sendable () -> Date
     private let sleep: @Sendable (Duration) async throws -> Void
     private let widgetCache: WidgetSnapshotCache
@@ -30,6 +43,7 @@ final class DashboardViewModel {
 
     init(
         apiClient: any FluxAPIClient,
+        simulationService: SimulationPresetsService = .shared,
         widgetCache: WidgetSnapshotCache = WidgetSnapshotCache(),
         widgetReloadTrigger: @escaping @Sendable () -> Void = {
             WidgetCenter.shared.reloadTimelines(ofKind: WidgetKinds.battery)
@@ -48,6 +62,7 @@ final class DashboardViewModel {
         }
     ) {
         self.apiClient = apiClient
+        self.simulationService = simulationService
         self.widgetCache = widgetCache
         self.widgetReloadTrigger = widgetReloadTrigger
         self.widgetReloadDebounce = widgetReloadDebounce
@@ -117,18 +132,78 @@ final class DashboardViewModel {
         }
     }
 
+    /// True while a simulation is active. Drives the banner and value tinting;
+    /// independent of data availability (a stale/failed simulated fetch keeps
+    /// the banner up while the affected values fall back to the error path,
+    /// per [4.5]).
+    var isSimulating: Bool { activeSimulationPresetID != nil }
+
+    /// Activate (or switch to) a preset. Triggers an immediate refresh so the
+    /// on-screen figures and tint change at once ([2.2] replace-on-switch,
+    /// immediacy in the design).
+    func activateSimulation(presetID: String) async {
+        activeSimulationPresetID = presetID
+        await refresh()
+    }
+
+    /// Turn simulation off. Clears the active id and immediately re-fetches the
+    /// real status so the values and all simulated markings drop in the same
+    /// cycle ([5.5]).
+    func stopSimulation() async {
+        activeSimulationPresetID = nil
+        activeSimulationDeltaWatts = nil
+        activeSimulationName = nil
+        await refresh()
+    }
+
     func refresh() async {
         guard !isLoading else { return }
 
         isLoading = true
         defer { isLoading = false }
 
+        // Resolve the active preset's *current* watts from the presets list
+        // each cycle ([2.7]). If the active id is absent (deleted locally or
+        // removed via sync), simulation turns off ([2.4]).
+        var simulateWatts: Int?
+        var simulateName: String?
+        if let activeID = activeSimulationPresetID {
+            if let preset = simulationService.presets.first(where: { $0.id == activeID }) {
+                simulateWatts = preset.watts
+                simulateName = preset.label
+            } else {
+                // Active preset gone (deleted locally or removed via sync) → off ([2.4]).
+                activeSimulationPresetID = nil
+            }
+        }
+
+        // Set the banner state from the resolved preset *before* fetching, so the
+        // banner shows immediately and stays up even if this fetch fails ([4.5],
+        // [5.1]); the figures then fall back to the error/unavailable treatment.
+        // Banner and request use the same resolved watts, so they never disagree
+        // about which preset is active ([2.7]).
+        activeSimulationDeltaWatts = simulateWatts
+        activeSimulationName = simulateName
+
         do {
-            let response = try await apiClient.fetchStatus()
+            let simulating = simulateWatts != nil
+            let response: StatusResponse
+            if let watts = simulateWatts {
+                response = try await apiClient.fetchStatus(simulateLoadWatts: watts)
+            } else {
+                response = try await apiClient.fetchStatus()
+            }
             let fetchedAt = nowProvider()
             status = response
             lastSuccessfulFetch = fetchedAt
             error = nil
+
+            if simulating {
+                // A simulated status must never leak into the shared widget
+                // cache — widgets always show real data (Decision 13). Skip the
+                // cache write and the widget-reload trigger while simulating.
+                return
+            }
 
             let envelope = StatusSnapshotEnvelope(fetchedAt: fetchedAt, status: response)
             let wrote = widgetCache.writeIfNewer(envelope)

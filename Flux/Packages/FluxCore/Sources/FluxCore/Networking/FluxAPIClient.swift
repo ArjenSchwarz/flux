@@ -4,6 +4,16 @@ public protocol FluxAPIClient: Sendable {
     func fetchDay(date: String) async throws -> DayDetailResponse
     func saveNote(date: String, text: String) async throws -> NoteResponse
 
+    // Dashboard simulation — dashboard-simulation spec. A SEPARATE method from
+    // `fetchStatus()` so the widget timeline and settings-validation call
+    // sites stay param-free and can never simulate. Only DashboardViewModel
+    // calls this, and only while a simulation is active.
+    func fetchStatus(simulateLoadWatts: Int) async throws -> StatusResponse
+    func fetchPresets() async throws -> [SimulationPreset]
+    func createPreset(_ draft: SimulationPresetDraft) async throws -> SimulationPreset
+    func updatePreset(_ preset: SimulationPreset) async throws -> SimulationPreset
+    func deletePreset(id: String) async throws
+
     // SoC alerts — soc-alerts spec.
     func registerDevice(_ registration: DeviceRegistration) async throws -> DeviceItemResponse
     func fetchRules(deviceId: String) async throws -> [SoCAlertRule]
@@ -67,6 +77,31 @@ public extension FluxAPIClient {
         closingId _: String,
         with _: PricingPeriodDraft
     ) async throws -> ReplaceOpenEndedResult {
+        throw FluxAPIError.notConfigured
+    }
+
+    // Default so existing conformers (~30 test mocks, the widget timeline, the
+    // settings-validation client) need no change. The non-simulating fallback
+    // delegates to `fetchStatus()`, so any conformer that hasn't opted into
+    // simulation simply returns its real status. Only URLSessionAPIClient
+    // overrides this to actually send the parameter.
+    func fetchStatus(simulateLoadWatts _: Int) async throws -> StatusResponse {
+        try await fetchStatus()
+    }
+
+    func fetchPresets() async throws -> [SimulationPreset] {
+        throw FluxAPIError.notConfigured
+    }
+
+    func createPreset(_: SimulationPresetDraft) async throws -> SimulationPreset {
+        throw FluxAPIError.notConfigured
+    }
+
+    func updatePreset(_: SimulationPreset) async throws -> SimulationPreset {
+        throw FluxAPIError.notConfigured
+    }
+
+    func deletePreset(id _: String) async throws {
         throw FluxAPIError.notConfigured
     }
 }

@@ -201,11 +201,19 @@ struct FluxScreenHeader: View {
     @Binding var selection: FluxTab
     var onSettingsTap: (() -> Void)?
     var onTabActivate: ((FluxTab) -> Void)?
+    /// Optional accessory rendered on the trailing side of the tab-bar row,
+    /// before the settings affordance. The Dashboard uses it for the Simulate
+    /// menu so the control lives in the scroll content (visible on compact
+    /// iPhone where the nav bar is hidden), not the toolbar chrome.
+    var trailingAccessory: AnyView?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 8) {
                 FluxTabBar(selection: $selection, onActivate: onTabActivate)
+                if let trailingAccessory {
+                    trailingAccessory
+                }
                 if let onSettingsTap {
                     FluxTabBarSettingsButton(action: onSettingsTap)
                 }

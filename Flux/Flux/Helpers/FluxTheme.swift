@@ -55,6 +55,11 @@ enum FluxTheme {
         static let soc = Color(red: 1.0, green: 168 / 255, blue: 102 / 255)
         static let load = Color(red: 245 / 255, green: 233 / 255, blue: 216 / 255)
         static let night = Color(red: 91 / 255, green: 108 / 255, blue: 1.0)
+        /// Dashboard-simulation accent. Deliberately distinct from amber /
+        /// secondary so simulated values and the simulation banner never read
+        /// as real data (Req 5.2). A cyan-teal that fits the V5 palette while
+        /// standing apart from the amber hero, red grid, and purple battery.
+        static let simulation = Color(red: 64 / 255, green: 209 / 255, blue: 196 / 255)
     }
 
     enum Metrics {

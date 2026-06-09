@@ -29,10 +29,21 @@ const (
 	liveDataStalenessThreshold = 90 * time.Second
 )
 
-func (h *Handler) handleStatus(ctx context.Context, _ events.LambdaFunctionURLRequest) events.LambdaFunctionURLResponse {
+func (h *Handler) handleStatus(ctx context.Context, req events.LambdaFunctionURLRequest) events.LambdaFunctionURLResponse {
 	now := h.nowFunc().In(sydneyTZ)
 	today := now.Format("2006-01-02")
 	nowUnix := now.Unix()
+
+	// simLoadW is the added simulated load in watts (0 when no simulation is
+	// requested). An unparseable or out-of-range value 400s before any I/O so
+	// the client treats it as simulation-unavailable rather than rendering
+	// fabricated values ([4.6]). W > 0 also suppresses the off-peak indicator
+	// (Decision 11) so a real reassurance never appears beside a simulated
+	// "empty by".
+	simLoadW, err := parseSimulateLoad(req.QueryStringParameters)
+	if err != nil {
+		return errorResponse(400, err.Error())
+	}
 
 	// Phase 1: concurrent DynamoDB queries via errgroup.
 	// Any failure cancels remaining queries and returns 500.
@@ -94,11 +105,16 @@ func (h *Handler) handleStatus(ctx context.Context, _ events.LambdaFunctionURLRe
 		latest := allReadings[len(allReadings)-1]
 		sixtySecReadings := filterReadings(allReadings, nowUnix-60, nowUnix)
 
+		// Allocate the added simulated load across the live trio via the
+		// priority waterfall. At simLoadW == 0 this is a true no-op, so the
+		// live values are the real reading unchanged ([3.3], [4.2]).
+		live := allocateSimLoad(latest.Pload, latest.Pbat, latest.Pgrid, simLoadW)
+
 		resp.Live = &LiveData{
 			Ppv:            roundPower(latest.Ppv),
-			Pload:          roundPower(latest.Pload),
-			Pbat:           roundPower(latest.Pbat),
-			Pgrid:          roundPower(latest.Pgrid),
+			Pload:          roundPower(live.pload),
+			Pbat:           roundPower(live.pbat),
+			Pgrid:          roundPower(live.pgrid),
 			PgridSustained: computePgridSustained(sixtySecReadings),
 			Soc:            roundPower(latest.Soc),
 			Timestamp:      time.Unix(latest.Timestamp, 0).UTC().Format(time.RFC3339),
@@ -124,7 +140,16 @@ func (h *Handler) handleStatus(ctx context.Context, _ events.LambdaFunctionURLRe
 
 	if liveFresh {
 		latest := allReadings[len(allReadings)-1]
-		if ct := computeCutoffTime(latest.Soc, latest.Pbat, capacity, cutoffPercent, now); ct != nil {
+		// wBattery is the portion of the added load that reaches the battery
+		// after current export is cut first. exportReduction is derived from
+		// the live grid and threaded into both cutoff series: it only bites
+		// while exporting (where the cutoff is nil anyway), so it never makes a
+		// real "empty by" wrong; in the importing/zero-grid case it is 0 and
+		// wBattery == simLoadW. Each cutoff series caps independently via its
+		// own per-series headroom (latest.Pbat here, avgPbat below).
+		wBattery := simLoadW - exportReductionFor(latest.Pgrid, simLoadW)
+		simPbat := simDischarge(latest.Pbat, wBattery)
+		if ct := computeCutoffTime(latest.Soc, simPbat, capacity, cutoffPercent, now); ct != nil {
 			if !hasOffpeakBoundary || ct.Before(nextOpWindowStart) {
 				s := ct.UTC().Format(time.RFC3339)
 				battery.EstimatedCutoff = &s
@@ -133,14 +158,20 @@ func (h *Handler) handleStatus(ctx context.Context, _ events.LambdaFunctionURLRe
 		// T-1327: pbat-independent "can't empty before off-peak" indicator.
 		// Computed only on the live branch — a stale SoC would produce a
 		// misleading flag (Decision 7, mirrors EstimatedCutoff's gating).
-		battery.CantEmptyBeforeOffpeak = computeCantEmptyBeforeOffpeak(cantEmptyInput{
-			Soc:                 latest.Soc,
-			CapacityKwh:         capacity,
-			Now:                 now,
-			NextOpStart:         nextOpWindowStart,
-			HasBoundary:         hasOffpeakBoundary,
-			WithinOffpeakWindow: withinOffpeakWindow(now, h.offpeakStart, h.offpeakEnd),
-		})
+		// Suppressed entirely while simulating (Decision 11): the worst-case
+		// reassurance is meaningless under an added-load what-if and the hero
+		// renders it instead of the simulated "empty by", so leaving it set
+		// could hide or contradict the simulated estimate ([4.3]).
+		if simLoadW == 0 {
+			battery.CantEmptyBeforeOffpeak = computeCantEmptyBeforeOffpeak(cantEmptyInput{
+				Soc:                 latest.Soc,
+				CapacityKwh:         capacity,
+				Now:                 now,
+				NextOpStart:         nextOpWindowStart,
+				HasBoundary:         hasOffpeakBoundary,
+				WithinOffpeakWindow: withinOffpeakWindow(now, h.offpeakStart, h.offpeakEnd),
+			})
+		}
 	}
 
 	// Lowest SOC since 00:00 Sydney local on now's date — see Decision 4 in
@@ -162,13 +193,25 @@ func (h *Handler) handleStatus(ctx context.Context, _ events.LambdaFunctionURLRe
 	fifteenMinReadings := filterReadings(allReadings, nowUnix-900, nowUnix)
 	if len(fifteenMinReadings) >= 2 {
 		avgLoad, avgPbat := computeRollingAverages(fifteenMinReadings)
+		// The rolling cutoff is the hero "empty by". Under simulation the
+		// rolling battery power uses simDischarge with its own per-series
+		// headroom against avgPbat (capping independently of the live tile),
+		// and the returned averages carry the same adjustment so the response
+		// stays internally coherent. At simLoadW == 0 every term is a no-op.
+		simAvgLoad := avgLoad + simLoadW
+		wBattery := simLoadW
+		if liveFresh {
+			latest := allReadings[len(allReadings)-1]
+			wBattery = simLoadW - exportReductionFor(latest.Pgrid, simLoadW)
+		}
+		simAvgPbat := simDischarge(avgPbat, wBattery)
 		rolling := &RollingAvg{
-			AvgLoad: roundPower(avgLoad),
-			AvgPbat: roundPower(avgPbat),
+			AvgLoad: roundPower(simAvgLoad),
+			AvgPbat: roundPower(simAvgPbat),
 		}
 		if liveFresh {
 			latest := allReadings[len(allReadings)-1]
-			if ct := computeCutoffTime(latest.Soc, avgPbat, capacity, cutoffPercent, now); ct != nil {
+			if ct := computeCutoffTime(latest.Soc, simAvgPbat, capacity, cutoffPercent, now); ct != nil {
 				if !hasOffpeakBoundary || ct.Before(nextOpWindowStart) {
 					s := ct.UTC().Format(time.RFC3339)
 					rolling.EstimatedCutoff = &s

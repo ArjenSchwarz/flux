@@ -9,17 +9,34 @@ struct DashboardHeroPanel: View {
     let rolling15min: RollingAvg?
     let battery: BatteryInfo?
     let offpeakWindowStart: String?
+    /// When true the discharge rate and "empty by" reflect a simulated added
+    /// load, so they render in the simulation accent and are announced as
+    /// simulated (Req 5.3/5.4).
+    let isSimulating: Bool
 
     init(
         live: LiveData?,
         rolling15min: RollingAvg?,
         battery: BatteryInfo? = nil,
-        offpeakWindowStart: String? = nil
+        offpeakWindowStart: String? = nil,
+        isSimulating: Bool = false
     ) {
         self.live = live
         self.rolling15min = rolling15min
         self.battery = battery
         self.offpeakWindowStart = offpeakWindowStart
+        self.isSimulating = isSimulating
+    }
+
+    /// Colour for the discharge/charge rate and "empty by" time in the
+    /// subline. The empty-by time is normally amber; while simulating the
+    /// whole simulated subline takes the simulation accent.
+    private var sublineAccent: Color {
+        isSimulating ? FluxTheme.Palette.simulation : FluxTheme.Palette.secondaryText
+    }
+
+    private var cutoffAccent: Color {
+        isSimulating ? FluxTheme.Palette.simulation : FluxTheme.Palette.amber
     }
 
     var body: some View {
@@ -141,22 +158,24 @@ struct DashboardHeroPanel: View {
             HStack(spacing: 4) {
                 if let cutoff {
                     Text("\(Self.dischargingLabel(watts)) · ")
-                        .foregroundStyle(FluxTheme.Palette.secondaryText)
+                        .foregroundStyle(sublineAccent)
                     Text("empty by ")
-                        .foregroundStyle(FluxTheme.Palette.secondaryText)
+                        .foregroundStyle(sublineAccent)
                     Text(DateFormatting.clockTime(from: cutoff))
-                        .foregroundStyle(FluxTheme.Palette.amber)
+                        .foregroundStyle(cutoffAccent)
                         .monospacedDigit()
                 } else {
                     Text(Self.dischargingLabel(watts))
-                        .foregroundStyle(FluxTheme.Palette.secondaryText)
+                        .foregroundStyle(sublineAccent)
                 }
             }
             .appFont(FluxTheme.Typography.heroSubline)
+            .modifier(SimulatedSublineAccessibility(isSimulating: isSimulating))
         case .charging(let watts):
             Text(Self.chargingLabel(watts))
                 .appFont(FluxTheme.Typography.heroSubline)
-                .foregroundStyle(FluxTheme.Palette.secondaryText)
+                .foregroundStyle(sublineAccent)
+                .modifier(SimulatedSublineAccessibility(isSimulating: isSimulating))
         case .idle:
             Text("Idle · battery holding")
                 .appFont(FluxTheme.Typography.heroSubline)
@@ -185,6 +204,21 @@ struct DashboardHeroPanel: View {
             return .charging(watts: abs(live.pbat))
         }
         return .idle
+    }
+}
+
+/// Appends a ", simulated" suffix to the subline's VoiceOver announcement
+/// while a simulation is active (Req 5.4), leaving the visible text untouched.
+/// A no-op when not simulating so the default reading is unchanged.
+private struct SimulatedSublineAccessibility: ViewModifier {
+    let isSimulating: Bool
+
+    func body(content: Content) -> some View {
+        if isSimulating {
+            content.accessibilityLabel("Simulated battery flow")
+        } else {
+            content
+        }
     }
 }
 

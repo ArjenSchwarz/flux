@@ -197,7 +197,15 @@ func computeCutoffTime(soc, pbat, capacityKwh, cutoffPercent float64, now time.T
 	if hoursRemaining <= 0 || math.IsNaN(hoursRemaining) || math.IsInf(hoursRemaining, 0) {
 		return nil
 	}
-	t := now.Add(time.Duration(hoursRemaining * float64(time.Hour)))
+	// Guard the int64 nanosecond conversion: a near-zero discharge rate yields
+	// an astronomically large hoursRemaining whose conversion to time.Duration
+	// would overflow and wrap to a garbage past time. Such a battery effectively
+	// never empties, so report no cutoff.
+	nanos := hoursRemaining * float64(time.Hour)
+	if nanos >= float64(math.MaxInt64) {
+		return nil
+	}
+	t := now.Add(time.Duration(nanos))
 	return &t
 }
 
