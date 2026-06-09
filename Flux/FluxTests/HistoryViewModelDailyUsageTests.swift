@@ -130,6 +130,11 @@ struct HistoryViewModelDailyUsageTests {
         let derived = viewModel.derived
         #expect(derived.dailyUsage.count == 1)
         #expect(derived.dailyUsage.first?.isToday == true)
+        // Hard numbers include today's breakdown…
+        #expect(derived.summary.dailyUsageDisplayDayCount == 1)
+        #expect(abs(derived.summary.dailyUsageTotalKwh - 5.0) < 0.001)
+        #expect(derived.summary.mostUsageDay?.dayID == "2026-04-16")
+        // …but the per-day average and largest-kind stay undefined (no complete day).
         #expect(derived.summary.dailyUsageDayCount == 0)
         #expect(derived.summary.dailyUsageLargestKind == nil)
         #expect(derived.summary.dailyUsageAvgKwh == nil)
@@ -176,9 +181,14 @@ struct HistoryViewModelDailyUsageTests {
         #expect(derived.dailyUsage.count == 2)
         let today = try #require(derived.dailyUsage.first(where: { $0.dayID == "2026-04-16" }))
         #expect(today.isToday)
-        #expect(derived.summary.dailyUsageDayCount == 1)
-        #expect(abs(derived.summary.dailyUsageTotalKwh - 5.0) < 0.001, "today excluded from total")
-        #expect(abs((derived.summary.dailyUsageAvgKwh ?? -1) - 5.0) < 0.001)
+        #expect(derived.summary.dailyUsageDayCount == 1, "average denominator excludes today")
+        #expect(derived.summary.dailyUsageDisplayDayCount == 2, "display count includes today")
+        // Total is a hard number: yesterday 5.0 + today's partial (2.0 + 0.4).
+        #expect(abs(derived.summary.dailyUsageTotalKwh - 7.4) < 0.001, "today included in total")
+        #expect(
+            abs((derived.summary.dailyUsageAvgKwh ?? -1) - 5.0) < 0.001,
+            "per-day average still excludes today's partial day"
+        )
     }
 
     @Test

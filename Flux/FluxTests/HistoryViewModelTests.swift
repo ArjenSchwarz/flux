@@ -175,8 +175,13 @@ struct HistoryViewModelTests {
         await viewModel.loadHistory(range: .days(7))
 
         let summary = viewModel.summary
-        #expect(summary.solarDayCount == 1, "today is excluded from completed-day count")
-        #expect(abs(summary.solarTotalKwh - 10.0) < 0.001, "today's solar excluded from total")
+        #expect(summary.solarDayCount == 1, "today is excluded from completed-day count (average basis)")
+        #expect(summary.dayCount == 2, "today is included in the all-days count")
+        #expect(abs(summary.solarTotalKwh - 18.0) < 0.001, "today's solar included in the total (10 + 8)")
+        #expect(
+            abs((summary.solarPerDayKwh ?? -1) - 10.0) < 0.001,
+            "per-day average still excludes today's partial solar"
+        )
         #expect(summary.gridDayCount == 2, "today's grid is still counted in the off-peak split")
         #expect(abs(summary.peakImportTotalKwh - (1.5 + 1.5)) < 0.001, "peak = (4-2.5) + (3-1.5)")
         #expect(abs(summary.offpeakImportTotalKwh - 4.0) < 0.001)

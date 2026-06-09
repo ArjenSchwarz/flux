@@ -463,3 +463,44 @@ The alternative was keeping `kpi: String` and passing an empty string, which sti
 - One existing struct grew a new optional parameter; trivial drift in the public API of the chrome.
 
 ---
+
+## Decision 15: Hard-number totals and day-records include today; only averages exclude it
+
+**Date**: 2026-06-08
+**Status**: accepted (supersedes the "exclude today" half of Decision 5)
+
+### Context
+
+Decision 5 excluded today from Total solar, Total usage, Most usage, and Most solar to keep the overview tiles reconciling 1:1 with the chart-card KPIs. In use this proved surprising: a tile labelled "Most usage" that ignores today reads as wrong from a user's perspective — if today already has the highest usage of the range, the tile should say so. The user asked that any tile carrying a *hard number* (a total or a single-day max/min) account for today, while accepting that *averages* must keep excluding today's partial day.
+
+### Decision
+
+Split the period aggregates by kind rather than by tile:
+
+- **Totals** (Total solar, Total usage) and the **Battery card totals** (discharged / charged) now sum every day in range, today included — matching the grid totals (Peak imports, Exported) which already did.
+- **Day-records** (Most usage, Most solar) now consider today, joining Lowest SoC which already did.
+- **Per-day averages** (Solar /day, Battery /day discharged, Daily-usage /day, Avg night, largest-kind /day) keep excluding today: each divides a complete-days-only total by a complete-days count.
+
+Because a total and its average previously shared one field (e.g. `solarTotalKwh` fed both the tile and `solarPerDayKwh`), `PeriodSummary` now carries a separate complete-days numerator for each average (`solarCompleteTotalKwh`, `dischargeCompleteTotalKwh`, `dailyUsageCompleteTotalKwh`) and a display-oriented day count (`dayCount`, `dailyUsageDisplayDayCount`) that gates the Total tiles and the Daily-usage chart placeholder so a today-only range shows today's number and bar instead of an em-dash.
+
+### Rationale
+
+"Hard numbers include today" is the rule the grid totals and Lowest SoC already followed, so this makes the asymmetry of Decision 5 *consistent* (everything-but-averages includes today) rather than per-tile. Averages still exclude the partial day, which was the only sound part of the original concern. Cross-card reconciliation is preserved because each chart card's headline total reads from the same now-inclusive field as its overview tile.
+
+### Alternatives Considered
+
+- **Keep Decision 5 unchanged**: rejected — the user explicitly flagged the today-blind "Most usage" as wrong.
+- **Include today everywhere, averages too**: rejected — a partial day skews per-day averages, the one case Decision 5 got right.
+- **Add a today-delta and subtract it for averages**: rejected — storing explicit complete-days numerators is self-documenting and keeps the existing total/count→average pattern.
+
+### Consequences
+
+**Positive:**
+- "Most usage / Most solar / Total usage / Total solar" reflect today, matching user expectation and the grid/SoC tiles.
+- A today-only range (e.g. Week-to-date on the week's first day) now shows real numbers and the daily-usage bar instead of em-dashes.
+- Averages remain unskewed by the partial day.
+
+**Negative:**
+- `PeriodSummary` grew five fields (three complete-days numerators, two display counts) to keep totals and averages independent.
+
+---

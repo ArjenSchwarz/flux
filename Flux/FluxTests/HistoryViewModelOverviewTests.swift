@@ -22,8 +22,8 @@ struct HistoryViewModelOverviewTests {
         #expect(summary.lowestSocDay == nil)
     }
 
-    @Test("(b) only-today: complete-day fields empty; Lowest SoC populated when today has socLow")
-    func onlyTodayPopulatesOnlyLowestSoc() {
+    @Test("(b) only-today: hard-number totals/records include today; averages stay empty")
+    func onlyTodayPopulatesTotalsAndRecords() {
         let today = day(
             "2026-04-16", epv: 5.0, eInput: 1.0, eOutput: 0.5, eCharge: 1.0, eDischarge: 1.0,
             socLow: 22.7, socLowTime: "14:30:00",
@@ -32,11 +32,23 @@ struct HistoryViewModelOverviewTests {
         let derived = HistoryViewModel.DerivedState(days: [today], now: now(month: 4, day: 16))
         let summary = derived.summary
 
+        // Hard numbers — today is the only data and now contributes.
+        #expect(abs(summary.solarTotalKwh - 5.0) < 0.001)
+        #expect(abs(summary.dailyUsageTotalKwh - 2.5) < 0.001)
+        #expect(summary.dayCount == 1)
+        #expect(summary.dailyUsageDisplayDayCount == 1)
+        #expect(summary.mostUsageDay?.dayID == "2026-04-16")
+        #expect(abs((summary.mostUsageDay?.kwh ?? 0) - 2.5) < 0.001)
+        #expect(summary.mostSolarDay?.dayID == "2026-04-16")
+        #expect(abs((summary.mostSolarDay?.kwh ?? 0) - 5.0) < 0.001)
+
+        // Averages — no complete day yet, so they remain undefined.
+        #expect(summary.solarDayCount == 0)
+        #expect(summary.solarPerDayKwh == nil)
+        #expect(summary.dailyUsageAvgKwh == nil)
         #expect(summary.nightTotalKwh == 0)
         #expect(summary.nightBlockDayCount == 0)
         #expect(summary.nightAvgKwh == nil)
-        #expect(summary.mostUsageDay == nil)
-        #expect(summary.mostSolarDay == nil)
 
         let record = try? #require(summary.lowestSocDay)
         #expect(record?.dayID == "2026-04-16")

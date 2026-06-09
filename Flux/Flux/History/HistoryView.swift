@@ -197,6 +197,7 @@ struct HistoryView: View {
             summary: derived.summary,
             selectedDate: selectedDate,
             rangeDays: viewModel.resolvedRangeDays,
+            chartDomain: viewModel.chartDomain,
             onSelect: selectDay
         )
     }
@@ -208,6 +209,7 @@ struct HistoryView: View {
             summary: derived.summary,
             selectedDate: selectedDate,
             rangeDays: viewModel.resolvedRangeDays,
+            chartDomain: viewModel.chartDomain,
             onSelect: selectDay
         )
     }
@@ -219,6 +221,7 @@ struct HistoryView: View {
             summary: derived.summary,
             selectedDate: selectedDate,
             rangeDays: viewModel.resolvedRangeDays,
+            chartDomain: viewModel.chartDomain,
             onSelect: selectDay
         )
     }

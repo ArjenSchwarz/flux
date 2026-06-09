@@ -9,6 +9,9 @@ struct HistoryDailyUsageCard: View {
     let summary: HistoryViewModel.PeriodSummary
     let selectedDate: Date?
     let rangeDays: Int
+    /// Full-period x-axis reservation (Wk/Mo). `nil` (the default, used by the
+    /// expanded host which only knows a day count) leaves the chart auto-fitting.
+    var chartDomain: HistoryChartDomain?
     let onSelect: (String) -> Void
 
     var expansionScope: ChartScope { .historyRange(days: rangeDays) }
@@ -36,7 +39,10 @@ struct HistoryDailyUsageCard: View {
     }
 
     static func shouldShowPlaceholder(summary: HistoryViewModel.PeriodSummary) -> Bool {
-        summary.dailyUsageDayCount == 0
+        // Display count includes today, so a today-only range still renders
+        // today's bar instead of the "no breakdown" placeholder. The KPI and
+        // subtitle (per-day averages) stay em-dash until a complete day exists.
+        summary.dailyUsageDisplayDayCount == 0
     }
 
     static func kpi(for summary: HistoryViewModel.PeriodSummary) -> String {
@@ -65,7 +71,12 @@ struct HistoryDailyUsageCard: View {
 
     private var chart: some View {
         let kinds = DailyUsageBlock.Kind.chronologicalOrder
+        // Base the axis stride on the reserved slot count when a domain is set,
+        // so a sparse to-date month still gets ~6 evenly-spaced labels.
+        let axisDayCount = chartDomain?.slotDates.count ?? entries.count
         return Chart {
+            HistoryChartDomain.scaffold(chartDomain?.slotDates ?? [])
+
             if let selectedDate {
                 RuleMark(x: .value("Day", selectedDate))
                     .foregroundStyle(.gray.opacity(0.18))
@@ -87,8 +98,9 @@ struct HistoryDailyUsageCard: View {
             domain: kinds.map(\.displayLabel),
             range: kinds.map(\.chartColor)
         )
+        .historyChartXScale(chartDomain)
         .chartXAxis {
-            AxisMarks(values: .stride(by: .day, count: max(1, entries.count / 6)))
+            AxisMarks(values: .stride(by: .day, count: max(1, axisDayCount / 6)))
         }
         .animation(.default, value: entries.count)
         .accessibilityElement(children: .ignore)

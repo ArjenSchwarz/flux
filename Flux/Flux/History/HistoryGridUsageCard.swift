@@ -8,6 +8,9 @@ struct HistoryGridUsageCard: View {
     let summary: HistoryViewModel.PeriodSummary
     let selectedDate: Date?
     let rangeDays: Int
+    /// Full-period x-axis reservation (Wk/Mo). `nil` (the default, used by the
+    /// expanded host which only knows a day count) leaves the chart auto-fitting.
+    var chartDomain: HistoryChartDomain?
     let onSelect: (String) -> Void
 
     var expansionScope: ChartScope { .historyRange(days: rangeDays) }
@@ -58,6 +61,8 @@ struct HistoryGridUsageCard: View {
     @ViewBuilder
     private var chart: some View {
         Chart {
+            HistoryChartDomain.scaffold(chartDomain?.slotDates ?? [])
+
             if let selectedDate {
                 RuleMark(x: .value("Day", selectedDate))
                     .foregroundStyle(.gray.opacity(0.18))
@@ -96,6 +101,7 @@ struct HistoryGridUsageCard: View {
             "Peak import": Color.red,
             "Export": Color.blue
         ])
+        .historyChartXScale(chartDomain)
         .historySelectionOverlay(
             entries: entries.map { ($0.dayID, $0.date) },
             onSelect: onSelect

@@ -85,10 +85,24 @@ extension HistoryViewModel {
     }
 
     struct PeriodSummary: Equatable {
+        // Period totals and day-records are hard numbers, so they include
+        // today's partial value — the rule the grid aggregates and Lowest SoC
+        // already followed (Decision 15 supersedes the "exclude today" half of
+        // Decision 5). Per-day *averages* still exclude today (a partial day
+        // would skew them): each divides a complete-days-only total
+        // (`…CompleteTotalKwh`) by a complete-days count.
+
+        /// Sum of `epv` across every day in range, today included.
         let solarTotalKwh: Double
-        /// Excludes today (today is partial; including it would skew daily
-        /// averages). `batteryDayCount` follows the same rule.
+        /// Sum of `epv` across complete days only. Numerator for
+        /// `solarPerDayKwh` so the average is not skewed by today's partial day.
+        let solarCompleteTotalKwh: Double
+        /// Complete days only (today excluded). Denominator for
+        /// `solarPerDayKwh`; `batteryDayCount` follows the same rule.
         let solarDayCount: Int
+        /// All days in range, today included. Gates the Total solar tile so a
+        /// today-only range still shows a number rather than an em-dash.
+        let dayCount: Int
         let peakImportTotalKwh: Double
         let offpeakImportTotalKwh: Double
         let exportTotalKwh: Double
@@ -96,13 +110,29 @@ extension HistoryViewModel {
         /// are the actionable headline so showing today's in-progress
         /// number matters more than a clean daily average.
         let gridDayCount: Int
+        /// Sum of `eCharge` across every day in range, today included. There is
+        /// deliberately no `chargeCompleteTotalKwh` counterpart: no per-day
+        /// charge average is derived, so don't add one without a consumer.
         let chargeTotalKwh: Double
+        /// Sum of `eDischarge` across every day in range, today included.
         let dischargeTotalKwh: Double
+        /// Sum of `eDischarge` across complete days only. Numerator for
+        /// `dischargePerDayKwh`.
+        let dischargeCompleteTotalKwh: Double
         let batteryDayCount: Int
-        /// Sum of clamped stacked totals across complete days-with-blocks.
+        /// Sum of clamped stacked totals across every day-with-blocks, today
+        /// included.
         let dailyUsageTotalKwh: Double
-        /// Number of complete days-with-blocks contributing to the total.
+        /// Sum of clamped stacked totals across complete days-with-blocks only.
+        /// Numerator for `dailyUsageAvgKwh`.
+        let dailyUsageCompleteTotalKwh: Double
+        /// Number of complete days-with-blocks. Denominator for the daily-usage
+        /// averages (`dailyUsageAvgKwh`, `dailyUsageLargestKindAvgKwh`).
         let dailyUsageDayCount: Int
+        /// Number of days-with-blocks including today. Gates the Total usage
+        /// tile and the Daily usage chart placeholder so today's breakdown is
+        /// shown when it is the only day with data.
+        let dailyUsageDisplayDayCount: Int
         /// Largest contributing block kind across complete days-with-blocks,
         /// with ties broken by chronological order (AC 1.8). `nil` when no
         /// complete day-with-blocks exists in the range.
@@ -117,8 +147,9 @@ extension HistoryViewModel {
         let nightTotalKwh: Double
         let nightBlockDayCount: Int
         /// Best day-with-blocks (max stacked kWh, ties broken by most recent).
+        /// Today included — a record is a hard number.
         let mostUsageDay: DayKwhRecord?
-        /// Best complete day by `epv`. Ties broken by most recent.
+        /// Best day by `epv` (max, ties broken by most recent). Today included.
         let mostSolarDay: DayKwhRecord?
         /// Day-with-low whose raw `socLow` is the minimum; ties broken by
         /// most recent. Today included.
@@ -126,16 +157,21 @@ extension HistoryViewModel {
 
         static let empty = PeriodSummary(
             solarTotalKwh: 0,
+            solarCompleteTotalKwh: 0,
             solarDayCount: 0,
+            dayCount: 0,
             peakImportTotalKwh: 0,
             offpeakImportTotalKwh: 0,
             exportTotalKwh: 0,
             gridDayCount: 0,
             chargeTotalKwh: 0,
             dischargeTotalKwh: 0,
+            dischargeCompleteTotalKwh: 0,
             batteryDayCount: 0,
             dailyUsageTotalKwh: 0,
+            dailyUsageCompleteTotalKwh: 0,
             dailyUsageDayCount: 0,
+            dailyUsageDisplayDayCount: 0,
             dailyUsageLargestKind: nil,
             dailyUsageLargestKindTotalKwh: 0,
             nightTotalKwh: 0,
@@ -146,15 +182,15 @@ extension HistoryViewModel {
         )
 
         var solarPerDayKwh: Double? {
-            solarDayCount > 0 ? solarTotalKwh / Double(solarDayCount) : nil
+            solarDayCount > 0 ? solarCompleteTotalKwh / Double(solarDayCount) : nil
         }
 
         var dischargePerDayKwh: Double? {
-            batteryDayCount > 0 ? dischargeTotalKwh / Double(batteryDayCount) : nil
+            batteryDayCount > 0 ? dischargeCompleteTotalKwh / Double(batteryDayCount) : nil
         }
 
         var dailyUsageAvgKwh: Double? {
-            dailyUsageDayCount > 0 ? dailyUsageTotalKwh / Double(dailyUsageDayCount) : nil
+            dailyUsageDayCount > 0 ? dailyUsageCompleteTotalKwh / Double(dailyUsageDayCount) : nil
         }
 
         /// Denominator is `dailyUsageDayCount` (all complete days), not the
@@ -213,14 +249,12 @@ extension HistoryViewModel {
                 if let usageEntry {
                     dailyUsage.append(usageEntry)
                 }
-                if !isToday {
-                    totals.addCompleteDay(
-                        day,
-                        parsedDate: parsedDate,
-                        dailyUsageEntry: usageEntry
-                    )
-                }
-                totals.considerSocLow(day: day, parsedDate: parsedDate)
+                totals.addDay(
+                    day,
+                    parsedDate: parsedDate,
+                    isToday: isToday,
+                    dailyUsageEntry: usageEntry
+                )
             }
 
             self.solar = solar
@@ -293,22 +327,30 @@ extension HistoryViewModel.LowestSocRecord: DayRecordValue {
 
 extension HistoryViewModel {
     fileprivate struct Totals {
+        // Display aggregates — every day in range, today included.
+        var dayCount = 0
         var solarTotal = 0.0
-        var peakImportTotal = 0.0
-        var offpeakImportTotal = 0.0
-        var exportTotal = 0.0
         var chargeTotal = 0.0
         var dischargeTotal = 0.0
-        var completeDayCount = 0
-        var gridDayCount = 0
         var dailyUsageStackTotal = 0.0
-        var dailyUsageDayCount = 0
-        var dailyUsageKindSums: [DailyUsageBlock.Kind: Double] = [:]
-        var nightTotal = 0.0
-        var nightBlockDayCount = 0
+        var dailyUsageDisplayDayCount = 0
         var mostUsage: DayKwhRecord?
         var mostSolar: DayKwhRecord?
         var lowestSoc: LowestSocRecord?
+        // Grid aggregates — every day with an off-peak record (today included).
+        var peakImportTotal = 0.0
+        var offpeakImportTotal = 0.0
+        var exportTotal = 0.0
+        var gridDayCount = 0
+        // Average bases — complete days only (today is partial → would skew).
+        var completeDayCount = 0
+        var solarCompleteTotal = 0.0
+        var dischargeCompleteTotal = 0.0
+        var dailyUsageCompleteStackTotal = 0.0
+        var dailyUsageCompleteDayCount = 0
+        var dailyUsageKindSums: [DailyUsageBlock.Kind: Double] = [:]
+        var nightTotal = 0.0
+        var nightBlockDayCount = 0
 
         mutating func addGrid(_ entry: GridEntry) {
             peakImportTotal += entry.peakImportKwh
@@ -317,15 +359,20 @@ extension HistoryViewModel {
             gridDayCount += 1
         }
 
-        mutating func addCompleteDay(
+        /// Folds one day into both the display aggregates (always) and the
+        /// average bases (complete days only). Totals and day-records are hard
+        /// numbers so they include today; the averages exclude it.
+        mutating func addDay(
             _ day: DayEnergy,
             parsedDate: Date,
+            isToday: Bool,
             dailyUsageEntry: DailyUsageEntry?
         ) {
+            // Display aggregates (today included).
+            dayCount += 1
             solarTotal += day.epv
             chargeTotal += day.eCharge
             dischargeTotal += day.eDischarge
-            completeDayCount += 1
 
             Self.consider(
                 &mostSolar,
@@ -333,19 +380,31 @@ extension HistoryViewModel {
                 prefersLarger: true
             )
 
+            if let entry = dailyUsageEntry {
+                dailyUsageStackTotal += entry.stackedTotalKwh
+                dailyUsageDisplayDayCount += 1
+                Self.consider(
+                    &mostUsage,
+                    candidate: DayKwhRecord(dayID: day.date, date: parsedDate, kwh: entry.stackedTotalKwh),
+                    prefersLarger: true
+                )
+            }
+
+            considerSocLow(day: day, parsedDate: parsedDate)
+
+            // Average bases (today excluded).
+            guard !isToday else { return }
+            completeDayCount += 1
+            solarCompleteTotal += day.epv
+            dischargeCompleteTotal += day.eDischarge
+
             guard let entry = dailyUsageEntry else { return }
 
-            dailyUsageStackTotal += entry.stackedTotalKwh
-            dailyUsageDayCount += 1
+            dailyUsageCompleteStackTotal += entry.stackedTotalKwh
+            dailyUsageCompleteDayCount += 1
             for block in entry.blocks {
                 dailyUsageKindSums[block.kind, default: 0] += block.totalKwh
             }
-
-            Self.consider(
-                &mostUsage,
-                candidate: DayKwhRecord(dayID: day.date, date: parsedDate, kwh: entry.stackedTotalKwh),
-                prefersLarger: true
-            )
 
             if let night = entry.blocks.first(where: { $0.kind == .night }) {
                 nightTotal += night.totalKwh
@@ -353,9 +412,9 @@ extension HistoryViewModel {
             }
         }
 
-        /// Lowest SoC includes today, so it has its own entry point called
-        /// from the main loop unconditionally.
-        mutating func considerSocLow(day: DayEnergy, parsedDate: Date) {
+        /// Lowest SoC includes today; `socLow` is a final-or-running floor, so
+        /// today's value is meaningful even mid-day.
+        private mutating func considerSocLow(day: DayEnergy, parsedDate: Date) {
             guard let soc = day.socLow, soc.isFinite else { return }
             Self.consider(
                 &lowestSoc,
@@ -388,16 +447,21 @@ extension HistoryViewModel {
             let largest = largestDailyUsageKind
             return PeriodSummary(
                 solarTotalKwh: solarTotal,
+                solarCompleteTotalKwh: solarCompleteTotal,
                 solarDayCount: completeDayCount,
+                dayCount: dayCount,
                 peakImportTotalKwh: peakImportTotal,
                 offpeakImportTotalKwh: offpeakImportTotal,
                 exportTotalKwh: exportTotal,
                 gridDayCount: gridDayCount,
                 chargeTotalKwh: chargeTotal,
                 dischargeTotalKwh: dischargeTotal,
+                dischargeCompleteTotalKwh: dischargeCompleteTotal,
                 batteryDayCount: completeDayCount,
                 dailyUsageTotalKwh: dailyUsageStackTotal,
-                dailyUsageDayCount: dailyUsageDayCount,
+                dailyUsageCompleteTotalKwh: dailyUsageCompleteStackTotal,
+                dailyUsageDayCount: dailyUsageCompleteDayCount,
+                dailyUsageDisplayDayCount: dailyUsageDisplayDayCount,
                 dailyUsageLargestKind: largest,
                 dailyUsageLargestKindTotalKwh: largest.flatMap { dailyUsageKindSums[$0] } ?? 0,
                 nightTotalKwh: nightTotal,
@@ -409,7 +473,7 @@ extension HistoryViewModel {
         }
 
         private var largestDailyUsageKind: DailyUsageBlock.Kind? {
-            guard dailyUsageDayCount > 0 else { return nil }
+            guard dailyUsageCompleteDayCount > 0 else { return nil }
             return DailyUsageBlock.Kind.largest(
                 among: DailyUsageBlock.Kind.chronologicalOrder.lazy.map {
                     (kind: $0, value: dailyUsageKindSums[$0] ?? 0)
