@@ -16,6 +16,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Week-to-date and month-to-date charts reserve space for the full period.** A partly-elapsed week or month now draws its bars left-aligned with empty space held for the days not yet elapsed — Wk reserves the full 7-day week, Mo the full calendar month — so the layout stays consistent from the first day of the period instead of a lone bar stretching to fill the width. The fixed 7/14/30-day ranges are unchanged.
 - **SwiftLint now passes `--strict` cleanly.** Added `Flux/.swiftlint.yml` (the project had none, so the linter was scanning test targets and `.build-xc/` artifacts): build directories (`.build`, `.build-xc`, `DerivedData`) and the `FluxTests` / `FluxUITests` / `FluxCore/Tests` targets are now excluded. The 26 remaining production violations were fixed rather than suppressed — short identifiers renamed to meaningful names (including the `registerDeviceIfNeeded` `tz:` → `timeZone:` label), three over-length lines reflowed, a scoped `line_length` exception around the release-note copy in `WhatsNewCatalogue`, and a per-file `file_length` disable on `HistoryDerivedState` matching the convention already used by `DayDetailView` and `APIModels`. No app behaviour changes.
 
+### Documentation
+
+- Spec for **Dashboard Simulation** (T-1495). A Dashboard what-if toggle that applies a named load preset (watts) as a clearly-labelled simulation, computed server-side via a `simulateLoadWatts` parameter on `/status` so the simulated and real values can't diverge. Added load is allocated by a priority waterfall (reduce grid export → battery, capped at the inverter's discharge ceiling → grid import), keeping the power flow energy-balanced and the "empty by" accurate across evening-peak, mild-sun, and full-sun states. Presets are a system-wide CRUD resource modelled on `/pricing`. Planning only — not yet implemented. See `specs/dashboard-simulation/`.
+
 ## [1.5] - 2026-06-02
 
 ### Fixed
