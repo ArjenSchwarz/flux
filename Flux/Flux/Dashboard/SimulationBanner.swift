@@ -62,11 +62,20 @@ struct DashboardSimulateMenu: View {
     var body: some View {
         Menu {
             if presets.isEmpty {
+                #if os(macOS)
+                // onAddPreset is a no-op on macOS (no settings sheet); open the
+                // Settings scene so the empty state still offers a path ([2.3]),
+                // matching the staleness banner's macOS treatment.
+                SettingsLink {
+                    Label("Add a preset…", systemImage: "plus")
+                }
+                #else
                 Button {
                     onAddPreset()
                 } label: {
                     Label("Add a preset…", systemImage: "plus")
                 }
+                #endif
             } else {
                 ForEach(presets) { preset in
                     presetButton(preset)

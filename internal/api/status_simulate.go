@@ -79,7 +79,7 @@ func exportReductionFor(pgrid, w float64) float64 {
 	if export < 0 {
 		export = 0
 	}
-	return minFloat(w, export)
+	return min(w, export)
 }
 
 // headroom returns the additional discharge the battery can take on before
@@ -98,7 +98,7 @@ func headroom(p float64) float64 {
 // batteryAbsorbed returns how much of wBattery the battery takes on, bounded by
 // its remaining headroom.
 func batteryAbsorbed(p, wBattery float64) float64 {
-	return minFloat(wBattery, headroom(p))
+	return min(wBattery, headroom(p))
 }
 
 // simDischarge returns the simulated discharge for a series power p given the
@@ -108,12 +108,4 @@ func batteryAbsorbed(p, wBattery float64) float64 {
 // [4.2]). Evaluated per series (live pbat, rolling avgPbat).
 func simDischarge(p, wBattery float64) float64 {
 	return p + batteryAbsorbed(p, wBattery)
-}
-
-// minFloat returns the smaller of two float64 values.
-func minFloat(a, b float64) float64 {
-	if a < b {
-		return a
-	}
-	return b
 }

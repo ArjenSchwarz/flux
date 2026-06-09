@@ -172,11 +172,18 @@ final class DashboardViewModel {
                 simulateWatts = preset.watts
                 simulateName = preset.label
             } else {
+                // Active preset gone (deleted locally or removed via sync) → off ([2.4]).
                 activeSimulationPresetID = nil
-                activeSimulationDeltaWatts = nil
-                activeSimulationName = nil
             }
         }
+
+        // Set the banner state from the resolved preset *before* fetching, so the
+        // banner shows immediately and stays up even if this fetch fails ([4.5],
+        // [5.1]); the figures then fall back to the error/unavailable treatment.
+        // Banner and request use the same resolved watts, so they never disagree
+        // about which preset is active ([2.7]).
+        activeSimulationDeltaWatts = simulateWatts
+        activeSimulationName = simulateName
 
         do {
             let simulating = simulateWatts != nil
@@ -192,10 +199,6 @@ final class DashboardViewModel {
             error = nil
 
             if simulating {
-                // Record the watts that produced the displayed status so the
-                // banner and figures always describe the same watts ([2.7]).
-                activeSimulationDeltaWatts = simulateWatts
-                activeSimulationName = simulateName
                 // A simulated status must never leak into the shared widget
                 // cache — widgets always show real data (Decision 13). Skip the
                 // cache write and the widget-reload trigger while simulating.
