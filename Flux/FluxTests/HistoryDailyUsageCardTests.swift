@@ -25,10 +25,15 @@ struct HistoryDailyUsageCardTests {
     }
 
     @Test
-    func placeholderRendersWhenOnlyTodayHasBlocks() {
-        // Single today entry exists, but dailyUsageDayCount excludes today.
-        let summary = makeSummary(largest: nil, avg: nil, totalKwh: 0, dayCount: 0)
-        #expect(HistoryDailyUsageCard.shouldShowPlaceholder(summary: summary))
+    func chartRendersWhenOnlyTodayHasBlocks() {
+        // Today has a breakdown but no complete day does: the chart shows
+        // today's bar (display count > 0), so the placeholder is suppressed.
+        // The KPI/subtitle stay em-dash because the per-day average needs a
+        // complete day.
+        let summary = makeSummary(largest: nil, avg: nil, totalKwh: 4.0, dayCount: 0, displayDayCount: 1)
+        #expect(HistoryDailyUsageCard.shouldShowPlaceholder(summary: summary) == false)
+        #expect(HistoryDailyUsageCard.kpi(for: summary) == "—")
+        #expect(HistoryDailyUsageCard.subtitle(for: summary) == nil)
     }
 
     @Test
@@ -79,25 +84,32 @@ struct HistoryDailyUsageCardTests {
         )
     }
 
+    // swiftlint:disable:next function_default_parameter_at_end
     private func makeSummary(
         largest: DailyUsageBlock.Kind?,
         avg _: Double?,
         totalKwh: Double,
         dayCount: Int,
+        displayDayCount: Int = 0,
         eveningSum: Double = 0
     ) -> HistoryViewModel.PeriodSummary {
         HistoryViewModel.PeriodSummary(
             solarTotalKwh: 0,
+            solarCompleteTotalKwh: 0,
             solarDayCount: 0,
+            dayCount: 0,
             peakImportTotalKwh: 0,
             offpeakImportTotalKwh: 0,
             exportTotalKwh: 0,
             gridDayCount: 0,
             chargeTotalKwh: 0,
             dischargeTotalKwh: 0,
+            dischargeCompleteTotalKwh: 0,
             batteryDayCount: 0,
             dailyUsageTotalKwh: totalKwh,
+            dailyUsageCompleteTotalKwh: totalKwh,
             dailyUsageDayCount: dayCount,
+            dailyUsageDisplayDayCount: displayDayCount,
             dailyUsageLargestKind: largest,
             dailyUsageLargestKindTotalKwh: eveningSum,
             nightTotalKwh: 0,

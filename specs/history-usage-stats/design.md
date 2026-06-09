@@ -43,6 +43,8 @@ A new `HistoryStatsOverviewCard` rendering eight stat tiles for the active 7 / 1
 
 ## Components and Interfaces
 
+> **Superseded in part by [Decision 15](decision_log.md).** This section describes the design as originally built, where totals and day-records were computed over *complete days only*. Decision 15 later moved totals and day-records (Total solar/usage, Most usage/solar) to **include today**, leaving only the per-day averages on the complete-day basis. As part of that change `PeriodSummary` gained complete-days numerators (`solarCompleteTotalKwh`, `dischargeCompleteTotalKwh`, `dailyUsageCompleteTotalKwh`) and today-inclusive display counts (`dayCount`, `dailyUsageDisplayDayCount`), and the `addCompleteDay` / `considerSocLow` entry points described below were folded into a single `addDay(_:parsedDate:isToday:dailyUsageEntry:)` that does the display aggregates for every day and the average bases only for `!isToday`. See `HistoryDerivedState.swift` for the current shape; the prose below is retained for historical context.
+
 ### `HistoryViewModel.PeriodSummary` additions
 
 The existing four fields (`solarTotalKwh`, `exportTotalKwh`, `peakImportTotalKwh`, `dailyUsageTotalKwh`) cover tiles 2.1 / 2.2 / 2.3 / 2.4. Four new fields cover tiles 2.5 – 2.8:

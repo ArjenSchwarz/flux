@@ -167,3 +167,45 @@ Date-bounding is the only way to guarantee no pre-boundary day appears, and appl
 - Two existing tests (`loadHistoryFallsBackToCacheWhenNetworkFails`, `cacheFallbackPathRendersNotes`) hardcode an out-of-window cache date against the real clock and WILL break; they must be rewritten to inject `nowProvider` with dates relative to the injected now. This is required task work, not optional.
 
 ---
+
+## Decision 7: To-date charts reserve the full period on the x-axis
+
+**Date**: 2026-06-09
+**Status**: accepted
+
+### Context
+
+The History charts size their x-axis to the data they hold. For a to-date range early in the period this looks inconsistent: Week-to-date on a Monday draws a single full-width bar, and the bar geometry shifts every day as more days arrive. A user asked that a partly-elapsed week or month hold space for the days not yet elapsed, so the first day's bar sits at the far left as if the rest of the period were already there.
+
+### Decision
+
+For **Week-to-date** and **Month-to-date** only, reserve the whole period on the x-axis:
+
+- Week-to-date → a full 7-day week from the locale week start.
+- Month-to-date → the full calendar month (28–31 days) from the 1st.
+
+A `HistoryChartDomain` value (computed by `HistoryViewModel` from the resolved range, Sydney `now`, and the locale first weekday) carries the `ClosedRange<Date>` span and the list of Sydney-midnight slot dates. Charts apply it via `chartXScale(domain:)` and render invisible zero-height scaffold bars at every slot so Swift Charts infers a consistent one-day bar width even when only one real day has data. Fixed 7/14/30-day ranges pass `nil` and keep auto-fitting — they always span N days ending today, so they need no reservation. The reservation is scoped to the inline History cards; the enlarged-chart host passes `nil` because its `ChartScope` carries only a day count, not the range type.
+
+### Rationale
+
+`chartXScale(domain:)` is already the proven mechanism for a fixed time axis in this codebase (Day Detail's `DayChartDomain`). Reserving the full calendar period — rather than padding to a trailing N-days window — is what "space for the rest of the period" means and keeps every day of the week/month in the same horizontal slot all period long. The scaffold solves the one-bar degenerate case (the user's "first day of the week" example) that a bare domain would render as a single fat bar.
+
+### Alternatives Considered
+
+- **Reserve for all five ranges**: rejected — the fixed ranges already span N days ending today, so there is nothing to reserve except on a brand-new system; the user asked specifically about the to-date ranges.
+- **Pad month to a trailing 30/31-day window instead of the calendar month**: rejected — it would not align bars to calendar days and contradicts "the rest of *this* period".
+- **Bare `chartXScale(domain:)` with no scaffold**: rejected — a single real bar over a wide domain renders at an inconsistent (wide) width, which is exactly the first-day-of-period case the request highlights.
+- **Thread the range type through `ChartScope` so the enlarged chart reserves too**: deferred — it touches the Codable scope, the registry, and the macOS chart window for a secondary view; the inline cards are where the request applies.
+
+### Consequences
+
+**Positive:**
+- Week/month charts keep a stable, day-aligned layout from the first day of the period; bars are left-aligned with empty space held on the right.
+- Reuses the existing `chartXScale` pattern; no change to the wire contract or `DerivedState`.
+
+**Negative:**
+- Early in a long period the bars are thin (e.g. month-to-date on the 2nd reserves ~30 slots for 2 bars) — an accepted consequence of consistent alignment.
+- The enlarged-chart presentation does not reserve, so it can differ from the inline card for a to-date range until the scope carries the range type.
+- Each to-date chart renders N invisible scaffold marks (≤31), a negligible cost.
+
+---

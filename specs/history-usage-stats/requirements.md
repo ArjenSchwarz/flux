@@ -19,17 +19,18 @@ The History screen renders four chart cards (Solar, Grid, Battery, Daily Usage) 
 
 ## Definitions
 
-- **complete day**: a day in the range whose date is strictly before today, resolved through `DateFormatting.isToday(_:now:)` (the same boundary every other History aggregate uses).
+- **complete day**: a day in the range whose date is strictly before today, resolved through `DateFormatting.isToday(_:now:)`. After [Decision 15](decision_log.md) this boundary applies only to the per-day *averages*, not to totals or day-records (which now include today).
 - **day-with-blocks**: a day whose `DayEnergy.dailyUsage` is present and has at least one block (per `history-daily-usage` spec).
 - **day-with-offpeak**: a day whose `DayEnergy.offpeakGridImportKwh` is non-nil. Days without an off-peak record are excluded from the Peak imports and Exported tiles because the off-peak / peak split cannot be derived without it.
 - **day-with-night-block**: a day-with-blocks whose blocks include a `night` block.
 - **day-with-low**: a day whose `DayEnergy.socLow` is non-nil.
 - **stat tile**: one labelled value rendered inside the overview card.
 
-Today inclusion across the eight tiles:
+Today inclusion across the eight tiles (updated by [Decision 15](decision_log.md), which superseded the "exclude today" half of [Decision 5](decision_log.md)):
+- **Total usage, Total solar, Most usage, Most solar** include today — they are hard numbers (totals and single-day maxes).
 - **Lowest SoC** includes today via the `socLow` semantics already in `DayEnergy`.
 - **Peak imports** and **Exported** include today when today has an off-peak record, because they reuse the existing `peakImportTotalKwh` / `exportTotalKwh` aggregates which do not gate on `!isToday`.
-- All other tiles (Total usage, Total solar, Avg night, Most usage, Most solar) exclude today via the same `DateFormatting.isToday(_:now:)` boundary the rest of `PeriodSummary` already applies.
+- **Avg night** excludes today — it is a per-day average and a partial day would skew it. The complete-days numerators backing the other per-day averages (Solar/day, Battery/day, Daily-usage/day) likewise exclude today.
 
 ## 1. iOS / macOS: Overview Card Placement and Chrome
 
@@ -52,13 +53,13 @@ The eight tiles SHALL be defined as follows. Each tile renders a label and a val
 
 | # | Tile label | Value | Cohort |
 |---|---|---|---|
-| 2.1 | Total usage | `sum(dailyUsage.stackedTotalKwh)` | complete days-with-blocks |
-| 2.2 | Total solar | `sum(epv)` | complete days |
+| 2.1 | Total usage | `sum(dailyUsage.stackedTotalKwh)` | days-with-blocks in range, today included (Decision 15) |
+| 2.2 | Total solar | `sum(epv)` | all days in range, today included (Decision 15) |
 | 2.3 | Exported | `sum(eOutput)` | days-with-offpeak in range (today included when it has an off-peak record) |
 | 2.4 | Peak imports | `sum(eInput − offpeakGridImportKwh)`, each summand clamped ≥ 0 | days-with-offpeak in range (today included when it has an off-peak record) |
-| 2.5 | Avg night | `sum(night-block kWh) / count(days-with-night-block)` | complete days-with-night-block |
-| 2.6 | Most usage | `max(dailyUsage.stackedTotalKwh)` | complete days-with-blocks |
-| 2.7 | Most solar | `max(epv)` | complete days |
+| 2.5 | Avg night | `sum(night-block kWh) / count(days-with-night-block)` | complete days-with-night-block (today excluded — average) |
+| 2.6 | Most usage | `max(dailyUsage.stackedTotalKwh)` | days-with-blocks in range, today included (Decision 15) |
+| 2.7 | Most solar | `max(epv)` | all days in range, today included (Decision 15) |
 | 2.8 | Lowest SoC | `min(socLow)` | days-with-low (today included if it has a `socLow`) |
 
 1. <a name="2.1"></a>**Total usage** — Label `"Total usage"`. Value formatted via `HistoryFormatters.kwh`. Tile renders an em-dash `"—"` for the value WHEN the cohort is empty.  

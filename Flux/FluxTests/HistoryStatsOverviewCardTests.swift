@@ -136,7 +136,7 @@ struct HistoryStatsOverviewCardTests {
 
     @Test("Stat tile spells out kilowatt hours")
     func statTileAccessibilityLabel() {
-        let summary = makeSummary(solarTotalKwh: 98.4, solarDayCount: 5)
+        let summary = makeSummary(solarTotalKwh: 98.4, solarDayCount: 5, dayCount: 5)
         #expect(HistoryStatsOverviewCard.accessibilityLabel(tile: .totalSolar, summary: summary)
             == "Total solar, 98.4 kilowatt hours")
     }
@@ -223,9 +223,11 @@ struct HistoryStatsOverviewCardTests {
         DateFormatting.parseDayDate(dayID)!
     }
 
+    // swiftlint:disable:next function_default_parameter_at_end
     private func makeSummary(
         solarTotalKwh: Double = 0,
         solarDayCount: Int = 0,
+        dayCount: Int = 0,
         peakImportTotalKwh: Double = 0,
         offpeakImportTotalKwh: Double = 0,
         exportTotalKwh: Double = 0,
@@ -235,6 +237,7 @@ struct HistoryStatsOverviewCardTests {
         batteryDayCount: Int = 0,
         dailyUsageTotalKwh: Double = 0,
         dailyUsageDayCount: Int = 0,
+        dailyUsageDisplayDayCount: Int = 0,
         dailyUsageLargestKind: DailyUsageBlock.Kind? = nil,
         dailyUsageLargestKindTotalKwh: Double = 0,
         nightTotalKwh: Double = 0,
@@ -245,16 +248,21 @@ struct HistoryStatsOverviewCardTests {
     ) -> HistoryViewModel.PeriodSummary {
         HistoryViewModel.PeriodSummary(
             solarTotalKwh: solarTotalKwh,
+            solarCompleteTotalKwh: solarTotalKwh,
             solarDayCount: solarDayCount,
+            dayCount: dayCount,
             peakImportTotalKwh: peakImportTotalKwh,
             offpeakImportTotalKwh: offpeakImportTotalKwh,
             exportTotalKwh: exportTotalKwh,
             gridDayCount: gridDayCount,
             chargeTotalKwh: chargeTotalKwh,
             dischargeTotalKwh: dischargeTotalKwh,
+            dischargeCompleteTotalKwh: dischargeTotalKwh,
             batteryDayCount: batteryDayCount,
             dailyUsageTotalKwh: dailyUsageTotalKwh,
+            dailyUsageCompleteTotalKwh: dailyUsageTotalKwh,
             dailyUsageDayCount: dailyUsageDayCount,
+            dailyUsageDisplayDayCount: dailyUsageDisplayDayCount,
             dailyUsageLargestKind: dailyUsageLargestKind,
             dailyUsageLargestKindTotalKwh: dailyUsageLargestKindTotalKwh,
             nightTotalKwh: nightTotalKwh,

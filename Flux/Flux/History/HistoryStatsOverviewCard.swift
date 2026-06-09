@@ -96,9 +96,10 @@ extension HistoryStatsOverviewCard {
     static func valueText(for tile: TileKey, summary: HistoryViewModel.PeriodSummary) -> String {
         switch tile {
         case .totalUsage:
-            return summary.dailyUsageDayCount == 0 ? "—" : HistoryFormatters.kwh(summary.dailyUsageTotalKwh)
+            return summary.dailyUsageDisplayDayCount == 0
+                ? "—" : HistoryFormatters.kwh(summary.dailyUsageTotalKwh)
         case .totalSolar:
-            return summary.solarDayCount == 0 ? "—" : HistoryFormatters.kwh(summary.solarTotalKwh)
+            return summary.dayCount == 0 ? "—" : HistoryFormatters.kwh(summary.solarTotalKwh)
         case .exported:
             return summary.gridDayCount == 0 ? "—" : HistoryFormatters.kwh(summary.exportTotalKwh)
         case .peakImports:
@@ -168,11 +169,11 @@ extension HistoryStatsOverviewCard {
         let label = label(for: tile)
         switch tile {
         case .totalUsage:
-            return summary.dailyUsageDayCount == 0
+            return summary.dailyUsageDisplayDayCount == 0
                 ? "\(label), no data"
                 : "\(label), \(HistoryStatsFormatters.accessibleKwh(summary.dailyUsageTotalKwh))"
         case .totalSolar:
-            return summary.solarDayCount == 0
+            return summary.dayCount == 0
                 ? "\(label), no data"
                 : "\(label), \(HistoryStatsFormatters.accessibleKwh(summary.solarTotalKwh))"
         case .exported:
@@ -298,16 +299,21 @@ private func previewSummary(populated: Bool) -> HistoryViewModel.PeriodSummary {
     let date = DateFormatting.parseDayDate("2026-04-13")!
     return HistoryViewModel.PeriodSummary(
         solarTotalKwh: 98.4,
+        solarCompleteTotalKwh: 98.4,
         solarDayCount: 6,
+        dayCount: 7,
         peakImportTotalKwh: 7.2,
         offpeakImportTotalKwh: 12.4,
         exportTotalKwh: 14.0,
         gridDayCount: 6,
         chargeTotalKwh: 24.5,
         dischargeTotalKwh: 22.0,
+        dischargeCompleteTotalKwh: 22.0,
         batteryDayCount: 6,
         dailyUsageTotalKwh: 64.5,
+        dailyUsageCompleteTotalKwh: 64.5,
         dailyUsageDayCount: 6,
+        dailyUsageDisplayDayCount: 7,
         dailyUsageLargestKind: .evening,
         dailyUsageLargestKindTotalKwh: 18.0,
         nightTotalKwh: 12.0,
@@ -343,11 +349,12 @@ private func previewEntries() -> [HistoryViewModel.SolarEntry] {
 
 #Preview("HistoryStatsOverviewCard — Mac, mixed em-dash") {
     let mixed = HistoryViewModel.PeriodSummary(
-        solarTotalKwh: 98.4, solarDayCount: 6,
+        solarTotalKwh: 98.4, solarCompleteTotalKwh: 98.4, solarDayCount: 6, dayCount: 7,
         peakImportTotalKwh: 0, offpeakImportTotalKwh: 0,
         exportTotalKwh: 0, gridDayCount: 0,
-        chargeTotalKwh: 0, dischargeTotalKwh: 0, batteryDayCount: 6,
-        dailyUsageTotalKwh: 64.5, dailyUsageDayCount: 6,
+        chargeTotalKwh: 0, dischargeTotalKwh: 0, dischargeCompleteTotalKwh: 0, batteryDayCount: 6,
+        dailyUsageTotalKwh: 64.5, dailyUsageCompleteTotalKwh: 64.5,
+        dailyUsageDayCount: 6, dailyUsageDisplayDayCount: 7,
         dailyUsageLargestKind: .evening, dailyUsageLargestKindTotalKwh: 18.0,
         nightTotalKwh: 0, nightBlockDayCount: 0,
         mostUsageDay: nil,

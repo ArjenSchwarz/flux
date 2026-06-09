@@ -14,6 +14,10 @@ final class HistoryViewModel {
     /// Read by `HistoryView` for the cards' `rangeDays:` (which carries the
     /// expansion scope's `N`).
     private(set) var resolvedRangeDays: Int = 7
+    /// The range whose data is currently in `days`. Drives `chartDomain` so the
+    /// charts' x-axis reservation matches the rendered data, not an in-flight
+    /// selection.
+    private(set) var resolvedRange: HistoryRange = .days(7)
 
     private let apiClient: any FluxAPIClient
     private let modelContext: ModelContext
@@ -78,6 +82,7 @@ final class HistoryViewModel {
         let now = nowProvider()
         let resolvedDays = range.resolvedDays(now: now, firstWeekday: firstWeekdayProvider())
         resolvedRangeDays = resolvedDays
+        resolvedRange = range
 
         do {
             let response = try await apiClient.fetchHistory(days: resolvedDays)
@@ -205,6 +210,17 @@ extension HistoryViewModel {
     /// accessors below repeatedly.
     var derived: DerivedState {
         DerivedState(days: days, now: nowProvider())
+    }
+
+    /// Full-period x-axis reservation for the to-date ranges (Wk → full week,
+    /// Mo → full calendar month), or `nil` for the fixed `.days` ranges, which
+    /// always span N days ending today and so need no reservation.
+    var chartDomain: HistoryChartDomain? {
+        HistoryChartDomain.make(
+            range: resolvedRange,
+            now: nowProvider(),
+            firstWeekday: firstWeekdayProvider()
+        )
     }
 
     /// Convenience accessors for tests and previews. Each rebuilds
