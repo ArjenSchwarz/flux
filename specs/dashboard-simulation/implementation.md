@@ -10,7 +10,7 @@ A three-level explanation of the implemented feature, written as a pre-push revi
 
 The Dashboard normally shows your battery's real numbers: how much power the house is using, how fast the battery is draining, and roughly when it will be "empty". Dashboard Simulation lets you ask a what-if question — "what would happen if I started charging the car right now?" — and see the answer on the same screen, without actually turning anything on.
 
-You set up named scenarios called **presets** in Settings. A preset is just a label plus a wattage, like "Charge car" at 1700 watts. On the Dashboard there is a new **Simulate** wand button. Tap it, pick a preset, and the figures change to show the picture *as if* that extra load were running. A coloured banner appears across the top saying you are looking at a what-if, and the affected numbers change colour so you can never mistake them for real readings. Tap **Stop** (or just relaunch the app) and everything snaps back to reality.
+You set up named scenarios called **presets** in Settings. A preset is just a label plus a wattage, like "Charge car" at 1700 watts. On the Dashboard there is a new **Simulate** pill beside the big battery percentage. Tap it, pick a preset, and the figures change to show the picture *as if* that extra load were running. A coloured banner appears across the top saying you are looking at a what-if, and the affected numbers change colour so you can never mistake them for real readings. Tap **Stop** (or just relaunch the app) and everything snaps back to reality.
 
 ### Why It Matters
 
@@ -106,7 +106,7 @@ Every task in `tasks.md` 1–17 is checked; task 18 (run full Go + iOS + macOS t
 - 1.6 server-confirmed-then-apply with visible error: `SimulationPresetsService` mirrors SoC Alerts; editor keeps the sheet open on failure.
 
 ### Group 2 — Activate From the Dashboard — Fully implemented
-- 2.1 control on both platforms: `DashboardSimulateMenu` in scroll content (not toolbar) so it shows on compact iPhone.
+- 2.1 control on both platforms: `DashboardSimulateMenu` is injected into `DashboardHeroPanel` as a top-trailing pill, so it renders on every layout — compact iPhone (`dashboardContent`) and regular iPad/macOS (`dashboardContentRegular`) alike (Decision 15). Presets are loaded by a `DashboardView` `.task` on appear, so the menu is populated without first visiting Settings ▸ Simulation.
 - 2.2 replace-on-switch: `activateSimulation` overwrites the single `activeSimulationPresetID`.
 - 2.3 empty state offers a path to create: "Add a preset…" item (SettingsLink on macOS, callback on iOS).
 - 2.4 deleted/synced-away active preset turns simulation off: `refresh()` clears the id when absent from the list (tested).

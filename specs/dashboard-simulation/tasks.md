@@ -128,7 +128,7 @@ references:
   - Requirements: [2.2](requirements.md#2.2), [2.4](requirements.md#2.4), [2.5](requirements.md#2.5), [2.6](requirements.md#2.6), [2.7](requirements.md#2.7), [4.5](requirements.md#4.5), [5.5](requirements.md#5.5)
 
 - [x] 17. Implement Dashboard simulation UI (view wiring) <!-- id:0plbs03 -->
-  - Simulate menu in DashboardView headerSection (lists presets + Off; empty shows Add a preset deep-linking to Settings Simulation).
+  - Simulate menu (`DashboardSimulateMenu`) as a top-trailing pill in `DashboardHeroPanel` (lists presets + Off; empty shows Add a preset deep-linking to Settings Simulation). Placed in the hero rather than `headerSection` so it renders on every layout — see Decision 15.
   - New Dashboard/SimulationBanner.swift at the top of dashboardContent (stalenessBanner placement baseline) with a distinct FluxTheme.Palette.simulation accent, preset+delta, and a Stop control.
   - Tint the simulated values (trio House, hero discharge/empty-by) in the accent while active; accessibility labels announce simulated; iOS + macOS.
   - Blocked-by: 0plbs00 (Implement Settings Simulation list + editor (GREEN)), 0plbs02 (Implement DashboardViewModel simulation state + fetch wiring (GREEN))
