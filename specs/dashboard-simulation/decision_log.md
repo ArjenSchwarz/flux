@@ -450,3 +450,45 @@ One rule covers every starting state correctly with ~6 lines server-side, reusin
 - Assumes self-consumption priority (reduce export before reducing battery charge); a feed-in-priority configuration would behave differently. The 5 kW ceiling is a fixed constant — if the real inverter limit differs it updates in one place (`maxDischargeKW`).
 
 ---
+
+## Decision 15: Place the Simulate control in the hero panel and load presets on the Dashboard
+
+**Date**: 2026-06-10
+**Status**: accepted (supersedes the placement in the "Where the control lives" section of the design)
+
+### Context
+
+The control was first built as an icon-only `Menu` in `headerSection` — the trailing side of the `FluxScreenHeader` tab-bar row, beside the settings gear (the placement the design's "Where the control lives" section specified). In use this had two problems. First, a bare icon wedged between the tab bar and the gear was a small, ambiguous touch target. Second — and more serious — `headerSection` is rendered only by the compact layout (`dashboardContent`); the regular layout (`dashboardContentRegular`, used by iPad regular and macOS, where `IPadLayoutGate.isActive` is always true) deliberately omits it, so those platforms had **no** Dashboard trigger at all and could only ever show the active-state banner, which can never appear without a trigger. That under-met [2.1] (control on both iOS and macOS / Decision 7). Separately, the shared `SimulationPresetsService` was bound at startup but only refreshed by the Settings ▸ Simulation screen, so the Dashboard menu stayed empty until that screen had been visited once.
+
+### Decision
+
+Inject the `DashboardSimulateMenu` into `DashboardHeroPanel` as a top-trailing accessory beside the SoC numeral, rendered as a labelled "Simulate" pill (SF Symbol + text) styled like the existing tab-bar pills, taking the simulation accent with a status dot while active. The panel takes the control through a generic `accessory: () -> Accessory` slot (defaulting to `EmptyView`), laid out as a *sibling* of the numeral so the numeral shrinks via `minimumScaleFactor` on a narrow device rather than running under the pill. Because the hero panel is rendered by both layouts, the control now appears on iPhone, iPad regular, and macOS. Also load presets from the Dashboard: `DashboardView` refreshes `SimulationPresetsService` in a `.task` on appear, re-running on each appearance to pick up cross-device edits/deletes ([2.4]/[2.7]).
+
+### Rationale
+
+Moving the control into the hero fixes the [2.1] coverage gap and the touch-target complaint in one change, and removes the `FluxScreenHeader.trailingAccessory: AnyView?` plumbing (the project's Swift rules discourage `AnyView`) — the generic accessory slot replaces it. Laying the pill out as a sibling rather than an overlay keeps it from colliding with the common four-character SoC reading (e.g. "84.3%") at 108 pt on narrow devices. Refreshing presets from the Dashboard makes that screen authoritative for its own data instead of depending on the user having opened Settings first; the cost is a single small `GET /simulation-presets` per appearance, which the service already guards against stale overwrites via `Task.checkCancellation()`.
+
+### Alternatives Considered
+
+- **Keep the icon in `headerSection`, just enlarge it**: Smallest change - Rejected because it leaves the iPad/macOS regular layout with no control ([2.1] gap) and the header row remains a cramped target.
+- **A full-width "Simulate" row at the bottom of the hero**: Largest, most obvious target - Rejected as visually heavier than the hero's minimalist language; the corner pill reads clearly enough.
+- **Refresh presets only when the cached list is empty**: Avoids a per-appearance `GET` - Rejected because it drops the cross-device freshness the unconditional refresh gives ([2.4]/[2.7]); the saved request is negligible for a two-user app.
+- **Add the trigger to the regular layout's system toolbar instead**: Reuses existing chrome - Rejected because the compact layout hides the nav bar, so a single shared placement in scroll content is simpler and consistent across layouts.
+
+### Consequences
+
+**Positive:**
+- One Simulate control on every layout (iPhone, iPad regular, macOS), satisfying [2.1] where the old placement did not.
+- Larger, labelled touch target that reads as an action and signals active state without opening the menu.
+- The Dashboard menu is populated on first appearance, without a detour through Settings.
+- Removes an `AnyView` from `FluxScreenHeader`.
+
+**Negative:**
+- `DashboardHeroPanel` is now generic over its accessory; a minor type-signature cost for a previously data-only view.
+- One extra `GET /simulation-presets` per Dashboard appearance (intended, and cheap).
+
+### Impact
+
+`DashboardHeroPanel` (generic accessory slot + sibling layout), `DashboardView` (hero injection, presets `.task`, header simplification), `DashboardSimulateMenu` (pill label), and `FluxScreenHeader` (removed `trailingAccessory`).
+
+---

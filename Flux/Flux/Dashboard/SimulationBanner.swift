@@ -104,6 +104,13 @@ struct DashboardSimulateMenu: View {
         let accent = viewModel.isSimulating
             ? FluxTheme.Palette.simulation
             : FluxTheme.Palette.secondaryText
+        let fill = viewModel.isSimulating
+            ? FluxTheme.Palette.simulation.opacity(0.14)
+            : FluxTheme.Palette.tabBarFill
+        let stroke = viewModel.isSimulating
+            ? FluxTheme.Palette.simulation.opacity(0.5)
+            : FluxTheme.Palette.border
+        let shape = RoundedRectangle(cornerRadius: FluxTheme.Metrics.tabBarCornerRadius, style: .continuous)
         return HStack(spacing: 5) {
             Image(systemName: "wand.and.stars")
             Text("Simulate")
@@ -117,26 +124,9 @@ struct DashboardSimulateMenu: View {
         .foregroundStyle(accent)
         .padding(.horizontal, 11)
         .padding(.vertical, 7)
-        .background(
-            RoundedRectangle(cornerRadius: FluxTheme.Metrics.tabBarCornerRadius, style: .continuous)
-                .fill(
-                    viewModel.isSimulating
-                        ? FluxTheme.Palette.simulation.opacity(0.14)
-                        : FluxTheme.Palette.tabBarFill
-                )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: FluxTheme.Metrics.tabBarCornerRadius, style: .continuous)
-                .strokeBorder(
-                    viewModel.isSimulating
-                        ? FluxTheme.Palette.simulation.opacity(0.5)
-                        : FluxTheme.Palette.border,
-                    lineWidth: FluxTheme.Metrics.hairline
-                )
-        )
-        .contentShape(
-            RoundedRectangle(cornerRadius: FluxTheme.Metrics.tabBarCornerRadius, style: .continuous)
-        )
+        .background(shape.fill(fill))
+        .overlay(shape.strokeBorder(stroke, lineWidth: FluxTheme.Metrics.hairline))
+        .contentShape(shape)
     }
 
     @ViewBuilder
