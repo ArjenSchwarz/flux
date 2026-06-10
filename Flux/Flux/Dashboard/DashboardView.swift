@@ -115,7 +115,9 @@ struct DashboardView: View {
             // at startup but otherwise only refreshed by the Settings →
             // Simulation screen, so without this the menu stayed empty until
             // that screen was visited. Re-runs on each appearance to pick up
-            // edits/deletes synced from another device.
+            // edits/deletes synced from another device. A failed fetch is
+            // intentionally silent (try?) — the menu keeps its last-known
+            // presets rather than surfacing a Dashboard-level error.
             try? await simulationService.refresh()
         }
     }

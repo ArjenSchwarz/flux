@@ -56,13 +56,17 @@ struct DashboardHeroPanel<Accessory: View>: View {
                             .tracking(-4)
                             .foregroundStyle(FluxTheme.Palette.amber)
                             .monospacedDigit()
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.6)
                             .accessibilityLabel(accessibilityValue)
                         Text("%")
                             .appFont(FluxTheme.Typography.heroUnit)
                             .foregroundStyle(FluxTheme.Palette.tertiaryText)
                     }
+                    // Scale the numeral and its unit together so a wide reading
+                    // (e.g. "84.3%") shrinks as one on a narrow device rather
+                    // than the numeral alone shrinking while the % stays full
+                    // size.
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
                     Spacer(minLength: 8)
                     accessory()
                 }
