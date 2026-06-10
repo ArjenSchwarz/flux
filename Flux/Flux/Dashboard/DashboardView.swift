@@ -110,6 +110,14 @@ struct DashboardView: View {
         }
         .scrollContentBackground(.hidden)
         .scrollBounceBehavior(.basedOnSize)
+        .task {
+            // Presets power the hero Simulate menu. The shared service is bound
+            // at startup but otherwise only refreshed by the Settings →
+            // Simulation screen, so without this the menu stayed empty until
+            // that screen was visited. Re-runs on each appearance to pick up
+            // edits/deletes synced from another device.
+            try? await simulationService.refresh()
+        }
     }
 
     private var usesRegularLayout: Bool { IPadLayoutGate.isActive(hSizeClass: hSizeClass) }
@@ -163,18 +171,16 @@ struct DashboardView: View {
             FluxScreenHeader(
                 selection: tabBinding,
                 onSettingsTap: onSettingsTap,
-                onTabActivate: onTabActivate,
-                trailingAccessory: AnyView(simulateMenu)
+                onTabActivate: onTabActivate
             )
         } else {
-            HStack(alignment: .top) {
-                legacyHeader
-                Spacer()
-                simulateMenu
-            }
+            legacyHeader
         }
     }
 
+    // The Simulate control lives in the hero panel (see `heroPanel`), not the
+    // header row, so its touch target is large and unambiguous and it appears
+    // on every layout (the header is absent from the iPad/macOS regular path).
     private var simulateMenu: some View {
         DashboardSimulateMenu(
             viewModel: viewModel,
@@ -212,7 +218,9 @@ struct DashboardView: View {
             battery: viewModel.status?.battery,
             offpeakWindowStart: viewModel.status?.offpeak?.windowStart,
             isSimulating: viewModel.isSimulating
-        )
+        ) {
+            simulateMenu
+        }
     }
 
     @ViewBuilder

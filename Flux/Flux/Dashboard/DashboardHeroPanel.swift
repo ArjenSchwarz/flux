@@ -4,7 +4,7 @@ import SwiftUI
 /// Hero battery numeral on the Dashboard. The numeral and the rest of the
 /// panel are rendered in the user-selected app font (Settings → App font),
 /// resolved via `\.appFontFamily` in the environment.
-struct DashboardHeroPanel: View {
+struct DashboardHeroPanel<Accessory: View>: View {
     let live: LiveData?
     let rolling15min: RollingAvg?
     let battery: BatteryInfo?
@@ -13,19 +13,26 @@ struct DashboardHeroPanel: View {
     /// load, so they render in the simulation accent and are announced as
     /// simulated (Req 5.3/5.4).
     let isSimulating: Bool
+    /// Control pinned to the top-trailing of the hero, beside the SoC numeral
+    /// (the Dashboard passes the Simulate menu). Laid out as a sibling of the
+    /// numeral — not an overlay — so the numeral shrinks slightly on a narrow
+    /// device rather than running under the control.
+    @ViewBuilder let accessory: () -> Accessory
 
     init(
         live: LiveData?,
         rolling15min: RollingAvg?,
         battery: BatteryInfo? = nil,
         offpeakWindowStart: String? = nil,
-        isSimulating: Bool = false
+        isSimulating: Bool = false,
+        @ViewBuilder accessory: @escaping () -> Accessory = { EmptyView() }
     ) {
         self.live = live
         self.rolling15min = rolling15min
         self.battery = battery
         self.offpeakWindowStart = offpeakWindowStart
         self.isSimulating = isSimulating
+        self.accessory = accessory
     }
 
     /// Colour for the discharge/charge rate and "empty by" time in the
@@ -42,16 +49,22 @@ struct DashboardHeroPanel: View {
     var body: some View {
         FluxPanel(padding: FluxTheme.Metrics.panelHeroPadding) {
             VStack(alignment: .leading, spacing: 0) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(heroNumber)
-                        .appFont(FluxTheme.Typography.heroNumber)
-                        .tracking(-4)
-                        .foregroundStyle(FluxTheme.Palette.amber)
-                        .monospacedDigit()
-                        .accessibilityLabel(accessibilityValue)
-                    Text("%")
-                        .appFont(FluxTheme.Typography.heroUnit)
-                        .foregroundStyle(FluxTheme.Palette.tertiaryText)
+                HStack(alignment: .top, spacing: 8) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(heroNumber)
+                            .appFont(FluxTheme.Typography.heroNumber)
+                            .tracking(-4)
+                            .foregroundStyle(FluxTheme.Palette.amber)
+                            .monospacedDigit()
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.6)
+                            .accessibilityLabel(accessibilityValue)
+                        Text("%")
+                            .appFont(FluxTheme.Typography.heroUnit)
+                            .foregroundStyle(FluxTheme.Palette.tertiaryText)
+                    }
+                    Spacer(minLength: 8)
+                    accessory()
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 // Trim the giant glyph's intrinsic leading so the panel's

@@ -88,14 +88,54 @@ struct DashboardSimulateMenu: View {
                 }
             }
         } label: {
-            Label("Simulate", systemImage: "wand.and.stars")
-                .labelStyle(.iconOnly)
-                .foregroundStyle(
-                    viewModel.isSimulating ? FluxTheme.Palette.simulation : FluxTheme.Palette.secondaryText
-                )
+            pillLabel
         }
+        .menuIndicator(.hidden)
         .accessibilityLabel(
             viewModel.isSimulating ? "Simulation active. Change or stop simulation" : "Simulate"
+        )
+    }
+
+    /// Labelled pill (icon + "Simulate"), styled like the tab-bar pills so it
+    /// reads as part of the navigation language. While simulating it takes the
+    /// simulation accent and shows a trailing dot, so the active state is
+    /// obvious without opening the menu.
+    private var pillLabel: some View {
+        let accent = viewModel.isSimulating
+            ? FluxTheme.Palette.simulation
+            : FluxTheme.Palette.secondaryText
+        return HStack(spacing: 5) {
+            Image(systemName: "wand.and.stars")
+            Text("Simulate")
+            if viewModel.isSimulating {
+                Circle()
+                    .fill(FluxTheme.Palette.simulation)
+                    .frame(width: 6, height: 6)
+            }
+        }
+        .appFont(.footnote, weight: .semibold)
+        .foregroundStyle(accent)
+        .padding(.horizontal, 11)
+        .padding(.vertical, 7)
+        .background(
+            RoundedRectangle(cornerRadius: FluxTheme.Metrics.tabBarCornerRadius, style: .continuous)
+                .fill(
+                    viewModel.isSimulating
+                        ? FluxTheme.Palette.simulation.opacity(0.14)
+                        : FluxTheme.Palette.tabBarFill
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: FluxTheme.Metrics.tabBarCornerRadius, style: .continuous)
+                .strokeBorder(
+                    viewModel.isSimulating
+                        ? FluxTheme.Palette.simulation.opacity(0.5)
+                        : FluxTheme.Palette.border,
+                    lineWidth: FluxTheme.Metrics.hairline
+                )
+        )
+        .contentShape(
+            RoundedRectangle(cornerRadius: FluxTheme.Metrics.tabBarCornerRadius, style: .continuous)
         )
     }
 
