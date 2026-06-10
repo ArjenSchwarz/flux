@@ -7,6 +7,27 @@ public enum WhatsNewCatalogue {
     // swiftlint:disable line_length
     public static let releases: [WhatsNewRelease] = [
         WhatsNewRelease(
+            version: "1.6",
+            date: dateOf(year: 2026, month: 6),
+            highlights: [
+                Highlight(
+                    category: .new,
+                    title: "Simulate a load",
+                    detail: "Tap Simulate on the Dashboard to preview how a load like charging the car would change your battery flow and empty-by time — it's a what-if, nothing actually changes. Manage presets in Settings → Simulation."
+                ),
+                Highlight(
+                    category: .new,
+                    title: "Week and month ranges",
+                    detail: "History adds Wk and Mo ranges for this week and this month so far, alongside the 7, 14, and 30-day views."
+                ),
+                Highlight(
+                    category: .improved,
+                    title: "Totals include today",
+                    detail: "History's overview totals now count today, so a range that's only just begun shows real numbers instead of dashes."
+                )
+            ]
+        ),
+        WhatsNewRelease(
             version: "1.5",
             date: dateOf(year: 2026, month: 6),
             highlights: [
