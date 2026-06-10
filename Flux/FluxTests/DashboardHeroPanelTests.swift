@@ -7,7 +7,7 @@ import Testing
 // alongside the existing status line. The contract worth pinning is the
 // VoiceOver announcement — it is the user-facing signal the requirement
 // commits to (see requirements.md §3.5). The string is sourced from
-// `DashboardHeroPanel.cantEmptyBeforeOffpeakAccessibilityLabel` so both
+// `DashboardHeroPanel<EmptyView>.cantEmptyBeforeOffpeakAccessibilityLabel` so both
 // the view body and this test consume the same expression.
 @MainActor
 @Suite
@@ -44,7 +44,7 @@ struct DashboardHeroPanelTests {
         )
 
         #expect(
-            DashboardHeroPanel.cantEmptyBeforeOffpeakAccessibilityLabel(offpeakWindowStart: "23:00")
+            DashboardHeroPanel<EmptyView>.cantEmptyBeforeOffpeakAccessibilityLabel(offpeakWindowStart: "23:00")
                 == "Battery won't empty before off-peak at 23:00"
         )
     }
@@ -56,7 +56,7 @@ struct DashboardHeroPanelTests {
     @Test
     func visibleTextLeadsWithPowerFlowPrefixWhenPresent() {
         #expect(
-            DashboardHeroPanel.cantEmptyBeforeOffpeakVisibleText(
+            DashboardHeroPanel<EmptyView>.cantEmptyBeforeOffpeakVisibleText(
                 prefix: "Discharging · 400 W",
                 offpeakWindowStart: "11:00"
             ) == "Discharging · 400 W · won't empty before 11:00"
@@ -66,7 +66,7 @@ struct DashboardHeroPanelTests {
     @Test
     func visibleTextFallsBackToBareFormWithoutPrefix() {
         #expect(
-            DashboardHeroPanel.cantEmptyBeforeOffpeakVisibleText(
+            DashboardHeroPanel<EmptyView>.cantEmptyBeforeOffpeakVisibleText(
                 prefix: nil,
                 offpeakWindowStart: "11:00"
             ) == "Won't empty before 11:00"
@@ -78,8 +78,8 @@ struct DashboardHeroPanelTests {
     // so a formatting change here must be a deliberate one.
     @Test
     func powerFlowLabelsFormatWattsAndKilowatts() {
-        #expect(DashboardHeroPanel.dischargingLabel(400) == "Discharging · 400 W")
-        #expect(DashboardHeroPanel.dischargingLabel(2400) == "Discharging · 2.40 kW")
-        #expect(DashboardHeroPanel.chargingLabel(1200) == "Charging · 1.20 kW")
+        #expect(DashboardHeroPanel<EmptyView>.dischargingLabel(400) == "Discharging · 400 W")
+        #expect(DashboardHeroPanel<EmptyView>.dischargingLabel(2400) == "Discharging · 2.40 kW")
+        #expect(DashboardHeroPanel<EmptyView>.chargingLabel(1200) == "Charging · 1.20 kW")
     }
 }
