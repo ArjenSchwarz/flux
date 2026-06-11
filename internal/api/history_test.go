@@ -442,6 +442,246 @@ func TestHandleHistoryBundlesNotes(t *testing.T) {
 	})
 }
 
+// TestHandleHistoryRangeParamMatrix covers the two request forms of /history
+// (req 5.1, 5.4, 5.6): the existing days=N form (including the no-params
+// default of 7), the new explicit start/end range form, and every rejected
+// combination. The range form is past-only per Decision 15: end must be
+// strictly before the current Sydney date. Spans are inclusive on both ends
+// and capped at 31 days; the cap must be calendar-aware so a window crossing
+// the April DST fallback (Sydney, 2026-04-05) is not off by one.
+func TestHandleHistoryRangeParamMatrix(t *testing.T) {
+	now := fixedNow() // 2026-04-15 10:00 AEST; today = "2026-04-15"
+
+	tests := map[string]struct {
+		params     map[string]string
+		wantStatus int
+		// wantErr is the exact error body message when wantStatus is 400.
+		wantErr string
+		// wantStart/wantEnd are the inclusive bounds QueryDailyEnergy must
+		// receive when wantStatus is 200.
+		wantStart string
+		wantEnd   string
+	}{
+		"no params defaults to days=7": {
+			params: nil, wantStatus: 200,
+			wantStart: "2026-04-09", wantEnd: "2026-04-15",
+		},
+		"days only unchanged": {
+			params: map[string]string{"days": "14"}, wantStatus: 200,
+			wantStart: "2026-04-02", wantEnd: "2026-04-15",
+		},
+		"days with start and end rejected": {
+			params:     map[string]string{"days": "7", "start": "2026-04-01", "end": "2026-04-07"},
+			wantStatus: 400, wantErr: "cannot combine days with start and end parameters",
+		},
+		"days with lone start rejected": {
+			params:     map[string]string{"days": "7", "start": "2026-04-01"},
+			wantStatus: 400, wantErr: "cannot combine days with start and end parameters",
+		},
+		"lone start rejected": {
+			params:     map[string]string{"start": "2026-04-01"},
+			wantStatus: 400, wantErr: "start and end must be supplied together",
+		},
+		"lone end rejected": {
+			params:     map[string]string{"end": "2026-04-07"},
+			wantStatus: 400, wantErr: "start and end must be supplied together",
+		},
+		"unparseable start rejected": {
+			params:     map[string]string{"start": "01-04-2026", "end": "2026-04-07"},
+			wantStatus: 400, wantErr: "invalid start or end parameter, must be YYYY-MM-DD",
+		},
+		"impossible end date rejected": {
+			params:     map[string]string{"start": "2026-04-01", "end": "2026-04-31"},
+			wantStatus: 400, wantErr: "invalid start or end parameter, must be YYYY-MM-DD",
+		},
+		"end before start rejected": {
+			params:     map[string]string{"start": "2026-04-07", "end": "2026-04-01"},
+			wantStatus: 400, wantErr: "end must not be before start",
+		},
+		"end equals today rejected": {
+			params:     map[string]string{"start": "2026-04-09", "end": "2026-04-15"},
+			wantStatus: 400, wantErr: "end must be before the current date",
+		},
+		"end after today rejected": {
+			params:     map[string]string{"start": "2026-04-09", "end": "2026-04-20"},
+			wantStatus: 400, wantErr: "end must be before the current date",
+		},
+		"single-day range ok": {
+			params:     map[string]string{"start": "2026-04-10", "end": "2026-04-10"},
+			wantStatus: 200, wantStart: "2026-04-10", wantEnd: "2026-04-10",
+		},
+		"31-day inclusive span ok": {
+			params:     map[string]string{"start": "2026-03-01", "end": "2026-03-31"},
+			wantStatus: 200, wantStart: "2026-03-01", wantEnd: "2026-03-31",
+		},
+		"32-day span rejected": {
+			params:     map[string]string{"start": "2026-03-01", "end": "2026-04-01"},
+			wantStatus: 400, wantErr: "date range must not exceed 31 days",
+		},
+		"31-day span crossing April DST fallback ok": {
+			params:     map[string]string{"start": "2026-03-15", "end": "2026-04-14"},
+			wantStatus: 200, wantStart: "2026-03-15", wantEnd: "2026-04-14",
+		},
+		"32-day span crossing April DST fallback rejected": {
+			params:     map[string]string{"start": "2026-03-14", "end": "2026-04-14"},
+			wantStatus: 400, wantErr: "date range must not exceed 31 days",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			var gotStart, gotEnd string
+			mr := &mockReader{
+				queryDailyEnergyFn: func(_ context.Context, _, start, end string) ([]dynamo.DailyEnergyItem, error) {
+					gotStart, gotEnd = start, end
+					return []dynamo.DailyEnergyItem{}, nil
+				},
+			}
+
+			h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+			h.nowFunc = func() time.Time { return now }
+
+			resp, err := h.Handle(context.Background(), historyRequest(tc.params))
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantStatus, resp.StatusCode)
+
+			if tc.wantStatus == 400 {
+				var body map[string]string
+				require.NoError(t, json.Unmarshal([]byte(resp.Body), &body))
+				assert.Equal(t, tc.wantErr, body["error"])
+				return
+			}
+			assert.Equal(t, tc.wantStart, gotStart, "QueryDailyEnergy inclusive start bound")
+			assert.Equal(t, tc.wantEnd, gotEnd, "QueryDailyEnergy inclusive end bound")
+		})
+	}
+}
+
+// TestHandleHistoryRangeSkipsLiveCompute verifies the range form is
+// stored-values-only (req 5.3, Decision 15): no readings query is issued, no
+// energy reconciliation or live off-peak integration happens, and the
+// off-peak and notes queries are bounded by the requested range rather than
+// today.
+func TestHandleHistoryRangeSkipsLiveCompute(t *testing.T) {
+	now := fixedNow()
+	const rangeStart = "2026-04-10"
+	const rangeEnd = "2026-04-12"
+
+	peak := 3.4
+	tr := &trackingReader{mockReader: &mockReader{
+		queryDailyEnergyFn: func(_ context.Context, _, start, end string) ([]dynamo.DailyEnergyItem, error) {
+			assert.Equal(t, rangeStart, start)
+			assert.Equal(t, rangeEnd, end)
+			return []dynamo.DailyEnergyItem{
+				{Date: "2026-04-10", Epv: 15, EInput: 4, EOutput: 1, ECharge: 8, EDischarge: 7},
+				{Date: "2026-04-11", Epv: 16, EInput: 5, EOutput: 2, ECharge: 9, EDischarge: 8, PeakGridImportKwh: &peak},
+				{Date: "2026-04-12", Epv: 17, EInput: 6, EOutput: 3, ECharge: 10, EDischarge: 9},
+			}, nil
+		},
+		queryOffpeakFn: func(_ context.Context, _, start, end string) ([]dynamo.OffpeakItem, error) {
+			assert.Equal(t, rangeStart, start, "offpeak query bounded by range start, not today's window")
+			assert.Equal(t, rangeEnd, end, "offpeak query bounded by range end, not today")
+			return []dynamo.OffpeakItem{
+				// Complete record — final deltas pass through.
+				{Date: "2026-04-10", Status: dynamo.OffpeakStatusComplete, GridUsageKwh: 2.4, GridExportKwh: 0.6},
+				// Pending record on a past date: must NOT be live-integrated
+				// (no readings exist on the range path); split stays absent.
+				{Date: "2026-04-12", Status: dynamo.OffpeakStatusPending, StartEInput: 999, StartEOutput: 999},
+			}, nil
+		},
+		queryNotesFn: func(_ context.Context, _, start, end string) ([]dynamo.NoteItem, error) {
+			assert.Equal(t, rangeStart, start, "notes query bounded by range start")
+			assert.Equal(t, rangeEnd, end, "notes query bounded by range end, not today")
+			return []dynamo.NoteItem{{Date: "2026-04-11", Text: "Past note"}}, nil
+		},
+	}}
+
+	h := NewHandler(tr, nil, testSerial, testToken, "11:00", "14:00")
+	h.nowFunc = func() time.Time { return now }
+
+	resp, err := h.Handle(context.Background(), historyRequest(map[string]string{
+		"start": rangeStart, "end": rangeEnd,
+	}))
+	require.NoError(t, err)
+	assert.Equal(t, 200, resp.StatusCode)
+
+	assert.Equal(t, int32(0), tr.queryReadingsCalls.Load(),
+		"range form must not issue a readings query (Decision 15)")
+
+	hr := parseHistoryResponse(t, resp)
+	require.Len(t, hr.Days, 3)
+
+	// Stored energy totals pass through unreconciled.
+	assert.Equal(t, "2026-04-10", hr.Days[0].Date)
+	assert.Equal(t, 15.0, hr.Days[0].Epv)
+	assert.Equal(t, 4.0, hr.Days[0].EInput)
+
+	// Complete off-peak record surfaces its final deltas.
+	require.NotNil(t, hr.Days[0].OffpeakGridImportKwh)
+	assert.InDelta(t, 2.4, *hr.Days[0].OffpeakGridImportKwh, 0.001)
+	require.NotNil(t, hr.Days[0].OffpeakGridExportKwh)
+	assert.InDelta(t, 0.6, *hr.Days[0].OffpeakGridExportKwh, 0.001)
+
+	// Stored peak grid import passes through; note joined onto its day.
+	require.NotNil(t, hr.Days[1].PeakGridImportKwh)
+	assert.InDelta(t, peak, *hr.Days[1].PeakGridImportKwh, 0.001)
+	require.NotNil(t, hr.Days[1].Note)
+	assert.Equal(t, "Past note", *hr.Days[1].Note)
+
+	// Pending record on a past date: no live integration, split absent.
+	assert.Nil(t, hr.Days[2].OffpeakGridImportKwh)
+	assert.Nil(t, hr.Days[2].OffpeakGridExportKwh)
+}
+
+// TestHandleHistoryRangePredatesData verifies req 5.5: a range older than (or
+// partially older than) stored data returns whichever days exist — possibly
+// none — without error.
+func TestHandleHistoryRangePredatesData(t *testing.T) {
+	now := fixedNow()
+
+	t.Run("range entirely before stored data returns empty without error", func(t *testing.T) {
+		mr := &mockReader{
+			queryDailyEnergyFn: func(_ context.Context, _, _, _ string) ([]dynamo.DailyEnergyItem, error) {
+				return []dynamo.DailyEnergyItem{}, nil
+			},
+		}
+		h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+		h.nowFunc = func() time.Time { return now }
+
+		resp, err := h.Handle(context.Background(), historyRequest(map[string]string{
+			"start": "2020-01-01", "end": "2020-01-31",
+		}))
+		require.NoError(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Empty(t, parseHistoryResponse(t, resp).Days)
+	})
+
+	t.Run("range partially before stored data returns the existing subset", func(t *testing.T) {
+		mr := &mockReader{
+			queryDailyEnergyFn: func(_ context.Context, _, _, _ string) ([]dynamo.DailyEnergyItem, error) {
+				// Storage only has the last two days of the requested month.
+				return []dynamo.DailyEnergyItem{
+					{Date: "2026-03-30", Epv: 12},
+					{Date: "2026-03-31", Epv: 13},
+				}, nil
+			},
+		}
+		h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+		h.nowFunc = func() time.Time { return now }
+
+		resp, err := h.Handle(context.Background(), historyRequest(map[string]string{
+			"start": "2026-03-01", "end": "2026-03-31",
+		}))
+		require.NoError(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+
+		hr := parseHistoryResponse(t, resp)
+		require.Len(t, hr.Days, 2)
+		assert.Equal(t, "2026-03-30", hr.Days[0].Date)
+		assert.Equal(t, "2026-03-31", hr.Days[1].Date)
+	})
+}
+
 // TestHandleHistoryOffpeakSoftFailure verifies that an off-peak query
 // failure does not take down the entire history response. The iOS grid
 // card already degrades gracefully when the split is missing, so a

@@ -6,7 +6,7 @@ references:
 ---
 # History Period Navigation
 
-- [ ] 1. Write failing /history handler tests for the param matrix and past-only range form <!-- id:lftd8w4 -->
+- [x] 1. Write failing /history handler tests for the param matrix and past-only range form <!-- id:lftd8w4 -->
   - Table-driven in internal/api/history_test.go
   - Matrix: no params (days=7 default unchanged); days only unchanged; days+start/end mixed form 400; lone start or end 400; unparseable date 400; end<start 400; end==today 400 (range form is past-only, Decision 15); end>today 400; 31-day inclusive span OK; 32-day 400; span crossing the April DST fallback
   - Past range issues NO readings query and no live compute (recording reader stub)
@@ -15,7 +15,7 @@ references:
   - Requirements: [5.1](requirements.md#5.1), [5.2](requirements.md#5.2), [5.3](requirements.md#5.3), [5.4](requirements.md#5.4), [5.5](requirements.md#5.5), [5.6](requirements.md#5.6)
   - References: internal/api/history.go, internal/api/history_test.go, specs/history-period-navigation/design.md
 
-- [ ] 2. Implement start/end range form in handleHistory <!-- id:lftd8w5 -->
+- [x] 2. Implement start/end range form in handleHistory <!-- id:lftd8w5 -->
   - Distinguish days-present from days-defaulted for the mixed-form 400
   - Parse with time.ParseInLocation("2006-01-02", v, sydneyTZ)
   - Validation per Decision 15: end strictly before Sydney today; span via end.After(start.AddDate(0,0,30))
@@ -27,7 +27,7 @@ references:
   - Requirements: [5.1](requirements.md#5.1), [5.2](requirements.md#5.2), [5.3](requirements.md#5.3), [5.4](requirements.md#5.4), [5.5](requirements.md#5.5), [5.6](requirements.md#5.6)
   - References: internal/api/history.go
 
-- [ ] 3. Extend cross-handler parity test to energy totals, peak grid import, and off-peak split <!-- id:lftd8w6 -->
+- [x] 3. Extend cross-handler parity test to energy totals, peak grid import, and off-peak split <!-- id:lftd8w6 -->
   - cross_handler_test.go currently asserts derivedStats parity only
   - Add /day vs /history (range form) equality for a date more than 30 days old (readings TTL-expired): energy totals, peak grid import, off-peak split
   - Fixture must set PeakGridImportKwh and an offpeak row, which the current fixture leaves nil/absent
@@ -48,7 +48,7 @@ references:
   - New Networking/HistoryQuery.swift: enum HistoryQuery: Hashable, Sendable, Codable { case days(Int); case dateRange(start: String, end: String) }
   - Protocol method + default per the fetchStatus(simulateLoadWatts:) evolution pattern so ~30 existing mocks keep compiling
   - URLSessionAPIClient implements the real encoding
-  - Blocked-by: lftd8w7 (Write failing FluxCore tests for HistoryQuery and fetchHistory(query:)), failing
+  - Blocked-by: lftd8w7 (Write failing FluxCore tests for HistoryQuery and fetchHistory(query:)), failing, failing, failing, failing
   - Stream: 2
   - Requirements: [5.1](requirements.md#5.1)
   - References: Flux/Packages/FluxCore/Sources/FluxCore/Networking/HistoryQuery.swift, Flux/Packages/FluxCore/Sources/FluxCore/Networking/FluxAPIClient.swift, Flux/Packages/FluxCore/Sources/FluxCore/Networking/URLSessionAPIClient.swift
