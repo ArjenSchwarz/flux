@@ -36,7 +36,7 @@ references:
   - Requirements: [5.7](requirements.md#5.7)
   - References: internal/api/cross_handler_test.go, internal/api/day.go
 
-- [ ] 4. Write failing FluxCore tests for HistoryQuery and fetchHistory(query:) <!-- id:lftd8w7 -->
+- [x] 4. Write failing FluxCore tests for HistoryQuery and fetchHistory(query:) <!-- id:lftd8w7 -->
   - URLSessionAPIClient encodes .days(n) as ?days=N and .dateRange as ?start=...&end=...
   - Protocol-extension default delegates .days to the required fetchHistory(days:) and throws FluxAPIError.notConfigured for .dateRange
   - HistoryQuery Hashable + Codable round-trip (Codable required: ChartScope is Codable)
@@ -44,7 +44,7 @@ references:
   - Requirements: [5.1](requirements.md#5.1)
   - References: Flux/Packages/FluxCore/Sources/FluxCore/Networking/FluxAPIClient.swift, Flux/Packages/FluxCore/Sources/FluxCore/Networking/URLSessionAPIClient.swift
 
-- [ ] 5. Implement HistoryQuery and the fetchHistory(query:) client path <!-- id:lftd8w8 -->
+- [x] 5. Implement HistoryQuery and the fetchHistory(query:) client path <!-- id:lftd8w8 -->
   - New Networking/HistoryQuery.swift: enum HistoryQuery: Hashable, Sendable, Codable { case days(Int); case dateRange(start: String, end: String) }
   - Protocol method + default per the fetchStatus(simulateLoadWatts:) evolution pattern so ~30 existing mocks keep compiling
   - URLSessionAPIClient implements the real encoding
@@ -53,7 +53,7 @@ references:
   - Requirements: [5.1](requirements.md#5.1)
   - References: Flux/Packages/FluxCore/Sources/FluxCore/Networking/HistoryQuery.swift, Flux/Packages/FluxCore/Sources/FluxCore/Networking/FluxAPIClient.swift, Flux/Packages/FluxCore/Sources/FluxCore/Networking/URLSessionAPIClient.swift
 
-- [ ] 6. Write HistoryPeriod property-based and unit tests <!-- id:lftd8w9 -->
+- [x] 6. Write HistoryPeriod property-based and unit tests <!-- id:lftd8w9 -->
   - Seeded random dates across DST transitions and month-length edges, T-1361 test style
   - Invariants: next(previous(p)) == p and inverse; contains(start) true and contains(endExclusive) false; week periods always 7 slot days, months 28-31; week(containing: d) identical for every d in the same week (likewise month)
   - dayCount and start/end date strings correct
@@ -61,7 +61,7 @@ references:
   - Requirements: [1.2](requirements.md#1.2), [1.3](requirements.md#1.3), [3.1](requirements.md#3.1)
   - References: Flux/Flux/History/HistoryPeriod.swift, Flux/Packages/FluxCore/Sources/FluxCore/Helpers/DateFormatting.swift
 
-- [ ] 7. Implement HistoryPeriod <!-- id:lftd8wa -->
+- [x] 7. Implement HistoryPeriod <!-- id:lftd8wa -->
   - New Flux/Flux/History/HistoryPeriod.swift: Sydney-midnight start + endExclusive; week/month factories composing existing DateFormatting helpers
   - previous/next via byAdding .day -7/+7 and .month -1/+1 on start; assert on .days ranges (controls never shown there, silent self-return would hide a wiring bug)
   - contains, dayCount, startDateString/endDateString
@@ -70,7 +70,7 @@ references:
   - Requirements: [1.2](requirements.md#1.2), [1.3](requirements.md#1.3), [3.1](requirements.md#3.1)
   - References: Flux/Flux/History/HistoryPeriod.swift, specs/history-period-navigation/design.md
 
-- [ ] 8. Write failing HistoryViewModel tests for navigation, resolved snapshot, and cache bounds <!-- id:lftd8wb -->
+- [x] 8. Write failing HistoryViewModel tests for navigation, resolved snapshot, and cache bounds <!-- id:lftd8wb -->
   - Recording mock asserts the expected HistoryQuery per intent
   - selectRange resets the anchor; reload()/loadHistory never touch it (req 1.8)
   - navigateNext from previous week collapses to anchor nil + .days query; jumpTo a date in the current month gives anchor nil
@@ -83,7 +83,7 @@ references:
   - Requirements: [1.2](requirements.md#1.2), [1.3](requirements.md#1.3), [1.4](requirements.md#1.4), [1.8](requirements.md#1.8), [2.1](requirements.md#2.1), [2.3](requirements.md#2.3), [3.3](requirements.md#3.3), [6.1](requirements.md#6.1), [7.1](requirements.md#7.1), [7.2](requirements.md#7.2), [7.3](requirements.md#7.3)
   - References: Flux/Flux/History/HistoryViewModel.swift
 
-- [ ] 9. Implement HistoryViewModel intent methods, resolvedQuery, and bounded cache <!-- id:lftd8wc -->
+- [x] 9. Implement HistoryViewModel intent methods, resolvedQuery, and bounded cache <!-- id:lftd8wc -->
   - periodAnchor: Date? (nil = current); intent methods selectRange/navigatePrevious/navigateNext/jumpTo/returnToCurrent; the load path is anchor-agnostic
   - Coalescing re-keyed on RequestedPeriod (range + anchor)
   - resolvedQuery set inside load() drives chartDomain, resolvedRangeDays, the periodQuery accessor, and the next-chevron disabled state
@@ -94,7 +94,7 @@ references:
   - Requirements: [1.2](requirements.md#1.2), [1.3](requirements.md#1.3), [1.4](requirements.md#1.4), [1.6](requirements.md#1.6), [1.8](requirements.md#1.8), [2.1](requirements.md#2.1), [2.3](requirements.md#2.3), [3.3](requirements.md#3.3), [6.1](requirements.md#6.1), [7.1](requirements.md#7.1), [7.2](requirements.md#7.2), [7.3](requirements.md#7.3)
   - References: Flux/Flux/History/HistoryViewModel.swift, Flux/Flux/History/HistoryChartDomain.swift
 
-- [ ] 10. Implement HistoryPeriodHeader <!-- id:lftd8wd -->
+- [x] 10. Implement HistoryPeriodHeader <!-- id:lftd8wd -->
   - New Flux/Flux/History/HistoryPeriodHeader.swift styled after DayNavigationHeader (DayDetailViewSupport.swift:50): chevrons + centred tappable label
   - File-private Sydney formatters (MMM d, day-only d, MMM yyyy - none exist today)
   - Label opens graphical DatePicker (popover; sheet on compact iOS) with in: ...sydneyTodayEnd and .environment calendar/timeZone set to Sydney (device-calendar rendering would be off by a day on non-Sydney devices)
@@ -104,7 +104,7 @@ references:
   - Requirements: [1.1](requirements.md#1.1), [1.3](requirements.md#1.3), [1.5](requirements.md#1.5), [2.1](requirements.md#2.1), [2.2](requirements.md#2.2), [3.1](requirements.md#3.1), [3.2](requirements.md#3.2), [4.1](requirements.md#4.1)
   - References: Flux/Flux/History/HistoryPeriodHeader.swift, Flux/Flux/DayDetail/DayDetailViewSupport.swift
 
-- [ ] 11. Wire HistoryView: header, key handling, reload switches, empty-period notice, stats subtitle <!-- id:lftd8we -->
+- [x] 11. Wire HistoryView: header, key handling, reload switches, empty-period notice, stats subtitle <!-- id:lftd8we -->
   - Header between range picker and note row, Wk/Mo only
   - Picker onChange and .task call selectRange; .refreshable and error-state Retry switch to reload()
   - macOS: .focusable() then .onKeyPress(left/right), guarded to Wk/Mo
@@ -116,7 +116,7 @@ references:
   - Requirements: [1.1](requirements.md#1.1), [1.4](requirements.md#1.4), [1.5](requirements.md#1.5), [1.6](requirements.md#1.6), [1.7](requirements.md#1.7), [1.8](requirements.md#1.8), [2.2](requirements.md#2.2), [2.3](requirements.md#2.3), [6.2](requirements.md#6.2), [6.3](requirements.md#6.3)
   - References: Flux/Flux/History/HistoryView.swift, Flux/Flux/History/HistoryStatsOverviewCard.swift
 
-- [ ] 12. Carry HistoryQuery through the chart-expansion scope and MockFluxAPIClient <!-- id:lftd8wf -->
+- [x] 12. Carry HistoryQuery through the chart-expansion scope and MockFluxAPIClient <!-- id:lftd8wf -->
   - ChartScope.historyRange(days:) becomes historyRange(HistoryQuery) (Codable preserved)
   - ChartSceneObserver fetches via the scope's query; ChartExpansionContent.historyRangeDays derives the day count (.dateRange via inclusiveDayCount)
   - ExpandedChartView default scope .historyRange(.days(defaultHistoryRangeDays))

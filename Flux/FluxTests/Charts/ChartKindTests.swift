@@ -1,3 +1,4 @@
+import FluxCore
 import Foundation
 import Testing
 @testable import Flux
@@ -31,7 +32,7 @@ struct ChartKindTests {
 
     @Test("ChartScope.historyRange round-trips through JSON")
     func chartScopeHistoryRangeRoundTrips() throws {
-        let scope = ChartScope.historyRange(days: 14)
+        let scope = ChartScope.historyRange(.days(14))
         let data = try JSONEncoder().encode(scope)
         let decoded = try JSONDecoder().decode(ChartScope.self, from: data)
         #expect(decoded == scope)
@@ -50,9 +51,9 @@ struct ChartKindTests {
     func chartScopeHashableDistinguishesCases() {
         let date = Date(timeIntervalSince1970: 1_700_000_000)
         let scopes: Set<ChartScope> = [
-            .historyRange(days: 7),
-            .historyRange(days: 14),
-            .historyRange(days: 30),
+            .historyRange(.days(7)),
+            .historyRange(.days(14)),
+            .historyRange(.days(30)),
             .daySpecific(date: date)
         ]
         #expect(scopes.count == 4)
@@ -60,6 +61,6 @@ struct ChartKindTests {
 
     @Test("ChartScope.historyRange differing only in days are not equal")
     func chartScopeHistoryRangeDiffersByDays() {
-        #expect(ChartScope.historyRange(days: 7) != ChartScope.historyRange(days: 14))
+        #expect(ChartScope.historyRange(.days(7)) != ChartScope.historyRange(.days(14)))
     }
 }

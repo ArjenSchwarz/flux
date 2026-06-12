@@ -1,4 +1,5 @@
 #if canImport(UIKit) && !os(macOS)
+import FluxCore
 import Foundation
 import SwiftUI
 import Testing
@@ -20,9 +21,9 @@ struct iOSExpandIntegrationTests {
         }
 
         let cases: [(ChartKind, ChartScope)] = [
-            (.historySolar, .historyRange(days: 7)),
-            (.historyGridUsage, .historyRange(days: 14)),
-            (.historyDailyUsage, .historyRange(days: 30)),
+            (.historySolar, .historyRange(.days(7))),
+            (.historyGridUsage, .historyRange(.days(14))),
+            (.historyDailyUsage, .historyRange(.days(30))),
             (.dayPower, .daySpecific(date: Date(timeIntervalSince1970: 1_700_000_000))),
             (.dayBatteryCombined, .daySpecific(date: Date(timeIntervalSince1970: 1_710_000_000)))
         ]

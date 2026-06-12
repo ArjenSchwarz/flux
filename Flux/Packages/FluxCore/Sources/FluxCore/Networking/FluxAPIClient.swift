@@ -4,6 +4,12 @@ public protocol FluxAPIClient: Sendable {
     func fetchDay(date: String) async throws -> DayDetailResponse
     func saveNote(date: String, text: String) async throws -> NoteResponse
 
+    // History period navigation — history-period-navigation spec. Carries
+    // either the existing day-count form or an explicit past date range in a
+    // single value, so the view model, API client, and chart-expansion scope
+    // all fetch the same window.
+    func fetchHistory(query: HistoryQuery) async throws -> HistoryResponse
+
     // Dashboard simulation — dashboard-simulation spec. A SEPARATE method from
     // `fetchStatus()` so the widget timeline and settings-validation call
     // sites stay param-free and can never simulate. Only DashboardViewModel
@@ -91,6 +97,19 @@ public extension FluxAPIClient {
 
     func fetchPresets() async throws -> [SimulationPreset] {
         throw FluxAPIError.notConfigured
+    }
+
+    // Default so existing conformers (~30 test mocks) need no change — the
+    // fetchStatus(simulateLoadWatts:) evolution pattern. `.days` delegates to
+    // the required `fetchHistory(days:)`; `.dateRange` throws, so only mocks
+    // that exercise past-period navigation implement the new method.
+    func fetchHistory(query: HistoryQuery) async throws -> HistoryResponse {
+        switch query {
+        case let .days(days):
+            return try await fetchHistory(days: days)
+        case .dateRange:
+            throw FluxAPIError.notConfigured
+        }
     }
 
     func createPreset(_: SimulationPresetDraft) async throws -> SimulationPreset {

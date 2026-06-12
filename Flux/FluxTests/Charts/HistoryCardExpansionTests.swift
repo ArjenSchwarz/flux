@@ -20,56 +20,65 @@ struct HistoryCardExpansionTests {
         #expect(kinds.count == 3)
     }
 
-    @Test("HistorySolarCard.expansionScope tracks the current rangeDays")
-    func solarExpansionScopeTracksRange() {
-        for days in [7, 14, 30] {
-            let card = makeSolarCard(rangeDays: days)
-            #expect(card.expansionScope == .historyRange(days: days))
+    @Test("HistorySolarCard.expansionScope carries the current periodQuery")
+    func solarExpansionScopeTracksQuery() {
+        for query in Self.sampleQueries {
+            let card = makeSolarCard(periodQuery: query)
+            #expect(card.expansionScope == .historyRange(query))
         }
     }
 
-    @Test("HistoryGridUsageCard.expansionScope tracks the current rangeDays")
-    func gridExpansionScopeTracksRange() {
-        for days in [7, 14, 30] {
-            let card = makeGridCard(rangeDays: days)
-            #expect(card.expansionScope == .historyRange(days: days))
+    @Test("HistoryGridUsageCard.expansionScope carries the current periodQuery")
+    func gridExpansionScopeTracksQuery() {
+        for query in Self.sampleQueries {
+            let card = makeGridCard(periodQuery: query)
+            #expect(card.expansionScope == .historyRange(query))
         }
     }
 
-    @Test("HistoryDailyUsageCard.expansionScope tracks the current rangeDays")
-    func dailyUsageExpansionScopeTracksRange() {
-        for days in [7, 14, 30] {
-            let card = makeDailyUsageCard(rangeDays: days)
-            #expect(card.expansionScope == .historyRange(days: days))
+    @Test("HistoryDailyUsageCard.expansionScope carries the current periodQuery")
+    func dailyUsageExpansionScopeTracksQuery() {
+        for query in Self.sampleQueries {
+            let card = makeDailyUsageCard(periodQuery: query)
+            #expect(card.expansionScope == .historyRange(query))
         }
     }
 
-    private func makeSolarCard(rangeDays: Int) -> HistorySolarCard {
+    /// Both query forms: the fixed day-count windows and a navigated past
+    /// period, which the expansion scope must carry unchanged (Decision 13).
+    private static let sampleQueries: [HistoryQuery] = [
+        .days(7),
+        .days(14),
+        .days(30),
+        .dateRange(start: "2026-04-06", end: "2026-04-12")
+    ]
+
+    private func makeSolarCard(periodQuery: HistoryQuery) -> HistorySolarCard {
         HistorySolarCard(
             entries: [],
             summary: .empty,
             selectedDate: nil,
-            rangeDays: rangeDays,
+            periodQuery: periodQuery,
             onSelect: { _ in }
         )
     }
 
-    private func makeGridCard(rangeDays: Int) -> HistoryGridUsageCard {
+    private func makeGridCard(periodQuery: HistoryQuery) -> HistoryGridUsageCard {
         HistoryGridUsageCard(
             entries: [],
             summary: .empty,
             selectedDate: nil,
-            rangeDays: rangeDays,
+            periodQuery: periodQuery,
             onSelect: { _ in }
         )
     }
 
-    private func makeDailyUsageCard(rangeDays: Int) -> HistoryDailyUsageCard {
+    private func makeDailyUsageCard(periodQuery: HistoryQuery) -> HistoryDailyUsageCard {
         HistoryDailyUsageCard(
             entries: [],
             summary: .empty,
             selectedDate: nil,
-            rangeDays: rangeDays,
+            periodQuery: periodQuery,
             onSelect: { _ in }
         )
     }

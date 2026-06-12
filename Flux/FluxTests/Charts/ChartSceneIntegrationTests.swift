@@ -1,4 +1,5 @@
 #if os(macOS)
+import FluxCore
 import Foundation
 import Testing
 @testable import Flux
@@ -31,11 +32,11 @@ struct ChartSceneIntegrationTests {
         }
 
         action(.dayPower, scope: .daySpecific(date: Date(timeIntervalSince1970: 1_714_521_600)))
-        action(.historySolar, scope: .historyRange(days: 7))
+        action(.historySolar, scope: .historyRange(.days(7)))
 
         #expect(registry.current.count == 2)
         #expect(registry.current[.dayPower] == .daySpecific(date: Date(timeIntervalSince1970: 1_714_521_600)))
-        #expect(registry.current[.historySolar] == .historyRange(days: 7))
+        #expect(registry.current[.historySolar] == .historyRange(.days(7)))
     }
 
     @Test("Relaunch: a fresh registry is empty (no persistence)")
@@ -56,8 +57,8 @@ struct ChartSceneIntegrationTests {
         let solar = ExpandedChartView.resolvedScope(for: .historySolar, in: registry, today: { today })
         let dayPower = ExpandedChartView.resolvedScope(for: .dayPower, in: registry, today: { today })
 
-        if case let .historyRange(days) = solar {
-            #expect(days > 0)
+        if case let .historyRange(query) = solar {
+            #expect(query == .days(ExpandedChartView.defaultHistoryRangeDays))
         } else {
             Issue.record("Expected historyRange fallback for historySolar")
         }

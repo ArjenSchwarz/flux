@@ -4,6 +4,10 @@ import SwiftUI
 struct HistoryStatsOverviewCard: View {
     let summary: HistoryViewModel.PeriodSummary
     let entries: [HistoryViewModel.SolarEntry]
+    /// Calendar day-count of the rendered past period, or `nil` for the
+    /// current period. Drives the "N of M days" coverage subtitle (req 6.2);
+    /// the costs card's "days priced" caption is intentionally unchanged.
+    var periodDays: Int?
     let onSelect: (String) -> Void
 
     /// Case order is load-bearing: `ForEach(TileKey.allCases, …)` renders tiles
@@ -33,7 +37,7 @@ struct HistoryStatsOverviewCard: View {
         HistoryCardChrome(
             title: "Period overview",
             kpi: HistoryStatsFormatters.dateRange(entries: entries),
-            subtitle: nil
+            subtitle: Self.periodCoverageSubtitle(dayCount: summary.dayCount, periodDays: periodDays)
         ) {
             grid
         }
@@ -79,6 +83,14 @@ struct HistoryStatsOverviewCard: View {
 // MARK: - Static helpers
 
 extension HistoryStatsOverviewCard {
+    /// "N of M days" when a past period has fewer recorded days than calendar
+    /// days (req 6.2); `nil` for the current period (`periodDays == nil`,
+    /// req 6.3) or a fully recorded past period.
+    static func periodCoverageSubtitle(dayCount: Int, periodDays: Int?) -> String? {
+        guard let periodDays, dayCount < periodDays else { return nil }
+        return "\(dayCount) of \(periodDays) days"
+    }
+
     static func label(for tile: TileKey) -> String {
         switch tile {
         case .totalUsage: return "Total usage"

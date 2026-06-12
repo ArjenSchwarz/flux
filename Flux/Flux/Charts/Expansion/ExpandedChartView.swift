@@ -1,3 +1,4 @@
+import FluxCore
 import SwiftUI
 
 struct ExpandedChartView: View {
@@ -88,7 +89,7 @@ struct ExpandedChartView: View {
         }
         switch kind.hostKind {
         case .history:
-            return .historyRange(days: defaultHistoryRangeDays)
+            return .historyRange(.days(defaultHistoryRangeDays))
         case .day:
             return .daySpecific(date: today())
         }

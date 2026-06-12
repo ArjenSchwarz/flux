@@ -7,7 +7,7 @@ import Testing
 /// Requirement 5.2 / 5.3: the producing range must not influence the cards.
 /// Given an identical day set, every card produces identical `DerivedState`
 /// and `PeriodSummary`, and the resolved day-count `N` flows unchanged into the
-/// card's `ChartScope.historyRange(days:)` expansion scope.
+/// card's `ChartScope.historyRange(_:)` expansion scope.
 @MainActor @Suite(.serialized)
 struct HistoryRangeConsistencyTests {
     private static let sampleDays: [DayEnergy] = [
@@ -69,26 +69,26 @@ struct HistoryRangeConsistencyTests {
 
         #expect(viewModel.resolvedRangeDays == 12)
 
-        // The cards receive `rangeDays: viewModel.resolvedRangeDays`, which
-        // becomes `ChartScope.historyRange(days:)` — the resolved N, not the
-        // fixed 7/14/30 ([5.3]).
+        // The cards receive `periodQuery: viewModel.periodQuery`, which
+        // becomes `ChartScope.historyRange(_:)` — the resolved `.days(N)`,
+        // not the fixed 7/14/30 ([5.3]).
         let derived = viewModel.derived
         let solar = HistorySolarCard(
             entries: derived.solar, summary: derived.summary,
-            selectedDate: nil, rangeDays: viewModel.resolvedRangeDays, onSelect: { _ in }
+            selectedDate: nil, periodQuery: viewModel.periodQuery, onSelect: { _ in }
         )
         let grid = HistoryGridUsageCard(
             entries: derived.grid, summary: derived.summary,
-            selectedDate: nil, rangeDays: viewModel.resolvedRangeDays, onSelect: { _ in }
+            selectedDate: nil, periodQuery: viewModel.periodQuery, onSelect: { _ in }
         )
         let usage = HistoryDailyUsageCard(
             entries: derived.dailyUsage, summary: derived.summary,
-            selectedDate: nil, rangeDays: viewModel.resolvedRangeDays, onSelect: { _ in }
+            selectedDate: nil, periodQuery: viewModel.periodQuery, onSelect: { _ in }
         )
 
-        #expect(solar.expansionScope == .historyRange(days: 12))
-        #expect(grid.expansionScope == .historyRange(days: 12))
-        #expect(usage.expansionScope == .historyRange(days: 12))
+        #expect(solar.expansionScope == .historyRange(.days(12)))
+        #expect(grid.expansionScope == .historyRange(.days(12)))
+        #expect(usage.expansionScope == .historyRange(.days(12)))
     }
 
     // MARK: - Helpers
