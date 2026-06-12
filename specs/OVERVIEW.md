@@ -296,5 +296,6 @@ Navigation to past calendar periods on the History screen's Wk/Mo ranges: chevro
 
 - [decision_log.md](history-period-navigation/decision_log.md)
 - [design.md](history-period-navigation/design.md)
+- [implementation.md](history-period-navigation/implementation.md)
 - [requirements.md](history-period-navigation/requirements.md)
 - [tasks.md](history-period-navigation/tasks.md)
