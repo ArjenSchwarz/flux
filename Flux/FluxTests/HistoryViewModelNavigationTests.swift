@@ -136,6 +136,29 @@ struct HistoryViewModelNavigationTests {
     }
 
     @Test
+    func jumpToDateInsideTheDisplayedPeriodIssuesNoRequest() async throws {
+        let context = try makeModelContext()
+        let apiClient = RecordingQueryAPIClient()
+        let viewModel = makeViewModel(apiClient: apiClient, modelContext: context)
+
+        await viewModel.loadHistory(range: .weekToDate)
+        await viewModel.navigatePrevious()
+
+        // The picker lands on another date inside the already-displayed past
+        // week: nothing would change, so no request is issued and the anchor
+        // stays where it is.
+        await viewModel.jumpTo(date: sydneyMidnight(year: 2026, month: 4, day: 9))
+        #expect(apiClient.requestedQueries == [.days(3), Self.previousWeekQuery])
+        #expect(viewModel.periodAnchor == sydneyMidnight(year: 2026, month: 4, day: 6))
+
+        // Same for re-selecting a date inside the displayed current period.
+        await viewModel.returnToCurrent()
+        await viewModel.jumpTo(date: sydneyMidnight(year: 2026, month: 4, day: 14))
+        #expect(apiClient.requestedQueries == [.days(3), Self.previousWeekQuery, .days(3)])
+        #expect(viewModel.periodAnchor == nil)
+    }
+
+    @Test
     func returnToCurrentClearsAnchorAndRequestsDaysForm() async throws {
         let context = try makeModelContext()
         let apiClient = RecordingQueryAPIClient()
@@ -237,6 +260,34 @@ struct HistoryViewModelNavigationTests {
         let renderedDomain = try #require(viewModel.chartDomain)
         #expect(renderedDomain.slotDates.first == sydneyMidnight(year: 2026, month: 4, day: 6))
         #expect(renderedDomain.slotDates.count == 7)
+    }
+
+    // MARK: - Partial past period averages (req 6.1)
+
+    @Test
+    func pastPeriodAveragesDivideByRecordedDaysNotPeriodLength() async throws {
+        let context = try makeModelContext()
+        let apiClient = RecordingQueryAPIClient()
+        let viewModel = makeViewModel(apiClient: apiClient, modelContext: context)
+        await viewModel.loadHistory(range: .monthToDate)
+
+        // March 2026 spans 31 days but only 11 of them have recorded data.
+        let recordedDays = (1 ... 11).map { day in
+            DayEnergy(
+                date: String(format: "2026-03-%02d", day),
+                epv: 4.0, eInput: 1.0, eOutput: 0.5, eCharge: 2.0, eDischarge: 3.0
+            )
+        }
+        apiClient.historyResult = .success(HistoryResponse(days: recordedDays))
+        await viewModel.navigatePrevious()
+
+        // Req 6.1: per-day averages divide by the 11 recorded days — the
+        // 31-day period length only feeds the "N of M days" subtitle.
+        let summary = viewModel.derived.summary
+        #expect(viewModel.resolvedRangeDays == 31)
+        #expect(summary.dayCount == 11)
+        #expect(summary.solarPerDayKwh == 4.0)
+        #expect(summary.dischargePerDayKwh == 3.0)
     }
 
     // MARK: - Cache fallback bounded both ends (req 7.2)

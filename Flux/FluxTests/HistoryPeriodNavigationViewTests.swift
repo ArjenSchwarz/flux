@@ -86,6 +86,30 @@ struct HistoryPeriodNavigationViewTests {
         )
     }
 
+    // MARK: - Jump picker upper bound (req 3.2)
+
+    @Test
+    func sydneyTodayEndIsTheEndOfTheSydneyDayNotTheDeviceDay() throws {
+        // 15:00 UTC on 2026-04-15 is already 01:00 AEST on 2026-04-16, so the
+        // Sydney date differs from the UTC/device date. The picker bound must
+        // be the last instant of the Sydney day — Apr 16, not Apr 15.
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: CachedDayEnergy.self, configurations: configuration)
+        let now = Calendar(identifier: .gregorian).date(from: DateComponents(
+            timeZone: TimeZone(secondsFromGMT: 0),
+            year: 2026, month: 4, day: 15, hour: 15, minute: 0
+        ))!
+        let viewModel = HistoryViewModel(
+            apiClient: EmptyHistoryAPIClient(),
+            modelContext: ModelContext(container),
+            nowProvider: { now },
+            firstWeekdayProvider: { 2 }
+        )
+
+        // One second before Sydney midnight of Apr 17 — the end of Apr 16.
+        #expect(viewModel.sydneyTodayEnd == sydneyDate(2026, 4, 17).addingTimeInterval(-1))
+    }
+
     // MARK: - Empty past period keeps the cards rendered (req 1.6)
 
     @Test

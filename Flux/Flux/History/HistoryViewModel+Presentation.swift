@@ -63,14 +63,14 @@ extension HistoryViewModel {
     /// The rendered period for the header label — `nil` for fixed `.days`
     /// ranges, where the header is not shown (req 1.5).
     var displayedPeriod: HistoryPeriod? {
-        switch resolvedRange {
-        case .days:
-            return nil
-        case .weekToDate:
-            return .week(containing: chartReferenceDate, firstWeekday: firstWeekdayProvider())
-        case .monthToDate:
-            return .month(containing: chartReferenceDate)
-        }
+        period(for: resolvedRange, containing: chartReferenceDate)
+    }
+
+    /// The stats card's "N of M days" denominator: the period's calendar
+    /// day-count for a past period, or `nil` for the current one, which needs
+    /// no coverage indicator (req 6.3).
+    var pastPeriodDayCount: Int? {
+        isViewingCurrentPeriod ? nil : resolvedRangeDays
     }
 
     /// Upper bound for the jump picker: the last instant of the Sydney day

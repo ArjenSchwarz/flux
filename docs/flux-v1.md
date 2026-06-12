@@ -199,9 +199,9 @@ Returns:
 }
 ```
 
-**`GET /history?days=7`**
+**`GET /history?days=7`** (or `?start=2026-03-01&end=2026-03-31`)
 
-Returns daily energy summaries for the bar chart:
+Returns daily energy summaries for the bar chart. The `days=N` form (1–31) covers the last N days ending Sydney today; the `start`/`end` form serves a past period from stored values only (inclusive `YYYY-MM-DD` bounds, `end` strictly before Sydney today, max 31 days):
 
 ```json
 {
@@ -326,7 +326,7 @@ Accessed via navigation from Dashboard. Shows daily energy totals.
 
 ### Display
 
-Grouped vertical bar chart showing the last 7 days (default), with a segmented control offering 7d / 14d / 30d plus two calendar-anchored to-date ranges: Wk (week to date) and Mo (month to date). The to-date ranges resolve to an inclusive day-count (1–31) against the Sydney calendar, with the week's first weekday taken from the device locale, and load over the same `/history?days=N` contract.
+Grouped vertical bar chart showing the last 7 days (default), with a segmented control offering 7d / 14d / 30d plus two calendar-anchored to-date ranges: Wk (week to date) and Mo (month to date). The to-date ranges resolve to an inclusive day-count (1–31) against the Sydney calendar, with the week's first weekday taken from the device locale, and load over the same `/history?days=N` contract. The Wk and Mo ranges also allow navigating to past weeks and months, which load via the `/history` `start`/`end` date-range form (stored values only); the current period always uses `days=N`.
 
 Each day shows 5 side-by-side bars:
 

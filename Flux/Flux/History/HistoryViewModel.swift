@@ -10,10 +10,13 @@ final class HistoryViewModel {
     private(set) var isLoading = false
     private(set) var error: FluxAPIError?
     private(set) var lastRequestedRange: HistoryRange = .days(7)
-    /// Inclusive day-count resolved on the last load: the requested `N` for the
+    /// Inclusive day-count of the rendered window: the requested `N` for the
     /// `.days` form, or the period's calendar day-count for a past range — the
-    /// M in the stats card's "N of M days".
-    private(set) var resolvedRangeDays: Int = 7
+    /// M in the stats card's "N of M days". Derived from `resolvedQuery` so it
+    /// can never disagree with the rendered data; the unparseable-`dateRange`
+    /// arm is unreachable (the only producer is `HistoryPeriod`'s formatted
+    /// strings), so 0 is just a conservative fallback.
+    var resolvedRangeDays: Int { resolvedQuery.dayCount ?? 0 }
     /// The range whose data is currently in `days`. Drives `chartDomain` so the
     /// charts' x-axis reservation matches the rendered data, not an in-flight
     /// selection.
@@ -36,7 +39,13 @@ final class HistoryViewModel {
         let anchor: Date?
     }
 
-    private var lastRequestedPeriod = RequestedPeriod(range: .days(7), anchor: nil)
+    /// Always the latest selection: `lastRequestedRange` is recorded before the
+    /// isLoading guard and `periodAnchor` is mutated only by the intent
+    /// methods, so reading them live is exactly the pair the coalescing loop
+    /// must converge on.
+    private var lastRequestedPeriod: RequestedPeriod {
+        RequestedPeriod(range: lastRequestedRange, anchor: periodAnchor)
+    }
 
     private let apiClient: any FluxAPIClient
     private let modelContext: ModelContext
@@ -81,7 +90,6 @@ final class HistoryViewModel {
         // chosen during an in-flight load is not dropped — the in-flight load
         // coalesces to it. The anchor is read, never written, here (req 1.8).
         lastRequestedRange = range
-        lastRequestedPeriod = RequestedPeriod(range: range, anchor: periodAnchor)
         guard !isLoading else { return }
 
         isLoading = true
@@ -102,12 +110,11 @@ final class HistoryViewModel {
         }
     }
 
-    /// The query, day-count, and cache window for one load. Resolved before
-    /// the fetch; adopted into the resolved snapshot only once the fetch has
-    /// settled, atomically with `days`.
+    /// The query and cache window for one load. Resolved before the fetch;
+    /// adopted into the resolved snapshot only once the fetch has settled,
+    /// atomically with `days`.
     private struct LoadTarget {
         let query: HistoryQuery
-        let rangeDays: Int
         let cacheStart: String
         let cacheEnd: String
     }
@@ -142,7 +149,6 @@ final class HistoryViewModel {
         if let anchor = period.anchor, let resolved = self.period(for: period.range, containing: anchor) {
             return LoadTarget(
                 query: .dateRange(start: resolved.startDateString, end: resolved.endDateString),
-                rangeDays: resolved.dayCount,
                 cacheStart: resolved.startDateString,
                 cacheEnd: resolved.endDateString
             )
@@ -150,14 +156,12 @@ final class HistoryViewModel {
         let resolvedDays = period.range.resolvedDays(now: now, firstWeekday: firstWeekdayProvider())
         return LoadTarget(
             query: .days(resolvedDays),
-            rangeDays: resolvedDays,
             cacheStart: DateFormatting.windowStartDateString(inclusiveDays: resolvedDays, now: now),
             cacheEnd: DateFormatting.todayDateString(now: now)
         )
     }
 
     private func adopt(_ target: LoadTarget, range: HistoryRange) {
-        resolvedRangeDays = target.rangeDays
         resolvedRange = range
         resolvedQuery = target.query
     }
@@ -214,15 +218,33 @@ final class HistoryViewModel {
     private func navigate(to target: HistoryPeriod) async {
         // The current-period check uses Sydney "today" via nowProvider(),
         // re-evaluated on each trigger (requirements Definitions).
-        periodAnchor = target.contains(nowProvider()) ? nil : target.start
+        let isCurrent = target.contains(nowProvider())
+        // Re-selecting the already-rendered period (the jump picker landing on
+        // a date inside the displayed week/month) would re-fetch an identical
+        // window — skip it. Only when settled (an in-flight load may still
+        // coalesce to a newer selection) and healthy (an error state must keep
+        // its retry path).
+        if !isLoading, error == nil, isAlreadyRendered(target, isCurrent: isCurrent) {
+            return
+        }
+        periodAnchor = isCurrent ? nil : target.start
         await loadHistory(range: lastRequestedRange)
+    }
+
+    /// True when `target` is exactly the period whose data is in `days`,
+    /// keyed off the resolved snapshot like every other rendered-state check.
+    private func isAlreadyRendered(_ target: HistoryPeriod, isCurrent: Bool) -> Bool {
+        if isCurrent { return isViewingCurrentPeriod }
+        return resolvedQuery == .dateRange(start: target.startDateString, end: target.endDateString)
     }
 
     private func navigationBasePeriod() -> HistoryPeriod? {
         period(for: lastRequestedRange, containing: periodAnchor ?? nowProvider())
     }
 
-    private func period(for range: HistoryRange, containing date: Date) -> HistoryPeriod? {
+    // Internal (not private) so the presentation extension's `displayedPeriod`
+    // derives the rendered period through the same switch.
+    func period(for range: HistoryRange, containing date: Date) -> HistoryPeriod? {
         switch range {
         case .days:
             return nil

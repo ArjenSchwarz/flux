@@ -126,10 +126,10 @@ struct HistoryPeriodHeader: View {
         case .weekToDate:
             let calendar = DateFormatting.sydneyCalendar
             let sameMonth = calendar.isDate(period.start, equalTo: period.lastDay, toGranularity: .month)
-            let start = HistoryPeriodLabelFormatter.shortMonthDay.string(from: period.start)
+            let start = DateFormatting.shortMonthDay(from: period.start)
             let end = sameMonth
                 ? HistoryPeriodLabelFormatter.dayOnly.string(from: period.lastDay)
-                : HistoryPeriodLabelFormatter.shortMonthDay.string(from: period.lastDay)
+                : DateFormatting.shortMonthDay(from: period.lastDay)
             return "\(start) – \(end)"
         case .monthToDate:
             return HistoryPeriodLabelFormatter.monthYear.string(from: period.start)
@@ -138,15 +138,9 @@ struct HistoryPeriodHeader: View {
 }
 
 /// Sydney-zoned label formatters, mirroring the `HistorySummaryDateFormatter`
-/// precedent. None of these formats exist elsewhere today.
+/// precedent. Only formats that exist nowhere else live here — the shared
+/// `"MMM d"` form comes from `DateFormatting.shortMonthDay(from:)`.
 private enum HistoryPeriodLabelFormatter {
-    static let shortMonthDay: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.timeZone = DateFormatting.sydneyTimeZone
-        formatter.dateFormat = "MMM d"
-        return formatter
-    }()
-
     static let dayOnly: DateFormatter = {
         let formatter = DateFormatter()
         formatter.timeZone = DateFormatting.sydneyTimeZone

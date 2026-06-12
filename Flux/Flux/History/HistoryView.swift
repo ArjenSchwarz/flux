@@ -197,15 +197,17 @@ struct HistoryView: View {
     @ViewBuilder
     private var historyContent: some View {
         let derived = viewModel.derived
+        // Captured once like `derived`: each access re-runs the interval math.
+        let chartDomain = viewModel.chartDomain
         let selectedDate = viewModel.selectedDay.flatMap { DateFormatting.parseDayDate($0.date) }
         VStack(alignment: .leading, spacing: 16) {
             statsOverviewCard(derived: derived)
             if let periodCosts = viewModel.periodCosts {
                 HistoryPeriodCostsCard(costs: periodCosts)
             }
-            solarCard(derived: derived, selectedDate: selectedDate)
-            gridUsageCard(derived: derived, selectedDate: selectedDate)
-            dailyUsageCard(derived: derived, selectedDate: selectedDate)
+            solarCard(derived: derived, selectedDate: selectedDate, chartDomain: chartDomain)
+            gridUsageCard(derived: derived, selectedDate: selectedDate, chartDomain: chartDomain)
+            dailyUsageCard(derived: derived, selectedDate: selectedDate, chartDomain: chartDomain)
             if let selectedDay = viewModel.selectedDay {
                 summaryCard(for: selectedDay)
             }
@@ -217,6 +219,7 @@ struct HistoryView: View {
     @ViewBuilder
     private var historyContentRegular: some View {
         let derived = viewModel.derived
+        let chartDomain = viewModel.chartDomain
         let selectedDate = viewModel.selectedDay.flatMap { DateFormatting.parseDayDate($0.date) }
         VStack(alignment: .leading, spacing: 16) {
             statsOverviewCard(derived: derived)
@@ -224,9 +227,9 @@ struct HistoryView: View {
                 HistoryPeriodCostsCard(costs: periodCosts)
             }
             AdaptiveColumnsLayout {
-                solarCard(derived: derived, selectedDate: selectedDate)
-                gridUsageCard(derived: derived, selectedDate: selectedDate)
-                dailyUsageCard(derived: derived, selectedDate: selectedDate)
+                solarCard(derived: derived, selectedDate: selectedDate, chartDomain: chartDomain)
+                gridUsageCard(derived: derived, selectedDate: selectedDate, chartDomain: chartDomain)
+                dailyUsageCard(derived: derived, selectedDate: selectedDate, chartDomain: chartDomain)
                 if let selectedDay = viewModel.selectedDay {
                     summaryCard(for: selectedDay)
                 }
@@ -241,43 +244,49 @@ struct HistoryView: View {
         HistoryStatsOverviewCard(
             summary: derived.summary,
             entries: derived.solar,
-            periodDays: viewModel.isViewingCurrentPeriod ? nil : viewModel.resolvedRangeDays,
+            periodDays: viewModel.pastPeriodDayCount,
             onSelect: selectDay
         )
     }
 
     @ViewBuilder
-    private func solarCard(derived: HistoryViewModel.DerivedState, selectedDate: Date?) -> some View {
+    private func solarCard(
+        derived: HistoryViewModel.DerivedState, selectedDate: Date?, chartDomain: HistoryChartDomain?
+    ) -> some View {
         HistorySolarCard(
             entries: derived.solar,
             summary: derived.summary,
             selectedDate: selectedDate,
             periodQuery: viewModel.periodQuery,
-            chartDomain: viewModel.chartDomain,
+            chartDomain: chartDomain,
             onSelect: selectDay
         )
     }
 
     @ViewBuilder
-    private func gridUsageCard(derived: HistoryViewModel.DerivedState, selectedDate: Date?) -> some View {
+    private func gridUsageCard(
+        derived: HistoryViewModel.DerivedState, selectedDate: Date?, chartDomain: HistoryChartDomain?
+    ) -> some View {
         HistoryGridUsageCard(
             entries: derived.grid,
             summary: derived.summary,
             selectedDate: selectedDate,
             periodQuery: viewModel.periodQuery,
-            chartDomain: viewModel.chartDomain,
+            chartDomain: chartDomain,
             onSelect: selectDay
         )
     }
 
     @ViewBuilder
-    private func dailyUsageCard(derived: HistoryViewModel.DerivedState, selectedDate: Date?) -> some View {
+    private func dailyUsageCard(
+        derived: HistoryViewModel.DerivedState, selectedDate: Date?, chartDomain: HistoryChartDomain?
+    ) -> some View {
         HistoryDailyUsageCard(
             entries: derived.dailyUsage,
             summary: derived.summary,
             selectedDate: selectedDate,
             periodQuery: viewModel.periodQuery,
-            chartDomain: viewModel.chartDomain,
+            chartDomain: chartDomain,
             onSelect: selectDay
         )
     }

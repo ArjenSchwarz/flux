@@ -9,4 +9,20 @@ public enum HistoryQuery: Hashable, Sendable, Codable {
     /// Explicit past-only window with inclusive `YYYY-MM-DD` bounds. The server
     /// rejects ranges that are not strictly before Sydney today (Decision 15).
     case dateRange(start: String, end: String)
+
+    /// Inclusive day-count of the window: the `N` of `.days(N)`, or the
+    /// Sydney-calendar span of a `.dateRange`. `nil` when a `.dateRange`
+    /// bound fails to parse.
+    public var dayCount: Int? {
+        switch self {
+        case let .days(days):
+            return days
+        case let .dateRange(start, end):
+            guard let startDate = DateFormatting.parseDayDate(start),
+                  let endDate = DateFormatting.parseDayDate(end) else {
+                return nil
+            }
+            return DateFormatting.inclusiveDayCount(from: startDate, through: endDate)
+        }
+    }
 }

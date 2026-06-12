@@ -12,7 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Internal
 
-- **History period navigation spec** (T-1497). Full spec for navigating to past weeks/months on the History screen: requirements, design, 16-entry decision log, and a 12-task TDD implementation plan in `specs/history-period-navigation/`. Covers prev/next period chevrons, a Sydney-zoned date-picker jump, a return-to-current action, and a new past-only `start`/`end` date-range form on `GET /history` (existing `days=N` form kept permanently per Decision 16; follow-up ticket T-1540 tracks the unification question). `specs/OVERVIEW.md` updated. No code changes yet.
+- **History period navigation spec** (T-1497). Full spec for navigating to past weeks/months on the History screen: requirements, design, 17-entry decision log, and a 12-task TDD implementation plan in `specs/history-period-navigation/`. Covers prev/next period chevrons, a Sydney-zoned date-picker jump, a return-to-current action, and a new past-only `start`/`end` date-range form on `GET /history` (existing `days=N` form kept permanently per Decision 16; follow-up ticket T-1540 tracks the unification question). `specs/OVERVIEW.md` updated. No code changes yet.
 
 ## [1.6] - 2026-06-10
 

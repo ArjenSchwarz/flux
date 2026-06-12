@@ -53,11 +53,11 @@ struct ExpandedHistoryHost: View {
     let kind: ChartKind
     @Bindable var controller: ExpandedHistoryHostController
     @Binding var selectedDate: Date?
-    /// Day count derived from the observer's scope. The cards below receive a
-    /// nominal `.days` query built from it: their expansion affordance is
-    /// disabled in this host (see the environment override), so the query is
-    /// never used to spawn a further expansion.
-    let rangeDays: Int
+    /// The observer scope's query, passed through unchanged. It only feeds
+    /// the cards' `expansionScope`, and their expansion affordance is disabled
+    /// in this host (see the environment override), so it never spawns a
+    /// further expansion.
+    let periodQuery: HistoryQuery
     let onSelect: (String) -> Void
 
     var body: some View {
@@ -68,7 +68,7 @@ struct ExpandedHistoryHost: View {
                     entries: controller.displayed.solar,
                     summary: controller.displayed.summary,
                     selectedDate: selectedDate,
-                    periodQuery: .days(rangeDays),
+                    periodQuery: periodQuery,
                     onSelect: handleSelect
                 )
                 .simultaneousGesture(dragLifecycleGesture)
@@ -77,7 +77,7 @@ struct ExpandedHistoryHost: View {
                     entries: controller.displayed.grid,
                     summary: controller.displayed.summary,
                     selectedDate: selectedDate,
-                    periodQuery: .days(rangeDays),
+                    periodQuery: periodQuery,
                     onSelect: handleSelect
                 )
                 .simultaneousGesture(dragLifecycleGesture)
@@ -86,7 +86,7 @@ struct ExpandedHistoryHost: View {
                     entries: controller.displayed.dailyUsage,
                     summary: controller.displayed.summary,
                     selectedDate: selectedDate,
-                    periodQuery: .days(rangeDays),
+                    periodQuery: periodQuery,
                     onSelect: handleSelect
                 )
                 .simultaneousGesture(dragLifecycleGesture)
