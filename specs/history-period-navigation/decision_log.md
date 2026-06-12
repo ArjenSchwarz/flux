@@ -503,3 +503,35 @@ Both forms stay, with distinct semantics: `days=N` means "window ending on the s
 - Two request forms to maintain and document on one endpoint.
 
 ---
+
+## Decision 17: navigateNext clamps in the view model, not only via the disabled chevron
+
+**Date**: 2026-06-12
+**Status**: accepted
+
+### Context
+
+The design keyed the next-chevron's disabled state off the resolved snapshot (`isViewingCurrentPeriod`), which by design lags rendered data while a load is in flight. Post-implementation review showed that a second `navigateNext` arriving mid-load — a rapid double-tap, or macOS arrow-key repeat, which fires faster than a network round trip — could step past the current period and issue a future-dated range request. The server correctly 400s it, but the user lands in an error state whose Retry repeats the same bad request.
+
+### Decision
+
+`navigateNext()` guards `periodAnchor != nil` and is a no-op at the current period, mirroring `DayDetailViewModel`'s `isToday` clamp. The chevron's resolved-snapshot disabled state is presentation only.
+
+### Rationale
+
+UI disabled states are advisory under async load; the view model is the only place that can enforce the invariant against event timing. The sibling Day Detail pattern already clamps in the view model for the same reason.
+
+### Alternatives Considered
+
+- **Key the disabled state off requested state instead of resolved**: closes the race - Rejected: breaks the resolved-snapshot rule that the header reflects rendered data, and still leaves programmatic callers unguarded.
+- **Have load() reject future ranges client-side**: catches the symptom - Rejected: the navigation intent is the wrong layer to let produce an invalid period in the first place.
+
+### Consequences
+
+**Positive:**
+- Future-dated range requests are unreachable from the UI regardless of event timing; covered by no-op and mid-load double-tap tests.
+
+**Negative:**
+- The clamp duplicates, at the intent layer, a constraint the disabled chevron also expresses.
+
+---
