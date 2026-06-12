@@ -66,6 +66,49 @@ struct HistoryViewModelNavigationTests {
     }
 
     @Test
+    func navigateNextAtCurrentPeriodIsANoOp() async throws {
+        let context = try makeModelContext()
+        let apiClient = RecordingQueryAPIClient()
+        let viewModel = makeViewModel(apiClient: apiClient, modelContext: context)
+
+        await viewModel.loadHistory(range: .weekToDate)
+        await viewModel.navigateNext()
+
+        // No future period exists after the current one: no request, no
+        // anchor movement.
+        #expect(apiClient.requestedQueries == [.days(3)])
+        #expect(viewModel.periodAnchor == nil)
+        #expect(viewModel.isViewingCurrentPeriod)
+    }
+
+    @Test
+    func rapidDoubleNavigateNextStopsAtTheCurrentPeriod() async throws {
+        let context = try makeModelContext()
+        let apiClient = GatedQueryAPIClient()
+        let viewModel = makeViewModel(apiClient: apiClient, modelContext: context)
+
+        await viewModel.loadHistory(range: .weekToDate)
+        await viewModel.navigatePrevious()
+
+        // First navigateNext collapses to current; park its fetch in-flight.
+        apiClient.armGate()
+        let firstNext = Task { await viewModel.navigateNext() }
+        await apiClient.waitForGatedFetch()
+
+        // A second navigateNext lands mid-load (rapid double-tap or macOS
+        // key-repeat). The anchor is already nil, so it must be a no-op —
+        // not a step into the future week the server would reject.
+        await viewModel.navigateNext()
+
+        apiClient.release()
+        await firstNext.value
+
+        #expect(apiClient.requestedQueries == [.days(3), Self.previousWeekQuery, .days(3)])
+        #expect(viewModel.periodAnchor == nil)
+        #expect(viewModel.isViewingCurrentPeriod)
+    }
+
+    @Test
     func jumpToPastDateRequestsTheContainingPeriod() async throws {
         let context = try makeModelContext()
         let apiClient = RecordingQueryAPIClient()

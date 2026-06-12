@@ -189,7 +189,12 @@ final class HistoryViewModel {
     /// period containing Sydney-today collapses to the current to-date view
     /// (req 1.3).
     func navigateNext() async {
-        guard let base = navigationBasePeriod() else { return }
+        // Already at the current period — nothing lies after it. Clamping here
+        // (like DayDetailViewModel's isToday guard) matters because the UI's
+        // disabled state reads the resolved snapshot, which lags an in-flight
+        // load: a rapid double-tap or macOS key-repeat would otherwise issue a
+        // future-dated range request the server rejects.
+        guard periodAnchor != nil, let base = navigationBasePeriod() else { return }
         await navigate(to: base.next(range: lastRequestedRange, firstWeekday: firstWeekdayProvider()))
     }
 
