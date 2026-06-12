@@ -16,19 +16,66 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 	now := h.nowFunc().In(sydneyTZ)
 	today := now.Format("2006-01-02")
 
-	// Parse and validate days parameter (default 7). To-date ranges resolve
-	// to any inclusive day-count from 1 through 31, so accept that whole
-	// range; a non-numeric value still 400s via the err check.
-	days := 7
-	if d := req.QueryStringParameters["days"]; d != "" {
-		parsed, err := strconv.Atoi(d)
-		if err != nil || parsed < 1 || parsed > 31 {
-			return errorResponse(400, "invalid days parameter, must be between 1 and 31")
-		}
-		days = parsed
-	}
+	// The endpoint accepts two mutually exclusive request forms (Decision 10/16):
+	//   days=N      — inclusive window ending on the server's today; may
+	//                 include live-computed values for today (unchanged).
+	//   start/end   — explicit inclusive past range; stored values only.
+	// Supplying both forms in one request is rejected rather than resolved by
+	// precedence, so malformed client requests cannot be silently masked.
+	daysParam := req.QueryStringParameters["days"]
+	startParam := req.QueryStringParameters["start"]
+	endParam := req.QueryStringParameters["end"]
 
-	startDate := now.AddDate(0, 0, -(days - 1)).Format("2006-01-02")
+	var startDate, endDate string
+	includesToday := true
+
+	switch {
+	case daysParam != "" && (startParam != "" || endParam != ""):
+		return errorResponse(400, "cannot combine days with start and end parameters")
+	case (startParam == "") != (endParam == ""):
+		return errorResponse(400, "start and end must be supplied together")
+	case startParam != "":
+		// Explicit range form. Past-only per Decision 15: end must be strictly
+		// before the current Sydney date, so this path never performs live
+		// compute and never includes a today row (req 5.3).
+		start, err := time.ParseInLocation("2006-01-02", startParam, sydneyTZ)
+		if err != nil {
+			return errorResponse(400, "invalid start or end parameter, must be YYYY-MM-DD")
+		}
+		end, err := time.ParseInLocation("2006-01-02", endParam, sydneyTZ)
+		if err != nil {
+			return errorResponse(400, "invalid start or end parameter, must be YYYY-MM-DD")
+		}
+		if end.Before(start) {
+			return errorResponse(400, "end must not be before start")
+		}
+		// String compare is safe: ParseInLocation guarantees zero-padded
+		// canonical YYYY-MM-DD on both sides.
+		if endParam >= today {
+			return errorResponse(400, "end must be before the current date")
+		}
+		// Inclusive span cap of 31 days. AddDate is calendar-aware, so a DST
+		// transition inside the window cannot produce an off-by-one.
+		if end.After(start.AddDate(0, 0, 30)) {
+			return errorResponse(400, "date range must not exceed 31 days")
+		}
+		startDate, endDate = startParam, endParam
+		includesToday = false
+	default:
+		// Day-count form (default 7). To-date ranges resolve to any inclusive
+		// day-count from 1 through 31, so accept that whole range; a
+		// non-numeric value still 400s via the err check.
+		days := 7
+		if daysParam != "" {
+			parsed, err := strconv.Atoi(daysParam)
+			if err != nil || parsed < 1 || parsed > 31 {
+				return errorResponse(400, "invalid days parameter, must be between 1 and 31")
+			}
+			days = parsed
+		}
+		startDate = now.AddDate(0, 0, -(days - 1)).Format("2006-01-02")
+		endDate = today
+	}
 
 	// Fetch daily energy rows and per-day off-peak rows concurrently. The
 	// today readings query (used by both energy reconciliation and live
@@ -42,7 +89,7 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error {
-		result, err := h.reader.QueryDailyEnergy(gctx, h.serial, startDate, today)
+		result, err := h.reader.QueryDailyEnergy(gctx, h.serial, startDate, endDate)
 		items = result
 		return err
 	})
@@ -51,7 +98,7 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 		// renders a placeholder when the split is missing. A throttle on
 		// the off-peak table shouldn't take down the entire history
 		// response, so log and continue without the split.
-		result, err := h.reader.QueryOffpeak(gctx, h.serial, startDate, today)
+		result, err := h.reader.QueryOffpeak(gctx, h.serial, startDate, endDate)
 		if err != nil {
 			slog.Warn("history offpeak query failed; proceeding without split", "error", err)
 			return nil
@@ -63,17 +110,23 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 	// Today readings: read on a sibling goroutine so a failure stays
 	// isolated from the gated queries above (AC 4.9). The 24-hour window in
 	// Unix seconds; computeTodayEnergy filters to >= midnight Sydney, so any
-	// pre-midnight readings are discarded.
+	// pre-midnight readings are discarded. The range form never includes
+	// today (Decision 15), so it skips the query entirely and the channel is
+	// pre-filled with an empty result.
 	type readingsResult struct {
 		readings []dynamo.ReadingItem
 		err      error
 	}
 	readingsCh := make(chan readingsResult, 1)
-	go func() {
-		nowUnix := now.Unix()
-		r, err := h.reader.QueryReadings(ctx, h.serial, nowUnix-86400, nowUnix)
-		readingsCh <- readingsResult{readings: r, err: err}
-	}()
+	if includesToday {
+		go func() {
+			nowUnix := now.Unix()
+			r, err := h.reader.QueryReadings(ctx, h.serial, nowUnix-86400, nowUnix)
+			readingsCh <- readingsResult{readings: r, err: err}
+		}()
+	} else {
+		readingsCh <- readingsResult{}
+	}
 
 	// Notes read runs alongside the errgroup so a failure logs and leaves
 	// the per-day note field nil instead of cancelling the core queries.
@@ -81,7 +134,7 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 	// g.Wait returns successfully — gctx is cancelled on Wait completion,
 	// which would race a still-in-flight QueryNotes and yield a spurious
 	// empty map.
-	waitNotes := fetchNotesAsync(ctx, h.reader, "history", h.serial, startDate, today)
+	waitNotes := fetchNotesAsync(ctx, h.reader, "history", h.serial, startDate, endDate)
 
 	if err := g.Wait(); err != nil {
 		<-readingsCh // drain so the goroutine doesn't leak
