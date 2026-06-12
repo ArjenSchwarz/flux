@@ -48,7 +48,7 @@ references:
   - New Networking/HistoryQuery.swift: enum HistoryQuery: Hashable, Sendable, Codable { case days(Int); case dateRange(start: String, end: String) }
   - Protocol method + default per the fetchStatus(simulateLoadWatts:) evolution pattern so ~30 existing mocks keep compiling
   - URLSessionAPIClient implements the real encoding
-  - Blocked-by: lftd8w7 (Write failing FluxCore tests for HistoryQuery and fetchHistory(query:)), failing, failing, failing, failing
+  - Blocked-by: lftd8w7 (Write failing FluxCore tests for HistoryQuery and fetchHistory(query:))
   - Stream: 2
   - Requirements: [5.1](requirements.md#5.1)
   - References: Flux/Packages/FluxCore/Sources/FluxCore/Networking/HistoryQuery.swift, Flux/Packages/FluxCore/Sources/FluxCore/Networking/FluxAPIClient.swift, Flux/Packages/FluxCore/Sources/FluxCore/Networking/URLSessionAPIClient.swift
