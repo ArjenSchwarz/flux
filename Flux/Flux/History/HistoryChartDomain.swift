@@ -21,7 +21,10 @@ struct HistoryChartDomain: Equatable {
 
     /// Builds the domain for a to-date range, or `nil` for a fixed `.days`
     /// range (no reservation needed) or if the calendar arithmetic fails.
-    static func make(range: HistoryRange, now: Date, firstWeekday: Int) -> HistoryChartDomain? {
+    /// `referenceDate` is any instant inside the period to reserve — `now` for
+    /// the current period, the period start for a navigated past period
+    /// (req 1.4: past periods always reserve the full week/month).
+    static func make(range: HistoryRange, referenceDate: Date, firstWeekday: Int) -> HistoryChartDomain? {
         let calendar = DateFormatting.sydneyCalendar
         let start: Date
         let endExclusive: Date
@@ -30,13 +33,13 @@ struct HistoryChartDomain: Equatable {
             return nil
         case .weekToDate:
             // A week is always seven calendar days from the locale week start.
-            start = DateFormatting.startOfWeek(now: now, firstWeekday: firstWeekday)
+            start = DateFormatting.startOfWeek(now: referenceDate, firstWeekday: firstWeekday)
             guard let end = calendar.date(byAdding: .day, value: 7, to: start) else { return nil }
             endExclusive = end
         case .monthToDate:
             // The calendar-month interval gives both boundaries without a
             // hard-coded length, so 28–31-day months are handled uniformly.
-            guard let interval = calendar.dateInterval(of: .month, for: now) else { return nil }
+            guard let interval = calendar.dateInterval(of: .month, for: referenceDate) else { return nil }
             start = interval.start
             endExclusive = interval.end
         }

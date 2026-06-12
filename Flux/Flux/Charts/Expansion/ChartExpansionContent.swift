@@ -99,9 +99,18 @@ struct ChartExpansionContent: View {
     }
 
     static func historyRangeDays(from scope: ChartScope) -> Int {
-        if case let .historyRange(days) = scope {
-            return days
+        guard case let .historyRange(query) = scope else {
+            return ExpandedChartView.defaultHistoryRangeDays
         }
-        return ExpandedChartView.defaultHistoryRangeDays
+        switch query {
+        case let .days(days):
+            return days
+        case let .dateRange(start, end):
+            guard let startDate = DateFormatting.parseDayDate(start),
+                  let endDate = DateFormatting.parseDayDate(end) else {
+                return ExpandedChartView.defaultHistoryRangeDays
+            }
+            return DateFormatting.inclusiveDayCount(from: startDate, through: endDate)
+        }
     }
 }

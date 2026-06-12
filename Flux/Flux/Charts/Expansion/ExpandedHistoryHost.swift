@@ -53,6 +53,10 @@ struct ExpandedHistoryHost: View {
     let kind: ChartKind
     @Bindable var controller: ExpandedHistoryHostController
     @Binding var selectedDate: Date?
+    /// Day count derived from the observer's scope. The cards below receive a
+    /// nominal `.days` query built from it: their expansion affordance is
+    /// disabled in this host (see the environment override), so the query is
+    /// never used to spawn a further expansion.
     let rangeDays: Int
     let onSelect: (String) -> Void
 
@@ -64,7 +68,7 @@ struct ExpandedHistoryHost: View {
                     entries: controller.displayed.solar,
                     summary: controller.displayed.summary,
                     selectedDate: selectedDate,
-                    rangeDays: rangeDays,
+                    periodQuery: .days(rangeDays),
                     onSelect: handleSelect
                 )
                 .simultaneousGesture(dragLifecycleGesture)
@@ -73,7 +77,7 @@ struct ExpandedHistoryHost: View {
                     entries: controller.displayed.grid,
                     summary: controller.displayed.summary,
                     selectedDate: selectedDate,
-                    rangeDays: rangeDays,
+                    periodQuery: .days(rangeDays),
                     onSelect: handleSelect
                 )
                 .simultaneousGesture(dragLifecycleGesture)
@@ -82,7 +86,7 @@ struct ExpandedHistoryHost: View {
                     entries: controller.displayed.dailyUsage,
                     summary: controller.displayed.summary,
                     selectedDate: selectedDate,
-                    rangeDays: rangeDays,
+                    periodQuery: .days(rangeDays),
                     onSelect: handleSelect
                 )
                 .simultaneousGesture(dragLifecycleGesture)

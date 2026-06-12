@@ -10,7 +10,7 @@ struct RootView: View {
     // held in `ChartScopeRegistry`, which is an in-memory `@MainActor`
     // store and therefore lost on cold relaunch. After restoration,
     // `ExpandedChartView.resolvedScope` falls back to
-    // `historyRange(days: defaultHistoryRangeDays)` for History kinds
+    // `historyRange(.days(defaultHistoryRangeDays))` for History kinds
     // and `daySpecific(date: today())` for Day kinds. A user who
     // backgrounded with a 14-day range will see the chart reopen at
     // 7 days; documented gap.

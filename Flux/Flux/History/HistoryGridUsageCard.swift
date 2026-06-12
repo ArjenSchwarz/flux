@@ -1,4 +1,5 @@
 import Charts
+import FluxCore
 import SwiftUI
 
 struct HistoryGridUsageCard: View {
@@ -7,13 +8,16 @@ struct HistoryGridUsageCard: View {
     let entries: [HistoryViewModel.GridEntry]
     let summary: HistoryViewModel.PeriodSummary
     let selectedDate: Date?
-    let rangeDays: Int
+    /// The rendered window, passed by `HistoryView` from the view model's
+    /// resolved query so the enlarged chart fetches the same period —
+    /// including a navigated past one (Decision 13).
+    let periodQuery: HistoryQuery
     /// Full-period x-axis reservation (Wk/Mo). `nil` (the default, used by the
     /// expanded host which only knows a day count) leaves the chart auto-fitting.
     var chartDomain: HistoryChartDomain?
     let onSelect: (String) -> Void
 
-    var expansionScope: ChartScope { .historyRange(days: rangeDays) }
+    var expansionScope: ChartScope { .historyRange(periodQuery) }
 
     var body: some View {
         HistoryCardChrome(
