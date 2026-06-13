@@ -79,7 +79,10 @@ extension HistoryViewModel {
         let calendar = DateFormatting.sydneyCalendar
         let startOfToday = calendar.startOfDay(for: nowProvider())
         guard let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday) else {
-            return startOfToday
+            assertionFailure("date(byAdding: .day) returned nil for a valid date")
+            // End of today, not its start: a start-of-today bound would put
+            // today itself outside the picker range and make it unselectable.
+            return startOfToday.addingTimeInterval(86_399)
         }
         return startOfTomorrow.addingTimeInterval(-1)
     }

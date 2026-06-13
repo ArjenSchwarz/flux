@@ -109,6 +109,34 @@ struct HistoryViewModelNavigationTests {
     }
 
     @Test
+    func rapidBackwardNavigationAccumulatesPeriods() async throws {
+        let context = try makeModelContext()
+        let apiClient = GatedQueryAPIClient()
+        let viewModel = makeViewModel(apiClient: apiClient, modelContext: context)
+
+        await viewModel.loadHistory(range: .weekToDate)
+
+        // First navigatePrevious steps to the previous week; park its fetch.
+        apiClient.armGate()
+        let firstPrev = Task { await viewModel.navigatePrevious() }
+        await apiClient.waitForGatedFetch()
+
+        // A second navigatePrevious lands mid-load. Back-navigation is
+        // unbounded (req 1.6): it steps a further week from the already-moved
+        // anchor rather than collapsing to a single step, so two taps land two
+        // weeks back, not one.
+        await viewModel.navigatePrevious()
+
+        apiClient.release()
+        await firstPrev.value
+
+        let twoWeeksBack = HistoryQuery.dateRange(start: "2026-03-30", end: "2026-04-05")
+        #expect(apiClient.requestedQueries == [.days(3), Self.previousWeekQuery, twoWeeksBack])
+        #expect(viewModel.periodAnchor == sydneyMidnight(year: 2026, month: 3, day: 30))
+        #expect(viewModel.resolvedQuery == twoWeeksBack)
+    }
+
+    @Test
     func jumpToPastDateRequestsTheContainingPeriod() async throws {
         let context = try makeModelContext()
         let apiClient = RecordingQueryAPIClient()
