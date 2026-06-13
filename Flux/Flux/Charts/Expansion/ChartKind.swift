@@ -1,3 +1,4 @@
+import FluxCore
 import Foundation
 
 enum ChartKind: String, Hashable, Codable, CaseIterable, Identifiable {
@@ -44,6 +45,9 @@ enum ChartKind: String, Hashable, Codable, CaseIterable, Identifiable {
 }
 
 enum ChartScope: Hashable, Codable {
-    case historyRange(days: Int)
+    /// Carries the full `HistoryQuery` rather than a day count so an enlarged
+    /// chart fetches the same window as the card it came from — including a
+    /// navigated past period (Decision 13).
+    case historyRange(HistoryQuery)
     case daySpecific(date: Date)
 }

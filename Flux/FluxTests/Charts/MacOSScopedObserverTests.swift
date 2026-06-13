@@ -181,7 +181,7 @@ struct MacOSScopedObserverTests {
         stub.historyResponse = HistoryResponse(days: [])
         let observer = makeObserver(
             kind: .historySolar,
-            scope: .historyRange(days: 14),
+            scope: .historyRange(.days(14)),
             api: stub,
             clock: { now }
         )

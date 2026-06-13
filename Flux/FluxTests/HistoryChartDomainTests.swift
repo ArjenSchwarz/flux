@@ -18,16 +18,16 @@ struct HistoryChartDomainTests {
     @Test("Fixed .days ranges reserve nothing")
     func fixedRangesReturnNil() {
         let now = sydneyDate(2026, 6, 10)
-        #expect(HistoryChartDomain.make(range: .days(7), now: now, firstWeekday: 2) == nil)
-        #expect(HistoryChartDomain.make(range: .days(14), now: now, firstWeekday: 1) == nil)
-        #expect(HistoryChartDomain.make(range: .days(30), now: now, firstWeekday: 2) == nil)
+        #expect(HistoryChartDomain.make(range: .days(7), referenceDate: now, firstWeekday: 2) == nil)
+        #expect(HistoryChartDomain.make(range: .days(14), referenceDate: now, firstWeekday: 1) == nil)
+        #expect(HistoryChartDomain.make(range: .days(30), referenceDate: now, firstWeekday: 2) == nil)
     }
 
     @Test("Week-to-date reserves a full 7-day week from the week start")
     func weekToDateReservesFullWeek() throws {
         // 2026-06-10 is a Wednesday; Monday-start week begins 2026-06-08.
         let now = sydneyDate(2026, 6, 10)
-        let domain = try #require(HistoryChartDomain.make(range: .weekToDate, now: now, firstWeekday: 2))
+        let domain = try #require(HistoryChartDomain.make(range: .weekToDate, referenceDate: now, firstWeekday: 2))
 
         let weekStart = DateFormatting.startOfWeek(now: now, firstWeekday: 2)
         #expect(domain.slotDates.count == 7)
@@ -43,8 +43,8 @@ struct HistoryChartDomainTests {
     @Test("Week start honours the locale first weekday")
     func weekStartFollowsFirstWeekday() throws {
         let now = sydneyDate(2026, 6, 10) // Wednesday
-        let mondayStart = try #require(HistoryChartDomain.make(range: .weekToDate, now: now, firstWeekday: 2))
-        let sundayStart = try #require(HistoryChartDomain.make(range: .weekToDate, now: now, firstWeekday: 1))
+        let mondayStart = try #require(HistoryChartDomain.make(range: .weekToDate, referenceDate: now, firstWeekday: 2))
+        let sundayStart = try #require(HistoryChartDomain.make(range: .weekToDate, referenceDate: now, firstWeekday: 1))
         // Monday-start begins 2026-06-08; Sunday-start begins 2026-06-07.
         #expect(mondayStart.slotDates.first == sydneyDate(2026, 6, 8, hour: 0))
         #expect(sundayStart.slotDates.first == sydneyDate(2026, 6, 7, hour: 0))
@@ -56,7 +56,7 @@ struct HistoryChartDomainTests {
     func monthToDateReservesFullMonth() throws {
         // June has 30 days.
         let now = sydneyDate(2026, 6, 9)
-        let domain = try #require(HistoryChartDomain.make(range: .monthToDate, now: now, firstWeekday: 2))
+        let domain = try #require(HistoryChartDomain.make(range: .monthToDate, referenceDate: now, firstWeekday: 2))
 
         let monthStart = DateFormatting.startOfMonth(now: now)
         #expect(domain.slotDates.count == 30)
@@ -70,7 +70,7 @@ struct HistoryChartDomainTests {
         // Sydney DST ends in early April 2026; April still has 30 calendar days,
         // and calendar-day arithmetic keeps every slot at Sydney midnight.
         let now = sydneyDate(2026, 4, 15)
-        let domain = try #require(HistoryChartDomain.make(range: .monthToDate, now: now, firstWeekday: 2))
+        let domain = try #require(HistoryChartDomain.make(range: .monthToDate, referenceDate: now, firstWeekday: 2))
         #expect(domain.slotDates.count == 30)
         #expect(domain.slotDates.allSatisfy { calendar.startOfDay(for: $0) == $0 })
         #expect(domain.span.upperBound == sydneyDate(2026, 5, 1, hour: 0))

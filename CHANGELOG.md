@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+
+- **History period navigation** (T-1497). The History screen's Wk and Mo ranges gain a period header — previous/next chevrons, a tappable label opening a graphical date picker (which follows the system's first-day-of-week), and a Current button sitting between the chevrons — to browse past weeks and months, with ←/→ key navigation on macOS. Past periods are fetched via a new past-only `start`/`end` date-range form on `GET /history` that serves stored values only (no live compute), while the current period keeps the unchanged `days=N` form; a cross-handler parity test pins `/day` and `/history` to identical numbers for dates past the readings TTL. App-side: a `HistoryQuery` enum through `FluxAPIClient` and the chart-expansion scope, a Sydney-calendar `HistoryPeriod` model (DST-safe, property-tested), view-model navigation intents with request coalescing keyed on the requested period and a resolved snapshot driving the header and chart domain, an offline cache bounded to the viewed period, a distinct no-data notice for empty past periods (cards stay rendered), and an "N of M days" subtitle when a past period is partially covered. iOS + macOS.
+
+### Internal
+
+- **History period navigation spec** (T-1497). Full spec for navigating to past weeks/months on the History screen: requirements, design, 17-entry decision log, and a 12-task TDD implementation plan in `specs/history-period-navigation/`. Covers prev/next period chevrons, a Sydney-zoned date-picker jump, a return-to-current action, and a new past-only `start`/`end` date-range form on `GET /history` (existing `days=N` form kept permanently per Decision 16; follow-up ticket T-1540 tracks the unification question). `specs/OVERVIEW.md` updated. No code changes yet.
+
 ## [1.6] - 2026-06-10
 
 ### Added

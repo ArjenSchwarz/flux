@@ -28,7 +28,7 @@ struct ChartExpansionContent: View {
                     kind: kind,
                     history: observer.historyController,
                     day: observer.dayController,
-                    historyRangeDays: Self.historyRangeDays(from: observer.scope),
+                    historyQuery: Self.historyQuery(from: observer.scope),
                     selectedHistoryDate: $selectedHistoryDate,
                     // Bar-tap navigation from the enlarged History view to
                     // Day Detail is intentionally not wired. Decisions 11
@@ -98,10 +98,13 @@ struct ChartExpansionContent: View {
         observer = ChartSceneObserver(kind: kind, scope: scope, api: api)
     }
 
-    static func historyRangeDays(from scope: ChartScope) -> Int {
-        if case let .historyRange(days) = scope {
-            return days
+    /// The scope's query, passed through unchanged so the enlarged chart can
+    /// never disagree with the card it came from (Decision 13). The day-scope
+    /// fallback mirrors `ExpandedChartView.resolvedScope`'s history default.
+    static func historyQuery(from scope: ChartScope) -> HistoryQuery {
+        guard case let .historyRange(query) = scope else {
+            return .days(ExpandedChartView.defaultHistoryRangeDays)
         }
-        return ExpandedChartView.defaultHistoryRangeDays
+        return query
     }
 }

@@ -21,26 +21,22 @@ struct HistoryChartDomain: Equatable {
 
     /// Builds the domain for a to-date range, or `nil` for a fixed `.days`
     /// range (no reservation needed) or if the calendar arithmetic fails.
-    static func make(range: HistoryRange, now: Date, firstWeekday: Int) -> HistoryChartDomain? {
-        let calendar = DateFormatting.sydneyCalendar
-        let start: Date
-        let endExclusive: Date
+    /// `referenceDate` is any instant inside the period to reserve — `now` for
+    /// the current period, the period start for a navigated past period
+    /// (req 1.4: past periods always reserve the full week/month).
+    static func make(range: HistoryRange, referenceDate: Date, firstWeekday: Int) -> HistoryChartDomain? {
+        // HistoryPeriod owns the week/month boundary math; this only turns the
+        // resolved boundaries into slot dates.
+        let period: HistoryPeriod
         switch range {
         case .days:
             return nil
         case .weekToDate:
-            // A week is always seven calendar days from the locale week start.
-            start = DateFormatting.startOfWeek(now: now, firstWeekday: firstWeekday)
-            guard let end = calendar.date(byAdding: .day, value: 7, to: start) else { return nil }
-            endExclusive = end
+            period = .week(containing: referenceDate, firstWeekday: firstWeekday)
         case .monthToDate:
-            // The calendar-month interval gives both boundaries without a
-            // hard-coded length, so 28–31-day months are handled uniformly.
-            guard let interval = calendar.dateInterval(of: .month, for: now) else { return nil }
-            start = interval.start
-            endExclusive = interval.end
+            period = .month(containing: referenceDate)
         }
-        return build(start: start, endExclusive: endExclusive, calendar: calendar)
+        return build(start: period.start, endExclusive: period.endExclusive, calendar: DateFormatting.sydneyCalendar)
     }
 
     private static func build(start: Date, endExclusive: Date, calendar: Calendar) -> HistoryChartDomain? {

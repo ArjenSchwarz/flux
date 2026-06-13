@@ -1,3 +1,4 @@
+import FluxCore
 import Foundation
 import SwiftUI
 import Testing
@@ -38,7 +39,7 @@ struct ExpandableChartContainerTests {
         var currentDays = 7
         let container = ExpandableChartContainer(
             kind: .historySolar,
-            scopeProvider: { .historyRange(days: currentDays) },
+            scopeProvider: { .historyRange(.days(currentDays)) },
             content: { EmptyView() }
         )
 
@@ -48,7 +49,7 @@ struct ExpandableChartContainerTests {
         currentDays = 14
         container.invoke(action: action)
 
-        #expect(captured == .historyRange(days: 14))
+        #expect(captured == .historyRange(.days(14)))
     }
 
     @Test("Each ChartKind passed in is forwarded unchanged to the action")
@@ -59,7 +60,7 @@ struct ExpandableChartContainerTests {
 
             let container = ExpandableChartContainer(
                 kind: kind,
-                scopeProvider: { .historyRange(days: 1) },
+                scopeProvider: { .historyRange(.days(1)) },
                 content: { EmptyView() }
             )
 

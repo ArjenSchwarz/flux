@@ -1,3 +1,4 @@
+import FluxCore
 import Foundation
 import Testing
 @testable import Flux
@@ -37,7 +38,7 @@ struct ExpandedChartViewTests {
         #expect(resolved == .daySpecific(date: Date(timeIntervalSince1970: 1_700_000_000)))
     }
 
-    @Test("Router falls back to historyRange(days: 7) for history scope when registry is empty")
+    @Test("Router falls back to historyRange(.days(7)) for history scope when registry is empty")
     func historyScopeFallbackUsesDefault() {
         let registry = ChartScopeRegistry()
         let resolved = ExpandedChartView.resolvedScope(
@@ -45,7 +46,7 @@ struct ExpandedChartViewTests {
             in: registry,
             today: { Date(timeIntervalSince1970: 1_700_000_000) }
         )
-        #expect(resolved == .historyRange(days: 7))
+        #expect(resolved == .historyRange(.days(7)))
     }
 
     @Test("Router reads the registered scope when present")

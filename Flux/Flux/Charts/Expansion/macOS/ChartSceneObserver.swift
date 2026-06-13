@@ -80,16 +80,16 @@ final class ChartSceneObserver {
         lastFetched = clock()
 
         switch scope {
-        case let .historyRange(days):
-            await fetchHistory(days: days)
+        case let .historyRange(query):
+            await fetchHistory(query: query)
         case let .daySpecific(date):
             await fetchDay(at: date)
         }
     }
 
-    private func fetchHistory(days: Int) async {
+    private func fetchHistory(query: HistoryQuery) async {
         do {
-            let response = try await api.fetchHistory(days: days)
+            let response = try await api.fetchHistory(query: query)
             let derived = HistoryViewModel.DerivedState(days: response.days, now: clock())
             historyController?.adopt(
                 ExpandedHistoryHostSnapshot(

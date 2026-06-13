@@ -66,13 +66,37 @@ struct HistoryView: View {
                 }
                 .pickerStyle(.segmented)
 
-                NoteRowView(text: viewModel.selectedDay?.note)
+                // Period navigation is Wk/Mo only (req 1.5); fixed ranges keep
+                // their existing chrome untouched.
+                if isPeriodNavigable, let period = viewModel.displayedPeriod {
+                    HistoryPeriodHeader(
+                        range: viewModel.resolvedRange,
+                        period: period,
+                        isViewingCurrentPeriod: viewModel.isViewingCurrentPeriod,
+                        pickerUpperBound: viewModel.sydneyTodayEnd,
+                        onPrevious: { Task { await viewModel.navigatePrevious() } },
+                        onNext: { Task { await viewModel.navigateNext() } },
+                        onJump: { date in Task { await viewModel.jumpTo(date: date) } },
+                        onReturnToCurrent: { Task { await viewModel.returnToCurrent() } }
+                    )
+                }
+
+                if viewModel.showsEmptyPeriodNotice {
+                    noDataForPeriodNotice
+                } else {
+                    NoteRowView(text: viewModel.selectedDay?.note)
+                }
 
                 if viewModel.days.isEmpty, let error = viewModel.error, !viewModel.isLoading {
                     errorState(error)
-                } else if viewModel.days.isEmpty, !viewModel.isLoading {
+                } else if viewModel.days.isEmpty, !viewModel.isLoading, !viewModel.showsEmptyPeriodNotice {
                     emptyState
                 } else {
+                    // An empty past period falls through here on purpose: the
+                    // cards stay rendered and the HistoryChartDomain scaffold
+                    // reserves the full-period axis (req 1.6), with the
+                    // compact notice above replacing the note row — never the
+                    // replace-everything emptyState.
                     if usesRegularLayout {
                         historyContentRegular
                     } else {
@@ -102,13 +126,13 @@ struct HistoryView: View {
             }
         }
         .task {
-            async let history: Void = viewModel.loadHistory(range: selectedRange)
+            async let history: Void = viewModel.selectRange(selectedRange)
             async let pricing: Void = viewModel.refreshPricing()
             _ = await (history, pricing)
         }
         .onChange(of: selectedRange) { _, newRange in
             Task {
-                async let history: Void = viewModel.loadHistory(range: newRange)
+                async let history: Void = viewModel.selectRange(newRange)
                 async let pricing: Void = viewModel.refreshPricing()
                 _ = await (history, pricing)
             }
@@ -117,9 +141,24 @@ struct HistoryView: View {
         .macRefreshAction { [viewModel] in
             await viewModel.reload()
         }
+        .focusable()
+        .onKeyPress(.leftArrow) {
+            guard isPeriodNavigable else { return .ignored }
+            Task { await viewModel.navigatePrevious() }
+            return .handled
+        }
+        .onKeyPress(.rightArrow) {
+            guard isPeriodNavigable, !viewModel.isViewingCurrentPeriod else { return .ignored }
+            Task { await viewModel.navigateNext() }
+            return .handled
+        }
         #endif
+        // reload() rather than loadHistory(range: selectedRange): refresh
+        // re-fetches the displayed period — including a navigated past one
+        // (req 1.8) — and a stale `selectedRange` capture can never diverge
+        // from the view model's `lastRequestedRange`.
         .refreshable {
-            await viewModel.loadHistory(range: selectedRange)
+            await viewModel.reload()
         }
         #if !os(macOS)
         .sheet(isPresented: $showingSettings) {
@@ -139,18 +178,36 @@ struct HistoryView: View {
 
     private var usesRegularLayout: Bool { IPadLayoutGate.isActive(hSizeClass: hSizeClass) }
 
+    /// Period navigation exists only for the calendar-anchored ranges (req 1.5).
+    private var isPeriodNavigable: Bool {
+        selectedRange == .weekToDate || selectedRange == .monthToDate
+    }
+
+    /// Compact no-data notice for a successfully fetched but empty past period
+    /// (req 1.6) — replaces the note row, visually distinct from `errorState`.
+    private var noDataForPeriodNotice: some View {
+        FluxPanel {
+            Label("No data for this period", systemImage: "calendar.badge.exclamationmark")
+                .appFontSystem(size: 13)
+                .foregroundStyle(FluxTheme.Palette.secondaryText)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
     @ViewBuilder
     private var historyContent: some View {
         let derived = viewModel.derived
+        // Captured once like `derived`: each access re-runs the interval math.
+        let chartDomain = viewModel.chartDomain
         let selectedDate = viewModel.selectedDay.flatMap { DateFormatting.parseDayDate($0.date) }
         VStack(alignment: .leading, spacing: 16) {
             statsOverviewCard(derived: derived)
             if let periodCosts = viewModel.periodCosts {
                 HistoryPeriodCostsCard(costs: periodCosts)
             }
-            solarCard(derived: derived, selectedDate: selectedDate)
-            gridUsageCard(derived: derived, selectedDate: selectedDate)
-            dailyUsageCard(derived: derived, selectedDate: selectedDate)
+            solarCard(derived: derived, selectedDate: selectedDate, chartDomain: chartDomain)
+            gridUsageCard(derived: derived, selectedDate: selectedDate, chartDomain: chartDomain)
+            dailyUsageCard(derived: derived, selectedDate: selectedDate, chartDomain: chartDomain)
             if let selectedDay = viewModel.selectedDay {
                 summaryCard(for: selectedDay)
             }
@@ -162,6 +219,7 @@ struct HistoryView: View {
     @ViewBuilder
     private var historyContentRegular: some View {
         let derived = viewModel.derived
+        let chartDomain = viewModel.chartDomain
         let selectedDate = viewModel.selectedDay.flatMap { DateFormatting.parseDayDate($0.date) }
         VStack(alignment: .leading, spacing: 16) {
             statsOverviewCard(derived: derived)
@@ -169,9 +227,9 @@ struct HistoryView: View {
                 HistoryPeriodCostsCard(costs: periodCosts)
             }
             AdaptiveColumnsLayout {
-                solarCard(derived: derived, selectedDate: selectedDate)
-                gridUsageCard(derived: derived, selectedDate: selectedDate)
-                dailyUsageCard(derived: derived, selectedDate: selectedDate)
+                solarCard(derived: derived, selectedDate: selectedDate, chartDomain: chartDomain)
+                gridUsageCard(derived: derived, selectedDate: selectedDate, chartDomain: chartDomain)
+                dailyUsageCard(derived: derived, selectedDate: selectedDate, chartDomain: chartDomain)
                 if let selectedDay = viewModel.selectedDay {
                     summaryCard(for: selectedDay)
                 }
@@ -186,42 +244,49 @@ struct HistoryView: View {
         HistoryStatsOverviewCard(
             summary: derived.summary,
             entries: derived.solar,
+            periodDays: viewModel.pastPeriodDayCount,
             onSelect: selectDay
         )
     }
 
     @ViewBuilder
-    private func solarCard(derived: HistoryViewModel.DerivedState, selectedDate: Date?) -> some View {
+    private func solarCard(
+        derived: HistoryViewModel.DerivedState, selectedDate: Date?, chartDomain: HistoryChartDomain?
+    ) -> some View {
         HistorySolarCard(
             entries: derived.solar,
             summary: derived.summary,
             selectedDate: selectedDate,
-            rangeDays: viewModel.resolvedRangeDays,
-            chartDomain: viewModel.chartDomain,
+            periodQuery: viewModel.periodQuery,
+            chartDomain: chartDomain,
             onSelect: selectDay
         )
     }
 
     @ViewBuilder
-    private func gridUsageCard(derived: HistoryViewModel.DerivedState, selectedDate: Date?) -> some View {
+    private func gridUsageCard(
+        derived: HistoryViewModel.DerivedState, selectedDate: Date?, chartDomain: HistoryChartDomain?
+    ) -> some View {
         HistoryGridUsageCard(
             entries: derived.grid,
             summary: derived.summary,
             selectedDate: selectedDate,
-            rangeDays: viewModel.resolvedRangeDays,
-            chartDomain: viewModel.chartDomain,
+            periodQuery: viewModel.periodQuery,
+            chartDomain: chartDomain,
             onSelect: selectDay
         )
     }
 
     @ViewBuilder
-    private func dailyUsageCard(derived: HistoryViewModel.DerivedState, selectedDate: Date?) -> some View {
+    private func dailyUsageCard(
+        derived: HistoryViewModel.DerivedState, selectedDate: Date?, chartDomain: HistoryChartDomain?
+    ) -> some View {
         HistoryDailyUsageCard(
             entries: derived.dailyUsage,
             summary: derived.summary,
             selectedDate: selectedDate,
-            rangeDays: viewModel.resolvedRangeDays,
-            chartDomain: viewModel.chartDomain,
+            periodQuery: viewModel.periodQuery,
+            chartDomain: chartDomain,
             onSelect: selectDay
         )
     }
@@ -291,8 +356,10 @@ struct HistoryView: View {
                 .appFont(.subheadline)
                 .foregroundStyle(.secondary)
             HStack {
+                // reload() keeps a navigated past period in place on retry
+                // (req 1.8) — see the .refreshable note above.
                 Button("Retry") {
-                    Task { await viewModel.loadHistory(range: selectedRange) }
+                    Task { await viewModel.reload() }
                 }
                 .buttonStyle(.borderedProminent)
 
@@ -331,25 +398,3 @@ private enum HistorySummaryDateFormatter {
         return formatter
     }()
 }
-
-#if DEBUG
-#Preview("Compact") {
-    let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
-    // swiftlint:disable:next force_try
-    let container = try! ModelContainer(for: CachedDayEnergy.self, configurations: configuration)
-    NavigationStack {
-        HistoryView(apiClient: MockFluxAPIClient.preview, modelContext: ModelContext(container))
-    }
-}
-
-#Preview("Regular 770") {
-    let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
-    // swiftlint:disable:next force_try
-    let container = try! ModelContainer(for: CachedDayEnergy.self, configurations: configuration)
-    NavigationStack {
-        HistoryView(apiClient: MockFluxAPIClient.preview, modelContext: ModelContext(container))
-    }
-    .frame(width: 770)
-    .environment(\.horizontalSizeClass, .regular)
-}
-#endif

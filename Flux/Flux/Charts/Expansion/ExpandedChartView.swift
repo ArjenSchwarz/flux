@@ -1,3 +1,4 @@
+import FluxCore
 import SwiftUI
 
 struct ExpandedChartView: View {
@@ -8,7 +9,7 @@ struct ExpandedChartView: View {
     let kind: ChartKind
     let history: ExpandedHistoryHostController?
     let day: ExpandedDayHostController?
-    let historyRangeDays: Int
+    let historyQuery: HistoryQuery
     let onSelectHistoryDay: ((String) -> Void)?
     let selectedHistoryDate: Binding<Date?>?
     let selectedDayDate: Binding<Date?>?
@@ -20,7 +21,7 @@ struct ExpandedChartView: View {
         kind: ChartKind,
         history: ExpandedHistoryHostController? = nil,
         day: ExpandedDayHostController? = nil,
-        historyRangeDays: Int = ExpandedChartView.defaultHistoryRangeDays,
+        historyQuery: HistoryQuery = .days(ExpandedChartView.defaultHistoryRangeDays),
         selectedHistoryDate: Binding<Date?>? = nil,
         onSelectHistoryDay: ((String) -> Void)? = nil,
         selectedDayDate: Binding<Date?>? = nil
@@ -28,7 +29,7 @@ struct ExpandedChartView: View {
         self.kind = kind
         self.history = history
         self.day = day
-        self.historyRangeDays = historyRangeDays
+        self.historyQuery = historyQuery
         self.selectedHistoryDate = selectedHistoryDate
         self.onSelectHistoryDay = onSelectHistoryDay
         self.selectedDayDate = selectedDayDate
@@ -58,7 +59,7 @@ struct ExpandedChartView: View {
                     kind: kind,
                     controller: history,
                     selectedDate: selectedHistoryDate ?? .constant(nil),
-                    rangeDays: historyRangeDays,
+                    periodQuery: historyQuery,
                     onSelect: onSelectHistoryDay ?? { _ in }
                 )
             } else {
@@ -88,7 +89,7 @@ struct ExpandedChartView: View {
         }
         switch kind.hostKind {
         case .history:
-            return .historyRange(days: defaultHistoryRangeDays)
+            return .historyRange(.days(defaultHistoryRangeDays))
         case .day:
             return .daySpecific(date: today())
         }

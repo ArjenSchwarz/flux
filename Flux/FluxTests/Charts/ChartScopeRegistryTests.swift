@@ -1,3 +1,4 @@
+import FluxCore
 import Foundation
 import Testing
 @testable import Flux
@@ -8,7 +9,7 @@ struct ChartScopeRegistryTests {
     @Test("Writing a scope is readable by the same kind")
     func writeThenReadByKind() {
         let registry = ChartScopeRegistry()
-        let scope = ChartScope.historyRange(days: 7)
+        let scope = ChartScope.historyRange(.days(7))
 
         registry.current[.historySolar] = scope
 
@@ -30,7 +31,7 @@ struct ChartScopeRegistryTests {
     @Test("Different kinds are stored independently")
     func differentKindsAreIndependent() {
         let registry = ChartScopeRegistry()
-        let historyScope = ChartScope.historyRange(days: 14)
+        let historyScope = ChartScope.historyRange(.days(14))
         let dayScope = ChartScope.daySpecific(date: Date(timeIntervalSince1970: 1_700_000_000))
 
         registry.current[.historyGridUsage] = historyScope

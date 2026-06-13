@@ -261,6 +261,20 @@ final actor MockFluxAPIClient: FluxAPIClient {
         return HistoryResponse(days: selectedDays)
     }
 
+    /// Real implementation rather than the protocol default: this mock backs
+    /// every preview, and under the default a `.dateRange` would throw, so
+    /// previews navigating to a past period would show the error state.
+    func fetchHistory(query: HistoryQuery) async throws -> HistoryResponse {
+        switch query {
+        case let .days(days):
+            return try await fetchHistory(days: days)
+        case let .dateRange(start, end):
+            // Zero-padded YYYY-MM-DD strings compare chronologically.
+            let selectedDays = Self.historyDays.filter { $0.date >= start && $0.date <= end }
+            return HistoryResponse(days: selectedDays)
+        }
+    }
+
     func fetchDay(date: String) async throws -> DayDetailResponse {
         Self.dayDetailResponse(for: date)
     }
