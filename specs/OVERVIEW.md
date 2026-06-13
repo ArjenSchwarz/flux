@@ -307,5 +307,6 @@ During the off-peak charging window, `GET /status` returns a projected battery S
 
 - [decision_log.md](offpeak-charge-projection/decision_log.md)
 - [design.md](offpeak-charge-projection/design.md)
+- [implementation.md](offpeak-charge-projection/implementation.md)
 - [requirements.md](offpeak-charge-projection/requirements.md)
 - [tasks.md](offpeak-charge-projection/tasks.md)
