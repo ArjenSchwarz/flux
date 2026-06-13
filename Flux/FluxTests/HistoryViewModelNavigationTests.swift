@@ -187,6 +187,34 @@ struct HistoryViewModelNavigationTests {
     }
 
     @Test
+    func jumpToSamePeriodRefetchesFromErrorState() async throws {
+        let context = try makeModelContext()
+        let apiClient = RecordingQueryAPIClient()
+        let viewModel = makeViewModel(apiClient: apiClient, modelContext: context)
+
+        await viewModel.loadHistory(range: .weekToDate)
+        await viewModel.navigatePrevious()
+
+        // A reload of that same week then fails, leaving the view model in an
+        // error state while the previous week is still the rendered snapshot.
+        apiClient.historyResult = .failure(FluxAPIError.serverError)
+        await viewModel.reload()
+        #expect(viewModel.error == .serverError)
+
+        // Retrying via the picker (a date inside the rendered-but-errored week)
+        // must bypass the already-rendered short-circuit and re-issue the
+        // request — the error state needs its retry path, not a no-op.
+        apiClient.historyResult = .success(HistoryResponse(days: []))
+        await viewModel.jumpTo(date: sydneyMidnight(year: 2026, month: 4, day: 9))
+
+        #expect(apiClient.requestedQueries == [
+            .days(3), Self.previousWeekQuery, Self.previousWeekQuery, Self.previousWeekQuery,
+        ])
+        #expect(viewModel.error == nil)
+        #expect(viewModel.resolvedQuery == Self.previousWeekQuery)
+    }
+
+    @Test
     func returnToCurrentClearsAnchorAndRequestsDaysForm() async throws {
         let context = try makeModelContext()
         let apiClient = RecordingQueryAPIClient()

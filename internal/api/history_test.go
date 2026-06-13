@@ -478,6 +478,10 @@ func TestHandleHistoryRangeParamMatrix(t *testing.T) {
 			params:     map[string]string{"days": "7", "start": "2026-04-01"},
 			wantStatus: 400, wantErr: "cannot combine days with start and end parameters",
 		},
+		"days with lone end rejected": {
+			params:     map[string]string{"days": "7", "end": "2026-04-07"},
+			wantStatus: 400, wantErr: "cannot combine days with start and end parameters",
+		},
 		"lone start rejected": {
 			params:     map[string]string{"start": "2026-04-01"},
 			wantStatus: 400, wantErr: "start and end must be supplied together",

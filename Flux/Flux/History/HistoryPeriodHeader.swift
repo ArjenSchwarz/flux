@@ -77,7 +77,7 @@ struct HistoryPeriodHeader: View {
         // The picker renders and caps in the environment calendar — without
         // these, "today" and the snapped period could be off by a day on a
         // non-Sydney device.
-        .environment(\.calendar, Self.pickerCalendar)
+        .environment(\.calendar, Self.makePickerCalendar())
         .environment(\.timeZone, DateFormatting.sydneyTimeZone)
         .labelsHidden()
         .padding()
@@ -88,11 +88,12 @@ struct HistoryPeriodHeader: View {
         }
     }
 
-    /// Sydney calendar adopting the device's first-weekday setting and locale,
-    /// so the picker's week rows start on the same day as the Wk period maths
-    /// (`Calendar.current.firstWeekday` everywhere else) and the user's system
-    /// preference.
-    private static var pickerCalendar: Calendar {
+    /// Builds a Sydney calendar adopting the device's first-weekday setting and
+    /// locale, so the picker's week rows start on the same day as the Wk period
+    /// maths (`Calendar.current.firstWeekday` everywhere else) and the user's
+    /// system preference. A factory, not a cached property: it re-reads the
+    /// current locale each time so an in-session region change is picked up.
+    private static func makePickerCalendar() -> Calendar {
         var calendar = DateFormatting.sydneyCalendar
         calendar.firstWeekday = Calendar.current.firstWeekday
         calendar.locale = Locale.current

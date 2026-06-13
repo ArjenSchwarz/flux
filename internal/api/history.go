@@ -54,8 +54,10 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 		if endParam >= today {
 			return errorResponse(400, "end must be before the current date")
 		}
-		// Inclusive span cap of 31 days. AddDate is calendar-aware, so a DST
-		// transition inside the window cannot produce an off-by-one.
+		// Inclusive span cap of 31 days: start plus 30 days is the 31st (and
+		// last allowed) day, so end may equal but not exceed it. AddDate is
+		// calendar-aware, so a DST transition inside the window cannot produce
+		// an off-by-one.
 		if end.After(start.AddDate(0, 0, 30)) {
 			return errorResponse(400, "date range must not exceed 31 days")
 		}
