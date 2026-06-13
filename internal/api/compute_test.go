@@ -3,6 +3,7 @@ package api
 import (
 	"math"
 	"testing"
+	"testing/quick"
 	"time"
 
 	"github.com/ArjenSchwarz/flux/internal/derivedstats"
@@ -1148,4 +1149,151 @@ func TestReconcileEnergy(t *testing.T) {
 			assert.InDelta(t, tc.want.EDischarge, got.EDischarge, 1e-9)
 		})
 	}
+}
+
+func TestProjectOffpeakEndSoc(t *testing.T) {
+	// Window 11:00-14:00 in Sydney local time; capacity 13.34 kWh. These are
+	// the design.md Testing Strategy fixtures, which double as the deferred
+	// worked example from decision_log Decision 7.
+	const (
+		start = "11:00"
+		end   = "14:00"
+		cap   = 13.34
+	)
+	at := func(h, m int) time.Time {
+		return time.Date(2026, 4, 15, h, m, 0, 0, sydneyTZ)
+	}
+
+	tests := map[string]struct {
+		now  time.Time
+		soc  float64
+		cap  float64
+		want *float64
+	}{
+		"crosses 95 boundary": {
+			now: at(12, 0), soc: 50, cap: cap, want: floatPtr(97.5),
+		},
+		"fast rate only never reaches 95": {
+			now: at(13, 30), soc: 40, cap: cap, want: floatPtr(56.9),
+		},
+		"already in trickle band clamps to 100": {
+			now: at(13, 0), soc: 97, cap: cap, want: floatPtr(100.0),
+		},
+		"crosses 95 mid window": {
+			now: at(13, 0), soc: 90, cap: cap, want: floatPtr(98.2),
+		},
+		"already full": {
+			now: at(12, 0), soc: 100, cap: cap, want: floatPtr(100.0),
+		},
+		"before window returns nil": {
+			now: at(10, 0), soc: 50, cap: cap, want: nil,
+		},
+		"after window returns nil": {
+			now: at(14, 30), soc: 50, cap: cap, want: nil,
+		},
+		"zero capacity returns nil": {
+			now: at(12, 0), soc: 50, cap: 0, want: nil,
+		},
+		"negative capacity returns nil": {
+			now: at(12, 0), soc: 50, cap: -5, want: nil,
+		},
+		// 95% tie-break: SoC exactly 95 charges at the 500 W trickle rate. Over
+		// the 2h from 12:00 the trickle gain is 0.5/13.34*100*2 = 7.5, so
+		// 95 -> 102.5, clamped to 100.
+		"soc exactly 95 uses trickle rate": {
+			now: at(12, 0), soc: 95, cap: cap, want: floatPtr(100.0),
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := projectOffpeakEndSoc(tc.soc, tc.cap, tc.now, start, end)
+			if tc.want == nil {
+				assert.Nil(t, got)
+				return
+			}
+			require.NotNil(t, got)
+			assert.InDelta(t, *tc.want, *got, 1e-9)
+		})
+	}
+}
+
+// TestPropertyProjectOffpeakEndSoc exercises the closed-form curve's
+// invariants over random inputs: the result is always within [soc, 100], and
+// it is monotonic non-decreasing in both the hours remaining and the starting
+// SoC. testing/quick generates inputs independently, so each monotonicity
+// property constructs a second input that differs from the generated base in
+// exactly one dimension.
+func TestPropertyProjectOffpeakEndSoc(t *testing.T) {
+	const (
+		start = "11:00"
+		end   = "14:00"
+	)
+	// nowFor maps a fraction f in [0,1] onto an instant inside the window
+	// [11:00, 14:00). f=0 is 11:00 (3h remaining); f→1 approaches 14:00
+	// (0h remaining). A larger f means fewer hours remaining.
+	nowFor := func(f float64) time.Time {
+		f = math.Mod(math.Abs(f), 1)
+		// Cap below 1 so we never land exactly on (or past) the window end,
+		// where the minute-of-day gate flips to false.
+		secs := int(f * (3*3600 - 1))
+		return time.Date(2026, 4, 15, 11, 0, 0, 0, sydneyTZ).Add(time.Duration(secs) * time.Second)
+	}
+	// normSoc maps an arbitrary float onto [0, 100].
+	normSoc := func(x float64) float64 {
+		return math.Mod(math.Abs(x), 100.0000001)
+	}
+	// normCap maps an arbitrary float onto a positive capacity in (0, ~100].
+	normCap := func(x float64) float64 {
+		return math.Mod(math.Abs(x), 100) + 1
+	}
+
+	t.Run("result within [soc, 100]", func(t *testing.T) {
+		f := func(socRaw, capRaw, fRaw float64) bool {
+			soc := normSoc(socRaw)
+			capKwh := normCap(capRaw)
+			got := projectOffpeakEndSoc(soc, capKwh, nowFor(fRaw), start, end)
+			if got == nil {
+				return false // always in-window with positive capacity
+			}
+			return *got >= soc-1e-9 && *got <= 100+1e-9
+		}
+		require.NoError(t, quick.Check(f, nil))
+	})
+
+	t.Run("monotonic non-decreasing in hours remaining", func(t *testing.T) {
+		f := func(socRaw, capRaw, fRaw float64) bool {
+			soc := normSoc(socRaw)
+			capKwh := normCap(capRaw)
+			f0 := math.Mod(math.Abs(fRaw), 1)
+			// Earlier now (more hours remaining) vs the same instant moved
+			// later (fewer hours). More hours must not yield a lower SoC.
+			fLate := f0 + (1-f0)/2 // strictly later than f0, still < 1
+			early := projectOffpeakEndSoc(soc, capKwh, nowFor(f0), start, end)
+			late := projectOffpeakEndSoc(soc, capKwh, nowFor(fLate), start, end)
+			if early == nil || late == nil {
+				return false
+			}
+			return *early >= *late-1e-9
+		}
+		require.NoError(t, quick.Check(f, nil))
+	})
+
+	t.Run("monotonic non-decreasing in soc", func(t *testing.T) {
+		f := func(socRaw, capRaw, fRaw float64) bool {
+			capKwh := normCap(capRaw)
+			now := nowFor(fRaw)
+			lowSoc := math.Mod(math.Abs(socRaw), 100)
+			// Same now and capacity; a higher starting SoC must not project a
+			// lower end SoC.
+			highSoc := lowSoc + (100-lowSoc)/2 // strictly greater, <= 100
+			low := projectOffpeakEndSoc(lowSoc, capKwh, now, start, end)
+			high := projectOffpeakEndSoc(highSoc, capKwh, now, start, end)
+			if low == nil || high == nil {
+				return false
+			}
+			return *high >= *low-1e-9
+		}
+		require.NoError(t, quick.Check(f, nil))
+	})
 }

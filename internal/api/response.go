@@ -67,6 +67,12 @@ type RollingAvg struct {
 // written, or "pending" while the window is open and deltas are derived
 // from the current daily-energy snapshot. Empty when no record exists or
 // when deltas cannot be computed.
+//
+// ProjectedEndSoc is the idealised SoC (percent) the battery will reach by
+// WindowEnd if charging continues at full capability. It is a pointer with no
+// omitempty so absence serialises as explicit JSON null (mirrors
+// EstimatedCutoff): null means "no projection — outside the window or no fresh
+// live data", which clients must distinguish from a real value. See AC 3.2.
 type OffpeakData struct {
 	WindowStart         string   `json:"windowStart"`
 	WindowEnd           string   `json:"windowEnd"`
@@ -77,6 +83,7 @@ type OffpeakData struct {
 	BatteryDischargeKwh *float64 `json:"batteryDischargeKwh"`
 	GridExportKwh       *float64 `json:"gridExportKwh"`
 	BatteryDeltaPercent *float64 `json:"batteryDeltaPercent"`
+	ProjectedEndSoc     *float64 `json:"projectedEndSoc"`
 }
 
 // TodayEnergy contains cumulative energy totals for the current day.

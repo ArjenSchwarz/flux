@@ -6,7 +6,7 @@ references:
 ---
 # Off-peak Charge Projection
 
-- [ ] 1. Write failing unit and property tests for projectOffpeakEndSoc <!-- id:zugls51 -->
+- [x] 1. Write failing unit and property tests for projectOffpeakEndSoc <!-- id:zugls51 -->
   - Table-driven in internal/api/compute_test.go using the design.md Testing Strategy fixtures (capacity 13.34 kWh, window end 14:00): 12:00/50->97.5, 13:30/40->56.9, 13:00/97->100.0, 13:00/90->98.2, 12:00/100->100.0; before-window 10:00/50->nil; after-window 14:30/50->nil; capacity<=0->nil
   - Cover the 95% tie-break: SoC exactly 95 charges at the 500 W rate; SoC <95 uses 4.5 kW up to 95 then 500 W
   - Property tests (testing/quick): result in [soc,100]; monotonic non-decreasing in hours and in soc, holding the other inputs fixed per generated paired comparison
@@ -14,7 +14,7 @@ references:
   - Requirements: [1.1](requirements.md#1.1), [1.2](requirements.md#1.2), [1.3](requirements.md#1.3), [1.5](requirements.md#1.5), [1.6](requirements.md#1.6), [1.7](requirements.md#1.7), [1.8](requirements.md#1.8), [1.9](requirements.md#1.9), [1.10](requirements.md#1.10), [2.1](requirements.md#2.1), [2.3](requirements.md#2.3)
   - References: internal/api/compute.go, internal/api/compute_test.go, specs/offpeak-charge-projection/design.md
 
-- [ ] 2. Implement projectOffpeakEndSoc, charge constants, and the ProjectedEndSoc response field <!-- id:zugls52 -->
+- [x] 2. Implement projectOffpeakEndSoc, charge constants, and the ProjectedEndSoc response field <!-- id:zugls52 -->
   - compute.go constants (mirror maxDischargeKW style): offpeakChargeRateKW=4.5, offpeakTrickleRateKW=0.5, fastChargeMaxSoc=95.0
   - projectOffpeakEndSoc(soc, capacityKwh, now, offpeakStart, offpeakEnd) *float64: closed-form two-rate curve; gate via withinOffpeakWindow and capacity>0; window-end = sydneyTZ midnight + endMin (as nextOffpeakStart); clamp to [soc,100]; roundPower to 1 dp
   - response.go: add ProjectedEndSoc *float64 `json:"projectedEndSoc"` to OffpeakData (pointer, no omitempty so absence serialises as explicit null)
@@ -23,7 +23,7 @@ references:
   - Requirements: [1.1](requirements.md#1.1), [1.2](requirements.md#1.2), [1.3](requirements.md#1.3), [1.4](requirements.md#1.4), [1.5](requirements.md#1.5), [1.6](requirements.md#1.6), [1.7](requirements.md#1.7), [1.8](requirements.md#1.8), [1.9](requirements.md#1.9), [1.10](requirements.md#1.10), [2.1](requirements.md#2.1), [2.3](requirements.md#2.3), [3.1](requirements.md#3.1), [3.2](requirements.md#3.2)
   - References: internal/api/compute.go, internal/api/response.go
 
-- [ ] 3. Write failing status-handler integration tests for the projection <!-- id:zugls53 -->
+- [x] 3. Write failing status-handler integration tests for the projection <!-- id:zugls53 -->
   - inside window + fresh live -> offpeak.projectedEndSoc present; outside window -> nil; stale live (no fresh reading) -> nil
   - simulateLoadWatts>0 returns the SAME projectedEndSoc as the unsimulated call (AC 2.4)
   - absent projection serialises as JSON null (no omitempty)
@@ -32,7 +32,7 @@ references:
   - Requirements: [2.1](requirements.md#2.1), [2.2](requirements.md#2.2), [2.4](requirements.md#2.4), [3.1](requirements.md#3.1), [3.2](requirements.md#3.2)
   - References: internal/api/status_test.go
 
-- [ ] 4. Wire projectOffpeakEndSoc into the status handler <!-- id:zugls54 -->
+- [x] 4. Wire projectOffpeakEndSoc into the status handler <!-- id:zugls54 -->
   - After resp.Offpeak = buildOffpeak(...), on the liveFresh branch call projectOffpeakEndSoc(latest.Soc, capacity, now, h.offpeakStart, h.offpeakEnd) and assign to resp.Offpeak.ProjectedEndSoc
   - Reuse the existing `capacity` variable (status.go:125) for AC 1.4 parity with EstimatedCutoff — no second capacity lookup
   - Run make test and make lint
