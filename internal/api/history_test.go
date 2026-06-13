@@ -488,11 +488,11 @@ func TestHandleHistoryRangeParamMatrix(t *testing.T) {
 		},
 		"unparseable start rejected": {
 			params:     map[string]string{"start": "01-04-2026", "end": "2026-04-07"},
-			wantStatus: 400, wantErr: "invalid start or end parameter, must be YYYY-MM-DD",
+			wantStatus: 400, wantErr: "invalid start parameter, must be YYYY-MM-DD",
 		},
 		"impossible end date rejected": {
 			params:     map[string]string{"start": "2026-04-01", "end": "2026-04-31"},
-			wantStatus: 400, wantErr: "invalid start or end parameter, must be YYYY-MM-DD",
+			wantStatus: 400, wantErr: "invalid end parameter, must be YYYY-MM-DD",
 		},
 		"end before start rejected": {
 			params:     map[string]string{"start": "2026-04-07", "end": "2026-04-01"},

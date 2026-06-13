@@ -40,11 +40,11 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 		// compute and never includes a today row (req 5.3).
 		start, err := time.ParseInLocation("2006-01-02", startParam, sydneyTZ)
 		if err != nil {
-			return errorResponse(400, "invalid start or end parameter, must be YYYY-MM-DD")
+			return errorResponse(400, "invalid start parameter, must be YYYY-MM-DD")
 		}
 		end, err := time.ParseInLocation("2006-01-02", endParam, sydneyTZ)
 		if err != nil {
-			return errorResponse(400, "invalid start or end parameter, must be YYYY-MM-DD")
+			return errorResponse(400, "invalid end parameter, must be YYYY-MM-DD")
 		}
 		if end.Before(start) {
 			return errorResponse(400, "end must not be before start")
