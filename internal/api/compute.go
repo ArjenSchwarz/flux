@@ -241,9 +241,8 @@ func projectOffpeakEndSoc(soc, capacityKwh float64, now time.Time, offpeakStart,
 	// construction as nextOffpeakStart. withinOffpeakWindow gates on
 	// minute-of-day so now is always before this instant here; h is a
 	// positive, seconds-precise duration absorbed by the [soc, 100] clamp.
-	local := now.In(sydneyTZ)
 	windowEnd := startOfDaySydney(now).Add(time.Duration(endMin) * time.Minute)
-	h := windowEnd.Sub(local).Hours()
+	h := windowEnd.Sub(now).Hours()
 
 	// r converts a charge power (kW) to a SoC rate (percent per hour).
 	r := func(kw float64) float64 { return kw / capacityKwh * 100 }
