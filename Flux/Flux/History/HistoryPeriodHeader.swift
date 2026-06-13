@@ -5,9 +5,9 @@ import SwiftUI
 /// in content on both platforms (Decision 14) and styled after
 /// `DayNavigationHeader`: chevrons flanking a centred period label. Tapping
 /// the label opens a graphical date picker capped at Sydney today (req 3.2);
-/// a compact "Current" button appears trailing the header only when viewing a
-/// past period (req 2.1/2.2, Decision 8). The next chevron is visible but
-/// disabled at the current period (req 1.3).
+/// a compact "Current" button appears beneath the label — between the
+/// chevrons — only when viewing a past period (req 2.1/2.2, Decision 8). The
+/// next chevron is visible but disabled at the current period (req 1.3).
 struct HistoryPeriodHeader: View {
     let range: HistoryRange
     let period: HistoryPeriod
@@ -29,7 +29,12 @@ struct HistoryPeriodHeader: View {
                 onPrevious()
             }
             Spacer()
-            periodLabel
+            VStack(spacing: 4) {
+                periodLabel
+                if !isViewingCurrentPeriod {
+                    currentButton
+                }
+            }
             Spacer()
             navButton(
                 symbol: "chevron.right",
@@ -37,9 +42,6 @@ struct HistoryPeriodHeader: View {
                 accessibilityLabel: "Next period"
             ) {
                 onNext()
-            }
-            if !isViewingCurrentPeriod {
-                currentButton
             }
         }
         .foregroundStyle(FluxTheme.Palette.primaryText)
@@ -75,7 +77,7 @@ struct HistoryPeriodHeader: View {
         // The picker renders and caps in the environment calendar — without
         // these, "today" and the snapped period could be off by a day on a
         // non-Sydney device.
-        .environment(\.calendar, DateFormatting.sydneyCalendar)
+        .environment(\.calendar, Self.pickerCalendar)
         .environment(\.timeZone, DateFormatting.sydneyTimeZone)
         .labelsHidden()
         .padding()
@@ -84,6 +86,17 @@ struct HistoryPeriodHeader: View {
             showingPicker = false
             onJump(newDate)
         }
+    }
+
+    /// Sydney calendar adopting the device's first-weekday setting and locale,
+    /// so the picker's week rows start on the same day as the Wk period maths
+    /// (`Calendar.current.firstWeekday` everywhere else) and the user's system
+    /// preference.
+    private static var pickerCalendar: Calendar {
+        var calendar = DateFormatting.sydneyCalendar
+        calendar.firstWeekday = Calendar.current.firstWeekday
+        calendar.locale = Locale.current
+        return calendar
     }
 
     private var currentButton: some View {
