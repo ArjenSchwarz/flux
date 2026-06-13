@@ -255,7 +255,9 @@ struct DashboardView: View {
                 .flatMap(DateFormatting.parseTimestamp),
             offpeakBatteryDeltaPercent: viewModel.status?.offpeak?.batteryDeltaPercent,
             showsOffpeakDelta: true,
-            energyLeftKwh: energyLeftKwh
+            energyLeftKwh: energyLeftKwh,
+            projectedOffpeakEndSoc: viewModel.status?.offpeak?.projectedEndSoc,
+            offpeakWindowEnd: viewModel.status?.offpeak?.windowEnd
         )
     }
 

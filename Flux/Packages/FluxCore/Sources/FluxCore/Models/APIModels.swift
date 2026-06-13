@@ -132,6 +132,10 @@ public struct OffpeakData: Codable, Sendable {
     public let batteryDischargeKwh: Double?
     public let gridExportKwh: Double?
     public let batteryDeltaPercent: Double?
+    /// Server-computed projected SoC (percent) at the off-peak window end,
+    /// assuming charging continues at the idealised max rate. Present only
+    /// while inside the window with fresh live data; nil otherwise.
+    public let projectedEndSoc: Double?
 
     public init(
         windowStart: String,
@@ -142,7 +146,8 @@ public struct OffpeakData: Codable, Sendable {
         batteryChargeKwh: Double?,
         batteryDischargeKwh: Double?,
         gridExportKwh: Double?,
-        batteryDeltaPercent: Double?
+        batteryDeltaPercent: Double?,
+        projectedEndSoc: Double? = nil
     ) {
         self.windowStart = windowStart
         self.windowEnd = windowEnd
@@ -153,6 +158,7 @@ public struct OffpeakData: Codable, Sendable {
         self.batteryDischargeKwh = batteryDischargeKwh
         self.gridExportKwh = gridExportKwh
         self.batteryDeltaPercent = batteryDeltaPercent
+        self.projectedEndSoc = projectedEndSoc
     }
 }
 

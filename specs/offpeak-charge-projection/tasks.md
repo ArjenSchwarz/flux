@@ -41,7 +41,7 @@ references:
   - Requirements: [1.4](requirements.md#1.4), [2.2](requirements.md#2.2), [2.4](requirements.md#2.4), [3.1](requirements.md#3.1)
   - References: internal/api/status.go
 
-- [ ] 5. Add projectedEndSoc to FluxCore OffpeakData and test decoding <!-- id:zugls55 -->
+- [x] 5. Add projectedEndSoc to FluxCore OffpeakData and test decoding <!-- id:zugls55 -->
   - OffpeakData: add `public let projectedEndSoc: Double?` and a trailing init parameter `projectedEndSoc: Double? = nil` (default preserves the MockFluxAPIClient, OffPeakBlock, WidgetFixtures call sites)
   - FluxCore decode test: projectedEndSoc decodes for present, explicit null, and absent JSON; the property name must match the Go json tag "projectedEndSoc"
   - Type change (exempt from preceding test); bundled with its decode test as one cohesive change
@@ -49,7 +49,7 @@ references:
   - Requirements: [3.2](requirements.md#3.2)
   - References: Flux/Packages/FluxCore/Sources/FluxCore/Models/APIModels.swift
 
-- [ ] 6. Write failing BatteryBlock test for the projection row and precedence <!-- id:zugls56 -->
+- [x] 6. Write failing BatteryBlock test for the projection row and precedence <!-- id:zugls56 -->
   - With projectedOffpeakEndSoc set: the off-peak row label is "Projected at {windowEnd}" and value is SOCFormatting.format(projected); the "Charged during off-peak" delta row is suppressed
   - With projectedOffpeakEndSoc nil: behaviour unchanged (delta row per showsOffpeakDelta)
   - Expose the row-selection and label logic as internal computed properties so it is testable without view-rendering infrastructure
@@ -57,7 +57,7 @@ references:
   - Requirements: [4.1](requirements.md#4.1), [4.2](requirements.md#4.2), [4.3](requirements.md#4.3)
   - References: Flux/Flux/Helpers/BatteryBlock.swift
 
-- [ ] 7. Implement the BatteryBlock projection row <!-- id:zugls57 -->
+- [x] 7. Implement the BatteryBlock projection row <!-- id:zugls57 -->
   - Add params projectedOffpeakEndSoc: Double? and offpeakWindowEnd: String?
   - Render the projection row INSTEAD of the delta row when a projection is present (mutually exclusive); "Lowest" row last: = !(projectedOffpeakEndSoc != nil || rendersOffpeakDelta)
   - Label "Projected at \(offpeakWindowEnd ?? "off-peak end")", value SOCFormatting.format(projected)
@@ -66,7 +66,7 @@ references:
   - Requirements: [4.1](requirements.md#4.1), [4.2](requirements.md#4.2), [4.3](requirements.md#4.3), [4.4](requirements.md#4.4)
   - References: Flux/Flux/Helpers/BatteryBlock.swift
 
-- [ ] 8. Wire the projection through DashboardView and run app build/lint/test <!-- id:zugls58 -->
+- [x] 8. Wire the projection through DashboardView and run app build/lint/test <!-- id:zugls58 -->
   - DashboardView batteryPanel: pass projectedOffpeakEndSoc: viewModel.status?.offpeak?.projectedEndSoc and offpeakWindowEnd: viewModel.status?.offpeak?.windowEnd
   - Run make macos-build, make macos-test, make macos-lint
   - Blocked-by: zugls57 (Implement the BatteryBlock projection row), zugls55 (Add projectedEndSoc to FluxCore OffpeakData and test decoding)
