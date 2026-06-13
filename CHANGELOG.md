@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Internal
 
+- **Off-peak charge projection spec** (T-1533). Full spec for showing the projected battery state-of-charge at the off-peak window end on the Dashboard: requirements, design, 9-entry decision log, and an 8-task TDD plan across two streams (Go backend, Swift app) in `specs/offpeak-charge-projection/`. During the off-peak window, `GET /status` returns a server-computed projection from an idealised two-rate charge curve (4.5 kW up to 95%, then 500 W to 100%), independent of live battery power and load simulation, clamped to `[currentSoC, 100]`; it is rendered as a single contextual row on the Dashboard battery panel that takes precedence over the off-peak delta row, and reuses the cutoff estimate's capacity so the two figures stay consistent. `specs/OVERVIEW.md` updated. No code changes yet.
 - **History period navigation spec** (T-1497). Full spec for navigating to past weeks/months on the History screen: requirements, design, 17-entry decision log, and a 12-task TDD implementation plan in `specs/history-period-navigation/`. Covers prev/next period chevrons, a Sydney-zoned date-picker jump, a return-to-current action, and a new past-only `start`/`end` date-range form on `GET /history` (existing `days=N` form kept permanently per Decision 16; follow-up ticket T-1540 tracks the unification question). `specs/OVERVIEW.md` updated. No code changes yet.
 
 ## [1.6] - 2026-06-10
