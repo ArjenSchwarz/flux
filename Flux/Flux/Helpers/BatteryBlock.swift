@@ -42,7 +42,7 @@ struct BatteryBlock: View {
                     label: "Lowest",
                     value: lowestValue,
                     sub: lowestSubtitle,
-                    last: !(projectedOffpeakEndSoc != nil || rendersOffpeakDelta)
+                    last: offpeakRow == nil
                 )
                 if let offpeakRow {
                     FluxStatRow(
