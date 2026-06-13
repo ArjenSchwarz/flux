@@ -219,6 +219,70 @@ struct APIModelsTests {
         #expect(offpeak.batteryDeltaPercent == nil)
     }
 
+    @Test
+    func decodeOffpeakWithProjectedEndSocPresent() throws {
+        let json = """
+        {
+          "windowStart": "11:00",
+          "windowEnd": "14:00",
+          "gridUsageKwh": 6.1,
+          "solarKwh": 3.2,
+          "batteryChargeKwh": 2.5,
+          "batteryDischargeKwh": 0.1,
+          "gridExportKwh": 0.3,
+          "batteryDeltaPercent": 42.3,
+          "projectedEndSoc": 97.5
+        }
+        """
+
+        let offpeak = try decoder.decode(OffpeakData.self, from: Data(json.utf8))
+
+        #expect(offpeak.projectedEndSoc == 97.5)
+    }
+
+    @Test
+    func decodeOffpeakWithProjectedEndSocNull() throws {
+        let json = """
+        {
+          "windowStart": "11:00",
+          "windowEnd": "14:00",
+          "gridUsageKwh": null,
+          "solarKwh": null,
+          "batteryChargeKwh": null,
+          "batteryDischargeKwh": null,
+          "gridExportKwh": null,
+          "batteryDeltaPercent": null,
+          "projectedEndSoc": null
+        }
+        """
+
+        let offpeak = try decoder.decode(OffpeakData.self, from: Data(json.utf8))
+
+        #expect(offpeak.projectedEndSoc == nil)
+    }
+
+    @Test
+    func decodeOffpeakWithProjectedEndSocAbsent() throws {
+        // Forward/backward compatibility: payloads outside the window omit
+        // the key entirely.
+        let json = """
+        {
+          "windowStart": "11:00",
+          "windowEnd": "14:00",
+          "gridUsageKwh": 6.1,
+          "solarKwh": 3.2,
+          "batteryChargeKwh": 2.5,
+          "batteryDischargeKwh": 0.1,
+          "gridExportKwh": 0.3,
+          "batteryDeltaPercent": 42.3
+        }
+        """
+
+        let offpeak = try decoder.decode(OffpeakData.self, from: Data(json.utf8))
+
+        #expect(offpeak.projectedEndSoc == nil)
+    }
+
     // MARK: - /history response
 
     @Test

@@ -244,6 +244,21 @@ func (h *Handler) handleStatus(ctx context.Context, req events.LambdaFunctionURL
 	// from the readings already in memory for live compute).
 	resp.Offpeak = buildOffpeak(opItem, allReadings, now, h.offpeakStart, h.offpeakEnd)
 
+	// Projected SoC at the off-peak window end (T-1533). Computed only on the
+	// fresh-live branch — same gate as EstimatedCutoff (AC 2.2) — and reusing
+	// the `capacity` variable already resolved above so the two figures never
+	// disagree about capacity (AC 1.4). projectOffpeakEndSoc returns nil
+	// outside the window, on an unparseable window, or for non-positive
+	// capacity; it never reads Pbat or the simulated load, so an active
+	// simulation leaves the projection unchanged (AC 1.9, AC 2.4). resp.Offpeak
+	// is always non-nil here (buildOffpeak always returns window times).
+	if liveFresh {
+		latest := allReadings[len(allReadings)-1]
+		if p := projectOffpeakEndSoc(latest.Soc, capacity, now, h.offpeakStart, h.offpeakEnd); p != nil {
+			resp.Offpeak.ProjectedEndSoc = p
+		}
+	}
+
 	// Peak grid import so far today: integrated directly from readings over the
 	// two windows bracketing off-peak, independent of reconcileEnergy so the
 	// off-peak sampling artifact never lands on peak (T-1421). Absent until the

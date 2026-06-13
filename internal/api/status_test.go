@@ -1059,6 +1059,144 @@ func TestHandleStatusCantEmptyBeforeOffpeak(t *testing.T) {
 	})
 }
 
+// TestHandleStatusProjectedEndSoc covers the off-peak charge projection on the
+// /status response (T-1533): it is present only inside the window on fresh live
+// data, absent (explicit JSON null) otherwise, and unaffected by an active load
+// simulation.
+func TestHandleStatusProjectedEndSoc(t *testing.T) {
+	// 12:00 Sydney, two hours before the 14:00 window end. With SoC 50 and the
+	// fallback 13.34 kWh capacity the closed-form curve projects 97.5%.
+	insideWindow := time.Date(2026, 4, 15, 12, 0, 0, 0, sydneyTZ)
+
+	freshReadingsAt := func(now time.Time, soc float64) func(context.Context, string, int64, int64) ([]dynamo.ReadingItem, error) {
+		return func(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
+			nowUnix := now.Unix()
+			return []dynamo.ReadingItem{
+				{Timestamp: nowUnix - 20, Ppv: 0, Pload: 200, Pbat: -3000, Pgrid: 3200, Soc: soc},
+				{Timestamp: nowUnix - 10, Ppv: 0, Pload: 200, Pbat: -3000, Pgrid: 3200, Soc: soc},
+			}, nil
+		}
+	}
+
+	t.Run("inside window and fresh live emits projection", func(t *testing.T) {
+		mr := &mockReader{
+			queryReadingsFn: freshReadingsAt(insideWindow, 50),
+			getSystemFn: func(_ context.Context, serial string) (*dynamo.SystemItem, error) {
+				return &dynamo.SystemItem{SysSn: serial, Cobat: 13.34}, nil
+			},
+		}
+		h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+		h.nowFunc = func() time.Time { return insideWindow }
+
+		resp, err := h.Handle(context.Background(), statusRequest())
+		require.NoError(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+
+		sr := parseStatusResponse(t, resp)
+		require.NotNil(t, sr.Offpeak)
+		require.NotNil(t, sr.Offpeak.ProjectedEndSoc, "projection present inside window with fresh live data")
+		assert.InDelta(t, 97.5, *sr.Offpeak.ProjectedEndSoc, 1e-9)
+	})
+
+	t.Run("outside window emits null", func(t *testing.T) {
+		// 10:00 Sydney — before the 11:00 window start.
+		outside := time.Date(2026, 4, 15, 10, 0, 0, 0, sydneyTZ)
+		mr := &mockReader{
+			queryReadingsFn: freshReadingsAt(outside, 50),
+			getSystemFn: func(_ context.Context, serial string) (*dynamo.SystemItem, error) {
+				return &dynamo.SystemItem{SysSn: serial, Cobat: 13.34}, nil
+			},
+		}
+		h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+		h.nowFunc = func() time.Time { return outside }
+
+		resp, err := h.Handle(context.Background(), statusRequest())
+		require.NoError(t, err)
+		sr := parseStatusResponse(t, resp)
+		require.NotNil(t, sr.Offpeak)
+		assert.Nil(t, sr.Offpeak.ProjectedEndSoc, "projection absent outside the off-peak window")
+	})
+
+	t.Run("stale live emits null even inside window", func(t *testing.T) {
+		// now inside window, but the latest reading is 2h old → !liveFresh.
+		mr := &mockReader{
+			queryReadingsFn: func(_ context.Context, _ string, _, _ int64) ([]dynamo.ReadingItem, error) {
+				return []dynamo.ReadingItem{
+					{Timestamp: insideWindow.Unix() - 2*3600, Ppv: 0, Pload: 200, Pbat: -3000, Pgrid: 3200, Soc: 50},
+				}, nil
+			},
+			getSystemFn: func(_ context.Context, serial string) (*dynamo.SystemItem, error) {
+				return &dynamo.SystemItem{SysSn: serial, Cobat: 13.34}, nil
+			},
+		}
+		h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+		h.nowFunc = func() time.Time { return insideWindow }
+
+		resp, err := h.Handle(context.Background(), statusRequest())
+		require.NoError(t, err)
+		sr := parseStatusResponse(t, resp)
+		assert.Nil(t, sr.Live, "precondition: live omitted when stale")
+		require.NotNil(t, sr.Offpeak)
+		assert.Nil(t, sr.Offpeak.ProjectedEndSoc, "projection absent when live data is stale")
+	})
+
+	t.Run("simulation does not change projection (AC 2.4)", func(t *testing.T) {
+		newReader := func() *mockReader {
+			return &mockReader{
+				queryReadingsFn: freshReadingsAt(insideWindow, 50),
+				getSystemFn: func(_ context.Context, serial string) (*dynamo.SystemItem, error) {
+					return &dynamo.SystemItem{SysSn: serial, Cobat: 13.34}, nil
+				},
+			}
+		}
+
+		// Unsimulated call.
+		hPlain := NewHandler(newReader(), nil, testSerial, testToken, "11:00", "14:00")
+		hPlain.nowFunc = func() time.Time { return insideWindow }
+		respPlain, err := hPlain.Handle(context.Background(), simulateStatusRequest(""))
+		require.NoError(t, err)
+		srPlain := parseStatusResponse(t, respPlain)
+		require.NotNil(t, srPlain.Offpeak)
+		require.NotNil(t, srPlain.Offpeak.ProjectedEndSoc)
+
+		// Simulated call with added load.
+		hSim := NewHandler(newReader(), nil, testSerial, testToken, "11:00", "14:00")
+		hSim.nowFunc = func() time.Time { return insideWindow }
+		respSim, err := hSim.Handle(context.Background(), simulateStatusRequest("3000"))
+		require.NoError(t, err)
+		srSim := parseStatusResponse(t, respSim)
+		require.NotNil(t, srSim.Offpeak)
+		require.NotNil(t, srSim.Offpeak.ProjectedEndSoc, "projection must remain present under simulation")
+
+		assert.Equal(t, *srPlain.Offpeak.ProjectedEndSoc, *srSim.Offpeak.ProjectedEndSoc,
+			"projection is independent of Pbat/simulated load (AC 2.4)")
+	})
+
+	t.Run("absent projection serialises as JSON null (no omitempty)", func(t *testing.T) {
+		// Outside the window → projection absent. The field must still appear in
+		// the offpeak object as explicit null, never omitted.
+		outside := time.Date(2026, 4, 15, 10, 0, 0, 0, sydneyTZ)
+		mr := &mockReader{
+			queryReadingsFn: freshReadingsAt(outside, 50),
+			getSystemFn: func(_ context.Context, serial string) (*dynamo.SystemItem, error) {
+				return &dynamo.SystemItem{SysSn: serial, Cobat: 13.34}, nil
+			},
+		}
+		h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+		h.nowFunc = func() time.Time { return outside }
+
+		resp, err := h.Handle(context.Background(), statusRequest())
+		require.NoError(t, err)
+
+		var raw map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal([]byte(resp.Body), &raw))
+		var offpeak map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal(raw["offpeak"], &offpeak))
+		require.Contains(t, offpeak, "projectedEndSoc", "field must always be serialised (no omitempty)")
+		assert.Equal(t, "null", string(offpeak["projectedEndSoc"]))
+	})
+}
+
 func TestHandleStatusSingleNowCapture(t *testing.T) {
 	// Verify that the handler captures "now" once and uses it consistently.
 	// The mock clock should be called exactly once via nowFunc.

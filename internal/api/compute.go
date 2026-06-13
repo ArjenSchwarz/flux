@@ -209,6 +209,64 @@ func computeCutoffTime(soc, pbat, capacityKwh, cutoffPercent float64, now time.T
 	return &t
 }
 
+// Off-peak charge-curve constants (Decision 3). Hardcoded like maxDischargeKW
+// because Flux monitors a single, fixed battery system — these change only if
+// the hardware changes. The tie-break at fastChargeMaxSoc is `>=` → trickle
+// rate (Decision 7).
+const (
+	offpeakChargeRateKW  = 4.5  // grid charge rate while SoC < fastChargeMaxSoc
+	offpeakTrickleRateKW = 0.5  // 500 W from fastChargeMaxSoc to 100%
+	fastChargeMaxSoc     = 95.0 // percent
+)
+
+// projectOffpeakEndSoc projects the battery SoC (percent) at the off-peak
+// window end using the idealised two-rate charge curve: offpeakChargeRateKW
+// while SoC < fastChargeMaxSoc, then offpeakTrickleRateKW up to 100%.
+//
+// Returns nil when the window is unparseable, now is outside [start, end), or
+// capacity is non-positive. The result is clamped to [soc, 100] and rounded to
+// 1 dp. The projection is a best-case figure independent of the live charge
+// power: it never reads Pbat or the simulated load, so AC 1.9 and AC 2.4 hold
+// by construction (Decision 4, Decision 6).
+func projectOffpeakEndSoc(soc, capacityKwh float64, now time.Time, offpeakStart, offpeakEnd string) *float64 {
+	if capacityKwh <= 0 || !withinOffpeakWindow(now, offpeakStart, offpeakEnd) {
+		return nil
+	}
+	_, endMin, ok := derivedstats.ParseOffpeakWindow(offpeakStart, offpeakEnd)
+	if !ok {
+		return nil
+	}
+
+	// Window-end instant: today's Sydney-local midnight + endMin, same
+	// construction as nextOffpeakStart. withinOffpeakWindow gates on
+	// minute-of-day so now is always before this instant here; h is a
+	// positive, seconds-precise duration absorbed by the [soc, 100] clamp.
+	windowEnd := startOfDaySydney(now).Add(time.Duration(endMin) * time.Minute)
+	h := windowEnd.Sub(now).Hours()
+
+	// r converts a charge power (kW) to a SoC rate (percent per hour).
+	r := func(kw float64) float64 { return kw / capacityKwh * 100 }
+
+	var projected float64
+	switch {
+	case soc >= 100:
+		projected = 100
+	case soc >= fastChargeMaxSoc:
+		projected = soc + r(offpeakTrickleRateKW)*h
+	default:
+		hoursTo95 := (fastChargeMaxSoc - soc) / r(offpeakChargeRateKW)
+		if hoursTo95 >= h {
+			projected = soc + r(offpeakChargeRateKW)*h
+		} else {
+			projected = fastChargeMaxSoc + r(offpeakTrickleRateKW)*(h-hoursTo95)
+		}
+	}
+
+	projected = max(soc, min(100, projected))
+	projected = roundPower(projected)
+	return &projected
+}
+
 // cantEmptyInput bundles the inputs to computeCantEmptyBeforeOffpeak.
 //
 // Soc is the latest battery SOC (percent). CapacityKwh is the configured
