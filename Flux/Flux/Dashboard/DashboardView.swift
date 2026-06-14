@@ -219,6 +219,8 @@ struct DashboardView: View {
             rolling15min: viewModel.status?.rolling15min,
             battery: viewModel.status?.battery,
             offpeakWindowStart: viewModel.status?.offpeak?.windowStart,
+            projectedOffpeakEndSoc: viewModel.status?.offpeak?.projectedEndSoc,
+            offpeakWindowEnd: viewModel.status?.offpeak?.windowEnd,
             isSimulating: viewModel.isSimulating
         ) {
             simulateMenu
@@ -255,9 +257,7 @@ struct DashboardView: View {
                 .flatMap(DateFormatting.parseTimestamp),
             offpeakBatteryDeltaPercent: viewModel.status?.offpeak?.batteryDeltaPercent,
             showsOffpeakDelta: true,
-            energyLeftKwh: energyLeftKwh,
-            projectedOffpeakEndSoc: viewModel.status?.offpeak?.projectedEndSoc,
-            offpeakWindowEnd: viewModel.status?.offpeak?.windowEnd
+            energyLeftKwh: energyLeftKwh
         )
     }
 
