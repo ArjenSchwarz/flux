@@ -255,7 +255,7 @@ The value is meaningful only during the window and the Dashboard labels it with 
 ## Decision 9: Projection row takes precedence over the off-peak delta row in BatteryBlock
 
 **Date**: 2026-06-13
-**Status**: accepted
+**Status**: superseded by Decision 10
 
 ### Context
 
@@ -281,5 +281,41 @@ During the window the projection is the meaningful figure and the delta is genui
 
 **Negative:**
 - The "Charged during off-peak" row is hidden during the window; the realised delta only appears once the window closes.
+
+---
+
+## Decision 10: Show the projection in the hero subline, not a BatteryBlock row
+
+**Date**: 2026-06-14
+**Status**: accepted
+
+### Context
+
+Decision 9 placed the projection as a row in the Dashboard's `BatteryBlock` ("Projected at 14:00 / 97.5%"). In use the figure read as a minor stat buried among the daily battery totals, not as the live, glanceable number it is meant to be. The hero panel already owns the live battery story: the big SoC numeral plus a subline that, when discharging, shows `Discharging · 2.40 kW · empty by 18:30` (the cutoff time in amber). The off-peak projection is the charging-side counterpart of that "empty by" figure and belongs in the same place.
+
+### Decision
+
+Render the projection in the hero panel's charging subline rather than in `BatteryBlock`. While the battery is charging and `/status` carries a projection, the subline reads `Charging · 4.50 kW · ~99% by 14:00`, with the projected figure in the same amber accent the cutoff time uses. The `BatteryBlock` projection row is removed and its delta-row behaviour reverts to the pre-feature state.
+
+### Rationale
+
+The projection is a live, transient figure (off-peak window only), so it belongs with the other live hero figures, not among the day's accumulated battery stats. Mirroring the discharge "empty by" line gives charge and discharge a symmetric, already-familiar treatment, and keeps the projection in exactly one place — there is no second screen or panel to keep consistent. Rounding to a whole percent prefixed with "~" signals an idealised best-case estimate, which suits the densely packed subline better than a 1-dp figure.
+
+### Alternatives Considered
+
+- **Keep the BatteryBlock row (Decision 9)**: A labelled row in the battery panel - Rejected; reads as a static daily stat rather than a live figure, and is visually distant from the SoC numeral it projects forward.
+- **A dedicated second subline under the rate**: `Charging · 4.50 kW` on one line, `Off-peak target ~99% by 14:00` below - Rejected; adds vertical weight to the hero and breaks the symmetry with the single-line discharge treatment.
+- **Show it in both the hero and the BatteryBlock row**: Rejected; the same value in two places on one screen is redundant and risks the two drifting on formatting.
+
+### Consequences
+
+**Positive:**
+- The projection sits beside the SoC numeral it extrapolates, with the same amber accent as the cutoff time — charge and discharge are symmetric.
+- Exactly one place renders the projection; no cross-panel consistency to maintain.
+- `BatteryBlock` returns to a single off-peak responsibility (the realised delta row), simplifying it.
+
+**Negative:**
+- The projection is shown only while charging; if the battery is idle or (under simulation) discharging during the window, it is not surfaced.
+- Whole-percent rounding in the hero drops the 1-dp precision the server computes (acceptable for an idealised figure shown in one spot).
 
 ---

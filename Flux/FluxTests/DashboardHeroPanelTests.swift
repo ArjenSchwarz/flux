@@ -82,4 +82,66 @@ struct DashboardHeroPanelTests {
         #expect(DashboardHeroPanel<EmptyView>.dischargingLabel(2400) == "Discharging · 2.40 kW")
         #expect(DashboardHeroPanel<EmptyView>.chargingLabel(1200) == "Charging · 1.20 kW")
     }
+
+    // The off-peak projection appears as a suffix on the charging subline
+    // (Decision 10). Pin the visible format: the percent is rounded and "~"
+    // marks it as an idealised figure, time-stamped with the window end.
+    @Test
+    func projectedChargeLabelRoundsPercentAndAppendsWindowEnd() {
+        #expect(
+            DashboardHeroPanel<EmptyView>.projectedChargeLabel(soc: 99.1, windowEnd: "14:00")
+                == "~99% by 14:00"
+        )
+        #expect(
+            DashboardHeroPanel<EmptyView>.projectedChargeLabel(soc: 99.6, windowEnd: "14:00")
+                == "~100% by 14:00"
+        )
+    }
+
+    @Test
+    func projectedChargeLabelFallsBackToBarePercentWithoutWindowEnd() {
+        #expect(
+            DashboardHeroPanel<EmptyView>.projectedChargeLabel(soc: 80.4, windowEnd: nil) == "~80%"
+        )
+    }
+
+    // VoiceOver spells out "about N percent" so the "~" is not read as "tilde".
+    @Test
+    func projectedChargeAccessibilityLabelSpellsOutPercent() {
+        #expect(
+            DashboardHeroPanel<EmptyView>.projectedChargeAccessibilityLabel(soc: 99.1, windowEnd: "14:00")
+                == "about 99 percent by 14:00"
+        )
+        #expect(
+            DashboardHeroPanel<EmptyView>.projectedChargeAccessibilityLabel(soc: 80.4, windowEnd: nil)
+                == "about 80 percent"
+        )
+    }
+
+    // AC 4.3: with no projection in /status, the charging subline shows no
+    // suffix. `projectedCharge` is the guard that drives that branch — pin the
+    // present/absent selection directly (the placement inside the `.charging`
+    // case is verified by the preview, not unit-testable here).
+    @Test
+    func projectedChargeIsNilWhenNoProjection() {
+        let panel = DashboardHeroPanel(
+            live: nil,
+            rolling15min: nil,
+            projectedOffpeakEndSoc: nil,
+            offpeakWindowEnd: "14:00"
+        )
+        #expect(panel.projectedCharge == nil)
+    }
+
+    @Test
+    func projectedChargeProducesVisibleAndAccessibleTextWhenPresent() {
+        let panel = DashboardHeroPanel(
+            live: nil,
+            rolling15min: nil,
+            projectedOffpeakEndSoc: 99.1,
+            offpeakWindowEnd: "14:00"
+        )
+        #expect(panel.projectedCharge?.text == "~99% by 14:00")
+        #expect(panel.projectedCharge?.accessibility == "about 99 percent by 14:00")
+    }
 }

@@ -59,7 +59,7 @@ During the off-peak charging window the battery is charged from the grid, but th
 
 **Acceptance Criteria:**
 
-1. <a name="4.1"></a>WHEN the `/status` response includes a projected SoC, the Dashboard SHALL display it as a percentage within the off-peak section.  
+1. <a name="4.1"></a>WHEN the `/status` response includes a projected SoC AND the battery is charging, the Dashboard SHALL display it as a percentage appended to the hero panel's charging subline (e.g. `Charging · 4.50 kW · ~99% by 14:00`). See [Decision 10](decision_log.md).  
 2. <a name="4.2"></a>The Dashboard SHALL label the projection using the off-peak window end time from the same `/status` response, not a client-side constant, so the labelled time matches the time the projection targets.  
 3. <a name="4.3"></a>WHEN the `/status` response does not include a projected SoC, the Dashboard SHALL NOT display the projection or any placeholder for it.  
 4. <a name="4.4"></a>The projection display SHALL render on both iOS and macOS via the shared FluxCore views.  

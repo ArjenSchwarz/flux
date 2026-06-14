@@ -18,15 +18,6 @@ struct BatteryBlock: View {
     var showsOffpeakDelta: Bool = false
     /// When non-nil, renders an "Energy left" row above "Battery cycle".
     var energyLeftKwh: Double?
-    /// Server-computed projected SoC (percent) at the off-peak window end.
-    /// When present, the projection row replaces the "Charged during off-peak"
-    /// delta row (Decision 9 — they are mutually exclusive). Live-only, so it
-    /// is nil on Day Detail / History.
-    var projectedOffpeakEndSoc: Double?
-    /// Off-peak window end label (e.g. "14:00") from the same `/status`
-    /// response, used to label the projection row so the labelled time matches
-    /// the time the projection targets (AC 4.2).
-    var offpeakWindowEnd: String?
 
     var body: some View {
         FluxPanel {
@@ -42,12 +33,12 @@ struct BatteryBlock: View {
                     label: "Lowest",
                     value: lowestValue,
                     sub: lowestSubtitle,
-                    last: offpeakRow == nil
+                    last: !rendersOffpeakDelta
                 )
-                if let offpeakRow {
+                if rendersOffpeakDelta {
                     FluxStatRow(
-                        label: offpeakRow.label,
-                        value: offpeakRow.value,
+                        label: "Charged during off-peak",
+                        value: offpeakDeltaText,
                         last: true
                     )
                 }
@@ -55,29 +46,11 @@ struct BatteryBlock: View {
         }
     }
 
-    /// The single off-peak row to render, or nil when none applies. The
-    /// projection row takes precedence over the delta row (Decision 9); the
-    /// two are mutually exclusive. Internal so the selection contract is
-    /// testable without view-rendering infrastructure.
-    var offpeakRow: (label: String, value: String)? {
-        if let projected = projectedOffpeakEndSoc {
-            return (projectedLabel, SOCFormatting.format(projected))
-        }
-        if rendersOffpeakDelta {
-            return ("Charged during off-peak", offpeakDeltaText)
-        }
-        return nil
-    }
-
-    var projectedLabel: String {
-        "Projected at \(offpeakWindowEnd ?? "off-peak end")"
-    }
-
-    var rendersOffpeakDelta: Bool {
+    private var rendersOffpeakDelta: Bool {
         showsOffpeakDelta || offpeakBatteryDeltaPercent != nil
     }
 
-    var offpeakDeltaText: String {
+    private var offpeakDeltaText: String {
         guard let value = offpeakBatteryDeltaPercent else { return "—" }
         return String(format: "%+.0f%%", value)
     }

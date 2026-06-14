@@ -10,9 +10,10 @@ used to validate the implementation against the spec.
 During the cheap "off-peak" charging window, the battery is being filled from the
 grid. Before this change, the app showed you the current charge level but gave no
 hint of how full the battery would be by the time the cheap window closed. This
-feature adds a small line on the Dashboard's battery panel that reads, for example,
-**"Projected at 14:00 — 97.5%"**: an estimate of where the battery will end up if
-charging keeps going at full speed until the window ends.
+feature adds the estimate to the Dashboard's main battery readout: while the battery
+is charging, the line under the big percentage reads, for example,
+**"Charging · 4.50 kW · ~99% by 14:00"** — where the battery will end up if charging
+keeps going at full speed until the window ends.
 
 The estimate is worked out on the server (the part of Flux that talks to the
 battery), not in the app, so every device that shows it shows the same number.
@@ -55,11 +56,17 @@ Backend (Go, `internal/api/`):
 App (Swift):
 - `FluxCore/Models/APIModels.swift` — `OffpeakData` gains `projectedEndSoc: Double?`
   with a trailing defaulted init parameter.
-- `Flux/Helpers/BatteryBlock.swift` — two new view inputs (`projectedOffpeakEndSoc`,
-  `offpeakWindowEnd`) and an `offpeakRow` computed property that selects a single
-  off-peak row.
+- `Dashboard/DashboardHeroPanel.swift` — two new view inputs (`projectedOffpeakEndSoc`,
+  `offpeakWindowEnd`), static `projectedChargeLabel` / `projectedChargeAccessibilityLabel`
+  formatters, and a `projectedCharge` computed property that the `.charging` case of the
+  hero subline renders as a suffix (see Decision 10).
 - `Dashboard/DashboardView.swift` — passes the projection and window-end label from
-  `viewModel.status?.offpeak?`.
+  `viewModel.status?.offpeak?` into the hero panel.
+
+> The projection was originally rendered as a `BatteryBlock` row (Decision 9); it was
+> relocated to the hero charging subline after the feature shipped (Decision 10), and
+> `BatteryBlock` reverted to its pre-feature state. This document describes the
+> shipped (hero) implementation.
 
 ### Implementation Approach
 
@@ -81,11 +88,13 @@ capacity is non-positive. The caller adds the **fresh-live** gate — the same
 `liveFresh` flag that guards `EstimatedCutoff` — so a stale reading never produces a
 projection.
 
-On the app side, `BatteryBlock` consolidates the off-peak row into one `offpeakRow`
-computed property: a projection row takes precedence over the "Charged during
-off-peak" delta row (they're mutually exclusive), and `nil` means no row at all. The
-projection's value is rendered with `SOCFormatting.format`, which matches the server's
-1-dp rounding.
+On the app side, `DashboardHeroPanel`'s `.charging` case appends the projection to the
+subline, mirroring the discharge "empty by" treatment: the rate in the standard accent,
+then the projected SoC at the window end in amber. The suffix comes from
+`projectedCharge` (nil → no suffix, satisfying AC 4.3) and is formatted by
+`projectedChargeLabel` as `~99% by 14:00` — rounded to a whole percent and prefixed
+with `~` to signal an idealised estimate (tighter than the server's 1-dp value, which
+suits the dense subline).
 
 ### Trade-offs
 
@@ -127,11 +136,13 @@ projection's value is rendered with `SOCFormatting.format`, which matches the se
 - **Serialization (AC 3.2)**: `*float64` with no `omitempty` → absence serialises as an
   explicit `null`, mirroring `EstimatedCutoff`, so clients distinguish "no projection"
   from a value. Swift `Double?` decodes present / `null` / absent identically to `nil`.
-- **SwiftUI selection**: `offpeakRow` is the single source of truth for the off-peak
-  row; the "Lowest" row's `last:` reads `offpeakRow == nil` (post-review), so the
-  two-row precedence rule lives in exactly one place. `rendersOffpeakDelta` /
-  `offpeakDeltaText` were widened from `private` to internal solely so the logic is
-  testable without view hosting — an accepted trade-off documented in the code.
+- **SwiftUI selection**: `projectedCharge` is the single source of truth for the
+  charging suffix — it returns the `(text, accessibility)` pair when a projection is
+  present and `nil` otherwise, so the present/absent decision (AC 4.1/4.3) lives in one
+  place. It is internal (not `private`) solely so the selection is testable without
+  hosting the view body; its placement inside the `.charging` case (the AC 4.1 "AND
+  charging" gate) is exercised by the SwiftUI preview. The visible/accessible strings
+  are `static` pure helpers, unit-tested directly.
 
 ### Architecture Impact
 
@@ -175,20 +186,21 @@ Every spec requirement maps to code that can be explained and is covered by a te
 | 2.3 | unparseable window / capacity ≤ 0 → nil | `negative capacity`, `zero capacity` fixtures |
 | 3.1 / 3.2 | server-side; `*float64` no `omitempty` | `absent projection serialises as JSON null`; Swift decode present/null/absent |
 | 3.3 | Dashboard reads `offpeak?.projectedEndSoc` directly | n/a (no re-derivation to test) |
-| 4.1 / 4.2 | `offpeakRow` projection row labelled with `offpeakWindowEnd` | `projectionRowLabelUsesWindowEnd`, fallback test |
-| 4.3 | `offpeakRow == nil` → no row | `noOffpeakRowWhenProjectionNilAndDeltaHidden` |
-| 4.4 | `BatteryBlock` shared across iOS + macOS via target membership | macOS build + test |
+| 4.1 / 4.2 | `projectedChargeLabel` suffix on the `.charging` subline, labelled with `offpeakWindowEnd` | `projectedChargeLabelRoundsPercentAndAppendsWindowEnd`, fallback test; `projectedChargeProducesVisibleAndAccessibleTextWhenPresent` |
+| 4.3 | `projectedCharge == nil` → no suffix | `projectedChargeIsNilWhenNoProjection` |
+| 4.4 | `DashboardHeroPanel` shared across iOS + macOS via target membership | macOS build + test |
 
-Decision 9 (projection row takes precedence over the delta row) is covered by
-`projectionSuppressesDeltaRow` and `deltaRowRendersWhenProjectionNil`.
+Decision 10 (projection shown in the hero charging subline, not a `BatteryBlock` row)
+is covered by the `projectedChargeLabel` / `projectedCharge` tests above; Decision 9
+(the original `BatteryBlock` row) is superseded and its tests were removed.
 
 **Partially implemented:** none.
 
 **Missing:** none.
 
 **Notes / non-defects surfaced while explaining:**
-- AC 4.4 says "shared FluxCore views" but `BatteryBlock` lives in the app target
-  (`Flux/Flux/Helpers/`), shared via target membership, not FluxCore. The design
+- AC 4.4 says "shared FluxCore views" but `DashboardHeroPanel` lives in the app target
+  (`Flux/Flux/Dashboard/`), shared via target membership, not FluxCore. The design
   explicitly flags this wording as imprecise; only the `OffpeakData` model is in
   FluxCore. Not a divergence.
 - AC 3.3 has no automated test (it asserts the *absence* of client-side derivation);

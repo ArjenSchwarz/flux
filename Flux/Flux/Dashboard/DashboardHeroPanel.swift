@@ -9,6 +9,14 @@ struct DashboardHeroPanel<Accessory: View>: View {
     let rolling15min: RollingAvg?
     let battery: BatteryInfo?
     let offpeakWindowStart: String?
+    /// Server-computed projected SoC (percent) at the off-peak window end, from
+    /// the same `/status` response. The server only returns it during the
+    /// window on fresh live data; the panel renders it on the charging subline
+    /// when present (AC 4.1) and shows nothing when nil (AC 4.3).
+    let projectedOffpeakEndSoc: Double?
+    /// Off-peak window end label (e.g. "14:00") used to time-stamp the
+    /// projection, so the labelled time matches the projected time (AC 4.2).
+    let offpeakWindowEnd: String?
     /// When true the discharge rate and "empty by" reflect a simulated added
     /// load, so they render in the simulation accent and are announced as
     /// simulated (Req 5.3/5.4).
@@ -24,6 +32,8 @@ struct DashboardHeroPanel<Accessory: View>: View {
         rolling15min: RollingAvg?,
         battery: BatteryInfo? = nil,
         offpeakWindowStart: String? = nil,
+        projectedOffpeakEndSoc: Double? = nil,
+        offpeakWindowEnd: String? = nil,
         isSimulating: Bool = false,
         @ViewBuilder accessory: @escaping () -> Accessory = { EmptyView() }
     ) {
@@ -31,6 +41,8 @@ struct DashboardHeroPanel<Accessory: View>: View {
         self.rolling15min = rolling15min
         self.battery = battery
         self.offpeakWindowStart = offpeakWindowStart
+        self.projectedOffpeakEndSoc = projectedOffpeakEndSoc
+        self.offpeakWindowEnd = offpeakWindowEnd
         self.isSimulating = isSimulating
         self.accessory = accessory
     }
@@ -150,6 +162,37 @@ struct DashboardHeroPanel<Accessory: View>: View {
         "Charging · \(PowerFormatting.format(watts))"
     }
 
+    /// The projected-SoC suffix for the charging subline, or nil when the
+    /// server returned no projection (outside the window / no live data). The
+    /// panel never re-derives the value — it only formats what `/status`
+    /// provides (AC 4.3). Internal so the present/absent selection (AC 4.1/4.3)
+    /// is testable without hosting the view body.
+    var projectedCharge: (text: String, accessibility: String)? {
+        guard let soc = projectedOffpeakEndSoc else { return nil }
+        return (
+            Self.projectedChargeLabel(soc: soc, windowEnd: offpeakWindowEnd),
+            Self.projectedChargeAccessibilityLabel(soc: soc, windowEnd: offpeakWindowEnd)
+        )
+    }
+
+    /// Visible projection suffix, e.g. "~99% by 14:00". The percent is rounded
+    /// and prefixed with "~" because it is an idealised best-case figure (4.5
+    /// kW to 95%, then trickle), not a measured value. Falls back to the bare
+    /// percent when the window end is unknown.
+    static func projectedChargeLabel(soc: Double, windowEnd: String?) -> String {
+        let pct = String(format: "~%.0f%%", soc)
+        guard let windowEnd else { return pct }
+        return "\(pct) by \(windowEnd)"
+    }
+
+    /// VoiceOver reading for the projection suffix — spells out "about N
+    /// percent" so the "~" is not announced as "tilde".
+    static func projectedChargeAccessibilityLabel(soc: Double, windowEnd: String?) -> String {
+        let pct = "about \(Int(soc.rounded())) percent"
+        guard let windowEnd else { return pct }
+        return "\(pct) by \(windowEnd)"
+    }
+
     /// VoiceOver announcement for the indicator. The exact string is the
     /// requirement contract under test (see requirements.md §3.5).
     static func cantEmptyBeforeOffpeakAccessibilityLabel(offpeakWindowStart: String) -> String {
@@ -189,10 +232,26 @@ struct DashboardHeroPanel<Accessory: View>: View {
             .appFont(FluxTheme.Typography.heroSubline)
             .modifier(SimulatedSublineAccessibility(isSimulating: isSimulating))
         case .charging(let watts):
-            Text(Self.chargingLabel(watts))
+            if let projectedCharge {
+                // Mirror the discharge "empty by" line: the rate in the
+                // standard accent, then the idealised projected SoC at the
+                // window end in amber (Decision 10).
+                HStack(spacing: 4) {
+                    Text("\(Self.chargingLabel(watts)) · ")
+                        .foregroundStyle(sublineAccent)
+                    Text(projectedCharge.text)
+                        .foregroundStyle(cutoffAccent)
+                        .monospacedDigit()
+                        .accessibilityLabel(projectedCharge.accessibility)
+                }
                 .appFont(FluxTheme.Typography.heroSubline)
-                .foregroundStyle(sublineAccent)
                 .modifier(SimulatedSublineAccessibility(isSimulating: isSimulating))
+            } else {
+                Text(Self.chargingLabel(watts))
+                    .appFont(FluxTheme.Typography.heroSubline)
+                    .foregroundStyle(sublineAccent)
+                    .modifier(SimulatedSublineAccessibility(isSimulating: isSimulating))
+            }
         case .idle:
             Text("Idle · battery holding")
                 .appFont(FluxTheme.Typography.heroSubline)
@@ -255,6 +314,21 @@ private struct SimulatedSublineAccessibility: ViewModifier {
                 rolling15min: MockFluxAPIClient.statusResponseCantEmpty.rolling15min,
                 battery: MockFluxAPIClient.statusResponseCantEmpty.battery,
                 offpeakWindowStart: MockFluxAPIClient.statusResponseCantEmpty.offpeak?.windowStart
+            )
+            // Off-peak charging with the projected end-of-window SoC appended.
+            DashboardHeroPanel(
+                live: LiveData(
+                    ppv: 0,
+                    pload: 600,
+                    pbat: -4500,
+                    pgrid: 5100,
+                    pgridSustained: true,
+                    soc: 84.3,
+                    timestamp: "2026-06-14T12:34:00Z"
+                ),
+                rolling15min: nil,
+                projectedOffpeakEndSoc: 99.1,
+                offpeakWindowEnd: "14:00"
             )
         }
         .padding()

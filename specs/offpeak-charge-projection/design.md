@@ -2,7 +2,9 @@
 
 ## Overview
 
-Add a server-computed projected SoC at the off-peak window end to `/status`, and render it as a single contextual row on the Dashboard's battery panel. The projection uses an idealised two-rate charge curve and is gated identically to the existing cutoff estimate.
+Add a server-computed projected SoC at the off-peak window end to `/status`, and append it to the Dashboard hero panel's charging subline (e.g. `Charging · 4.50 kW · ~99% by 14:00`). The projection uses an idealised two-rate charge curve and is gated identically to the existing cutoff estimate.
+
+> **Note (2026-06-14, [Decision 10](decision_log.md)):** the display moved from a `BatteryBlock` row to the hero charging subline after the feature shipped. The "Swift — display" and "Dashboard wiring" sections below describe the original `BatteryBlock` row approach; the live implementation now lives in `DashboardHeroPanel.swift` (`projectedChargeLabel` / charging case), with `BatteryBlock` reverted to its pre-feature state. The server-side design (compute, gating, field placement) is unchanged.
 
 ## Architecture
 
