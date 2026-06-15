@@ -270,6 +270,8 @@ flowchart LR
 
     devices --> poller
     rules --> poller
+    poller -.->|GC delete| devices
+    poller -.->|GC delete| rules
 
     readings --> lambda
     dpower --> lambda
