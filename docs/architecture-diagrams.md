@@ -102,8 +102,8 @@ flowchart TB
             igw["Internet Gateway"]
             sg["Security Group<br/>egress all · ingress none"]
             subgraph subnets["Public subnets — 2 AZs"]
-                sga["SubnetA 10.0.0.0/25"]
-                sgb["SubnetB 10.0.0.128/25"]
+                subnetA["SubnetA 10.0.0.0/25"]
+                subnetB["SubnetB 10.0.0.128/25"]
             end
             subgraph ecs["ECS Cluster: flux"]
                 svc["Fargate Service<br/>flux-poller · DesiredCount 1"]
@@ -123,12 +123,13 @@ flowchart TB
 
     ghcr -->|"image pull"| task
     svc --> task
+    svc -. "network config:<br/>both subnets" .- subnetA
+    svc -.- subnetB
     task --- sg
     task -.- s3ep
-    task --- sga
-    task --- sgb
-    sga --- igw
-    sgb --- igw
+    subnetA --- igw
+    subnetB --- igw
+    task -->|"internet egress<br/>via subnet route"| igw
     igw <-->|HTTPS| alpha
     igw -->|HTTPS| apns
     task -->|"writes via endpoint"| ddbep --> ddb
@@ -141,6 +142,12 @@ flowchart TB
     iam -. assumed by .- task
     iam -. assumed by .- lambda
 ```
+
+The Fargate **service** is configured across both AZ subnets; with
+`DesiredCount: 1` the single **task** runs in one of them at a time (its ENI is
+governed by the security group). DynamoDB and S3 traffic stays inside AWS over the
+gateway VPC endpoints; only AlphaESS and APNs traffic leaves through the Internet
+Gateway.
 
 IAM is least-privilege per role: the poller's `TaskRole` reads SoC rules/devices
 and writes readings, summaries, off-peak, and fire-state; the
@@ -164,7 +171,7 @@ flowchart LR
         g3["pollDailyEnergy<br/>every 1h · today + yesterday"]
         g4["pollSystemInfo<br/>every 24h"]
         g5["offpeak scheduler<br/>at window start + end"]
-        g6["pollDailySummary<br/>every 1h"]
+        g6["pollDailySummary<br/>every 1h · derives, no API call"]
         g7["midnightFinalizer<br/>~00:15 local"]
     end
 
@@ -205,7 +212,9 @@ Notes that matter for correctness:
   final pre-midnight snapshots land before the day rolls over.
 - **Off-peak energy is a diff** — start/end snapshots of `getOneDateEnergy` over
   the configured window (e.g. 11:00–14:00) are subtracted to get grid
-  import/export during the cheap window.
+  import/export during the cheap window. The snapshots are held in memory; only
+  the computed diff is persisted to `flux-offpeak` (hence `g5` bypasses the
+  `e3 → flux-daily-energy` path the other goroutines follow).
 - **`pollLiveData` also feeds SoC alerts** — see diagram 8.
 
 ---
@@ -225,7 +234,7 @@ data carries a TTL; user-authored data carries point-in-time recovery (PITR).
 | `flux-notes` | `sysSn` / `date` | PITR | Lambda (`PUT /note`) | Lambda |
 | `flux-devices` | `deviceId` | PITR | Lambda + Poller (GC) | Poller (eval) |
 | `flux-soc-rules` | `deviceId` / `ruleId` | PITR | Lambda | Poller (eval) |
-| `flux-soc-fire-state` | `deviceRule` / `windowStartDate` | TTL | Poller (idempotent) | Poller |
+| `flux-soc-fire-state` | `deviceRule` / `windowStartDate` | TTL 7d | Poller (idempotent) | Poller |
 | `flux-pricing` | `pricingId` | PITR | Lambda | Lambda |
 | `flux-simulation-presets` | `presetId` | PITR | Lambda | Lambda |
 
@@ -371,7 +380,9 @@ so a TestFlight build and an Xcode debug build coexist correctly.
 
 ## Maintaining these diagrams
 
-- Schedules and endpoints: `internal/poller/poller.go`, `internal/alphaess/client.go`
+- Schedules and goroutine wiring: `internal/poller/poller.go` (`Run`)
+- AlphaESS endpoints: `internal/alphaess/client.go`
+- Poller entry point + SoC-alert wiring: `cmd/poller/main.go`, `cmd/poller/socalerts.go`
 - API routes: `internal/api/handler.go` (`buildMux`)
 - Tables, keys, retention: `infrastructure/template.yaml`
 - IAM scoping: the three roles in `infrastructure/template.yaml`
