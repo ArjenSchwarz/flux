@@ -86,8 +86,8 @@ SecureString values.
 ## 3. AWS infrastructure
 
 The runtime topology. The poller runs as a single Fargate task in a public
-subnet with egress to AlphaESS and APNs; DynamoDB and S3 are reached over gateway
-VPC endpoints rather than the internet. The Lambda sits outside the VPC behind a
+subnet with egress to AlphaESS and APNs; DynamoDB is reached over a gateway VPC
+endpoint rather than the internet. The Lambda sits outside the VPC behind a
 public Function URL and does its own bearer-token auth.
 
 ```mermaid
@@ -110,7 +110,6 @@ flowchart TB
                 task["Task · ARM64 · awsvpc<br/>256 CPU / 512 MB<br/>poller container"]
             end
             ddbep["DynamoDB<br/>Gateway Endpoint"]
-            s3ep["S3<br/>Gateway Endpoint"]
         end
 
         furl["Function URL<br/>AuthType: NONE"]
@@ -126,7 +125,6 @@ flowchart TB
     svc -. "network config:<br/>both subnets" .- subnetA
     svc -.- subnetB
     task --- sg
-    task -.- s3ep
     subnetA --- igw
     subnetB --- igw
     task -->|"internet egress<br/>via subnet route"| igw
@@ -145,9 +143,10 @@ flowchart TB
 
 The Fargate **service** is configured across both AZ subnets; with
 `DesiredCount: 1` the single **task** runs in one of them at a time (its ENI is
-governed by the security group). DynamoDB and S3 traffic stays inside AWS over the
-gateway VPC endpoints; only AlphaESS and APNs traffic leaves through the Internet
-Gateway.
+governed by the security group). DynamoDB traffic stays inside AWS over the
+gateway VPC endpoint; AlphaESS, APNs, and the GHCR image pull all leave through
+the Internet Gateway. The VPC template also defines an S3 gateway endpoint, but
+the poller has no runtime S3 path — it is not drawn here to avoid implying one.
 
 IAM is least-privilege per role: the poller's `TaskRole` reads SoC rules/devices
 and writes readings, summaries, off-peak, and fire-state; the
@@ -215,19 +214,24 @@ Notes that matter for correctness:
   import/export during the cheap window. The snapshots are held in memory; only
   the computed diff is persisted to `flux-offpeak` (hence `g5` bypasses the
   `e3 → flux-daily-energy` path the other goroutines follow).
-- **`pollLiveData` also feeds SoC alerts** — see diagram 8.
+- **`pollLiveData` also feeds SoC alerts** — the same 10s tick evaluates rules and
+  writes `flux-soc-fire-state`, so the poller touches more than the five tables
+  shown here. See diagram 8 for the full fire path.
 
 ---
 
 ## 5. DynamoDB data model
 
-Eleven tables, all on-demand billing with `DeletionPolicy: Retain`. Reconstructable
-data carries a TTL; user-authored data carries point-in-time recovery (PITR).
+Eleven tables, all on-demand billing with `DeletionPolicy: Retain`. Only
+`flux-readings` and `flux-soc-fire-state` expire rows via TTL; everything else is
+kept. User-authored data carries point-in-time recovery (PITR). `flux-daily-power`
+is reconstructable but deliberately retained so Day Detail charts work for any
+historical date.
 
 | Table | Partition / Sort | Retention | Writer | Reader |
 |---|---|---|---|---|
 | `flux-readings` | `sysSn` / `timestamp` | TTL 30d | Poller (live 10s) | Lambda |
-| `flux-daily-power` | `sysSn` / `uploadTime` | TTL 30d | Poller (hourly) | Lambda (Day Detail fallback) |
+| `flux-daily-power` | `sysSn` / `uploadTime` | retained | Poller (hourly) | Lambda (Day Detail fallback) |
 | `flux-daily-energy` | `sysSn` / `date` | retained | Poller (hourly + summary + finalizer) | Lambda |
 | `flux-system` | `sysSn` | retained | Poller (24h) | Lambda |
 | `flux-offpeak` | `sysSn` / `date` | retained | Poller (window diff) | Lambda |
