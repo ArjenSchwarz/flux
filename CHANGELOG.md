@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Documentation
+
+- **Architecture diagrams** (`docs/architecture-diagrams.md`). A reference document with eight Mermaid diagrams covering the system overview, build and deploy pipeline, AWS infrastructure, the poller's polling engine, the DynamoDB data model (11 tables), the Lambda API surface, the dashboard refresh sequence, and the SoC-alert push flow. Each diagram is drawn from the source of truth (`infrastructure/template.yaml`, the Go services, and the apps) and validated against the Mermaid parser. Intended both as documentation and as source material for a write-up about Flux.
+- Corrected the DynamoDB table list in `CLAUDE.md` to enumerate all 11 tables with their retention policy (it previously listed only the original 5).
+
 ## [1.7] - 2026-06-15
 
 ### Added
