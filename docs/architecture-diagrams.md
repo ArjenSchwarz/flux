@@ -142,8 +142,8 @@ flowchart TB
 ```
 
 The Fargate **service** is configured across both AZ subnets; with
-`DesiredCount: 1` the single **task** runs in one of them at a time (its ENI is
-governed by the security group). DynamoDB traffic stays inside AWS over the
+`DesiredCount: 1` the running **task** resides in one AZ at a time — ECS picks the
+AZ at placement (its ENI is governed by the security group). DynamoDB traffic stays inside AWS over the
 gateway VPC endpoint; AlphaESS, APNs, and the GHCR image pull all leave through
 the Internet Gateway. The VPC template also defines an S3 gateway endpoint, but
 the poller has no runtime S3 path — it is not drawn here to avoid implying one.
@@ -301,8 +301,8 @@ flowchart TB
     mux --> presets["Simulation presets · CRUD<br/>/simulation-presets[/{id}]"]
 
     read --> ro[("read-only:<br/>readings · daily-energy<br/>daily-power · system · offpeak")]
-    read --> notesT[("notes — read")]
-    notes --> notesT
+    read -->|read| notesT[("notes")]
+    notes -->|write| notesT
     devices --> devT[("devices")]
     rules --> rulesT[("soc-rules")]
     rules --> fsT[("soc-fire-state<br/>cleared on edit/delete")]
@@ -337,6 +337,9 @@ sequenceDiagram
         Note over UI: render — keep last good data on failure
     end
 ```
+
+(The day's note is fetched alongside this, via `fetchNoteAsync`, concurrently but
+outside the errgroup so a notes-table failure can't cancel the core queries.)
 
 A shared-metric rule applies across screens: any value shown on more than one
 screen (e.g. today's peak grid import) is computed once — server-side where
@@ -392,6 +395,7 @@ so a TestFlight build and an Xcode debug build coexist correctly.
 - AlphaESS endpoints: `internal/alphaess/client.go`
 - Poller entry point + SoC-alert wiring: `cmd/poller/main.go`, `cmd/poller/socalerts.go`
 - API routes: `internal/api/handler.go` (`buildMux`)
+- `/status` fan-out and compute: `internal/api/status.go`
 - Tables, keys, retention: `infrastructure/template.yaml`
 - IAM scoping: the three roles in `infrastructure/template.yaml`
 - App refresh behaviour: `Flux/Flux/Dashboard/DashboardViewModel.swift`
