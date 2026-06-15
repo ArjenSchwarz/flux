@@ -7,6 +7,22 @@ public enum WhatsNewCatalogue {
     // swiftlint:disable line_length
     public static let releases: [WhatsNewRelease] = [
         WhatsNewRelease(
+            version: "1.7",
+            date: dateOf(year: 2026, month: 6),
+            highlights: [
+                Highlight(
+                    category: .new,
+                    title: "Off-peak charge projection",
+                    detail: "While charging during the off-peak window, the Dashboard shows the battery level it's expected to reach by the time the window ends — for example ~99% by 14:00."
+                ),
+                Highlight(
+                    category: .new,
+                    title: "Past weeks and months",
+                    detail: "History's Wk and Mo ranges can now step back through earlier weeks and months — use the chevrons, tap the label to pick a date, or tap Current to return to today."
+                )
+            ]
+        ),
+        WhatsNewRelease(
             version: "1.6",
             date: dateOf(year: 2026, month: 6),
             highlights: [

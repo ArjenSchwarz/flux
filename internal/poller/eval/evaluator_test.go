@@ -108,6 +108,17 @@ func readingAt(t *testing.T, date string, hour, minute int) time.Time {
 	return time.Date(parsed.Year(), parsed.Month(), parsed.Day(), hour, minute, 0, 0, loc)
 }
 
+// evaluateFresh runs Evaluate with the evaluator's clock pinned to the reading
+// time, so the AC 3.4 staleness guard (readingMaxAge) treats the reading as
+// current. Production feeds a just-observed reading; these tests model that by
+// making now == readingAt, which keeps them independent of wall-clock time.
+// Tests that exercise the staleness path set the clock themselves and call
+// Evaluate directly.
+func evaluateFresh(ctx context.Context, ev *Evaluator, soc float64, rt time.Time) {
+	ev.SetNow(func() time.Time { return rt })
+	ev.Evaluate(ctx, soc, rt)
+}
+
 func TestEvaluator_SeedDoesNotFire(t *testing.T) {
 	// AC 3.3: first in-window reading must only seed the comparator.
 	cache := &stubCache{Devices: devicesOneRule("d1", "r1", "Australia/Sydney", 40, "17:00", "19:00", "u1")}
@@ -116,7 +127,7 @@ func TestEvaluator_SeedDoesNotFire(t *testing.T) {
 	ev := NewEvaluator(cache, fs, q)
 
 	now := readingAt(t, "2026-06-15", 17, 30) // inside the window
-	ev.Evaluate(context.Background(), 30.0, now)
+	evaluateFresh(context.Background(), ev, 30.0, now)
 
 	assert.Len(t, fs.puts, 0, "first in-window reading must not fire (seed only)")
 	assert.Len(t, q.jobs, 0, "seed reading must not enqueue a push")
@@ -130,11 +141,11 @@ func TestEvaluator_AboveToAtOrBelowFiresOnce(t *testing.T) {
 	ctx := context.Background()
 
 	// Seed at 50%.
-	ev.Evaluate(ctx, 50.0, readingAt(t, "2026-06-15", 17, 10))
+	evaluateFresh(ctx, ev, 50.0, readingAt(t, "2026-06-15", 17, 10))
 	require.Len(t, fs.puts, 0)
 
 	// Drop to 38% — must fire once.
-	ev.Evaluate(ctx, 38.0, readingAt(t, "2026-06-15", 17, 20))
+	evaluateFresh(ctx, ev, 38.0, readingAt(t, "2026-06-15", 17, 20))
 	require.Len(t, fs.puts, 1)
 	assert.Equal(t, "d1", fs.puts[0].DeviceID)
 	assert.Equal(t, "r1", fs.puts[0].RuleID)
@@ -142,7 +153,7 @@ func TestEvaluator_AboveToAtOrBelowFiresOnce(t *testing.T) {
 	require.Len(t, q.jobs, 1, "Enqueue must be called after PutIfAbsent returns wrote=true")
 
 	// Stay below — must not fire again.
-	ev.Evaluate(ctx, 35.0, readingAt(t, "2026-06-15", 17, 30))
+	evaluateFresh(ctx, ev, 35.0, readingAt(t, "2026-06-15", 17, 30))
 	assert.Len(t, fs.puts, 1, "at-or-below -> at-or-below must not re-fire")
 	assert.Len(t, q.jobs, 1)
 }
@@ -155,14 +166,14 @@ func TestEvaluator_OutOfWindowSkipsAndDoesNotAdvanceComparator(t *testing.T) {
 	ctx := context.Background()
 
 	// 12:00 — outside the window — no seed, no fire.
-	ev.Evaluate(ctx, 30.0, readingAt(t, "2026-06-15", 12, 0))
+	evaluateFresh(ctx, ev, 30.0, readingAt(t, "2026-06-15", 12, 0))
 	assert.Len(t, fs.puts, 0)
 	assert.Len(t, q.jobs, 0)
 
 	// 17:30 — first in-window — seeds at 30 (which is already at-or-below).
 	// AC 3.3 says seed-only on first in-window reading; the next at-or-below
 	// reading still must not fire because the seed is already below threshold.
-	ev.Evaluate(ctx, 30.0, readingAt(t, "2026-06-15", 17, 30))
+	evaluateFresh(ctx, ev, 30.0, readingAt(t, "2026-06-15", 17, 30))
 	assert.Len(t, fs.puts, 0, "12:00 reading must not have advanced the comparator")
 }
 
@@ -175,7 +186,7 @@ func TestEvaluator_StaleReadingSkipped(t *testing.T) {
 	ctx := context.Background()
 
 	// Seed at 50.
-	ev.Evaluate(ctx, 50.0, readingAt(t, "2026-06-15", 17, 10))
+	evaluateFresh(ctx, ev, 50.0, readingAt(t, "2026-06-15", 17, 10))
 	require.Len(t, fs.puts, 0)
 
 	// Pretend "now" is two minutes after the reading — readingAt(17:10) is
@@ -193,8 +204,8 @@ func TestEvaluator_OutOfRangeSocSkipped(t *testing.T) {
 	ev := NewEvaluator(cache, fs, q)
 	ctx := context.Background()
 
-	ev.Evaluate(ctx, -5.0, readingAt(t, "2026-06-15", 17, 10))
-	ev.Evaluate(ctx, 105.0, readingAt(t, "2026-06-15", 17, 20))
+	evaluateFresh(ctx, ev, -5.0, readingAt(t, "2026-06-15", 17, 10))
+	evaluateFresh(ctx, ev, 105.0, readingAt(t, "2026-06-15", 17, 20))
 	assert.Len(t, fs.puts, 0)
 }
 
@@ -207,7 +218,7 @@ func TestEvaluator_RuleUpdatedAtMismatchClearsComparator(t *testing.T) {
 	ctx := context.Background()
 
 	// Seed at 50.
-	ev.Evaluate(ctx, 50.0, readingAt(t, "2026-06-15", 17, 10))
+	evaluateFresh(ctx, ev, 50.0, readingAt(t, "2026-06-15", 17, 10))
 	require.Len(t, fs.puts, 0)
 
 	// Lambda mutated the rule; UpdatedAt is now u2. The very next reading
@@ -216,12 +227,12 @@ func TestEvaluator_RuleUpdatedAtMismatchClearsComparator(t *testing.T) {
 	cache.Devices[0].Rules[0].UpdatedAt = "u2"
 	cache.mu.Unlock()
 
-	ev.Evaluate(ctx, 30.0, readingAt(t, "2026-06-15", 17, 20))
+	evaluateFresh(ctx, ev, 30.0, readingAt(t, "2026-06-15", 17, 20))
 	assert.Len(t, fs.puts, 0, "UpdatedAt bump must clear prev so the new config re-seeds")
 
 	// The subsequent reading sees a populated prev (30) and must not fire
 	// at 28 because the seed is already below.
-	ev.Evaluate(ctx, 28.0, readingAt(t, "2026-06-15", 17, 30))
+	evaluateFresh(ctx, ev, 28.0, readingAt(t, "2026-06-15", 17, 30))
 	assert.Len(t, fs.puts, 0, "post-seed reading still below threshold must not fire")
 }
 
@@ -235,12 +246,12 @@ func TestEvaluator_YesterdayCarryOverIsolated(t *testing.T) {
 	ctx := context.Background()
 
 	// Yesterday: SoC sat at 50% inside the window.
-	ev.Evaluate(ctx, 50.0, readingAt(t, "2026-06-15", 18, 50))
+	evaluateFresh(ctx, ev, 50.0, readingAt(t, "2026-06-15", 18, 50))
 
 	// Today: first in-window reading is 30 — below threshold. With the
 	// (deviceRule, windowStartDate) keyed prev map, today's first reading
 	// must seed, NOT fire from yesterday's value.
-	ev.Evaluate(ctx, 30.0, readingAt(t, "2026-06-16", 17, 10))
+	evaluateFresh(ctx, ev, 30.0, readingAt(t, "2026-06-16", 17, 10))
 	assert.Len(t, fs.puts, 0, "yesterday's comparator must not poison today")
 }
 
@@ -262,8 +273,8 @@ func TestEvaluator_MultipleRulesFireIndependently(t *testing.T) {
 	ev := NewEvaluator(cache, fs, q)
 	ctx := context.Background()
 
-	ev.Evaluate(ctx, 50.0, readingAt(t, "2026-06-15", 17, 10)) // seed both
-	ev.Evaluate(ctx, 30.0, readingAt(t, "2026-06-15", 17, 20)) // crosses both
+	evaluateFresh(ctx, ev, 50.0, readingAt(t, "2026-06-15", 17, 10)) // seed both
+	evaluateFresh(ctx, ev, 30.0, readingAt(t, "2026-06-15", 17, 20)) // crosses both
 
 	require.Len(t, fs.puts, 2, "each rule must produce its own fire-state row")
 	rules := map[string]bool{fs.puts[0].RuleID: true, fs.puts[1].RuleID: true}
@@ -280,8 +291,8 @@ func TestEvaluator_DisabledRuleNotEvaluated(t *testing.T) {
 	ev := NewEvaluator(cache, fs, q)
 	ctx := context.Background()
 
-	ev.Evaluate(ctx, 50.0, readingAt(t, "2026-06-15", 17, 10))
-	ev.Evaluate(ctx, 30.0, readingAt(t, "2026-06-15", 17, 20))
+	evaluateFresh(ctx, ev, 50.0, readingAt(t, "2026-06-15", 17, 10))
+	evaluateFresh(ctx, ev, 30.0, readingAt(t, "2026-06-15", 17, 20))
 	assert.Len(t, fs.puts, 0, "disabled rules must not fire")
 }
 
@@ -296,8 +307,8 @@ func TestEvaluator_StaleTokenSkipsPush(t *testing.T) {
 	ev := NewEvaluator(cache, fs, q)
 	ctx := context.Background()
 
-	ev.Evaluate(ctx, 50.0, readingAt(t, "2026-06-15", 17, 10))
-	ev.Evaluate(ctx, 30.0, readingAt(t, "2026-06-15", 17, 20))
+	evaluateFresh(ctx, ev, 50.0, readingAt(t, "2026-06-15", 17, 10))
+	evaluateFresh(ctx, ev, 30.0, readingAt(t, "2026-06-15", 17, 20))
 	assert.Len(t, q.jobs, 0, "stale-token device must not be pushed to")
 }
 
@@ -308,6 +319,6 @@ func TestEvaluator_InvalidTZSkipsDevice(t *testing.T) {
 	ev := NewEvaluator(cache, fs, q)
 	ctx := context.Background()
 
-	ev.Evaluate(ctx, 30.0, readingAt(t, "2026-06-15", 17, 10))
+	evaluateFresh(ctx, ev, 30.0, readingAt(t, "2026-06-15", 17, 10))
 	assert.Len(t, fs.puts, 0, "invalid TZ must skip the device, not panic")
 }
