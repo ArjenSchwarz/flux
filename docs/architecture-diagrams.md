@@ -195,8 +195,9 @@ flowchart LR
     g2 --> e2 --> d2
     g3 --> e3 --> d3
     g4 --> e4 --> d4
-    g5 -->|"snapshot at start + end"| e3
-    g5 -->|"diff window snapshots"| d5
+    g5 -->|"snapshot at start + end<br/>(diagnostic only)"| e3
+    d1 -->|"integrate window readings"| g5
+    g5 -->|"write computed deltas"| d5
     g6 -->|"derivedstats:<br/>blocks · peaks · min SOC"| d3
     g6 -.->|metrics| cw
     g7 -->|"finalize yesterday totals"| d3
@@ -209,11 +210,14 @@ Notes that matter for correctness:
   live `0%` / `0 W`.
 - **Today and yesterday both polled hourly** — yesterday is re-fetched so the
   final pre-midnight snapshots land before the day rolls over.
-- **Off-peak energy is a diff** — start/end snapshots of `getOneDateEnergy` over
-  the configured window (e.g. 11:00–14:00) are subtracted to get grid
-  import/export during the cheap window. The snapshots are held in memory; only
-  the computed diff is persisted to `flux-offpeak` (hence `g5` bypasses the
-  `e3 → flux-daily-energy` path the other goroutines follow).
+- **Off-peak energy is integrated from live readings** (post-T-1341) —
+  `handleEnd` runs a strongly-consistent query of `flux-readings` over the
+  configured window (e.g. 11:00–14:00) and sums the per-reading power deltas via
+  `derivedstats.IntegrateOffpeakDeltas`, then writes the result to `flux-offpeak`.
+  The `getOneDateEnergy` snapshots captured at window start/end are retained for
+  diagnostics and drift logging only — they are not the basis of the computed
+  value. This is why `g5` reads from `flux-readings` rather than following the
+  `e3 → flux-daily-energy` path the other goroutines use.
 - **`pollLiveData` also feeds SoC alerts** — the same 10s tick evaluates rules and
   writes `flux-soc-fire-state`, so the poller touches more than the five tables
   shown here. See diagram 8 for the full fire path.
