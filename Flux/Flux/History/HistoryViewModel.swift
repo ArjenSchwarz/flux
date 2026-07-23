@@ -73,10 +73,11 @@ final class HistoryViewModel {
     }
 
     /// Costs for the currently-loaded range. Computed lazily — recomputes
-    /// whenever the underlying `days` or `pricingService.periods` change,
-    /// thanks to `@Observable` tracking on both.
+    /// whenever the underlying `days` or `pricingService.plans` change, thanks
+    /// to `@Observable` tracking on both. Each day is priced by the plan
+    /// covering it, so a range spanning a switch date sums both sides.
     var periodCosts: PeriodCosts? {
-        PeriodCosts.compute(days: days, pricing: pricingService.periods)
+        PeriodCosts.compute(days: days, pricing: pricingService.plans)
     }
 
     /// AC 2.7 requires a refetch on every History range change. Called from
@@ -279,6 +280,11 @@ final class HistoryViewModel {
                 cached.offpeakGridImportKwh = day.offpeakGridImportKwh
                 cached.offpeakGridExportKwh = day.offpeakGridExportKwh
                 cached.peakGridImportKwh = day.peakGridImportKwh
+                cached.bandImports = day.bandImports
+                cached.offpeakWindowStart = day.offpeakWindowStart
+                cached.offpeakWindowEnd = day.offpeakWindowEnd
+                cached.offpeakIntegratedAt = day.offpeakIntegratedAt
+                cached.offpeakSampleCount = day.offpeakSampleCount
                 cached.note = day.note
                 warnIfClearing(cached: cached, day: day)
                 cached.dailyUsage = day.dailyUsage

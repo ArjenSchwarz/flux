@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Time-of-use pricing — app** (T-1890, T-1891). Fourth implementation phase of the band-based pricing spec, and the first with user-visible change. Settings ▸ Pricing now edits band-based plans, and costs are computed from them.
+  - Settings ▸ Pricing lists plans rather than periods. Each row shows its date range and the bands its rates apply over — "Free 10:00–15:00 · $0.2800 01:00–06:00 · $0.3500 default" — with feed-in on its own line. A closed plan reads "2026-01-01 until 2026-08-01" rather than a dash range, because the end date is exclusive and that day belongs to the successor.
+  - The plan editor replaces the three rate fields with a default rate, a feed-in rate, a savings reference rate (shown only once a free window exists), and a Windows section: per row a start and end picker, a Free toggle, and a rate field when the window isn't free. Times outside every window take the default rate, so a plan cannot be entered with a gap. Client-side validation mirrors the server's band rules, so a plan the editor accepts is not rejected for something it could have caught.
+  - The succession affordance now says what it does: it ends the open-ended plan **on** the new plan's start date and starts the successor that same day, rather than the day before. Both rows carry the same literal date.
+  - Day costs resolve in three tiers, matching the backend figure for figure: the stored per-band split when its geometry matches the plan and the free band's import is resolvable; otherwise the pre-band single-rate formula, which is what keeps every historical day's cost unchanged; otherwise all import at the plan's highest rate with no savings. Both cost helpers are pinned to the same cross-language vectors the Go implementation is tested against. The cost card and History totals keep their existing layout.
+  - Day Detail chart shading takes the free window from the plan pricing that day instead of a hardcoded 11:00–14:00, so it moves on the switch date. A day with no plan, or whose plan has no free band, gets no shading rather than a misleading band — and the widgets no longer substitute the legacy window when the API reports none.
+  - `/day` and `/history` now also report the window and integration provenance of the off-peak row each day's off-peak import came from. Without it the app could not tell a split captured under the current free window from a stale one, and every day priced by the new plan would have fallen back to the highest-rate estimate. The History cache stores it too, so an offline day prices identically to an online one.
+
 ### Internal
 
 - **Time-of-use pricing — poller and operator tools** (T-1890, T-1891). Third implementation phase of the band-based pricing spec. The poller now takes its off-peak window from the plan pricing each day, captures the durable per-band split, and the operator tools follow suit.

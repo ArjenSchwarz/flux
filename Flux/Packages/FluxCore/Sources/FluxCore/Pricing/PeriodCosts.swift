@@ -31,10 +31,13 @@ public struct PeriodCosts: Equatable, Sendable {
 
 public extension PeriodCosts {
     /// Sums costs across `days`. Returns `nil` iff no day in `days` is a
-    /// priced day, matching AC 5.4. The `totalDayCount` is the full range
-    /// (including unpriced days) so the caller can render the
-    /// `N of M days priced` caption from AC 5.3.
-    static func compute(days: [DayEnergy], pricing: [PricingPeriod]) -> PeriodCosts? {
+    /// priced day (AC 2.7). The `totalDayCount` is the full range (including
+    /// unpriced days) so the caller can render the `N of M days priced`
+    /// caption from AC 3.7.
+    ///
+    /// Each day resolves its own tier under the plan pricing it, so a range
+    /// spanning a switch date sums days priced by different plans.
+    static func compute(days: [DayEnergy], pricing: [PricingPlan]) -> PeriodCosts? {
         guard !days.isEmpty else { return nil }
 
         var peak: Double = 0

@@ -40,6 +40,50 @@
 | Q34 | 2026-07-23 | Band boundaries parsed by a new parser accepting 24:00; `ParseOffpeakWindow` not reused | `ParseOffpeakWindow` rejects `h > 23` and would reject every plan (review finding) |
 | Q35 | 2026-07-23 | `/status.offpeak` becomes nullable; nil means "no window" and clients never substitute the default-window constants | A no-free-band day has no window strings; widget defaults would falsely render the legacy window (review finding) |
 | Q36 | 2026-07-23 | `handleEnd`/recovery relaxed to permit readings-only finalisation without a pending row or start snapshot | A plan-read failure at window start must not permanently lose the day (AC 4.6); the snapshot is diagnostics-only since T-1341 |
+| Q37 | 2026-07-24 | `CachedDayEnergy` (SwiftData) round-trips `bandImports` and the off-peak source fields | History serves cached days when a fetch fails; without them the same day prices at the banded tier online and the fallback tier offline, which the Data Consistency rule forbids |
+| Q38 | 2026-07-24 | `PricingService.periods` renamed to `plans`; `PricingPeriodsView`/`PricingEditor` type names kept | The property is read at every call site and "periods" no longer describes a band-based plan; the view type names carry no semantics and renaming them is churn |
+| Q39 | 2026-07-24 | The editor's band-time pickers hold `24:00` as 23:59 and map it back on write | `DatePicker` has no representation for end-of-day, and without the mapping a plan whose last window ends at midnight could not be opened for editing |
+
+## Decision 7: Serve the Off-Peak Row's Geometry and Provenance on /day and /history
+
+**Date**: 2026-07-24
+**Status**: accepted
+
+### Context
+
+Decision 6's tier 1 requires the free band's import to be *resolvable*: the off-peak row must have been integrated under the plan's current free window (Q16/Q23), and a sparse-complete row (`integratedAt` set, no samples) counts as unavailable. `plan.DayCosts` implements exactly that in Go, and the shared cost vectors pin FluxCore to the same rule.
+
+But `/day` and `/history` served only `offpeakGridImportKwh` — no geometry, no integration provenance. FluxCore had no way to evaluate the rule. Falling back to the pre-feature default (11:00–14:00) would mean every day priced by the new plan (free 10:00–15:00) failed the geometry check and resolved at tier 3 forever, so the banded costing this feature exists for would never engage.
+
+### Decision
+
+`DaySummary` and `DayEnergy` carry an `OffpeakSource` group — `offpeakWindowStart`, `offpeakWindowEnd`, `offpeakIntegratedAt`, `offpeakSampleCount` — populated from the `flux-offpeak` row (or, for today's live-integrated split, from the resolved window). FluxCore's `OffpeakImport` mirrors `plan.OffpeakRow` field for field, so the shared vectors construct both sides identically.
+
+### Rationale
+
+The join rule already lives in one place per language and is pinned by the vectors; the only thing missing was the input. Mirroring `plan.OffpeakRow` exactly keeps the two implementations comparable by inspection and lets the vector fixtures build the Swift value with no re-derivation. The fields are additive and `omitempty`, so a day with no off-peak split carries none of them.
+
+### Alternatives Considered
+
+- **Infer the geometry from the `bandImports` gap**: the free window is exactly the gap between rated segments, so a split matching the plan's rated geometry implies the row matched too - Rejected because it cannot express the sparse-complete case at all, and it fails the `tier3-offpeak-geometry-mismatch` vector, which is the cross-language pin
+- **Drop the off-peak geometry check from tier 1**: fewer wire fields - Rejected: it silently reprices a day whose free window was edited after capture, which Q16 explicitly allows and Q23 exists to make detectable
+- **Have the server omit `offpeakGridImportKwh` for unusable rows**: no new fields, and the client's "unusable" case collapses into "no row" - Rejected because it changes what the off-peak card shows on those days, a behaviour change outside this feature's scope
+
+### Consequences
+
+**Positive:**
+- Tier 1 actually resolves under the new plan; banded costs are not permanently stuck at the fallback
+- Go and Swift cost inputs are field-for-field mirrors, so the shared vectors exercise the real production types on both sides
+
+**Negative:**
+- Four more fields on two read payloads, and one more thing to keep in sync if `OffpeakItem`'s provenance changes
+- The client now reasons about integration provenance, which was previously described as operator-diagnostics-only
+
+### Impact
+
+`internal/api/response.go` (`OffpeakSource`, `offpeakSourceFrom`), `day.go`, `history.go`; FluxCore `APIModels.swift`, `DayCosts.swift`; the SwiftData cache (Q37).
+
+---
 
 ## Decision 4: Store Plans as Default Rate + Exception Windows
 

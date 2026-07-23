@@ -13,9 +13,9 @@ public enum FluxAPIError: Error, Sendable, Equatable {
     case pricingValidation(PricingValidationReason)
 }
 
-/// Validation failure codes returned by the pricing endpoints (Requirement 1
-/// and AC 2.3). Mirrors the server-side error codes verbatim so the editor
-/// can map each one to inline field-level feedback.
+/// Validation failure codes returned by the pricing endpoints (AC 7.2).
+/// Mirrors the server-side error codes verbatim so the editor can map each one
+/// to inline field-level feedback.
 public enum PricingValidationReason: Error, Sendable, Equatable {
     case invertedDates
     case overlap(openEndedId: String?)
@@ -25,6 +25,15 @@ public enum PricingValidationReason: Error, Sendable, Equatable {
     /// Returned as HTTP 409 when a concurrent writer raced this one; the
     /// editor refetches the list and retries.
     case concurrentWrite
+    /// Band rules (time-of-use-pricing).
+    case bandWindowInvalid
+    case bandOverlap
+    case multipleFreeBands
+    case savingsRateMissing
+    case noRatedBand
+    /// A pre-migration three-rate payload, or a `replace-open-ended` whose
+    /// closing row is still the legacy shape (AC 7.3 / Q32).
+    case legacyShape
 }
 
 extension FluxAPIError {
@@ -74,17 +83,29 @@ extension PricingValidationReason {
     public var message: String {
         switch self {
         case .invertedDates:
-            return "End date must not be before the start date."
+            return "The end date must be after the start date."
         case .overlap:
-            return "This period overlaps an existing one. Close the previous period first."
+            return "This plan overlaps an existing one. Close the previous plan first."
         case .ratePrecision:
             return "Rates must use at most four decimal places."
         case .rateOutOfRange:
             return "Each rate must be between $0.00 and $10.00 per kWh."
         case .secondOpenEnded:
-            return "Only one open-ended pricing period is allowed at a time."
+            return "Only one open-ended pricing plan is allowed at a time."
         case .concurrentWrite:
             return "Another change was just applied. Try again."
+        case .bandWindowInvalid:
+            return "Each window needs a start before its end, between 00:00 and 24:00."
+        case .bandOverlap:
+            return "Windows must not overlap each other."
+        case .multipleFreeBands:
+            return "A plan can have at most one free window."
+        case .savingsRateMissing:
+            return "A plan with a free window needs a savings reference rate."
+        case .noRatedBand:
+            return "A free window covering the whole day leaves nothing to price."
+        case .legacyShape:
+            return "This plan is still in the old three-rate format. Run the pricing migration first."
         }
     }
 }

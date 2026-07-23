@@ -28,13 +28,13 @@ public protocol FluxAPIClient: Sendable {
     func deleteRule(deviceId: String, ruleId: String) async throws
 
     // Pricing — daily-costs spec.
-    func fetchPricing() async throws -> [PricingPeriod]
-    func createPricing(_ draft: PricingPeriodDraft) async throws -> PricingPeriod
-    func updatePricing(id: String, _ draft: PricingPeriodDraft) async throws -> PricingPeriod
+    func fetchPricing() async throws -> [PricingPlan]
+    func createPricing(_ draft: PricingPlanDraft) async throws -> PricingPlan
+    func updatePricing(id: String, _ draft: PricingPlanDraft) async throws -> PricingPlan
     func deletePricing(id: String) async throws
     func replaceOpenEndedPricing(
         closingId: String,
-        with draft: PricingPeriodDraft
+        with draft: PricingPlanDraft
     ) async throws -> ReplaceOpenEndedResult
 }
 
@@ -63,15 +63,15 @@ public extension FluxAPIClient {
         throw FluxAPIError.notConfigured
     }
 
-    func fetchPricing() async throws -> [PricingPeriod] {
+    func fetchPricing() async throws -> [PricingPlan] {
         throw FluxAPIError.notConfigured
     }
 
-    func createPricing(_: PricingPeriodDraft) async throws -> PricingPeriod {
+    func createPricing(_: PricingPlanDraft) async throws -> PricingPlan {
         throw FluxAPIError.notConfigured
     }
 
-    func updatePricing(id _: String, _: PricingPeriodDraft) async throws -> PricingPeriod {
+    func updatePricing(id _: String, _: PricingPlanDraft) async throws -> PricingPlan {
         throw FluxAPIError.notConfigured
     }
 
@@ -81,7 +81,7 @@ public extension FluxAPIClient {
 
     func replaceOpenEndedPricing(
         closingId _: String,
-        with _: PricingPeriodDraft
+        with _: PricingPlanDraft
     ) async throws -> ReplaceOpenEndedResult {
         throw FluxAPIError.notConfigured
     }

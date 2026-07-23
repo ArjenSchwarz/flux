@@ -224,10 +224,12 @@ struct DayDetailView: View {
                 if viewModel.hasPowerData {
                     DayDetailPanels.power(date: viewModel.date,
                                           readings: viewModel.parsedReadings,
+                                          offpeakWindow: viewModel.offpeakWindow,
                                           selectedDate: $powerSelected)
                     DayDetailPanels.battery(date: viewModel.date,
                                             readings: viewModel.parsedReadings,
                                             summary: viewModel.summary,
+                                            offpeakWindow: viewModel.offpeakWindow,
                                             selectedDate: $batterySelected)
                 } else {
                     DayDetailMessagePanel(title: "Power charts unavailable",
@@ -235,6 +237,7 @@ struct DayDetailView: View {
                     DayDetailPanels.battery(date: viewModel.date,
                                             readings: viewModel.parsedReadings,
                                             summary: viewModel.summary,
+                                            offpeakWindow: viewModel.offpeakWindow,
                                             selectedDate: $batterySelected)
                 }
             } else if let error = viewModel.error {
@@ -319,10 +322,12 @@ struct DayDetailView: View {
             if viewModel.hasPowerData {
                 DayDetailPanels.power(date: viewModel.date,
                                       readings: viewModel.parsedReadings,
+                                      offpeakWindow: viewModel.offpeakWindow,
                                       selectedDate: $powerSelected)
                 DayDetailPanels.battery(date: viewModel.date,
                                         readings: viewModel.parsedReadings,
                                         summary: viewModel.summary,
+                                        offpeakWindow: viewModel.offpeakWindow,
                                         selectedDate: $batterySelected)
             } else {
                 DayDetailMessagePanel(title: "Power charts unavailable",
@@ -330,6 +335,7 @@ struct DayDetailView: View {
                 DayDetailPanels.battery(date: viewModel.date,
                                         readings: viewModel.parsedReadings,
                                         summary: viewModel.summary,
+                                        offpeakWindow: viewModel.offpeakWindow,
                                         selectedDate: $batterySelected)
             }
         } else if let error = viewModel.error {

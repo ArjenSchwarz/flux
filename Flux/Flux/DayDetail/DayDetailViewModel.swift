@@ -105,11 +105,19 @@ final class DayDetailViewModel {
         await loadDay()
     }
 
-    /// Costs for the viewed day. Returns nil when no pricing period covers
-    /// the day or the daily summary is missing (AC 4.6).
+    /// Costs for the viewed day. Returns nil when no plan covers the day or
+    /// the daily summary is missing (AC 2.7).
     var costs: DayCosts? {
         guard let summary else { return nil }
-        return summary.costs(forDate: date, in: pricingService.periods)
+        return summary.costs(forDate: date, in: pricingService.plans)
+    }
+
+    /// The free window of the plan pricing the viewed day, used for chart
+    /// shading and the off-peak reading stats. Nil on a day with no plan or no
+    /// free band — those get no window rather than a substituted default
+    /// (AC 4.4).
+    var offpeakWindow: PlanSegment? {
+        PricingPlan.freeWindow(for: date, in: pricingService.plans)
     }
 
     /// AC 2.7 requires a refetch on every Day Detail open. Called from the
@@ -133,7 +141,11 @@ final class DayDetailViewModel {
             peakPeriods = response.peakPeriods ?? []
             dailyUsage = response.dailyUsage
             note = response.note
-            offpeakStats = OffpeakReadingStats.compute(date: date, readings: parsedReadings)
+            offpeakStats = OffpeakReadingStats.compute(
+                date: date,
+                readings: parsedReadings,
+                offpeakWindow: offpeakWindow
+            )
             error = nil
         } catch {
             readings = []

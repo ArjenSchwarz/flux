@@ -13,14 +13,28 @@ enum DayChartDomain {
         return startOfDay ... endOfDay
     }
 
-    static func offpeakRange(for dateString: String) -> (start: Date, end: Date)? {
-        guard let startOfDay = DateFormatting.parseDayDate(dateString) else { return nil }
-        let calendar = DateFormatting.sydneyCalendar
+    /// The free-window shading band for a day's charts. The window comes from
+    /// the free band of the plan pricing that day (AC 4.1) rather than a fixed
+    /// 11:00–14:00, so it moves with the plan on the switch date. A day with no
+    /// plan, or whose plan has no free band, gets no shading (AC 4.4).
+    static func offpeakRange(for dateString: String, window: PlanSegment?) -> (start: Date, end: Date)? {
+        guard let window,
+              let startOfDay = DateFormatting.parseDayDate(dateString),
+              let startMinutes = PlanWindow.parseBandTime(window.start),
+              let endMinutes = PlanWindow.parseBandTime(window.end)
+        else { return nil }
 
-        guard let offpeakStart = calendar.date(byAdding: .hour, value: 11, to: startOfDay),
-              let offpeakEnd = calendar.date(byAdding: .hour, value: 14, to: startOfDay)
+        let calendar = DateFormatting.sydneyCalendar
+        guard let offpeakStart = calendar.date(byAdding: .minute, value: startMinutes, to: startOfDay),
+              let offpeakEnd = calendar.date(byAdding: .minute, value: endMinutes, to: startOfDay)
         else { return nil }
 
         return (offpeakStart, offpeakEnd)
+    }
+
+    /// Convenience for the call sites that hold the plan list rather than an
+    /// already-resolved window.
+    static func offpeakRange(for dateString: String, plans: [PricingPlan]) -> (start: Date, end: Date)? {
+        offpeakRange(for: dateString, window: PricingPlan.freeWindow(for: dateString, in: plans))
     }
 }

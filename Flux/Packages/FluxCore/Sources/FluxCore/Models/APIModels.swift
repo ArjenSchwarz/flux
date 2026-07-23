@@ -112,9 +112,6 @@ public struct RollingAvg: Codable, Sendable {
 }
 
 public struct OffpeakData: Codable, Sendable {
-    public static let defaultWindowStart = "11:00"
-    public static let defaultWindowEnd = "14:00"
-
     /// Lifecycle of the off-peak record for the day. `pending` covers the
     /// in-progress window where deltas are projected against today's
     /// running totals; `complete` is the final post-window record.
@@ -123,8 +120,13 @@ public struct OffpeakData: Codable, Sendable {
         case complete
     }
 
-    public let windowStart: String
-    public let windowEnd: String
+    /// The free window of the plan pricing the day, or `nil` when that plan
+    /// has no free band. Clients must render `nil` as "no window" — never
+    /// substitute a fixed window, which would falsely show the legacy
+    /// 11:00–14:00 on a day that has none (Q35). The whole `offpeak` object is
+    /// itself nullable, for a day no plan prices at all.
+    public let windowStart: String?
+    public let windowEnd: String?
     public let status: Status?
     public let gridUsageKwh: Double?
     public let solarKwh: Double?
@@ -138,8 +140,8 @@ public struct OffpeakData: Codable, Sendable {
     public let projectedEndSoc: Double?
 
     public init(
-        windowStart: String,
-        windowEnd: String,
+        windowStart: String?,
+        windowEnd: String?,
         status: Status? = nil,
         gridUsageKwh: Double?,
         solarKwh: Double?,
@@ -208,6 +210,18 @@ public struct DayEnergy: Codable, Sendable, Identifiable {
     /// fall back to the `eInput − offpeakGridImportKwh` residual at the call
     /// site (see `HistoryDerivedState.gridEntry`).
     public let peakGridImportKwh: Double?
+    /// The day's rated-band import split, absent when the day is unpriced or
+    /// its split is unavailable (AC 3.6). Only rated bands appear — the free
+    /// band's import is `offpeakGridImportKwh`, which owns it (Q31).
+    public let bandImports: [BandImport]?
+    /// Geometry and provenance of the off-peak row `offpeakGridImportKwh` came
+    /// from, so a later plan-window edit is detectable as a mismatch rather
+    /// than silently mispricing the day. Absent on pre-feature rows, which can
+    /// only have been computed under 11:00–14:00.
+    public let offpeakWindowStart: String?
+    public let offpeakWindowEnd: String?
+    public let offpeakIntegratedAt: String?
+    public let offpeakSampleCount: Int?
     public let note: String?
 
     // Derived per-day stats, populated by the daily-derived-stats backend pass
@@ -233,6 +247,11 @@ public struct DayEnergy: Codable, Sendable, Identifiable {
         offpeakGridImportKwh: Double? = nil,
         offpeakGridExportKwh: Double? = nil,
         peakGridImportKwh: Double? = nil,
+        bandImports: [BandImport]? = nil,
+        offpeakWindowStart: String? = nil,
+        offpeakWindowEnd: String? = nil,
+        offpeakIntegratedAt: String? = nil,
+        offpeakSampleCount: Int? = nil,
         note: String? = nil,
         dailyUsage: DailyUsage? = nil,
         socLow: Double? = nil,
@@ -248,6 +267,11 @@ public struct DayEnergy: Codable, Sendable, Identifiable {
         self.offpeakGridImportKwh = offpeakGridImportKwh
         self.offpeakGridExportKwh = offpeakGridExportKwh
         self.peakGridImportKwh = peakGridImportKwh
+        self.bandImports = bandImports
+        self.offpeakWindowStart = offpeakWindowStart
+        self.offpeakWindowEnd = offpeakWindowEnd
+        self.offpeakIntegratedAt = offpeakIntegratedAt
+        self.offpeakSampleCount = offpeakSampleCount
         self.note = note
         self.dailyUsage = dailyUsage
         self.socLow = socLow
@@ -406,6 +430,18 @@ public struct DaySummary: Codable, Sendable {
     /// Absent for today and for days the integration's usability gate failed;
     /// callers fall back to the `eInput − offpeakGridImportKwh` residual.
     public let peakGridImportKwh: Double?
+    /// The day's rated-band import split, absent when the day is unpriced or
+    /// its split is unavailable (AC 3.6). Only rated bands appear — the free
+    /// band's import is `offpeakGridImportKwh`, which owns it (Q31).
+    public let bandImports: [BandImport]?
+    /// Geometry and provenance of the off-peak row `offpeakGridImportKwh` came
+    /// from, so a later plan-window edit is detectable as a mismatch rather
+    /// than silently mispricing the day. Absent on pre-feature rows, which can
+    /// only have been computed under 11:00–14:00.
+    public let offpeakWindowStart: String?
+    public let offpeakWindowEnd: String?
+    public let offpeakIntegratedAt: String?
+    public let offpeakSampleCount: Int?
 
     public init(
         epv: Double?,
@@ -417,7 +453,12 @@ public struct DaySummary: Codable, Sendable {
         socLowTime: String?,
         offpeakGridImportKwh: Double? = nil,
         offpeakGridExportKwh: Double? = nil,
-        peakGridImportKwh: Double? = nil
+        peakGridImportKwh: Double? = nil,
+        bandImports: [BandImport]? = nil,
+        offpeakWindowStart: String? = nil,
+        offpeakWindowEnd: String? = nil,
+        offpeakIntegratedAt: String? = nil,
+        offpeakSampleCount: Int? = nil
     ) {
         self.epv = epv
         self.eInput = eInput
@@ -429,6 +470,11 @@ public struct DaySummary: Codable, Sendable {
         self.offpeakGridImportKwh = offpeakGridImportKwh
         self.offpeakGridExportKwh = offpeakGridExportKwh
         self.peakGridImportKwh = peakGridImportKwh
+        self.bandImports = bandImports
+        self.offpeakWindowStart = offpeakWindowStart
+        self.offpeakWindowEnd = offpeakWindowEnd
+        self.offpeakIntegratedAt = offpeakIntegratedAt
+        self.offpeakSampleCount = offpeakSampleCount
     }
 }
 

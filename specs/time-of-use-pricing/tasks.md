@@ -209,7 +209,7 @@ references:
 
 ## App: FluxCore and UI
 
-- [ ] 29. Write failing FluxCore tests for PricingPlan models and segmentation against shared vectors <!-- id:chkfinx -->
+- [x] 29. Write failing FluxCore tests for PricingPlan models and segmentation against shared vectors <!-- id:chkfinx -->
   - FluxCore/Pricing: PricingPlan/PlanWindow/PricingPlanDraft replace PricingPeriod/PricingPeriodDraft
   - covers(date:) uses < endDate (exclusive)
   - Draft validation mirrors server codes; segmentation helper output must match pricing_segments.json vectors exactly
@@ -217,12 +217,12 @@ references:
   - Stream: 3
   - Requirements: [1.1](requirements.md#1.1), [1.4](requirements.md#1.4), [1.5](requirements.md#1.5), [2.2](requirements.md#2.2), [6.4](requirements.md#6.4)
 
-- [ ] 30. Implement FluxCore plan models and segmentation <!-- id:chkfiny -->
+- [x] 30. Implement FluxCore plan models and segmentation <!-- id:chkfiny -->
   - Blocked-by: chkfinx (Write failing FluxCore tests for PricingPlan models and segmentation against shared vectors)
   - Stream: 3
   - Requirements: [1.1](requirements.md#1.1), [1.4](requirements.md#1.4), [1.5](requirements.md#1.5), [2.2](requirements.md#2.2), [6.4](requirements.md#6.4)
 
-- [ ] 31. Write failing tests for three-tier cost resolution against cost vectors <!-- id:chkfinz -->
+- [x] 31. Write failing tests for three-tier cost resolution against cost vectors <!-- id:chkfinz -->
   - DayCosts/PeriodCosts tests against pricing_costs.json
   - Tier 1: bandImports geometry equals rated segments AND free import resolvable from offpeak row with matching geometry; sparse-complete row unusable
   - Tier 2: legacy formula verbatim — server-peak preference, max(0,) clamp, nil-offpeak path; single-rate plans never reach tier 3
@@ -232,25 +232,25 @@ references:
   - Stream: 3
   - Requirements: [3.1](requirements.md#3.1), [3.2](requirements.md#3.2), [3.3](requirements.md#3.3), [3.5](requirements.md#3.5), [3.6](requirements.md#3.6), [4.5](requirements.md#4.5), [5.2](requirements.md#5.2)
 
-- [ ] 32. Implement DayCosts and PeriodCosts three-tier resolution <!-- id:chkfio0 -->
+- [x] 32. Implement DayCosts and PeriodCosts three-tier resolution <!-- id:chkfio0 -->
   - Blocked-by: chkfinz (Write failing tests for three-tier cost resolution against cost vectors)
   - Stream: 3
   - Requirements: [3.1](requirements.md#3.1), [3.2](requirements.md#3.2), [3.3](requirements.md#3.3), [3.5](requirements.md#3.5), [3.6](requirements.md#3.6), [4.5](requirements.md#4.5), [5.2](requirements.md#5.2)
 
-- [ ] 33. Write failing tests for networking payloads, error codes, and nullable OffpeakData <!-- id:chkfio1 -->
+- [x] 33. Write failing tests for networking payloads, error codes, and nullable OffpeakData <!-- id:chkfio1 -->
   - URLSessionAPIClient pricing payloads for the band shape; PricingValidationReason new cases incl. legacyShape
   - OffpeakData.windowStart/windowEnd become optional and the offpeak object nullable — nil renders as no window, never defaultWindowStart/End constants (widgets included)
   - Blocked-by: chkfiny (Implement FluxCore plan models and segmentation)
   - Stream: 3
   - Requirements: [7.1](requirements.md#7.1), [7.2](requirements.md#7.2), [4.4](requirements.md#4.4)
 
-- [ ] 34. Implement networking, APIModels, and chart window changes <!-- id:chkfio2 -->
+- [x] 34. Implement networking, APIModels, and chart window changes <!-- id:chkfio2 -->
   - Also DayChartDomain.offpeakRange: replace hardcoded +11h/+14h with the day's window from the API response; no window -> no shading
   - Blocked-by: chkfio1 (Write failing tests for networking payloads, error codes, and nullable OffpeakData)
   - Stream: 3
   - Requirements: [7.1](requirements.md#7.1), [7.2](requirements.md#7.2), [4.4](requirements.md#4.4)
 
-- [ ] 35. Write failing tests for the pricing editor view model <!-- id:chkfio3 -->
+- [x] 35. Write failing tests for the pricing editor view model <!-- id:chkfio3 -->
   - PricingViewModel: default rate + exception windows editing (free toggle, rate field per window), 4dp normalisation
   - Succession flow ends the current plan on D and creates the successor starting D (AC 6.3)
   - Overlap remediation copy updated from day-before to switch-day phrasing (AC 6.5)
@@ -258,7 +258,7 @@ references:
   - Stream: 3
   - Requirements: [6.2](requirements.md#6.2), [6.3](requirements.md#6.3), [6.5](requirements.md#6.5)
 
-- [ ] 36. Implement PricingEditor, plan list summary, and remediation copy <!-- id:chkfio4 -->
+- [x] 36. Implement PricingEditor, plan list summary, and remediation copy <!-- id:chkfio4 -->
   - Settings/Pricing/PricingEditor.swift keeps sheet structure (dates, open-ended toggle, delete, remediation); Windows section rows: start/end pickers + Free toggle + rate field, add/remove
   - PricingPeriodsView band summary e.g. 'Free 10:00-15:00 / $0.2800 01:00-06:00 / $0.3500 default'
   - CostsCard/HistoryPeriodCostsCard layout unchanged (Q21)
@@ -266,14 +266,14 @@ references:
   - Stream: 3
   - Requirements: [6.1](requirements.md#6.1), [6.2](requirements.md#6.2), [6.3](requirements.md#6.3), [6.5](requirements.md#6.5)
 
-- [ ] 37. Write failing tests for Day Detail and History cost wiring <!-- id:chkfio5 -->
+- [x] 37. Write failing tests for Day Detail and History cost wiring <!-- id:chkfio5 -->
   - DayDetailViewModel/HistoryViewModel pass bandImports + offpeak row data + plan into the cost helper
   - Partial-coverage caption (N of M days priced) retained (AC 3.7)
   - Blocked-by: chkfio0 (Implement DayCosts and PeriodCosts three-tier resolution), chkfio2 (Implement networking, APIModels, and chart window changes)
   - Stream: 3
   - Requirements: [3.7](requirements.md#3.7), [6.1](requirements.md#6.1)
 
-- [ ] 38. Implement view-model cost wiring <!-- id:chkfio6 -->
+- [x] 38. Implement view-model cost wiring <!-- id:chkfio6 -->
   - Blocked-by: chkfio5 (Write failing tests for Day Detail and History cost wiring)
   - Stream: 3
   - Requirements: [3.7](requirements.md#3.7), [6.1](requirements.md#6.1)

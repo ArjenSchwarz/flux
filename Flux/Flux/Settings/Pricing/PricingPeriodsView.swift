@@ -1,8 +1,9 @@
 import FluxCore
 import SwiftUI
 
-/// Shown from Settings → "Pricing". Lists configured pricing periods sorted
-/// by start date ascending and offers add/edit/delete (Requirement 3).
+/// Shown from Settings → "Pricing". Lists configured pricing plans sorted by
+/// start date ascending and offers add/edit/delete. Each row shows the plan's
+/// date range and the bands its rates apply over (AC 6.1).
 @MainActor
 struct PricingPeriodsView: View {
     @State private var viewModel: PricingViewModel
@@ -40,21 +41,21 @@ struct PricingPeriodsView: View {
                 }
             }
             Section {
-                if viewModel.periods.isEmpty {
+                if viewModel.plans.isEmpty {
                     emptyStateRow
                 } else {
-                    ForEach(viewModel.periods) { period in
-                        periodRow(period)
+                    ForEach(viewModel.plans) { plan in
+                        planRow(plan)
                     }
                 }
             } header: {
-                Text("Periods")
+                Text("Plans")
             }
             Section {
                 Button {
                     viewModel.beginCreate()
                 } label: {
-                    Label("Add pricing period", systemImage: "plus")
+                    Label("Add pricing plan", systemImage: "plus")
                 }
             }
         }
@@ -67,14 +68,14 @@ struct PricingPeriodsView: View {
                 if viewModel.showsErrorBanner {
                     errorBanner
                 }
-                LiquidGlassSection(title: "Periods") {
+                LiquidGlassSection(title: "Plans") {
                     VStack(alignment: .leading, spacing: 8) {
-                        if viewModel.periods.isEmpty {
+                        if viewModel.plans.isEmpty {
                             emptyStateRow
                         } else {
-                            ForEach(viewModel.periods) { period in
-                                periodRow(period)
-                                if period.id != viewModel.periods.last?.id {
+                            ForEach(viewModel.plans) { plan in
+                                planRow(plan)
+                                if plan.id != viewModel.plans.last?.id {
                                     Divider()
                                 }
                             }
@@ -83,7 +84,7 @@ struct PricingPeriodsView: View {
                         Button {
                             viewModel.beginCreate()
                         } label: {
-                            Label("Add pricing period", systemImage: "plus")
+                            Label("Add pricing plan", systemImage: "plus")
                         }
                     }
                     .padding(8)
@@ -115,21 +116,24 @@ struct PricingPeriodsView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("No pricing yet")
                 .font(.body.weight(.semibold))
-            Text("Add a pricing period to see daily costs on Day Detail and totals on History.")
+            Text("Add a pricing plan to see daily costs on Day Detail and totals on History.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
     }
 
     @ViewBuilder
-    private func periodRow(_ period: PricingPeriod) -> some View {
+    private func planRow(_ plan: PricingPlan) -> some View {
         Button {
-            viewModel.beginEdit(period)
+            viewModel.beginEdit(plan)
         } label: {
             VStack(alignment: .leading, spacing: 4) {
-                Text(PricingPeriodsView.dateRangeText(for: period))
+                Text(PricingPeriodsView.dateRangeText(for: plan))
                     .font(.body.weight(.semibold))
-                Text(PricingPeriodsView.rateSummary(for: period))
+                Text(PricingPeriodsView.bandSummary(for: plan))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(PricingPeriodsView.feedInSummary(for: plan))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -141,7 +145,7 @@ struct PricingPeriodsView: View {
             Button(role: .destructive) {
                 Task {
                     do {
-                        try await viewModel.delete(period)
+                        try await viewModel.delete(plan)
                     } catch {
                         // PricingService.delete already recorded the error on
                         // service.lastError before re-throwing; the
@@ -161,27 +165,44 @@ struct PricingPeriodsView: View {
 // MARK: - Static formatters (exposed for unit tests)
 
 extension PricingPeriodsView {
-    static func dateRangeText(for period: PricingPeriod) -> String {
-        if let end = period.endDate {
-            return "\(period.startDate) – \(end)"
+    /// The end date is exclusive (Decision 5): the plan's last priced day is
+    /// the day before it. "until" says that; an inclusive-looking dash range
+    /// would not.
+    static func dateRangeText(for plan: PricingPlan) -> String {
+        if let end = plan.endDate {
+            return "\(plan.startDate) until \(end)"
         }
-        return "from \(period.startDate)"
+        return "from \(plan.startDate)"
     }
 
-    static func rateSummary(for period: PricingPeriod) -> String {
-        let peak = formatRate(period.peakRate)
-        let feedIn = formatRate(period.feedInRate)
-        let savings = formatRate(period.offPeakSavingsRate)
-        return "Peak \(peak)/kWh · Feed-in \(feedIn)/kWh · Off-peak \(savings)/kWh"
+    /// The plan's bands as entered: the free window first (it is the one that
+    /// changes behaviour elsewhere), then each rated exception, then the
+    /// default rate that fills the rest of the day.
+    static func bandSummary(for plan: PricingPlan) -> String {
+        var parts: [String] = []
+        if let free = plan.freeWindow {
+            parts.append("Free \(free.start)–\(free.end)")
+        }
+        for window in plan.windows where !window.free {
+            parts.append("\(formatRate(window.rate ?? 0)) \(window.start)–\(window.end)")
+        }
+        parts.append("\(formatRate(plan.defaultRate)) default")
+        return parts.joined(separator: " · ")
+    }
+
+    /// Feed-in is a single flat rate per plan, so it sits on its own line
+    /// rather than competing with the import bands.
+    static func feedInSummary(for plan: PricingPlan) -> String {
+        "Feed-in \(formatRate(plan.feedInRate))/kWh"
     }
 
     static func formatRate(_ rate: Double) -> String {
-        // 4dp rate display per AC 3.2 / Decision 10. Use a fixed format so
+        // 4dp rate display (daily-costs Decision 10). Use a fixed format so
         // the output is stable across locales.
         String(format: "$%.4f", rate)
     }
 
     static let emptyStateTitle = "No pricing yet"
-    static let emptyStateDetail = "Add a pricing period to see daily costs on Day Detail and totals on History."
-    static let addButtonLabel = "Add pricing period"
+    static let emptyStateDetail = "Add a pricing plan to see daily costs on Day Detail and totals on History."
+    static let addButtonLabel = "Add pricing plan"
 }

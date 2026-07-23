@@ -220,6 +220,7 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 			if hasSplit {
 				day.OffpeakGridImportKwh = floatPtr(imp)
 				day.OffpeakGridExportKwh = floatPtr(exp)
+				day.OffpeakSource = offpeakSourceFrom(op, isItemToday, window)
 			}
 		}
 		// Peak grid import: today is integrated live from readings (T-1420,

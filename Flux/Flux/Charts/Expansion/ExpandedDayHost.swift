@@ -5,11 +5,20 @@ struct ExpandedDayHostSnapshot {
     var date: String
     var readings: [ParsedReading]
     var summary: DaySummary?
+    /// The day's free window, from the plan pricing it, so the expanded chart
+    /// shades the same band the inline one does.
+    var offpeakWindow: PlanSegment?
 
-    init(date: String = "", readings: [ParsedReading] = [], summary: DaySummary? = nil) {
+    init(
+        date: String = "",
+        readings: [ParsedReading] = [],
+        summary: DaySummary? = nil,
+        offpeakWindow: PlanSegment? = nil
+    ) {
         self.date = date
         self.readings = readings
         self.summary = summary
+        self.offpeakWindow = offpeakWindow
     }
 }
 
@@ -79,6 +88,7 @@ struct ExpandedDayHost: View {
                 PowerChartView(
                     date: controller.displayed.date,
                     readings: controller.displayed.readings,
+                    offpeakWindow: controller.displayed.offpeakWindow,
                     selectedDate: $selectedDate
                 )
             case .dayBatteryCombined:
@@ -86,6 +96,7 @@ struct ExpandedDayHost: View {
                     date: controller.displayed.date,
                     readings: controller.displayed.readings,
                     summary: controller.displayed.summary,
+                    offpeakWindow: controller.displayed.offpeakWindow,
                     selectedDate: $selectedDate
                 )
             case .historySolar, .historyGridUsage, .historyDailyUsage:
