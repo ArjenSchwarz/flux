@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
@@ -18,16 +19,11 @@ import (
 // client decodes into PricingPeriod. PricingID must serialise as "id" so
 // the Swift Identifiable conformance works.
 func TestPricingItemJSONWireShape(t *testing.T) {
-	end := "2026-12-31"
-	item := PricingItem{
-		PricingID:          "pricing-1",
-		StartDate:          "2026-01-01",
-		EndDate:            &end,
-		PeakRate:           0.2873,
-		FeedInRate:         0.0500,
-		OffPeakSavingsRate: 0.1500,
-		CreatedAt:          "2026-05-23T10:00:00Z",
-		UpdatedAt:          "2026-05-23T10:00:00Z",
+	end := "2027-01-01"
+	item := bandPricingItem("pricing-1", "2026-01-01", &end)
+	item.Windows = []PricingWindow{
+		{Start: "10:00", End: "15:00", Free: true},
+		{Start: "01:00", End: "06:00", Rate: floatPtr(0.28)},
 	}
 	encoded, err := json.Marshal(item)
 	require.NoError(t, err)
@@ -39,14 +35,20 @@ func TestPricingItemJSONWireShape(t *testing.T) {
 	assert.NotContains(t, raw, "PricingID")
 
 	expected := map[string]any{
-		"id":                 "pricing-1",
-		"startDate":          "2026-01-01",
-		"endDate":            "2026-12-31",
-		"peakRate":           0.2873,
-		"feedInRate":         0.05,
-		"offPeakSavingsRate": 0.15,
-		"createdAt":          "2026-05-23T10:00:00Z",
-		"updatedAt":          "2026-05-23T10:00:00Z",
+		"id":        "pricing-1",
+		"startDate": "2026-01-01",
+		// Exclusive switch date (Decision 5): this period's last priced day
+		// is 2026-12-31.
+		"endDate":     "2027-01-01",
+		"defaultRate": 0.2873,
+		"windows": []any{
+			map[string]any{"start": "10:00", "end": "15:00", "free": true},
+			map[string]any{"start": "01:00", "end": "06:00", "free": false, "rate": 0.28},
+		},
+		"feedInRate":           0.05,
+		"savingsReferenceRate": 0.15,
+		"createdAt":            "2026-05-23T10:00:00Z",
+		"updatedAt":            "2026-05-23T10:00:00Z",
 	}
 	for key, want := range expected {
 		assert.Equal(t, want, raw[key], "wire shape key %q", key)
@@ -54,26 +56,42 @@ func TestPricingItemJSONWireShape(t *testing.T) {
 	assert.Len(t, raw, len(expected))
 }
 
-// TestPricingItemJSONOmitsAbsentEndDate verifies the open-ended period's
-// nil end date is omitted on the wire so the Swift decoder sees
-// endDate == nil rather than an empty string.
-func TestPricingItemJSONOmitsAbsentEndDate(t *testing.T) {
-	item := PricingItem{
-		PricingID:          "pricing-1",
-		StartDate:          "2026-01-01",
-		PeakRate:           0.2873,
-		FeedInRate:         0.0500,
-		OffPeakSavingsRate: 0.1500,
-		CreatedAt:          "2026-05-23T10:00:00Z",
-		UpdatedAt:          "2026-05-23T10:00:00Z",
-	}
+// TestPricingItemJSONOmitsAbsentOptionals verifies the open-ended period's
+// nil end date and a free-band-less plan's absent savings reference rate are
+// omitted on the wire, so the Swift decoder sees nil rather than a zero value.
+func TestPricingItemJSONOmitsAbsentOptionals(t *testing.T) {
+	item := bandPricingItem("pricing-1", "2026-01-01", nil)
+	item.Windows = nil
+	item.SavingsReferenceRate = nil
+
 	encoded, err := json.Marshal(item)
 	require.NoError(t, err)
 
 	var raw map[string]any
 	require.NoError(t, json.Unmarshal(encoded, &raw))
 	assert.NotContains(t, raw, "endDate")
+	assert.NotContains(t, raw, "savingsReferenceRate")
 }
+
+// bandPricingItem is the shared fixture for a band-shape row: the migrated
+// form of the plan that ran before the switch (free 11:00–14:00, one flat
+// rate otherwise).
+func bandPricingItem(id, startDate string, endDate *string) PricingItem {
+	return PricingItem{
+		PricingID:            id,
+		StartDate:            startDate,
+		EndDate:              endDate,
+		DefaultRate:          0.2873,
+		Windows:              []PricingWindow{{Start: "11:00", End: "14:00", Free: true}},
+		FeedInRate:           0.0500,
+		SavingsReferenceRate: floatPtr(0.1500),
+		CreatedAt:            "2026-05-23T10:00:00Z",
+		UpdatedAt:            "2026-05-23T10:00:00Z",
+	}
+}
+
+func floatPtr(v float64) *float64 { return &v }
+func strPtr(v string) *string     { return &v }
 
 // inMemoryPricingAPI is a hand-rolled fake that satisfies every DynamoDB
 // operation the pricing reader/writer needs: PutItem, GetItem, UpdateItem,
@@ -116,18 +134,44 @@ func (m *inMemoryPricingAPI) UpdateItem(_ context.Context, params *dynamodb.Upda
 			"pricingId": &types.AttributeValueMemberS{Value: id},
 		}
 	}
-	for k, v := range params.ExpressionAttributeValues {
-		// :openEndedId / :updatedAt etc. — translate the placeholder back
-		// to the column name by stripping the leading ":". Sufficient for
-		// the simple UpdateExpression we emit in production.
-		name := k[1:]
-		if name == "null" {
-			continue
-		}
-		row[name] = v
-	}
+	applyUpdateExpression(row, params.UpdateExpression, params.ExpressionAttributeValues)
 	m.items[id] = row
 	return &dynamodb.UpdateItemOutput{}, nil
+}
+
+// applyUpdateExpression applies a "REMOVE attr, … SET attr = :ph, …"
+// expression to a row. Every update expression the pricing store emits is of
+// that shape.
+//
+// The attribute name has to come from the expression, not from the
+// placeholder: the store writes `SET endDate = :end`, so mapping `:end` to an
+// attribute called "end" would leave the closing row's end date unset and
+// silently pass a succession test that should fail.
+func applyUpdateExpression(row map[string]types.AttributeValue, expr *string, values map[string]types.AttributeValue) {
+	if expr == nil {
+		return
+	}
+	remove, set := "", *expr
+	if before, after, found := strings.Cut(set, " SET "); found && strings.HasPrefix(set, "REMOVE ") {
+		remove, set = strings.TrimPrefix(before, "REMOVE "), after
+	} else {
+		set = strings.TrimPrefix(set, "SET ")
+	}
+
+	for attr := range strings.SplitSeq(remove, ",") {
+		if attr = strings.TrimSpace(attr); attr != "" {
+			delete(row, attr)
+		}
+	}
+	for assignment := range strings.SplitSeq(set, ",") {
+		attr, placeholder, found := strings.Cut(assignment, "=")
+		if !found {
+			continue
+		}
+		if v, ok := values[strings.TrimSpace(placeholder)]; ok {
+			row[strings.TrimSpace(attr)] = v
+		}
+	}
 }
 
 func (m *inMemoryPricingAPI) DeleteItem(_ context.Context, params *dynamodb.DeleteItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error) {
@@ -173,13 +217,7 @@ func (m *inMemoryPricingAPI) TransactWriteItems(_ context.Context, params *dynam
 					"pricingId": &types.AttributeValueMemberS{Value: id},
 				}
 			}
-			for k, v := range item.Update.ExpressionAttributeValues {
-				name := k[1:]
-				if name == "null" {
-					continue
-				}
-				row[name] = v
-			}
+			applyUpdateExpression(row, item.Update.UpdateExpression, item.Update.ExpressionAttributeValues)
 			m.items[id] = row
 		case item.Delete != nil:
 			id := item.Delete.Key["pricingId"].(*types.AttributeValueMemberS).Value
@@ -206,17 +244,7 @@ func TestPricingStore_PutAndGetClosedPeriodRoundTrip(t *testing.T) {
 	api := newInMemoryPricingAPI()
 	store := NewDynamoPricingStore(api, pricingTestTable())
 
-	end := "2026-12-31"
-	want := PricingItem{
-		PricingID:          "pricing-1",
-		StartDate:          "2026-01-01",
-		EndDate:            &end,
-		PeakRate:           0.2873,
-		FeedInRate:         0.0500,
-		OffPeakSavingsRate: 0.1500,
-		CreatedAt:          "2026-05-23T10:00:00Z",
-		UpdatedAt:          "2026-05-23T10:00:00Z",
-	}
+	want := bandPricingItem("pricing-1", "2026-01-01", strPtr("2027-01-01"))
 	require.NoError(t, store.PutPricing(context.Background(), want, nil))
 
 	got, err := store.GetPricing(context.Background(), want.PricingID)
@@ -229,12 +257,7 @@ func TestPricingStore_DeleteClosedPeriod(t *testing.T) {
 	api := newInMemoryPricingAPI()
 	store := NewDynamoPricingStore(api, pricingTestTable())
 
-	end := "2026-12-31"
-	item := PricingItem{
-		PricingID: "pricing-1", StartDate: "2026-01-01", EndDate: &end,
-		PeakRate: 0.2873, FeedInRate: 0.0500, OffPeakSavingsRate: 0.1500,
-		CreatedAt: "2026-05-23T10:00:00Z", UpdatedAt: "2026-05-23T10:00:00Z",
-	}
+	item := bandPricingItem("pricing-1", "2026-01-01", strPtr("2027-01-01"))
 	require.NoError(t, store.PutPricing(context.Background(), item, nil))
 	require.NoError(t, store.DeletePricing(context.Background(), item.PricingID, nil))
 
@@ -247,13 +270,11 @@ func TestPricingStore_ListPricingOrdersByStartDateAscending(t *testing.T) {
 	api := newInMemoryPricingAPI()
 	store := NewDynamoPricingStore(api, pricingTestTable())
 
-	endA := "2025-12-31"
-	endB := "2026-06-30"
 	rows := []PricingItem{
 		// Insert deliberately out of order.
-		{PricingID: "p-b", StartDate: "2026-01-01", EndDate: &endB, PeakRate: 0.3, FeedInRate: 0.05, OffPeakSavingsRate: 0.1, CreatedAt: "2026-05-23T10:00:00Z", UpdatedAt: "2026-05-23T10:00:00Z"},
-		{PricingID: "p-a", StartDate: "2025-01-01", EndDate: &endA, PeakRate: 0.25, FeedInRate: 0.04, OffPeakSavingsRate: 0.08, CreatedAt: "2026-05-23T10:00:00Z", UpdatedAt: "2026-05-23T10:00:00Z"},
-		{PricingID: "p-c", StartDate: "2026-07-01", PeakRate: 0.32, FeedInRate: 0.05, OffPeakSavingsRate: 0.12, CreatedAt: "2026-05-23T10:00:00Z", UpdatedAt: "2026-05-23T10:00:00Z"},
+		{PricingID: "p-b", StartDate: "2026-01-01", EndDate: strPtr("2026-07-01"), DefaultRate: 0.3, FeedInRate: 0.05, CreatedAt: "2026-05-23T10:00:00Z", UpdatedAt: "2026-05-23T10:00:00Z"},
+		{PricingID: "p-a", StartDate: "2025-01-01", EndDate: strPtr("2026-01-01"), DefaultRate: 0.25, FeedInRate: 0.04, CreatedAt: "2026-05-23T10:00:00Z", UpdatedAt: "2026-05-23T10:00:00Z"},
+		{PricingID: "p-c", StartDate: "2026-07-01", DefaultRate: 0.32, FeedInRate: 0.05, CreatedAt: "2026-05-23T10:00:00Z", UpdatedAt: "2026-05-23T10:00:00Z"},
 	}
 	for _, r := range rows {
 		require.NoError(t, store.PutPricing(context.Background(), r, nil))
@@ -282,11 +303,7 @@ func TestPricingStore_ListPricingExcludesSentinelRow(t *testing.T) {
 	require.NoError(t, err)
 	api.items[pricingSentinelID] = av
 
-	item := PricingItem{
-		PricingID: openID, StartDate: "2026-01-01",
-		PeakRate: 0.3, FeedInRate: 0.05, OffPeakSavingsRate: 0.1,
-		CreatedAt: "2026-05-23T10:00:00Z", UpdatedAt: "2026-05-23T10:00:00Z",
-	}
+	item := bandPricingItem(openID, "2026-01-01", nil)
 	require.NoError(t, store.PutPricing(context.Background(), item, nil))
 
 	got, err := store.ListPricing(context.Background())
@@ -328,25 +345,20 @@ func TestPricingStore_UpdateClosedRateOnly(t *testing.T) {
 	api := newInMemoryPricingAPI()
 	store := NewDynamoPricingStore(api, pricingTestTable())
 
-	end := "2026-06-30"
-	original := PricingItem{
-		PricingID: "p-1", StartDate: "2026-01-01", EndDate: &end,
-		PeakRate: 0.25, FeedInRate: 0.04, OffPeakSavingsRate: 0.08,
-		CreatedAt: "2026-05-23T10:00:00Z", UpdatedAt: "2026-05-23T10:00:00Z",
-	}
+	original := bandPricingItem("p-1", "2026-01-01", strPtr("2026-07-01"))
 	require.NoError(t, store.PutPricing(context.Background(), original, nil))
 
 	// Edit rates only — both before and after are closed periods, so the
 	// open-ended-id snapshot stays nil and no transaction is needed.
 	updated := original
-	updated.PeakRate = 0.3000
+	updated.DefaultRate = 0.3000
 	updated.FeedInRate = 0.0500
 	updated.UpdatedAt = "2026-05-24T10:00:00Z"
 	require.NoError(t, store.UpdatePricing(context.Background(), updated, nil))
 
 	got := readPricing(t, api, original.PricingID)
 	require.NotNil(t, got)
-	assert.Equal(t, 0.3000, got.PeakRate)
+	assert.Equal(t, 0.3000, got.DefaultRate)
 	assert.Equal(t, "2026-05-24T10:00:00Z", got.UpdatedAt)
 	assert.Equal(t, original.CreatedAt, got.CreatedAt, "createdAt must not change on update")
 }

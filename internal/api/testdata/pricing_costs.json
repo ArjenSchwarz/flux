@@ -1,0 +1,361 @@
+[
+  {
+    "name": "tier2-offpeak-and-server-peak",
+    "description": "Legacy formula, both values present: import prices the server-computed peak kWh, savings price the measured off-peak kWh. The two deliberately do not sum to eInput.",
+    "plan": {
+      "defaultRate": 0.35,
+      "windows": [{ "start": "11:00", "end": "14:00", "free": true }],
+      "feedInRate": 0.05,
+      "savingsReferenceRate": 0.35
+    },
+    "day": {
+      "eInput": 20.0,
+      "eOutput": 15.0,
+      "peakGridImportKwh": 13.8,
+      "offpeak": {
+        "gridImportKwh": 6.0,
+        "windowStart": "11:00",
+        "windowEnd": "14:00",
+        "integratedAt": "2026-04-12T04:00:00Z",
+        "sampleCount": 900
+      },
+      "bandImports": null
+    },
+    "expected": { "tier": 2, "importCost": 4.83, "feedInIncome": 0.75, "net": 4.08, "savings": 2.1 }
+  },
+  {
+    "name": "tier2-offpeak-no-server-peak",
+    "description": "Legacy formula, no server peak: import falls back to the eInput minus off-peak residual.",
+    "plan": {
+      "defaultRate": 0.35,
+      "windows": [{ "start": "11:00", "end": "14:00", "free": true }],
+      "feedInRate": 0.05,
+      "savingsReferenceRate": 0.35
+    },
+    "day": {
+      "eInput": 20.0,
+      "eOutput": 15.0,
+      "peakGridImportKwh": null,
+      "offpeak": {
+        "gridImportKwh": 6.0,
+        "windowStart": "11:00",
+        "windowEnd": "14:00",
+        "integratedAt": "2026-04-12T04:00:00Z",
+        "sampleCount": 900
+      },
+      "bandImports": null
+    },
+    "expected": { "tier": 2, "importCost": 4.9, "feedInIncome": 0.75, "net": 4.15, "savings": 2.1 }
+  },
+  {
+    "name": "tier2-no-offpeak-server-peak",
+    "description": "Legacy formula, no off-peak row: import prices the server peak and savings are $0.00.",
+    "plan": {
+      "defaultRate": 0.35,
+      "windows": [{ "start": "11:00", "end": "14:00", "free": true }],
+      "feedInRate": 0.05,
+      "savingsReferenceRate": 0.35
+    },
+    "day": {
+      "eInput": 20.0,
+      "eOutput": 15.0,
+      "peakGridImportKwh": 13.8,
+      "offpeak": null,
+      "bandImports": null
+    },
+    "expected": { "tier": 2, "importCost": 4.83, "feedInIncome": 0.75, "net": 4.08, "savings": 0.0 }
+  },
+  {
+    "name": "tier2-no-offpeak-no-server-peak",
+    "description": "Legacy formula, neither value present: all of eInput is priced at the plan rate.",
+    "plan": {
+      "defaultRate": 0.35,
+      "windows": [{ "start": "11:00", "end": "14:00", "free": true }],
+      "feedInRate": 0.05,
+      "savingsReferenceRate": 0.35
+    },
+    "day": {
+      "eInput": 20.0,
+      "eOutput": 15.0,
+      "peakGridImportKwh": null,
+      "offpeak": null,
+      "bandImports": null
+    },
+    "expected": { "tier": 2, "importCost": 7.0, "feedInIncome": 0.75, "net": 6.25, "savings": 0.0 }
+  },
+  {
+    "name": "tier2-zero-clamp",
+    "description": "Off-peak import exceeding the day's total clamps the residual to zero rather than producing a negative import cost.",
+    "plan": {
+      "defaultRate": 0.35,
+      "windows": [{ "start": "11:00", "end": "14:00", "free": true }],
+      "feedInRate": 0.05,
+      "savingsReferenceRate": 0.35
+    },
+    "day": {
+      "eInput": 5.0,
+      "eOutput": 15.0,
+      "peakGridImportKwh": null,
+      "offpeak": {
+        "gridImportKwh": 6.0,
+        "windowStart": "11:00",
+        "windowEnd": "14:00",
+        "integratedAt": "2026-04-12T04:00:00Z",
+        "sampleCount": 900
+      },
+      "bandImports": null
+    },
+    "expected": { "tier": 2, "importCost": 0.0, "feedInIncome": 0.75, "net": -0.75, "savings": 2.1 }
+  },
+  {
+    "name": "tier2-no-energy-recorded",
+    "description": "A day with no recorded energy is priced, not skipped: every line is zero.",
+    "plan": {
+      "defaultRate": 0.35,
+      "windows": [{ "start": "11:00", "end": "14:00", "free": true }],
+      "feedInRate": 0.05,
+      "savingsReferenceRate": 0.35
+    },
+    "day": {
+      "eInput": null,
+      "eOutput": null,
+      "peakGridImportKwh": null,
+      "offpeak": null,
+      "bandImports": null
+    },
+    "expected": { "tier": 2, "importCost": 0.0, "feedInIncome": 0.0, "net": 0.0, "savings": 0.0 }
+  },
+  {
+    "name": "tier1-new-plan-full-split",
+    "description": "The banded path: each rated band priced at its own rate, savings from the off-peak row whose geometry matches the plan's free window.",
+    "plan": {
+      "defaultRate": 0.35,
+      "windows": [
+        { "start": "10:00", "end": "15:00", "free": true },
+        { "start": "01:00", "end": "06:00", "free": false, "rate": 0.28 }
+      ],
+      "feedInRate": 0.05,
+      "savingsReferenceRate": 0.35
+    },
+    "day": {
+      "eInput": 23.0,
+      "eOutput": 15.0,
+      "peakGridImportKwh": null,
+      "offpeak": {
+        "gridImportKwh": 3.0,
+        "windowStart": "10:00",
+        "windowEnd": "15:00",
+        "integratedAt": "2026-08-02T05:00:00Z",
+        "sampleCount": 1500
+      },
+      "bandImports": [
+        { "start": "00:00", "end": "01:00", "kwh": 1.0 },
+        { "start": "01:00", "end": "06:00", "kwh": 4.0 },
+        { "start": "06:00", "end": "10:00", "kwh": 2.0 },
+        { "start": "15:00", "end": "24:00", "kwh": 8.0 }
+      ]
+    },
+    "expected": { "tier": 1, "importCost": 4.97, "feedInIncome": 0.75, "net": 4.22, "savings": 1.05 }
+  },
+  {
+    "name": "tier1-no-free-band",
+    "description": "A plan without a free band needs no off-peak row: the rated bands cover the whole day and savings are $0.00.",
+    "plan": {
+      "defaultRate": 0.35,
+      "windows": [{ "start": "01:00", "end": "06:00", "free": false, "rate": 0.28 }],
+      "feedInRate": 0.05
+    },
+    "day": {
+      "eInput": 15.0,
+      "eOutput": 15.0,
+      "peakGridImportKwh": null,
+      "offpeak": null,
+      "bandImports": [
+        { "start": "00:00", "end": "01:00", "kwh": 1.0 },
+        { "start": "01:00", "end": "06:00", "kwh": 4.0 },
+        { "start": "06:00", "end": "24:00", "kwh": 10.0 }
+      ]
+    },
+    "expected": { "tier": 1, "importCost": 4.97, "feedInIncome": 0.75, "net": 4.22, "savings": 0.0 }
+  },
+  {
+    "name": "tier1-pre-feature-offpeak-row-geometry",
+    "description": "An off-peak row without a geometry snapshot is treated as 11:00-14:00, the only window it can have been computed under, so it matches a migrated plan's free window. Same figures as tier2-offpeak-no-server-peak — the AC 5.2 property.",
+    "plan": {
+      "defaultRate": 0.35,
+      "windows": [{ "start": "11:00", "end": "14:00", "free": true }],
+      "feedInRate": 0.05,
+      "savingsReferenceRate": 0.35
+    },
+    "day": {
+      "eInput": 20.0,
+      "eOutput": 15.0,
+      "peakGridImportKwh": null,
+      "offpeak": {
+        "gridImportKwh": 6.0,
+        "windowStart": null,
+        "windowEnd": null,
+        "integratedAt": null,
+        "sampleCount": 0
+      },
+      "bandImports": [
+        { "start": "00:00", "end": "11:00", "kwh": 5.0 },
+        { "start": "14:00", "end": "24:00", "kwh": 9.0 }
+      ]
+    },
+    "expected": { "tier": 1, "importCost": 4.9, "feedInIncome": 0.75, "net": 4.15, "savings": 2.1 }
+  },
+  {
+    "name": "tier3-sparse-complete-offpeak-row",
+    "description": "An off-peak row with integratedAt set but no samples is a zero-delta artifact, not a measured zero, so the free import is unresolvable and a multi-rate plan falls to the fallback.",
+    "plan": {
+      "defaultRate": 0.35,
+      "windows": [
+        { "start": "10:00", "end": "15:00", "free": true },
+        { "start": "01:00", "end": "06:00", "free": false, "rate": 0.28 }
+      ],
+      "feedInRate": 0.05,
+      "savingsReferenceRate": 0.35
+    },
+    "day": {
+      "eInput": 23.0,
+      "eOutput": 15.0,
+      "peakGridImportKwh": null,
+      "offpeak": {
+        "gridImportKwh": 0.0,
+        "windowStart": "10:00",
+        "windowEnd": "15:00",
+        "integratedAt": "2026-08-02T05:00:00Z",
+        "sampleCount": 0
+      },
+      "bandImports": [
+        { "start": "00:00", "end": "01:00", "kwh": 1.0 },
+        { "start": "01:00", "end": "06:00", "kwh": 4.0 },
+        { "start": "06:00", "end": "10:00", "kwh": 2.0 },
+        { "start": "15:00", "end": "24:00", "kwh": 8.0 }
+      ]
+    },
+    "expected": { "tier": 3, "importCost": 8.05, "feedInIncome": 0.75, "net": 7.3, "savings": 0.0 }
+  },
+  {
+    "name": "tier3-band-geometry-mismatch",
+    "description": "A stored split captured under the previous free window no longer matches the plan's rated segments, so the day degrades to the fallback (Q16).",
+    "plan": {
+      "defaultRate": 0.35,
+      "windows": [
+        { "start": "10:00", "end": "15:00", "free": true },
+        { "start": "01:00", "end": "06:00", "free": false, "rate": 0.28 }
+      ],
+      "feedInRate": 0.05,
+      "savingsReferenceRate": 0.35
+    },
+    "day": {
+      "eInput": 23.0,
+      "eOutput": 15.0,
+      "peakGridImportKwh": null,
+      "offpeak": {
+        "gridImportKwh": 3.0,
+        "windowStart": "10:00",
+        "windowEnd": "15:00",
+        "integratedAt": "2026-08-02T05:00:00Z",
+        "sampleCount": 1500
+      },
+      "bandImports": [
+        { "start": "00:00", "end": "01:00", "kwh": 1.0 },
+        { "start": "01:00", "end": "06:00", "kwh": 4.0 },
+        { "start": "06:00", "end": "11:00", "kwh": 2.5 },
+        { "start": "14:00", "end": "24:00", "kwh": 9.0 }
+      ]
+    },
+    "expected": { "tier": 3, "importCost": 8.05, "feedInIncome": 0.75, "net": 7.3, "savings": 0.0 }
+  },
+  {
+    "name": "tier3-offpeak-geometry-mismatch",
+    "description": "The rated split matches but the off-peak row was integrated under the old window, so the free import is not resolvable for this plan.",
+    "plan": {
+      "defaultRate": 0.35,
+      "windows": [
+        { "start": "10:00", "end": "15:00", "free": true },
+        { "start": "01:00", "end": "06:00", "free": false, "rate": 0.28 }
+      ],
+      "feedInRate": 0.05,
+      "savingsReferenceRate": 0.35
+    },
+    "day": {
+      "eInput": 23.0,
+      "eOutput": 15.0,
+      "peakGridImportKwh": null,
+      "offpeak": {
+        "gridImportKwh": 3.0,
+        "windowStart": "11:00",
+        "windowEnd": "14:00",
+        "integratedAt": "2026-08-02T05:00:00Z",
+        "sampleCount": 1500
+      },
+      "bandImports": [
+        { "start": "00:00", "end": "01:00", "kwh": 1.0 },
+        { "start": "01:00", "end": "06:00", "kwh": 4.0 },
+        { "start": "06:00", "end": "10:00", "kwh": 2.0 },
+        { "start": "15:00", "end": "24:00", "kwh": 8.0 }
+      ]
+    },
+    "expected": { "tier": 3, "importCost": 8.05, "feedInIncome": 0.75, "net": 7.3, "savings": 0.0 }
+  },
+  {
+    "name": "tier3-multi-rate-no-split",
+    "description": "A multi-rate plan with no stored split cannot be priced per band, so all import is billed at the highest rate with no savings (AC 3.6).",
+    "plan": {
+      "defaultRate": 0.35,
+      "windows": [
+        { "start": "10:00", "end": "15:00", "free": true },
+        { "start": "01:00", "end": "06:00", "free": false, "rate": 0.28 }
+      ],
+      "feedInRate": 0.05,
+      "savingsReferenceRate": 0.35
+    },
+    "day": {
+      "eInput": 23.0,
+      "eOutput": 15.0,
+      "peakGridImportKwh": null,
+      "offpeak": {
+        "gridImportKwh": 3.0,
+        "windowStart": "10:00",
+        "windowEnd": "15:00",
+        "integratedAt": "2026-08-02T05:00:00Z",
+        "sampleCount": 1500
+      },
+      "bandImports": null
+    },
+    "expected": { "tier": 3, "importCost": 8.05, "feedInIncome": 0.75, "net": 7.3, "savings": 0.0 }
+  },
+  {
+    "name": "tier3-partially-known-split",
+    "description": "A split counts as available only when every rated band's kWh is known; a partial split is unavailable, not partially used (AC 3.6).",
+    "plan": {
+      "defaultRate": 0.35,
+      "windows": [
+        { "start": "10:00", "end": "15:00", "free": true },
+        { "start": "01:00", "end": "06:00", "free": false, "rate": 0.28 }
+      ],
+      "feedInRate": 0.05,
+      "savingsReferenceRate": 0.35
+    },
+    "day": {
+      "eInput": 23.0,
+      "eOutput": 15.0,
+      "peakGridImportKwh": null,
+      "offpeak": {
+        "gridImportKwh": 3.0,
+        "windowStart": "10:00",
+        "windowEnd": "15:00",
+        "integratedAt": "2026-08-02T05:00:00Z",
+        "sampleCount": 1500
+      },
+      "bandImports": [
+        { "start": "00:00", "end": "01:00", "kwh": 1.0 },
+        { "start": "01:00", "end": "06:00", "kwh": 4.0 }
+      ]
+    },
+    "expected": { "tier": 3, "importCost": 8.05, "feedInIncome": 0.75, "net": 7.3, "savings": 0.0 }
+  }
+]

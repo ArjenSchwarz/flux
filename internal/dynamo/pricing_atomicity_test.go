@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/stretchr/testify/assert"
@@ -36,8 +37,19 @@ func canceledWith(reasons []types.CancellationReason) error {
 // newAtomicityMock returns a *mockPricingAPI configured so every
 // TransactWriteItems call fails with the supplied error. Used by the
 // failure-shape tests to inject a deterministic CancellationReason set.
+// The GetItem stub serves the band-shape closing row ReplaceOpenEnded reads
+// before it commits; without it every case would fail on the legacy-shape
+// guard instead of reaching the transaction it is trying to exercise.
 func newAtomicityMock(transactErr error) *mockPricingAPI {
 	return &mockPricingAPI{
+		getItemFn: func(_ context.Context, params *dynamodb.GetItemInput) (*dynamodb.GetItemOutput, error) {
+			id := params.Key["pricingId"].(*types.AttributeValueMemberS).Value
+			av, err := attributevalue.MarshalMap(bandPricingItem(id, "2026-01-01", nil))
+			if err != nil {
+				return nil, err
+			}
+			return &dynamodb.GetItemOutput{Item: av}, nil
+		},
 		transactWriteFn: func(_ context.Context, _ *dynamodb.TransactWriteItemsInput) (*dynamodb.TransactWriteItemsOutput, error) {
 			return nil, transactErr
 		},
@@ -50,7 +62,7 @@ func TestPricingAtomicity_ReplaceOpenEnded_SentinelRace(t *testing.T) {
 	store := NewDynamoPricingStore(mock, pricingTestTable())
 
 	err := store.ReplaceOpenEnded(context.Background(), "open-id", "2026-06-30", "2026-05-24T10:00:00Z",
-		PricingItem{PricingID: "new-id", StartDate: "2026-07-01", PeakRate: 0.3})
+		PricingItem{PricingID: "new-id", StartDate: "2026-07-01", DefaultRate: 0.3})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrPricingConcurrentWrite,
 		"sentinel position must map to concurrent_open_ended_write")
@@ -62,7 +74,7 @@ func TestPricingAtomicity_ReplaceOpenEnded_ClosingRowRace(t *testing.T) {
 	store := NewDynamoPricingStore(mock, pricingTestTable())
 
 	err := store.ReplaceOpenEnded(context.Background(), "open-id", "2026-06-30", "2026-05-24T10:00:00Z",
-		PricingItem{PricingID: "new-id", StartDate: "2026-07-01", PeakRate: 0.3})
+		PricingItem{PricingID: "new-id", StartDate: "2026-07-01", DefaultRate: 0.3})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrPricingConcurrentWrite,
 		"closing-row position must map to concurrent_open_ended_write")
@@ -74,7 +86,7 @@ func TestPricingAtomicity_ReplaceOpenEnded_UUIDCollision(t *testing.T) {
 	store := NewDynamoPricingStore(mock, pricingTestTable())
 
 	err := store.ReplaceOpenEnded(context.Background(), "open-id", "2026-06-30", "2026-05-24T10:00:00Z",
-		PricingItem{PricingID: "new-id", StartDate: "2026-07-01", PeakRate: 0.3})
+		PricingItem{PricingID: "new-id", StartDate: "2026-07-01", DefaultRate: 0.3})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrPricingUUIDCollision,
 		"new-row position must map to uuid_collision so the caller retries")
@@ -88,7 +100,7 @@ func TestPricingAtomicity_EmptyReasonsFallsThroughTo500(t *testing.T) {
 	store := NewDynamoPricingStore(mock, pricingTestTable())
 
 	err := store.ReplaceOpenEnded(context.Background(), "open-id", "2026-06-30", "2026-05-24T10:00:00Z",
-		PricingItem{PricingID: "new-id", StartDate: "2026-07-01", PeakRate: 0.3})
+		PricingItem{PricingID: "new-id", StartDate: "2026-07-01", DefaultRate: 0.3})
 	require.Error(t, err)
 	assert.NotErrorIs(t, err, ErrPricingConcurrentWrite,
 		"empty Reasons[] must not masquerade as a concurrent_open_ended_write")
@@ -103,7 +115,7 @@ func TestPricingAtomicity_PutOpenEnded_SentinelRace(t *testing.T) {
 	store := NewDynamoPricingStore(mock, pricingTestTable())
 
 	err := store.PutPricing(context.Background(),
-		PricingItem{PricingID: "new-open", StartDate: "2026-07-01", PeakRate: 0.3}, nil)
+		PricingItem{PricingID: "new-open", StartDate: "2026-07-01", DefaultRate: 0.3}, nil)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrPricingConcurrentWrite)
 }
@@ -116,7 +128,7 @@ func TestPricingAtomicity_UpdateClosedToOpen_SentinelRace(t *testing.T) {
 	// item.EndDate == nil and prevOpenEndedID == nil triggers the
 	// closed→open transition in production.
 	err := store.UpdatePricing(context.Background(),
-		PricingItem{PricingID: "p-1", StartDate: "2026-01-01", PeakRate: 0.3}, nil)
+		PricingItem{PricingID: "p-1", StartDate: "2026-01-01", DefaultRate: 0.3}, nil)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrPricingConcurrentWrite)
 }
@@ -131,7 +143,7 @@ func TestPricingAtomicity_UpdateOpenToClosed_SentinelRace(t *testing.T) {
 	// item.EndDate set + prevOpenEndedID matches item.PricingID — was
 	// open, now closed.
 	err := store.UpdatePricing(context.Background(),
-		PricingItem{PricingID: openID, StartDate: "2026-01-01", EndDate: &end, PeakRate: 0.3}, &openID)
+		PricingItem{PricingID: openID, StartDate: "2026-01-01", EndDate: &end, DefaultRate: 0.3}, &openID)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrPricingConcurrentWrite)
 }
@@ -144,7 +156,7 @@ func TestPricingAtomicity_UpdateOpenToOpen_SentinelRace(t *testing.T) {
 
 	openID := "p-1"
 	err := store.UpdatePricing(context.Background(),
-		PricingItem{PricingID: openID, StartDate: "2026-01-01", PeakRate: 0.3}, &openID)
+		PricingItem{PricingID: openID, StartDate: "2026-01-01", DefaultRate: 0.3}, &openID)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrPricingConcurrentWrite)
 }
@@ -172,7 +184,7 @@ func TestPricingAtomicity_FirstWriteSentinelCreationRace(t *testing.T) {
 	// mapping treats a sentinel ConditionalCheckFailed at index 0 the
 	// same way regardless of which clause fired.
 	err := store.PutPricing(context.Background(),
-		PricingItem{PricingID: "new-open", StartDate: "2026-07-01", PeakRate: 0.3}, nil)
+		PricingItem{PricingID: "new-open", StartDate: "2026-07-01", DefaultRate: 0.3}, nil)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrPricingConcurrentWrite)
 }

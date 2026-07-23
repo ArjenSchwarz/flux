@@ -104,13 +104,13 @@ func (s *DynamoStore) WriteDailyEnergy(ctx context.Context, item DailyEnergyItem
 func (s *DynamoStore) UpdateDailyEnergyDerived(ctx context.Context, sysSn, date string, stats DerivedStats) error {
 	tableName := s.tables.DailyEnergy
 
-	// The derivedStats group and the peak group have independent lifecycles
+	// The derivedStats, peak, and band groups have independent lifecycles
 	// (peak-from-readings Decision 3). Each is written only when its own sentinel is non-empty,
 	// so the summarisation pass can fill peak on a row that already has derived
-	// stats — and vice versa — without clobbering the other group with zero
+	// stats — and vice versa — without clobbering the other groups with zero
 	// values. At least one group is always present in a real call; an empty
 	// stats produces a no-op write guarded below.
-	sets := make([]string, 0, 6)
+	sets := make([]string, 0, 8)
 	values := map[string]types.AttributeValue{}
 
 	if stats.DerivedStatsComputedAt != "" {
@@ -141,6 +141,16 @@ func (s *DynamoStore) UpdateDailyEnergyDerived(ctx context.Context, sysSn, date 
 		sets = append(sets, "peakGridImportKwh = :pk", "peakComputedAt = :pkts")
 		values[":pk"] = peakAV
 		values[":pkts"] = &types.AttributeValueMemberS{Value: stats.PeakComputedAt}
+	}
+
+	if stats.BandsComputedAt != "" {
+		bandsAV, err := attributevalue.Marshal(stats.BandImports)
+		if err != nil {
+			return fmt.Errorf("marshal bandImports (sysSn=%s, date=%s): %w", sysSn, date, err)
+		}
+		sets = append(sets, "bandImports = :bi", "bandsComputedAt = :bits")
+		values[":bi"] = bandsAV
+		values[":bits"] = &types.AttributeValueMemberS{Value: stats.BandsComputedAt}
 	}
 
 	if len(sets) == 0 {

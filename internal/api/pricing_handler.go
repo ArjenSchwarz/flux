@@ -126,7 +126,10 @@ func (h *Handler) handleCreatePricing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := h.nowFunc().UTC().Format(time.RFC3339)
-	item := payload.toItem(h.idFunc(), now, now)
+	item, ok := buildPricingItem(w, payload, h.idFunc(), now, now)
+	if !ok {
+		return
+	}
 
 	if err := h.pricing.PutPricing(r.Context(), item, prevOpenEndedID); err != nil {
 		mapPricingStoreError(w, "put pricing", err)
@@ -179,7 +182,10 @@ func (h *Handler) handleUpdatePricing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := h.nowFunc().UTC().Format(time.RFC3339)
-	item := payload.toItem(id, current.CreatedAt, now)
+	item, ok := buildPricingItem(w, payload, id, current.CreatedAt, now)
+	if !ok {
+		return
+	}
 
 	if err := h.pricing.UpdatePricing(r.Context(), item, prevOpenEndedID); err != nil {
 		mapPricingStoreError(w, "update pricing", err)
@@ -276,17 +282,12 @@ func (h *Handler) handleReplaceOpenEnded(w http.ResponseWriter, r *http.Request)
 		writePricingError(w, http.StatusBadRequest, pricingCodeInvertedDates, "newPeriod.startDate must be YYYY-MM-DD")
 		return
 	}
-	closingEndDate, err := previousDate(payload.NewPeriod.StartDate)
-	if err != nil {
-		// Defensive — validISODate above should have caught this.
-		slog.Error("previousDate failed on a validISODate-passing input", "startDate", payload.NewPeriod.StartDate, "error", err)
-		writePricingError(w, http.StatusInternalServerError, pricingCodeInternal, "internal error computing closing date")
-		return
-	}
+	// Under exclusive end dates the closing row ends on the successor's
+	// start date — the same literal string, no ±1 arithmetic (Decision 5).
+	closingEndDate := payload.NewPeriod.StartDate
 
-	// Simulate the resulting two-row state (closing capped at the new
-	// startDate − 1 day; new row inserted) and run the same validation
-	// chain against it.
+	// Simulate the resulting two-row state (closing capped at the switch
+	// date; new row inserted) and run the same validation chain against it.
 	projected := make([]dynamo.PricingItem, 0, len(existing)+1)
 	for _, row := range existing {
 		if row.PricingID == payload.ClosingPricingID {
@@ -303,7 +304,10 @@ func (h *Handler) handleReplaceOpenEnded(w http.ResponseWriter, r *http.Request)
 	}
 
 	now := h.nowFunc().UTC().Format(time.RFC3339)
-	newItem := payload.NewPeriod.toItem(h.idFunc(), now, now)
+	newItem, ok := buildPricingItem(w, payload.NewPeriod, h.idFunc(), now, now)
+	if !ok {
+		return
+	}
 	if err := h.pricing.ReplaceOpenEnded(r.Context(), payload.ClosingPricingID, closingEndDate, now, newItem); err != nil {
 		mapPricingStoreError(w, "replace open-ended pricing", err)
 		return
@@ -343,8 +347,17 @@ func decodePricingPayload(w http.ResponseWriter, r *http.Request) (pricingPayloa
 // toItem builds a PricingItem from the wire payload + server-assigned
 // fields. Rates are rounded to exactly four decimal places per
 // Decision 10 / Decision 20.
-func (p pricingPayload) toItem(id, createdAt, updatedAt string) dynamo.PricingItem {
-	return dynamo.PricingItem{
+//
+// TRANSITIONAL: the endpoints still speak the three-rate wire shape with
+// INCLUSIVE end dates while storage has moved to bands with EXCLUSIVE ends,
+// so the payload goes through the same legacy transform the migration tool
+// uses. This whole bridge — here and the candidate-end conversion in
+// validateOverlap — is replaced when the handlers take the band payload.
+//
+// The error is unreachable in practice: validateInvertedDates has already
+// rejected an unparseable endDate by the time this runs.
+func (p pricingPayload) toItem(id, createdAt, updatedAt string) (dynamo.PricingItem, error) {
+	return dynamo.TransformLegacyPricing(dynamo.LegacyPricingItem{
 		PricingID:          id,
 		StartDate:          p.StartDate,
 		EndDate:            p.EndDate,
@@ -353,7 +366,19 @@ func (p pricingPayload) toItem(id, createdAt, updatedAt string) dynamo.PricingIt
 		OffPeakSavingsRate: roundTo4DP(deref(p.OffPeakSavingsRate)),
 		CreatedAt:          createdAt,
 		UpdatedAt:          updatedAt,
+	})
+}
+
+// buildPricingItem wraps toItem with the shared 500 response for the
+// unreachable transform failure.
+func buildPricingItem(w http.ResponseWriter, p pricingPayload, id, createdAt, updatedAt string) (dynamo.PricingItem, bool) {
+	item, err := p.toItem(id, createdAt, updatedAt)
+	if err != nil {
+		slog.Error("build pricing item failed after validation passed", "error", err)
+		writePricingError(w, http.StatusInternalServerError, pricingCodeInternal, "internal error building pricing period")
+		return dynamo.PricingItem{}, false
 	}
+	return item, true
 }
 
 func deref(p *float64) float64 {
@@ -412,10 +437,22 @@ func validateInvertedDates(w http.ResponseWriter, p pricingPayload) bool {
 // validateOverlap fires AC 1.7 when the candidate's date range
 // intersects any existing row's date range (excluding excludeID).
 // Open-ended is modelled as endDate = "9999-12-31".
+//
+// TRANSITIONAL: the payload's endDate is still inclusive while stored rows
+// carry the exclusive switch date, so the candidate is converted to the
+// stored convention before comparing. Both sides become exclusive when the
+// handlers take the band payload, and this conversion goes away with it.
 func validateOverlap(w http.ResponseWriter, p pricingPayload, existing []dynamo.PricingItem, excludeID string) bool {
 	candEnd := pricingMaxEndDate
 	if p.EndDate != nil {
-		candEnd = *p.EndDate
+		next, err := time.Parse("2006-01-02", *p.EndDate)
+		if err != nil {
+			// Unreachable: validateInvertedDates runs first.
+			slog.Error("overlap check on an unparseable endDate", "endDate", *p.EndDate)
+			writePricingError(w, http.StatusBadRequest, pricingCodeInvertedDates, "endDate must be YYYY-MM-DD")
+			return false
+		}
+		candEnd = next.AddDate(0, 0, 1).Format("2006-01-02")
 	}
 	for _, row := range existing {
 		if row.PricingID == excludeID {
@@ -425,9 +462,10 @@ func validateOverlap(w http.ResponseWriter, p pricingPayload, existing []dynamo.
 		if row.EndDate != nil {
 			rowEnd = *row.EndDate
 		}
-		// Half-open intervals overlap iff start ≤ other.end && end ≥
-		// other.start. Inclusive on both ends per AC 1.5.
-		if p.StartDate <= rowEnd && candEnd >= row.StartDate {
+		// Half-open [start, end) intervals intersect iff each starts before
+		// the other ends. A period ending on the day its neighbour starts
+		// therefore does not overlap it (AC 2.2).
+		if p.StartDate < rowEnd && candEnd > row.StartDate {
 			if row.EndDate == nil {
 				writePricingOverlapError(w, row.PricingID)
 				return false
@@ -534,16 +572,6 @@ func validISODate(s string) bool {
 	}
 	_, err := time.Parse("2006-01-02", s)
 	return err == nil
-}
-
-// previousDate returns the YYYY-MM-DD string for one calendar day before
-// `s`. Used by replace-open-ended to derive the closing row's endDate.
-func previousDate(s string) (string, error) {
-	t, err := time.Parse("2006-01-02", s)
-	if err != nil {
-		return "", err
-	}
-	return t.AddDate(0, 0, -1).Format("2006-01-02"), nil
 }
 
 // roundTo4DP rounds v to exactly four decimal places. Used to normalise

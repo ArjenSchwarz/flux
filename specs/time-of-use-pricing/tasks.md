@@ -8,7 +8,7 @@ references:
 
 ## Foundation: Go plan domain and data layer
 
-- [ ] 1. Write failing tests for internal/plan band parsing and plan validation <!-- id:chkfin5 -->
+- [x] 1. Write failing tests for internal/plan band parsing and plan validation <!-- id:chkfin5 -->
   - New leaf package internal/plan (no dynamo/api imports)
   - Band time parser must accept 24:00 (internal minutes 0-1440) — derivedstats.ParseOffpeakWindow rejects h>23 and must not be reused
   - Cover codes: bandWindowInvalid, bandOverlap, multipleFreeBands, savingsRateMissing, noRatedBand (free window spans whole day; zero-width default remainder is valid), rate bounds 0..10 and 4dp
@@ -16,12 +16,12 @@ references:
   - Stream: 1
   - Requirements: [1.1](requirements.md#1.1), [1.2](requirements.md#1.2), [1.3](requirements.md#1.3), [1.4](requirements.md#1.4), [1.5](requirements.md#1.5), [1.6](requirements.md#1.6), [1.7](requirements.md#1.7)
 
-- [ ] 2. Implement internal/plan types, band parser, and Validate <!-- id:chkfin6 -->
+- [x] 2. Implement internal/plan types, band parser, and Validate <!-- id:chkfin6 -->
   - Blocked-by: chkfin5 (Write failing tests for internal/plan band parsing and plan validation)
   - Stream: 1
   - Requirements: [1.1](requirements.md#1.1), [1.2](requirements.md#1.2), [1.3](requirements.md#1.3), [1.4](requirements.md#1.4), [1.5](requirements.md#1.5), [1.6](requirements.md#1.6), [1.7](requirements.md#1.7)
 
-- [ ] 3. Write failing unit and property tests for Segments, Covers, PlanFor, FreeWindow, SegmentBounds <!-- id:chkfin7 -->
+- [x] 3. Write failing unit and property tests for Segments, Covers, PlanFor, FreeWindow, SegmentBounds <!-- id:chkfin7 -->
   - rapid properties: Segments always tiles 00:00-24:00, no overlap, abutting same-rate segments NOT merged (Q26)
   - Property: sum of per-segment IntegrateOffpeakDeltas grid import equals whole-day integral within epsilon, including 23h/25h Sydney days via wall-clock SegmentBounds (never dayStart.Add elapsed arithmetic)
   - Covers/PlanFor boundaries: switch day D goes to successor, D-1 to predecessor
@@ -30,12 +30,12 @@ references:
   - Stream: 1
   - Requirements: [1.1](requirements.md#1.1), [1.8](requirements.md#1.8), [2.1](requirements.md#2.1), [2.2](requirements.md#2.2), [3.8](requirements.md#3.8)
 
-- [ ] 4. Implement Segments, Covers, PlanFor, FreeWindow, SegmentBounds <!-- id:chkfin8 -->
+- [x] 4. Implement Segments, Covers, PlanFor, FreeWindow, SegmentBounds <!-- id:chkfin8 -->
   - Blocked-by: chkfin7 (Write failing unit and property tests for Segments, Covers, PlanFor, FreeWindow, SegmentBounds)
   - Stream: 1
   - Requirements: [1.1](requirements.md#1.1), [1.8](requirements.md#1.8), [2.1](requirements.md#2.1), [2.2](requirements.md#2.2), [3.8](requirements.md#3.8)
 
-- [ ] 5. Create shared cross-language cost/segment vectors and Go golden-formula tests <!-- id:chkfin9 -->
+- [x] 5. Create shared cross-language cost/segment vectors and Go golden-formula tests <!-- id:chkfin9 -->
   - internal/api/testdata/pricing_segments.json + pricing_costs.json, consumed later by FluxCore tests (note_lengths.json pattern)
   - Cost vectors MUST cover: all four tier-2 combos (offpeak +/-, server peak +/-), zero clamp, sparse-complete offpeak row (integratedAt set, sampleCount 0 = unavailable), geometry-mismatch day, multi-rate fallback (max rate, $0.00 savings)
   - Go test implements the tier-2 legacy DayCosts formula table from design.md — the same helper becomes the migrate tool's golden formula
@@ -43,7 +43,7 @@ references:
   - Stream: 1
   - Requirements: [3.1](requirements.md#3.1), [3.2](requirements.md#3.2), [3.3](requirements.md#3.3), [3.5](requirements.md#3.5), [3.6](requirements.md#3.6), [5.2](requirements.md#5.2)
 
-- [ ] 6. Write failing tests for dynamo new-shape PricingItem and legacy read transform <!-- id:chkfina -->
+- [x] 6. Write failing tests for dynamo new-shape PricingItem and legacy read transform <!-- id:chkfina -->
   - internal/dynamo/pricing.go
   - Legacy detection via raw attribute map (peakRate present) — plain unmarshal silently drops unknown fields
   - Transform shared with cmd/migrate-pricing: defaultRate <- peakRate, windows <- [{11:00-14:00 free}], savingsReferenceRate <- offPeakSavingsRate, endDate <- legacyEnd + 1 day
@@ -52,12 +52,12 @@ references:
   - Stream: 1
   - Requirements: [5.1](requirements.md#5.1), [7.3](requirements.md#7.3)
 
-- [ ] 7. Implement dynamo PricingItem band shape, raw-map legacy detection, transitional read transform <!-- id:chkfinb -->
+- [x] 7. Implement dynamo PricingItem band shape, raw-map legacy detection, transitional read transform <!-- id:chkfinb -->
   - Blocked-by: chkfina (Write failing tests for dynamo new-shape PricingItem and legacy read transform)
   - Stream: 1
   - Requirements: [5.1](requirements.md#5.1), [7.3](requirements.md#7.3)
 
-- [ ] 8. Write failing tests for DailyEnergyItem bandImports group and OffpeakItem window geometry <!-- id:chkfinc -->
+- [x] 8. Write failing tests for DailyEnergyItem bandImports group and OffpeakItem window geometry <!-- id:chkfinc -->
   - internal/dynamo/models.go + dynamostore.go
   - bandImports: rated segments only {start,end,kwh} — free import stays on the offpeak row (Q31)
   - bandsComputedAt third sentinel group in UpdateDailyEnergyDerived (peak-from-readings Decision 3 pattern)
@@ -65,12 +65,12 @@ references:
   - Stream: 1
   - Requirements: [3.4](requirements.md#3.4), [3.5](requirements.md#3.5)
 
-- [ ] 9. Implement daily-energy band group and offpeak geometry fields <!-- id:chkfind -->
+- [x] 9. Implement daily-energy band group and offpeak geometry fields <!-- id:chkfind -->
   - Blocked-by: chkfinc (Write failing tests for DailyEnergyItem bandImports group and OffpeakItem window geometry)
   - Stream: 1
   - Requirements: [3.4](requirements.md#3.4), [3.5](requirements.md#3.5)
 
-- [ ] 10. Write failing tests for ReplaceOpenEnded exclusive-end and legacy-shape rejection <!-- id:chkfine -->
+- [x] 10. Write failing tests for ReplaceOpenEnded exclusive-end and legacy-shape rejection <!-- id:chkfine -->
   - internal/dynamo/pricing_transactional.go
   - closing.endDate = successor.startDate (same literal date); delete previousDate helper
   - Closing row still carrying peakRate -> legacyShape error, no partial UpdateItem patch (Q32) — a partial update would create a legacy-detected row with an exclusive end date, double-shifted by transform + migration
@@ -78,7 +78,7 @@ references:
   - Stream: 1
   - Requirements: [2.2](requirements.md#2.2), [2.6](requirements.md#2.6), [5.4](requirements.md#5.4)
 
-- [ ] 11. Implement ReplaceOpenEnded same-day succession and legacy guard <!-- id:chkfinf -->
+- [x] 11. Implement ReplaceOpenEnded same-day succession and legacy guard <!-- id:chkfinf -->
   - Blocked-by: chkfine (Write failing tests for ReplaceOpenEnded exclusive-end and legacy-shape rejection)
   - Stream: 1
   - Requirements: [2.2](requirements.md#2.2), [2.6](requirements.md#2.6), [5.4](requirements.md#5.4)

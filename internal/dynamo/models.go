@@ -63,6 +63,26 @@ type DailyEnergyItem struct {
 	// peakGridImportKwh. The divergence is intentional and not worth a rename.
 	PeakGridImportKwh *float64 `dynamodbav:"peakGridImportKwh,omitempty"`
 	PeakComputedAt    string   `dynamodbav:"peakComputedAt,omitempty"`
+
+	// BandImports is the day's per-band grid import, captured at day close so
+	// banded costs survive the 30-day readings TTL (Q13). It holds the RATED
+	// segments only — free-window import lives on the flux-offpeak row, which
+	// owns that quantity exclusively (Q31). Each entry snapshots the geometry
+	// it was captured under (Q23), so a later window edit shows up as a
+	// mismatch instead of silently mispricing the day.
+	//
+	// Gated on its own BandsComputedAt sentinel, third in the group set
+	// UpdateDailyEnergyDerived writes independently. Absent when the
+	// integrator's usability gate fails for any rated segment.
+	BandImports     []BandImportAttr `dynamodbav:"bandImports,omitempty"`
+	BandsComputedAt string           `dynamodbav:"bandsComputedAt,omitempty"`
+}
+
+// BandImportAttr is the storage shape for one rated band's import energy.
+type BandImportAttr struct {
+	Start string  `dynamodbav:"start"` // HH:MM, Sydney local
+	End   string  `dynamodbav:"end"`   // HH:MM, may be "24:00"
+	Kwh   float64 `dynamodbav:"kwh"`
 }
 
 // DailyUsageAttr is the storage shape for derivedstats.DailyUsage.
@@ -116,6 +136,14 @@ type DerivedStats struct {
 	// sentinel is non-empty.
 	PeakGridImportKwh *float64
 	PeakComputedAt    string
+
+	// BandImports / BandsComputedAt carry the per-band split. Third group with
+	// its own lifecycle, same contract as the peak pair above: written only
+	// when BandsComputedAt is non-empty, and a nil BandImports with the
+	// sentinel set records "attempted, unavailable" so the row is not retried
+	// every hour.
+	BandImports     []BandImportAttr
+	BandsComputedAt string
 }
 
 // DailyPowerItem represents a row in the flux-daily-power table.
@@ -181,6 +209,40 @@ type OffpeakItem struct {
 	IntegrationSampleCount  int    `dynamodbav:"integrationSampleCount,omitempty"`
 	IntegrationSkippedPairs int    `dynamodbav:"integrationSkippedPairs,omitempty"`
 	IntegratedAt            string `dynamodbav:"integratedAt,omitempty"` // RFC3339 UTC
+
+	// WindowStart / WindowEnd snapshot the free window this row was
+	// integrated under, so a later plan edit that moves the window is
+	// detectable as a mismatch rather than silently repricing the day. Absent
+	// on pre-feature rows — see Geometry.
+	WindowStart string `dynamodbav:"windowStart,omitempty"` // HH:MM, Sydney local
+	WindowEnd   string `dynamodbav:"windowEnd,omitempty"`
+}
+
+// offpeakLegacyWindowStart / offpeakLegacyWindowEnd is the window every row
+// written before the geometry snapshot existed was computed under. It was the
+// only configured window for that whole period, so substituting it for a
+// missing snapshot is exact, not a guess.
+const (
+	offpeakLegacyWindowStart = "11:00"
+	offpeakLegacyWindowEnd   = "14:00"
+)
+
+// Geometry returns the free window the row's deltas were computed over,
+// substituting the pre-feature window when the row carries no snapshot.
+func (o OffpeakItem) Geometry() (start, end string) {
+	if o.WindowStart == "" || o.WindowEnd == "" {
+		return offpeakLegacyWindowStart, offpeakLegacyWindowEnd
+	}
+	return o.WindowStart, o.WindowEnd
+}
+
+// Usable reports whether the row's deltas are a real measurement. A row
+// integrated from readings but with no samples in the window is a zero-delta
+// artifact, not a measured zero, so it cannot price a free band. Rows
+// predating the integration path (no IntegratedAt) are snapshot deltas and
+// remain usable.
+func (o OffpeakItem) Usable() bool {
+	return o.IntegratedAt == "" || o.IntegrationSampleCount > 0
 }
 
 // NewReadingItem transforms AlphaESS power data into a DynamoDB reading item.

@@ -182,6 +182,8 @@ func TestWriteDailyEnergy_StructTagCoverage(t *testing.T) {
 		"derivedStatsComputedAt": true,
 		"peakGridImportKwh":      true,
 		"peakComputedAt":         true,
+		"bandImports":            true,
+		"bandsComputedAt":        true,
 	}
 	keyTags := map[string]bool{
 		"sysSn": true,

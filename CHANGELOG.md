@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Internal
+
+- **Time-of-use pricing — Go plan domain and data layer** (T-1890, T-1891). First implementation phase of the band-based pricing spec; no user-visible change yet.
+  - New leaf package `internal/plan` holding the plan domain: a default rate plus exception windows, the derived full-day segmentation, per-date plan selection, free-window resolution, and DST-correct wall-clock segment bounds. Band boundaries use a new parser that accepts `24:00` as end-of-day — `derivedstats.ParseOffpeakWindow` rejects hours above 23 and would reject every plan. Validation covers the band rules (invalid window, overlap, multiple free bands, missing savings rate, no rated band) alongside the existing rate bounds and precision rules.
+  - Plan end dates are now **exclusive**: a plan ending on the date its successor starts hands that whole day to the successor, with no ±1 arithmetic in validation, succession, or display. `ReplaceOpenEnded` writes the same literal switch date to both rows and refuses a succession whose closing row is still the pre-migration shape.
+  - Three-tier day-cost resolution in Go (stored band split → the pre-band single-rate formula verbatim → highest-rate fallback), pinned together with the segmentation to shared cross-language vectors in `internal/api/testdata/` that the FluxCore implementation will be held to. The single-rate tier is what keeps every historical day's cost identical after migration.
+  - Storage moves to the band shape: `flux-pricing` rows store `defaultRate` + `windows` + `savingsReferenceRate`, `flux-daily-energy` gains a sentinel-gated `bandImports` group for the durable per-band split, and `flux-offpeak` rows snapshot the free-window geometry they were integrated under. Pre-migration rows are detected on the raw attribute map and converted on read, so band-aware services can deploy ahead of the migration run.
+  - Property-based tests assert the segments always tile 00:00–24:00, that abutting same-rate segments stay separate, that at most one plan prices any date, and that per-segment grid-import integrals sum to the whole-day integral on 23-, 24-, and 25-hour Sydney days.
+
 ### Documentation
 
 - **Time-of-use pricing spec** (T-1890, T-1891; `specs/time-of-use-pricing/`). Full spec for reworking pricing plans into daily time bands — a default rate plus exception windows (the incoming plan: free 10:00–15:00, cheaper 01:00–06:00, standard rate otherwise) — with same-day plan succession via exclusive end dates, and the active plan replacing the SSM off-peak window as the source of truth across the poller and API. Covers durable per-band import capture at day close (so banded costs outlive the 30-day readings TTL), a three-tier FluxCore cost resolution that keeps all historical costs identical, a one-time `cmd/migrate-pricing` CLI with golden-value verification, requirements, design, decision log (6 ADRs, 36 quick decisions), a 39-task TDD implementation plan in three parallel streams, and manual cutover prerequisites. Planning artifacts only — no code changes.

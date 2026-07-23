@@ -24,6 +24,11 @@ var ErrPricingConcurrentWrite = errors.New("pricing: concurrent open-ended write
 // caller retries with a fresh UUID.
 var ErrPricingUUIDCollision = errors.New("pricing: uuid collision on new row")
 
+// ErrPricingLegacyShape is returned when a write path encounters a row that
+// is still the pre-migration three-rate shape. The API handler maps this to
+// the legacy_shape validation code (AC 7.3).
+var ErrPricingLegacyShape = errors.New("pricing: legacy three-rate row shape")
+
 // sentinelConditionExpression is the ConditionExpression placed on every
 // sentinel write. The first clause lets the very first transactional
 // write lazily create the sentinel; the second clause catches concurrent
@@ -179,7 +184,15 @@ func (s *DynamoPricingStore) deleteOpenEndedPeriod(ctx context.Context, id strin
 // newItem.PricingID when newItem is open-ended, or cleared when newItem
 // is closed. Three items per transaction: (1) sentinel, (2) closing-row
 // update, (3) new-row insert.
+//
+// closingEndDate is stored verbatim. Under exclusive end dates (Decision 5)
+// the caller passes the successor's start date, so both rows carry the same
+// literal switch date and the switch day belongs to the successor (AC 2.2) —
+// no date arithmetic happens here or in the caller.
 func (s *DynamoPricingStore) ReplaceOpenEnded(ctx context.Context, closingID string, closingEndDate string, updatedAt string, newItem PricingItem) error {
+	if err := s.rejectLegacyClosingRow(ctx, closingID); err != nil {
+		return err
+	}
 	prevOpenEndedID := &closingID
 	var newOpenEndedID *string
 	if newItem.EndDate == nil {
@@ -226,6 +239,38 @@ func (s *DynamoPricingStore) ReplaceOpenEnded(ctx context.Context, closingID str
 			conditionFailedAs(ErrPricingConcurrentWrite), // closing row
 			conditionFailedAs(ErrPricingUUIDCollision),   // new row
 		}, fmt.Sprintf("replace open-ended pricing (table=%s, closingId=%s, newId=%s)", s.table, closingID, newItem.PricingID))
+	}
+	return nil
+}
+
+// rejectLegacyClosingRow refuses a succession whose closing row is still the
+// legacy three-rate shape (Q32).
+//
+// Every other write path issues a full-item Put, but the closing write here
+// is a partial UpdateItem: patching a legacy row would leave it still
+// legacy-detected while carrying an exclusive end date, which the read
+// transform and then the migration would each shift by a day. Rewriting the
+// row inside the transaction was rejected as the fix — this call carries no
+// predecessor state, so a rewrite needs an extra read and can clobber a
+// concurrent edit — and the cutover order already runs the migration first.
+//
+// A read failure is not treated as "not legacy": the succession is refused so
+// a transient blip cannot produce a double-shifted end date.
+func (s *DynamoPricingStore) rejectLegacyClosingRow(ctx context.Context, closingID string) error {
+	out, err := s.client.GetItem(ctx, &dynamodb.GetItemInput{
+		TableName: &s.table,
+		Key:       pricingKey(closingID),
+	})
+	if err != nil {
+		return fmt.Errorf("get closing pricing row (table=%s, pricingId=%s): %w", s.table, closingID, err)
+	}
+	if out.Item == nil {
+		// The row vanished between the caller's validation scan and now.
+		// Same outcome the transaction's ConditionExpression would produce.
+		return ErrPricingConcurrentWrite
+	}
+	if IsLegacyPricingRow(out.Item) {
+		return fmt.Errorf("%w (pricingId=%s): run cmd/migrate-pricing first", ErrPricingLegacyShape, closingID)
 	}
 	return nil
 }

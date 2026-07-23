@@ -199,9 +199,9 @@ func decodeError(t *testing.T, raw string) pricingErrorBody {
 
 func TestPricing_ListReturnsSortedByStartDate(t *testing.T) {
 	store := newFakePricingStore()
-	end := "2026-12-31"
-	store.rows["p-b"] = dynamo.PricingItem{PricingID: "p-b", StartDate: "2026-06-01", EndDate: &end, PeakRate: 0.3, FeedInRate: 0.05, OffPeakSavingsRate: 0.1, CreatedAt: "2026-05-23T10:00:00Z", UpdatedAt: "2026-05-23T10:00:00Z"}
-	store.rows["p-a"] = dynamo.PricingItem{PricingID: "p-a", StartDate: "2026-01-01", EndDate: &end, PeakRate: 0.25, FeedInRate: 0.04, OffPeakSavingsRate: 0.08, CreatedAt: "2026-05-23T10:00:00Z", UpdatedAt: "2026-05-23T10:00:00Z"}
+	end := "2027-01-01"
+	store.rows["p-b"] = dynamo.PricingItem{PricingID: "p-b", StartDate: "2026-06-01", EndDate: &end, DefaultRate: 0.3, FeedInRate: 0.05, CreatedAt: "2026-05-23T10:00:00Z", UpdatedAt: "2026-05-23T10:00:00Z"}
+	store.rows["p-a"] = dynamo.PricingItem{PricingID: "p-a", StartDate: "2026-01-01", EndDate: &end, DefaultRate: 0.25, FeedInRate: 0.04, CreatedAt: "2026-05-23T10:00:00Z", UpdatedAt: "2026-05-23T10:00:00Z"}
 	h := newPricingTestHandler(store)
 
 	resp, err := h.Handle(context.Background(), makeRequest(http.MethodGet, "/pricing", "Bearer "+testToken))
@@ -240,8 +240,10 @@ func TestPricing_CreateClosedPeriodAssignsIDAndTimestamps(t *testing.T) {
 	assert.Equal(t, "pricing-uuid-1", got.PricingID)
 	assert.Equal(t, "2026-01-01", got.StartDate)
 	require.NotNil(t, got.EndDate)
-	assert.Equal(t, "2026-12-31", *got.EndDate)
-	assert.Equal(t, 0.2873, got.PeakRate)
+	// The wire endDate is still inclusive; storage records the exclusive
+	// switch date, so the period's last priced day is unchanged.
+	assert.Equal(t, "2027-01-01", *got.EndDate)
+	assert.Equal(t, 0.2873, got.DefaultRate)
 	assert.Equal(t, got.CreatedAt, got.UpdatedAt)
 }
 
@@ -317,7 +319,7 @@ func TestPricing_CreateRejectsOverlap(t *testing.T) {
 	end := "2026-06-30"
 	store.rows["existing"] = dynamo.PricingItem{
 		PricingID: "existing", StartDate: "2026-01-01", EndDate: &end,
-		PeakRate: 0.25, FeedInRate: 0.04, OffPeakSavingsRate: 0.08,
+		DefaultRate: 0.25, FeedInRate: 0.04,
 		CreatedAt: "2026-05-23T10:00:00Z", UpdatedAt: "2026-05-23T10:00:00Z",
 	}
 	h := newPricingTestHandler(store)
@@ -336,7 +338,7 @@ func TestPricing_CreateOverlapWithOpenEndedReturnsOpenEndedID(t *testing.T) {
 	store := newFakePricingStore()
 	store.rows["open-id"] = dynamo.PricingItem{
 		PricingID: "open-id", StartDate: "2026-01-01",
-		PeakRate: 0.25, FeedInRate: 0.04, OffPeakSavingsRate: 0.08,
+		DefaultRate: 0.25, FeedInRate: 0.04,
 		CreatedAt: "2026-05-23T10:00:00Z", UpdatedAt: "2026-05-23T10:00:00Z",
 	}
 	openID := "open-id"
@@ -368,12 +370,12 @@ func TestPricing_UpdateClosedRowToOpenEndedRejectedAsSecondOpenEnded(t *testing.
 	end := "2026-12-31"
 	store.rows["closed"] = dynamo.PricingItem{
 		PricingID: "closed", StartDate: "2026-01-01", EndDate: &end,
-		PeakRate: 0.25, FeedInRate: 0.04, OffPeakSavingsRate: 0.08,
+		DefaultRate: 0.25, FeedInRate: 0.04,
 		CreatedAt: "2026-05-23T10:00:00Z", UpdatedAt: "2026-05-23T10:00:00Z",
 	}
 	store.rows["open-1"] = dynamo.PricingItem{
 		PricingID: "open-1", StartDate: "2030-01-01",
-		PeakRate: 0.3, FeedInRate: 0.05, OffPeakSavingsRate: 0.1,
+		DefaultRate: 0.3, FeedInRate: 0.05,
 		CreatedAt: "2026-05-23T10:00:00Z", UpdatedAt: "2026-05-23T10:00:00Z",
 	}
 	openID := "open-1"
@@ -415,7 +417,7 @@ func TestPricing_CreateValidationChainOrder(t *testing.T) {
 	end := "2026-06-30"
 	store.rows["existing"] = dynamo.PricingItem{
 		PricingID: "existing", StartDate: "2026-01-01", EndDate: &end,
-		PeakRate: 0.25, FeedInRate: 0.04, OffPeakSavingsRate: 0.08,
+		DefaultRate: 0.25, FeedInRate: 0.04,
 		CreatedAt: "2026-05-23T10:00:00Z", UpdatedAt: "2026-05-23T10:00:00Z",
 	}
 	h := newPricingTestHandler(store)
@@ -442,7 +444,7 @@ func TestPricing_UpdateExistingPeriod(t *testing.T) {
 	end := "2026-12-31"
 	store.rows["p-1"] = dynamo.PricingItem{
 		PricingID: "p-1", StartDate: "2026-01-01", EndDate: &end,
-		PeakRate: 0.25, FeedInRate: 0.04, OffPeakSavingsRate: 0.08,
+		DefaultRate: 0.25, FeedInRate: 0.04,
 		CreatedAt: "2026-05-20T10:00:00Z", UpdatedAt: "2026-05-20T10:00:00Z",
 	}
 	h := newPricingTestHandler(store)
@@ -455,7 +457,7 @@ func TestPricing_UpdateExistingPeriod(t *testing.T) {
 	var got dynamo.PricingItem
 	require.NoError(t, json.Unmarshal([]byte(resp.Body), &got))
 	assert.Equal(t, "p-1", got.PricingID)
-	assert.Equal(t, 0.3, got.PeakRate)
+	assert.Equal(t, 0.3, got.DefaultRate)
 	assert.Equal(t, "2026-05-20T10:00:00Z", got.CreatedAt,
 		"createdAt must be preserved across update")
 	assert.NotEqual(t, "2026-05-20T10:00:00Z", got.UpdatedAt,
@@ -471,7 +473,7 @@ func TestPricing_UpdateExcludesSelfFromOverlapCheck(t *testing.T) {
 	end := "2026-12-31"
 	store.rows["p-1"] = dynamo.PricingItem{
 		PricingID: "p-1", StartDate: "2026-01-01", EndDate: &end,
-		PeakRate: 0.25, FeedInRate: 0.04, OffPeakSavingsRate: 0.08,
+		DefaultRate: 0.25, FeedInRate: 0.04,
 		CreatedAt: "2026-05-23T10:00:00Z", UpdatedAt: "2026-05-23T10:00:00Z",
 	}
 	h := newPricingTestHandler(store)
@@ -522,7 +524,7 @@ func TestPricing_ReplaceOpenEndedHappyPath(t *testing.T) {
 	store := newFakePricingStore()
 	store.rows["open-id"] = dynamo.PricingItem{
 		PricingID: "open-id", StartDate: "2026-01-01",
-		PeakRate: 0.25, FeedInRate: 0.04, OffPeakSavingsRate: 0.08,
+		DefaultRate: 0.25, FeedInRate: 0.04,
 		CreatedAt: "2026-05-23T10:00:00Z", UpdatedAt: "2026-05-23T10:00:00Z",
 	}
 	openID := "open-id"
@@ -539,11 +541,13 @@ func TestPricing_ReplaceOpenEndedHappyPath(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal([]byte(resp.Body), &got))
 	require.Len(t, got.Pricing, 2)
-	// Closing row should have been capped to startDate − 1 day.
+	// AC 2.2: the closing row's exclusive end date is the successor's start
+	// date, so 2026-06-01 is priced by the successor and 2026-05-31 is the
+	// predecessor's last priced day.
 	require.NotNil(t, got.Pricing[0].EndDate)
 	assert.Equal(t, "open-id", got.Pricing[0].PricingID)
-	assert.Equal(t, "2026-05-31", *got.Pricing[0].EndDate,
-		"closing-row endDate should equal newPeriod.startDate − 1 day")
+	assert.Equal(t, "2026-06-01", *got.Pricing[0].EndDate,
+		"closing-row endDate should equal newPeriod.startDate")
 	// New row open-ended.
 	assert.Nil(t, got.Pricing[1].EndDate)
 }
@@ -562,7 +566,7 @@ func TestPricing_ReplaceOpenEndedMapsConcurrentWriteTo409(t *testing.T) {
 	store := newFakePricingStore()
 	store.rows["open-id"] = dynamo.PricingItem{
 		PricingID: "open-id", StartDate: "2026-01-01",
-		PeakRate: 0.25, FeedInRate: 0.04, OffPeakSavingsRate: 0.08,
+		DefaultRate: 0.25, FeedInRate: 0.04,
 		CreatedAt: "2026-05-23T10:00:00Z", UpdatedAt: "2026-05-23T10:00:00Z",
 	}
 	openID := "open-id"
@@ -581,7 +585,7 @@ func TestPricing_ReplaceOpenEndedMapsUUIDCollisionTo500(t *testing.T) {
 	store := newFakePricingStore()
 	store.rows["open-id"] = dynamo.PricingItem{
 		PricingID: "open-id", StartDate: "2026-01-01",
-		PeakRate: 0.25, FeedInRate: 0.04, OffPeakSavingsRate: 0.08,
+		DefaultRate: 0.25, FeedInRate: 0.04,
 		CreatedAt: "2026-05-23T10:00:00Z", UpdatedAt: "2026-05-23T10:00:00Z",
 	}
 	openID := "open-id"
