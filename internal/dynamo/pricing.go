@@ -243,13 +243,28 @@ func pricingKey(id string) map[string]types.AttributeValue {
 const pricingListPageLimit = 200
 
 func (s *DynamoPricingStore) ListPricing(ctx context.Context) ([]PricingItem, error) {
+	return ListPricingRows(ctx, s.client, s.table)
+}
+
+// PricingScanAPI is the single DynamoDB call the pricing read needs. The
+// operator CLIs read plans without ever writing them, so they satisfy this
+// rather than the full PricingAPI — the Lambda keeps sole write access.
+type PricingScanAPI interface {
+	Scan(ctx context.Context, params *dynamodb.ScanInput, optFns ...func(*dynamodb.Options)) (*dynamodb.ScanOutput, error)
+}
+
+// ListPricingRows is the shared implementation behind ListPricing: it pages
+// the table, skips the sentinel, and converts legacy rows on the way. Exported
+// so the backfill and migration CLIs get identical decoding without building a
+// read/write store.
+func ListPricingRows(ctx context.Context, client PricingScanAPI, table string) ([]PricingItem, error) {
 	items := make([]PricingItem, 0)
 	limit := int32(pricingListPageLimit)
-	input := &dynamodb.ScanInput{TableName: &s.table, Limit: &limit}
+	input := &dynamodb.ScanInput{TableName: &table, Limit: &limit}
 	for {
-		out, err := s.client.Scan(ctx, input)
+		out, err := client.Scan(ctx, input)
 		if err != nil {
-			return nil, fmt.Errorf("scan pricing (table=%s): %w", s.table, err)
+			return nil, fmt.Errorf("scan pricing (table=%s): %w", table, err)
 		}
 		for _, av := range out.Items {
 			// Skip the sentinel — identified by partition key, not by
@@ -257,7 +272,7 @@ func (s *DynamoPricingStore) ListPricing(ctx context.Context) ([]PricingItem, er
 			if idAV, ok := av["pricingId"].(*types.AttributeValueMemberS); ok && idAV.Value == pricingSentinelID {
 				continue
 			}
-			item, err := decodePricingRow(av, fmt.Sprintf("pricing (table=%s)", s.table))
+			item, err := decodePricingRow(av, fmt.Sprintf("pricing (table=%s)", table))
 			if err != nil {
 				return nil, err
 			}

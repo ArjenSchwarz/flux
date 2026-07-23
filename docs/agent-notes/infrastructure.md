@@ -8,9 +8,16 @@
 ## Template Structure
 
 The template is a skeleton with:
-- 6 Parameters: ContainerImageUri, AlphaESSAppId, SystemSerialNumber, OffPeakWindowStart, OffPeakWindowEnd, SSMPathPrefix
+- 4 Parameters: ContainerImageUri, AlphaESSAppId, SystemSerialNumber, SSMPathPrefix
 - 3 Outputs: FunctionUrl (from ApiFunctionUrl), EcsClusterName (from EcsCluster), EcsServiceName (from PollerService)
 - Resources section is empty — will be populated by subsequent tasks
+
+`OffPeakWindowStart` / `OffPeakWindowEnd` were removed with the time-of-use
+pricing feature: the free window is a property of the plan pricing each day
+(that spec's Decision 2), so it switches with the plan rather than with a stack
+update. Deploying that version leaves `/flux/offpeak-start` and
+`/flux/offpeak-end` behind as orphaned SSM parameters — nothing reads them, and
+CloudFormation no longer manages them.
 
 ## Linting
 
@@ -21,7 +28,7 @@ The template is a skeleton with:
 - **VPC/Networking**: Vpc, SubnetA/B, IGW, RouteTable, DynamoDB/S3 endpoints, SecurityGroup
 - **IAM**: TaskExecutionRole, TaskRole, LambdaExecutionRole
 - **CloudWatch**: PollerLogGroup, ApiLogGroup
-- **SSM Parameters**: AppIdParameter, SerialParameter, OffpeakStartParameter, OffpeakEndParameter
+- **SSM Parameters**: AppIdParameter, SerialParameter
 - **DynamoDB**: ReadingsTable, DailyEnergyTable, DailyPowerTable, SystemTable, OffpeakTable, NotesTable
 - **Lambda**: ApiFunction, ApiFunctionUrl, ApiFunctionUrlPermission
 - **ECS**: EcsCluster, TaskDefinition, PollerService

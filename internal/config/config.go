@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"strconv"
-	"strings"
 	"time"
 )
 
@@ -17,10 +15,11 @@ type Config struct {
 	AppSecret string
 	Serial    string
 
-	// Off-peak window (duration from midnight)
-	OffpeakStart time.Duration
-	OffpeakEnd   time.Duration
-	Location     *time.Location
+	// Location is the timezone every calendar date and wall-clock boundary is
+	// interpreted in. The off-peak window used to live here too; it is now a
+	// property of the pricing plan that prices each day (Decision 2), so it
+	// switches with the plan instead of needing a redeploy.
+	Location *time.Location
 
 	// DynamoDB table names (empty in dry-run mode)
 	TableReadings     string
@@ -31,6 +30,10 @@ type Config struct {
 	TableDevices      string
 	TableSocRules     string
 	TableSocFireState string
+	// TablePricing holds the band-based plans. The poller reads it (never
+	// writes) to resolve each day's free window — the plan replaced the SSM
+	// window parameters as the source of truth (Decision 2).
+	TablePricing string
 
 	// APNs SSM parameter paths (empty in dry-run mode and when SoC alerts
 	// are not deployed). When all are set, the poller wires the alert path.
@@ -65,33 +68,6 @@ func Load() (*Config, error) {
 	cfg.AppSecret = requireEnv("ALPHA_APP_SECRET", &errs)
 	cfg.Serial = requireEnv("SYSTEM_SERIAL", &errs)
 
-	// Off-peak window.
-	var startOK, endOK bool
-	if raw := requireEnv("OFFPEAK_START", &errs); raw != "" {
-		d, err := parseHHMM(raw)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("OFFPEAK_START: %w", err))
-		} else {
-			cfg.OffpeakStart = d
-			startOK = true
-		}
-	}
-
-	if raw := requireEnv("OFFPEAK_END", &errs); raw != "" {
-		d, err := parseHHMM(raw)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("OFFPEAK_END: %w", err))
-		} else {
-			cfg.OffpeakEnd = d
-			endOK = true
-		}
-	}
-
-	if startOK && endOK && cfg.OffpeakStart >= cfg.OffpeakEnd {
-		errs = append(errs, fmt.Errorf("OFFPEAK_START must be before OFFPEAK_END (%s >= %s)",
-			FormatHHMM(cfg.OffpeakStart), FormatHHMM(cfg.OffpeakEnd)))
-	}
-
 	// Timezone.
 	tz := os.Getenv("TZ")
 	if tz == "" {
@@ -112,6 +88,7 @@ func Load() (*Config, error) {
 		cfg.TableDailyPower = requireEnv("TABLE_DAILY_POWER", &errs)
 		cfg.TableSystem = requireEnv("TABLE_SYSTEM", &errs)
 		cfg.TableOffpeak = requireEnv("TABLE_OFFPEAK", &errs)
+		cfg.TablePricing = requireEnv("TABLE_PRICING", &errs)
 		// SoC alert tables and APNs SSM params are optional: when missing
 		// the poller starts without the SoC alert path. Production wires
 		// them via CloudFormation; integration tests leave them unset.
@@ -130,7 +107,6 @@ func Load() (*Config, error) {
 
 	slog.Debug("config loaded",
 		"serial", cfg.Serial,
-		"offpeak", FormatHHMM(cfg.OffpeakStart)+"-"+FormatHHMM(cfg.OffpeakEnd),
 		"tz", cfg.Location.String(),
 		"dry_run", cfg.DryRun,
 	)
@@ -147,26 +123,6 @@ func requireEnv(name string, errs *[]error) string {
 	return v
 }
 
-// parseHHMM parses a "HH:MM" string into a time.Duration from midnight.
-func parseHHMM(s string) (time.Duration, error) {
-	parts := strings.Split(s, ":")
-	if len(parts) != 2 {
-		return 0, fmt.Errorf("expected HH:MM format, got %q", s)
-	}
-
-	h, err := strconv.Atoi(parts[0])
-	if err != nil || h < 0 || h > 23 {
-		return 0, fmt.Errorf("invalid hour in %q", s)
-	}
-
-	m, err := strconv.Atoi(parts[1])
-	if err != nil || m < 0 || m > 59 {
-		return 0, fmt.Errorf("invalid minute in %q", s)
-	}
-
-	return time.Duration(h)*time.Hour + time.Duration(m)*time.Minute, nil
-}
-
 // SocAlertsConfigured reports whether all SoC alert env vars are present.
 // When false, the poller starts without the alert pipeline — useful for
 // the gradual rollout described in design.md §Deploy ordering.
@@ -174,11 +130,4 @@ func (c *Config) SocAlertsConfigured() bool {
 	return c.TableDevices != "" && c.TableSocRules != "" && c.TableSocFireState != "" &&
 		c.APNsKeyParam != "" && c.APNsKeyIDParam != "" && c.APNsTeamIDParam != "" &&
 		c.APNsBundleIDParam != ""
-}
-
-// FormatHHMM formats a duration-from-midnight back to HH:MM for logging.
-func FormatHHMM(d time.Duration) string {
-	h := int(d.Hours())
-	m := int(d.Minutes()) % 60
-	return fmt.Sprintf("%02d:%02d", h, m)
 }

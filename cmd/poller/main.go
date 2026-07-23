@@ -39,8 +39,9 @@ func main() {
 	// Create AlphaESS client.
 	client := alphaess.NewClient(cfg.AppID, cfg.AppSecret, cfg.HTTPTimeout)
 
-	// Create store (DynamoDB or dry-run logger).
-	store, err := createStore(cfg)
+	// Create store (DynamoDB or dry-run logger) and the read-only pricing
+	// source the window-dependent jobs resolve their day's free band from.
+	store, plans, err := createStore(cfg)
 	if err != nil {
 		slog.Error("create store failed", "error", err)
 		os.Exit(1)
@@ -53,7 +54,7 @@ func main() {
 	defer cancel()
 
 	// Run poller (blocks until ctx is cancelled).
-	p := poller.New(client, store, cfg)
+	p := poller.New(client, store, plans, cfg)
 
 	// CloudWatch metrics for the daily-derived-stats summarisation pass.
 	// Dry-run keeps the no-op variant set by poller.New.
@@ -83,26 +84,37 @@ func main() {
 	slog.Info("poller stopped")
 }
 
-// createStore builds the appropriate Store implementation based on config.
-func createStore(cfg *config.Config) (dynamo.Store, error) {
+// createStore builds the Store and the read-only pricing source from config.
+// Both come from the same DynamoDB client, so the pricing reader is created
+// here rather than making the caller rebuild the AWS config.
+func createStore(cfg *config.Config) (dynamo.Store, poller.PlanLister, error) {
 	if cfg.DryRun {
-		slog.Info("dry-run mode active, DynamoDB writes disabled")
-		return dynamo.NewLogStore(slog.Default()), nil
+		slog.Info("dry-run mode active, DynamoDB writes disabled; no pricing plans, so window-dependent jobs stay idle")
+		return dynamo.NewLogStore(slog.Default()), noPlans{}, nil
 	}
 
 	awsCfg, err := awsconfig.LoadDefaultConfig(context.Background(),
 		awsconfig.WithRegion(cfg.AWSRegion),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("load AWS config: %w", err)
+		return nil, nil, fmt.Errorf("load AWS config: %w", err)
 	}
 
 	client := dynamodb.NewFromConfig(awsCfg)
-	return dynamo.NewDynamoStore(client, dynamo.TableNames{
+	store := dynamo.NewDynamoStore(client, dynamo.TableNames{
 		Readings:    cfg.TableReadings,
 		DailyEnergy: cfg.TableDailyEnergy,
 		DailyPower:  cfg.TableDailyPower,
 		System:      cfg.TableSystem,
 		Offpeak:     cfg.TableOffpeak,
-	}), nil
+	})
+	return store, dynamo.NewDynamoPricingStore(client, cfg.TablePricing), nil
 }
+
+// noPlans is the dry-run pricing source. Dry-run has no DynamoDB credentials
+// or table names, so it reports an empty plan set — which the scheduler and
+// the summarisation pass both treat as "no plan prices this day" and skip,
+// exactly the no-write behaviour dry-run is for.
+type noPlans struct{}
+
+func (noPlans) ListPricing(context.Context) ([]dynamo.PricingItem, error) { return nil, nil }

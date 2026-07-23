@@ -3,7 +3,10 @@ package dynamo
 import (
 	"context"
 	"testing"
+	"time"
 
+	"github.com/ArjenSchwarz/flux/internal/derivedstats"
+	"github.com/ArjenSchwarz/flux/internal/plan"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
@@ -213,4 +216,172 @@ func TestOffpeakItemUsable(t *testing.T) {
 			assert.Equal(t, tc.want, tc.item.Usable())
 		})
 	}
+}
+
+// --- IntegrateRatedBands ---
+
+// bandFixtureReadings synthesises a constant-power day at 60 s cadence over
+// [dayStart, dayStart+24h] in loc, importing `pgrid` watts from the grid the
+// whole time. The closing sample sits exactly on the next midnight so the
+// integrator has a right bracket for the last band and the expected energies
+// are whole numbers.
+func bandFixtureReadings(dayStart time.Time, pgrid float64) []derivedstats.Reading {
+	dayEnd := dayStart.AddDate(0, 0, 1)
+	out := make([]derivedstats.Reading, 0, 24*60+1)
+	for ts := dayStart; !ts.After(dayEnd); ts = ts.Add(time.Minute) {
+		out = append(out, derivedstats.Reading{Timestamp: ts.Unix(), Pgrid: pgrid})
+	}
+	return out
+}
+
+// bandTestPlan is the incoming time-of-use plan: free 10:00–15:00, a cheaper
+// band 01:00–06:00, the default rate otherwise.
+func bandTestPlan() plan.Plan {
+	savings := 0.35
+	return plan.Plan{
+		ID: "tou", StartDate: "2026-01-01", DefaultRate: 0.35,
+		Windows: []plan.Window{
+			{Start: "10:00", End: "15:00", Free: true},
+			{Start: "01:00", End: "06:00", Rate: 0.28},
+		},
+		FeedInRate: 0.05, SavingsRefRate: &savings,
+	}
+}
+
+func TestIntegrateRatedBands_GeometryMatchesRatedSegments(t *testing.T) {
+	t.Parallel()
+	sydney, err := time.LoadLocation("Australia/Sydney")
+	require.NoError(t, err)
+	day := time.Date(2026, 8, 12, 0, 0, 0, 0, sydney)
+
+	// 1000 W of constant import: each band's kWh is exactly its hour count.
+	bands, total, ok := IntegrateRatedBands(bandFixtureReadings(day, 1000), bandTestPlan(), day, sydney)
+
+	require.True(t, ok)
+	require.Len(t, bands, 4, "the free band splits the day into four rated segments")
+	assert.Equal(t, []BandImportAttr{
+		{Start: "00:00", End: "01:00", Kwh: 1.0},
+		{Start: "01:00", End: "06:00", Kwh: 5.0},
+		{Start: "06:00", End: "10:00", Kwh: 4.0},
+		{Start: "15:00", End: "24:00", Kwh: 9.0},
+	}, bands)
+	// 24 h day minus the 5 h free window = 19 kWh at 1 kW.
+	assert.InDelta(t, 19.0, total, 0.01)
+}
+
+// The free band's import is deliberately excluded: the flux-offpeak row owns
+// that quantity (Q31), and capturing it twice is what backfill repairs would
+// desynchronise.
+func TestIntegrateRatedBands_ExcludesFreeWindow(t *testing.T) {
+	t.Parallel()
+	sydney, err := time.LoadLocation("Australia/Sydney")
+	require.NoError(t, err)
+	day := time.Date(2026, 8, 12, 0, 0, 0, 0, sydney)
+
+	bands, _, ok := IntegrateRatedBands(bandFixtureReadings(day, 1000), bandTestPlan(), day, sydney)
+
+	require.True(t, ok)
+	for _, b := range bands {
+		assert.False(t, b.Start == "10:00" && b.End == "15:00", "the free band must not be stored")
+	}
+}
+
+// A plan with no free band leaves the whole day rated, so the bands tile
+// 00:00–24:00 and the total is the day's entire grid import.
+func TestIntegrateRatedBands_WholeDayWhenNoFreeBand(t *testing.T) {
+	t.Parallel()
+	sydney, err := time.LoadLocation("Australia/Sydney")
+	require.NoError(t, err)
+	day := time.Date(2026, 8, 12, 0, 0, 0, 0, sydney)
+	rated := plan.Plan{ID: "flat", StartDate: "2026-01-01", DefaultRate: 0.35, FeedInRate: 0.05}
+
+	bands, total, ok := IntegrateRatedBands(bandFixtureReadings(day, 1000), rated, day, sydney)
+
+	require.True(t, ok)
+	require.Len(t, bands, 1)
+	assert.Equal(t, "00:00", bands[0].Start)
+	assert.Equal(t, "24:00", bands[0].End)
+	assert.InDelta(t, 24.0, total, 0.01)
+}
+
+// AC 3.8: on a DST day the bands follow local wall-clock time and still sum to
+// the day's total — which only holds because the boundaries come from
+// plan.SegmentBounds rather than midnight-plus-elapsed arithmetic.
+func TestIntegrateRatedBands_DSTDaySumsToWholeDay(t *testing.T) {
+	t.Parallel()
+	sydney, err := time.LoadLocation("Australia/Sydney")
+	require.NoError(t, err)
+
+	tests := map[string]struct {
+		day     time.Time
+		wantKwh float64 // hours of rated time at 1 kW
+	}{
+		// 2026-10-04: DST start, 02:00 → 03:00 skipped. A 23-hour day, of
+		// which the 10:00–15:00 free window still removes 5 wall-clock hours,
+		// but 01:00–06:00 spans only 4 real hours.
+		"dst start (23h day)": {day: time.Date(2026, 10, 4, 0, 0, 0, 0, sydney), wantKwh: 18.0},
+		// 2026-04-05: DST end, 03:00 repeated. A 25-hour day.
+		"dst end (25h day)": {day: time.Date(2026, 4, 5, 0, 0, 0, 0, sydney), wantKwh: 20.0},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			readings := bandFixtureReadings(tc.day, 1000)
+			bands, total, ok := IntegrateRatedBands(readings, bandTestPlan(), tc.day, sydney)
+			require.True(t, ok)
+
+			// The bands' wall-clock geometry is the same on any day...
+			assert.Equal(t, "00:00", bands[0].Start)
+			assert.Equal(t, "24:00", bands[len(bands)-1].End)
+			// ...but the energy follows real elapsed time.
+			assert.InDelta(t, tc.wantKwh, total, 0.05)
+
+			// The whole-day integral over the same readings, less the free
+			// window, must equal the band total — the invariant that breaks
+			// if any boundary is computed by elapsed-minute arithmetic.
+			dayStart := tc.day
+			dayEnd := tc.day.AddDate(0, 0, 1)
+			whole, wholeOK := derivedstats.IntegrateOffpeakDeltas(readings, dayStart.Unix(), dayEnd.Unix())
+			require.True(t, wholeOK)
+			freeStart := time.Date(tc.day.Year(), tc.day.Month(), tc.day.Day(), 10, 0, 0, 0, sydney)
+			freeEnd := time.Date(tc.day.Year(), tc.day.Month(), tc.day.Day(), 15, 0, 0, 0, sydney)
+			free, freeOK := derivedstats.IntegrateOffpeakDeltas(readings, freeStart.Unix(), freeEnd.Unix())
+			require.True(t, freeOK)
+			assert.InDelta(t, whole.GridImportKwh-free.GridImportKwh, total, 0.05)
+		})
+	}
+}
+
+// A partially known split is unavailable, not partially usable (AC 3.6): one
+// unusable segment discards the whole result so no caller can persist half a
+// day's bands.
+func TestIntegrateRatedBands_UnusableSegmentDiscardsSplit(t *testing.T) {
+	t.Parallel()
+	sydney, err := time.LoadLocation("Australia/Sydney")
+	require.NoError(t, err)
+	day := time.Date(2026, 8, 12, 0, 0, 0, 0, sydney)
+
+	// Readings only from 06:00 onward: the 00:00–01:00 and 01:00–06:00
+	// segments have nothing to integrate.
+	full := bandFixtureReadings(day, 1000)
+	late := full[6*60:]
+
+	_, _, ok := IntegrateRatedBands(late, bandTestPlan(), day, sydney)
+	assert.False(t, ok, "a segment with no readings makes the whole split unavailable")
+}
+
+func TestIntegrateRatedBands_NoRatedSegments(t *testing.T) {
+	t.Parallel()
+	sydney, err := time.LoadLocation("Australia/Sydney")
+	require.NoError(t, err)
+	day := time.Date(2026, 8, 12, 0, 0, 0, 0, sydney)
+	savings := 0.35
+	allFree := plan.Plan{
+		ID: "all-free", StartDate: "2026-01-01", DefaultRate: 0.35, FeedInRate: 0.05,
+		Windows:        []plan.Window{{Start: "00:00", End: "24:00", Free: true}},
+		SavingsRefRate: &savings,
+	}
+
+	_, _, ok := IntegrateRatedBands(bandFixtureReadings(day, 1000), allFree, day, sydney)
+	assert.False(t, ok, "a plan with no rated band has no split to capture")
 }

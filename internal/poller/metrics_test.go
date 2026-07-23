@@ -31,7 +31,6 @@ func TestMetrics_RecordSummarisationPass_EmitsCorrectShape(t *testing.T) {
 		PassResultSuccess,
 		PassResultSkippedNoReadings,
 		PassResultSkippedNoRow,
-		PassResultSkippedSSMUnresolved,
 		PassResultSkippedAlreadyDone,
 		PassResultError,
 	}

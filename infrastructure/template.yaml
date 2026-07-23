@@ -16,21 +16,11 @@ Parameters:
     Type: String
     Description: AlphaESS system serial number
 
-  OffPeakWindowStart:
-    Type: String
-    # No default — HH:MM values must be passed via parameters file or
-    # --parameter-overrides. aws cloudformation package re-serializes YAML
-    # and strips quotes, causing YAML 1.1 sexagesimal parsing (11:00 → 660).
-    AllowedPattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$"
-    ConstraintDescription: Must be a valid time in HH:MM format (24-hour)
-    Description: Off-peak window start time (HH:MM)
-
-  OffPeakWindowEnd:
-    Type: String
-    # No default — see OffPeakWindowStart comment.
-    AllowedPattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$"
-    ConstraintDescription: Must be a valid time in HH:MM format (24-hour)
-    Description: Off-peak window end time (HH:MM)
+  # The off-peak window parameters are gone: the free window is a property of
+  # the pricing plan that prices each day (time-of-use-pricing Decision 2), so
+  # it switches with the plan instead of needing a stack update on the switch
+  # date. Deploying this version leaves /flux/offpeak-start and
+  # /flux/offpeak-end behind as orphaned SSM parameters; nothing reads them.
 
   SSMPathPrefix:
     Type: String
@@ -216,6 +206,17 @@ Resources:
                   - !GetAtt DevicesTable.Arn
                   - !GetAtt SocRulesTable.Arn
                   - !GetAtt SocFireStateTable.Arn
+              # Pricing is read-only for the poller: the plan is the source of
+              # truth for each day's free window (time-of-use-pricing
+              # Decision 2), and the Lambda keeps sole write access. Scan is
+              # required because ListPricing pages the whole (tiny) table.
+              - Effect: Allow
+                Action:
+                  - dynamodb:Scan
+                  - dynamodb:GetItem
+                  - dynamodb:Query
+                Resource:
+                  - !GetAtt PricingTable.Arn
         # daily-derived-stats spec, AC 1.11 / 7.3 + Decision 3.
         # UpdateItem on DailyEnergyTable is also covered by FluxTaskPolicy
         # above; declared again here so the derivedStats writer's IAM
@@ -364,22 +365,6 @@ Resources:
       Type: String
       Value: !Ref SystemSerialNumber
       Description: AlphaESS system serial number
-
-  OffpeakStartParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: !Sub "${SSMPathPrefix}/offpeak-start"
-      Type: String
-      Value: !Ref OffPeakWindowStart
-      Description: Off-peak window start time
-
-  OffpeakEndParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: !Sub "${SSMPathPrefix}/offpeak-end"
-      Type: String
-      Value: !Ref OffPeakWindowEnd
-      Description: Off-peak window end time
 
   # --- DynamoDB Tables ---
 
@@ -620,8 +605,6 @@ Resources:
           TZ: Australia/Sydney
           API_TOKEN_PARAM: !Sub "${SSMPathPrefix}/api-token"
           SYSTEM_SERIAL_PARAM: !Sub "${SSMPathPrefix}/serial"
-          OFFPEAK_START: !Ref OffPeakWindowStart
-          OFFPEAK_END: !Ref OffPeakWindowEnd
           TABLE_READINGS: !Ref ReadingsTable
           TABLE_DAILY_ENERGY: !Ref DailyEnergyTable
           TABLE_DAILY_POWER: !Ref DailyPowerTable
@@ -688,10 +671,6 @@ Resources:
             - Name: SYSTEM_SERIAL
               ValueFrom: !Sub "${SSMPathPrefix}/serial"
           Environment:
-            - Name: OFFPEAK_START
-              Value: !Ref OffPeakWindowStart
-            - Name: OFFPEAK_END
-              Value: !Ref OffPeakWindowEnd
             - Name: AWS_REGION
               Value: !Ref AWS::Region
             - Name: TABLE_READINGS
@@ -704,6 +683,10 @@ Resources:
               Value: !Ref SystemTable
             - Name: TABLE_OFFPEAK
               Value: !Ref OffpeakTable
+            # Read-only: each day's free window comes from the plan pricing
+            # that day (time-of-use-pricing Decision 2).
+            - Name: TABLE_PRICING
+              Value: !Ref PricingTable
             - Name: TABLE_DEVICES
               Value: !Ref DevicesTable
             - Name: TABLE_SOC_RULES

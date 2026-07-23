@@ -131,7 +131,7 @@ references:
 
 ## Poller and tools
 
-- [ ] 18. Write failing tests for PlanSource <!-- id:chkfinm -->
+- [x] 18. Write failing tests for PlanSource <!-- id:chkfinm -->
   - internal/poller/plansource.go tests
   - Startup load via ListPricing (Scan); last-good cache served on read failure with warn (never treated as no-plan)
   - Cold start with unreachable table retries with backoff (Q14/AC 4.6)
@@ -139,12 +139,12 @@ references:
   - Stream: 2
   - Requirements: [4.6](requirements.md#4.6)
 
-- [ ] 19. Implement PlanSource <!-- id:chkfinn -->
+- [x] 19. Implement PlanSource <!-- id:chkfinn -->
   - Blocked-by: chkfinm (Write failing tests for PlanSource)
   - Stream: 2
   - Requirements: [4.6](requirements.md#4.6)
 
-- [ ] 20. Write failing tests for the midnight-anchored OffpeakScheduler <!-- id:chkfino -->
+- [x] 20. Write failing tests for the midnight-anchored OffpeakScheduler <!-- id:chkfino -->
   - internal/poller/offpeak.go tests
   - Run loop wakes at local midnight, refreshes PlanSource, resolves that day's window, sleeps to its start (Q27); no-free-band day sleeps to next midnight
   - Offpeak row written with windowStart/windowEnd geometry
@@ -153,12 +153,12 @@ references:
   - Stream: 2
   - Requirements: [4.2](requirements.md#4.2), [4.3](requirements.md#4.3), [4.6](requirements.md#4.6)
 
-- [ ] 21. Implement OffpeakScheduler rework <!-- id:chkfinp -->
+- [x] 21. Implement OffpeakScheduler rework <!-- id:chkfinp -->
   - Blocked-by: chkfino (Write failing tests for the midnight-anchored OffpeakScheduler)
   - Stream: 2
   - Requirements: [4.2](requirements.md#4.2), [4.3](requirements.md#4.3), [4.6](requirements.md#4.6)
 
-- [ ] 22. Write failing tests for summarisation per-outcome gating and rated band block <!-- id:chkfinq -->
+- [x] 22. Write failing tests for summarisation per-outcome gating and rated band block <!-- id:chkfinq -->
   - internal/poller/dailysummary.go tests, per-outcome table from design.md
   - Plan read failure -> PassResultError, no sentinels, retried; plan with free band -> all blocks; plan without free band -> socLow/derived/peak run in whole-day-rated mode, off-peak-split values absent, sentinels set; no plan -> window-independent stats only, band sentinel left unset (terminal until backfill)
   - Band block: rated segments via wall-clock SegmentBounds (fixes latent dayStart.Add DST bug in the peak block); sum raw integrals before per-entry rounding
@@ -166,12 +166,12 @@ references:
   - Stream: 2
   - Requirements: [3.5](requirements.md#3.5), [4.4](requirements.md#4.4), [4.6](requirements.md#4.6)
 
-- [ ] 23. Implement summarisation rework <!-- id:chkfinr -->
+- [x] 23. Implement summarisation rework <!-- id:chkfinr -->
   - Blocked-by: chkfinq (Write failing tests for summarisation per-outcome gating and rated band block)
   - Stream: 2
   - Requirements: [3.5](requirements.md#3.5), [4.4](requirements.md#4.4), [4.6](requirements.md#4.6)
 
-- [ ] 24. Write failing tests for backfill CLI plan resolution and band rewrite <!-- id:chkfins -->
+- [x] 24. Write failing tests for backfill CLI plan resolution and band rewrite <!-- id:chkfins -->
   - cmd/backfill-grid + cmd/backfill-solar: per-day plan resolution from the pricing table replaces --offpeak-start/end flags (a backfill spanning the switch date needs per-day windows)
   - backfill-grid additionally rewrites the day's rated bandImports and the offpeak row's window geometry
   - Multi-item writes are non-atomic but idempotent/re-runnable (documented)
@@ -179,12 +179,12 @@ references:
   - Stream: 2
   - Requirements: [3.5](requirements.md#3.5), [4.5](requirements.md#4.5)
 
-- [ ] 25. Implement backfill CLI updates <!-- id:chkfint -->
+- [x] 25. Implement backfill CLI updates <!-- id:chkfint -->
   - Blocked-by: chkfins (Write failing tests for backfill CLI plan resolution and band rewrite)
   - Stream: 2
   - Requirements: [3.5](requirements.md#3.5), [4.5](requirements.md#4.5)
 
-- [ ] 26. Write failing tests for cmd/migrate-pricing <!-- id:chkfinu -->
+- [x] 26. Write failing tests for cmd/migrate-pricing <!-- id:chkfinu -->
   - Transform via the shared function from task 7
   - Golden check computes every priced day's costs with the EXACT legacy DayCosts formula (tier-2 table / task 5 helper), aborts on any mismatch before writing
   - Days priced by already-new-shape rows verified band-vs-band and logged
@@ -193,12 +193,12 @@ references:
   - Stream: 2
   - Requirements: [5.1](requirements.md#5.1), [5.2](requirements.md#5.2), [5.3](requirements.md#5.3), [5.4](requirements.md#5.4)
 
-- [ ] 27. Implement cmd/migrate-pricing <!-- id:chkfinv -->
+- [x] 27. Implement cmd/migrate-pricing <!-- id:chkfinv -->
   - Blocked-by: chkfinu (Write failing tests for cmd/migrate-pricing)
   - Stream: 2
   - Requirements: [5.1](requirements.md#5.1), [5.2](requirements.md#5.2), [5.3](requirements.md#5.3), [5.4](requirements.md#5.4)
 
-- [ ] 28. Update infrastructure template and remove window config plumbing <!-- id:chkfinw -->
+- [x] 28. Update infrastructure template and remove window config plumbing <!-- id:chkfinw -->
   - infrastructure/template.yaml: ECS TaskRole read-only IAM on PricingTable MUST include dynamodb:Scan (ListPricing is a Scan) + GetItem/Query; TABLE_PRICING env for poller container
   - Drop OffpeakStartParameter/OffpeakEndParameter and OFFPEAK_START/END env from both containers
   - internal/config/config.go: remove OffpeakStart/End fields + validation; cmd/poller/logging.go log line

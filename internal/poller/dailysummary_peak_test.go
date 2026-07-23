@@ -64,6 +64,7 @@ func TestSummarisation_PeakSkippedWhenBothSentinelsSet(t *testing.T) {
 			SysSn: "TEST123", Date: "2026-04-14",
 			DerivedStatsComputedAt: "2026-04-14T22:00:00Z",
 			PeakComputedAt:         "2026-04-14T22:00:00Z",
+			BandsComputedAt:        "2026-04-14T22:00:00Z",
 		},
 	}
 	p, _ := summarisationFixturePoller(t, ms)

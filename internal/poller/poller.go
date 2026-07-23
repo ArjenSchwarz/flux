@@ -61,6 +61,7 @@ type Poller struct {
 	client    APIClient
 	store     dynamo.Store
 	cfg       *config.Config
+	plans     *PlanSource
 	offpeak   *OffpeakScheduler
 	metrics   MetricsRecorder
 	evaluator LiveDataEvaluator
@@ -74,15 +75,20 @@ type Poller struct {
 // New creates a Poller with the given dependencies. The metrics recorder
 // defaults to NoopMetrics; production code overwrites it via the SetMetrics
 // helper after constructing a CloudWatch client.
-func New(client APIClient, store dynamo.Store, cfg *config.Config) *Poller {
+//
+// The off-peak scheduler and the summarisation pass share one PlanSource so
+// they resolve the same window for a given day from the same cached read
+// (Decision 2 — the plan is the single source of truth for the free window).
+func New(client APIClient, store dynamo.Store, plans PlanLister, cfg *config.Config) *Poller {
 	p := &Poller{
 		client:  client,
 		store:   store,
 		cfg:     cfg,
+		plans:   NewPlanSource(plans),
 		now:     time.Now,
 		metrics: NoopMetrics{},
 	}
-	p.offpeak = NewOffpeakScheduler(client, store, cfg)
+	p.offpeak = NewOffpeakScheduler(client, store, p.plans, cfg)
 	return p
 }
 

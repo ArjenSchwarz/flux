@@ -27,13 +27,12 @@ func summarisationFixturePoller(t *testing.T, ms *mockStore) (*Poller, *fakeMetr
 	t.Helper()
 	loc, _ := time.LoadLocation("Australia/Sydney")
 	cfg := &config.Config{
-		Serial:       "TEST123",
-		Location:     loc,
-		OffpeakStart: 11 * time.Hour,
-		OffpeakEnd:   14 * time.Hour,
+		Serial:   "TEST123",
+		Location: loc,
 	}
 	fakeM := &fakeMetrics{}
-	p := New(nil, ms, cfg)
+	p := New(nil, ms, openEndedPlanLister("11:00", "14:00"), cfg)
+	p.plans.retryDelay = time.Microsecond
 	// Pin clock to 2026-04-15 02:00 AEST so "yesterday" deterministically
 	// resolves to 2026-04-14.
 	p.now = func() time.Time { return time.Date(2026, 4, 15, 2, 0, 0, 0, loc) }
@@ -116,6 +115,7 @@ func TestSummarisation_AlreadyPopulated(t *testing.T) {
 			SysSn: "TEST123", Date: "2026-04-14",
 			DerivedStatsComputedAt: "2026-04-14T22:00:00Z",
 			PeakComputedAt:         "2026-04-14T22:00:00Z",
+			BandsComputedAt:        "2026-04-14T22:00:00Z",
 		},
 	}
 	p, _ := summarisationFixturePoller(t, ms)
@@ -127,22 +127,9 @@ func TestSummarisation_AlreadyPopulated(t *testing.T) {
 	assert.Nil(t, ms.queryReadingsResult, "queryReadingsResult unset means QueryReadings must not have been called for default")
 }
 
-func TestSummarisation_SsmUnresolved(t *testing.T) {
-	loc, _ := time.LoadLocation("Australia/Sydney")
-	ms := &mockStore{
-		getDailyEnergyResult: &dynamo.DailyEnergyItem{SysSn: "TEST123", Date: "2026-04-14"},
-		queryReadingsResult:  makeReadings("2026-04-14", loc),
-	}
-	p, _ := summarisationFixturePoller(t, ms)
-	// Force off-peak window to invalid by zeroing the durations after Pollerm
-	// is built (cfg.OffpeakStart >= cfg.OffpeakEnd → ParseOffpeakWindow returns false).
-	p.cfg.OffpeakStart = 0
-	p.cfg.OffpeakEnd = 0
-
-	result := p.runSummarisationPass(context.Background(), "2026-04-14")
-	assert.Equal(t, PassResultSkippedSSMUnresolved, result)
-	assert.Zero(t, ms.derivedUpdates)
-}
+// The unresolved-window early return is gone; its replacements — the four
+// per-outcome paths of the plan-resolution table — live in
+// dailysummary_plan_test.go.
 
 func TestSummarisation_ReadingsError(t *testing.T) {
 	ms := &mockStore{
@@ -301,6 +288,7 @@ func TestSummarisation_PrecheckShortCircuits_NoReadingsQuery(t *testing.T) {
 			SysSn: "TEST123", Date: "2026-04-14",
 			DerivedStatsComputedAt: "2026-04-14T22:00:00Z",
 			PeakComputedAt:         "2026-04-14T22:00:00Z",
+			BandsComputedAt:        "2026-04-14T22:00:00Z",
 		},
 	}
 	p, _ := summarisationFixturePoller(t, ms)

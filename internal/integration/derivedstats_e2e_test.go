@@ -134,12 +134,13 @@ func TestEndToEnd_DerivedStatsRoundTrip(t *testing.T) {
 	// the writer side of the AC 6.7 contract end-to-end (no hand-rolled
 	// payload).
 	cfg := &config.Config{
-		Serial:       serial,
-		Location:     loc,
-		OffpeakStart: 11 * time.Hour,
-		OffpeakEnd:   14 * time.Hour,
+		Serial:   serial,
+		Location: loc,
 	}
-	p := poller.New(nil, store, cfg)
+	// The free window comes from the plan pricing the day (Decision 2), so
+	// the pass needs a plan source. fixedPlanStore prices every date at
+	// 11:00–14:00, the window these fixture expectations were written against.
+	p := poller.New(nil, store, fixedPlanStore{}, cfg)
 	p.SetMetrics(poller.NoopMetrics{})
 	// 02:00 AEST on 2026-04-15 ⇒ yesterday-in-Sydney = 2026-04-14.
 	p.SetNow(func() time.Time { return time.Date(2026, 4, 15, 2, 0, 0, 0, loc) })

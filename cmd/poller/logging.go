@@ -35,9 +35,11 @@ func newJSONLogger(output io.Writer) *slog.Logger {
 // logPollerStartup logs selected non-secret configuration fields. Never logs
 // the full config to avoid leaking AppSecret.
 func logPollerStartup(cfg *config.Config, logger *slog.Logger) {
+	// The off-peak window is no longer configuration, so it is no longer a
+	// startup fact: each day's window is resolved from the plan pricing that
+	// day and logged by the scheduler as it processes the day.
 	logger.Info("poller starting",
 		"serial", cfg.Serial,
-		"offpeak", config.FormatHHMM(cfg.OffpeakStart)+"-"+config.FormatHHMM(cfg.OffpeakEnd),
 		"tz", cfg.Location.String(),
 		"dry_run", cfg.DryRun,
 	)
