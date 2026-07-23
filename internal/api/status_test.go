@@ -9,6 +9,7 @@ import (
 
 	"github.com/ArjenSchwarz/flux/internal/derivedstats"
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
+	"github.com/ArjenSchwarz/flux/internal/plan"
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -79,7 +80,7 @@ func TestHandleStatusAllDataPresent(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), statusRequest())
@@ -139,7 +140,7 @@ func TestHandleStatusStaleLatestReading_OmitsLive(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), statusRequest())
@@ -177,7 +178,7 @@ func TestHandleStatusStalenessBoundary(t *testing.T) {
 				},
 			}
 
-			h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+			h := newTestHandlerFor(mr, nil, testSerial, testToken)
 			h.nowFunc = func() time.Time { return now }
 
 			resp, err := h.Handle(context.Background(), statusRequest())
@@ -200,7 +201,7 @@ func TestHandleStatusNoReadings(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return fixedNow() }
 
 	resp, err := h.Handle(context.Background(), statusRequest())
@@ -235,7 +236,7 @@ func TestHandleStatusLow24hNoReadingsToday(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), statusRequest())
@@ -255,7 +256,7 @@ func TestHandleStatusOffpeakPendingBeforeWindowNoSplit(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), statusRequest())
@@ -307,7 +308,7 @@ func TestHandleStatusOffpeakInProgress(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), statusRequest())
@@ -341,7 +342,7 @@ func TestHandleStatusOffpeakComplete(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), statusRequest())
@@ -372,7 +373,7 @@ func TestHandleStatusNoTodayEnergy(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), statusRequest())
@@ -402,7 +403,7 @@ func TestHandleStatusComputedEnergyNoDaily(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), statusRequest())
@@ -442,7 +443,7 @@ func TestHandleStatusReconciledEnergy(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), statusRequest())
@@ -476,7 +477,7 @@ func TestHandleStatusSingleReadingWithDaily(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), statusRequest())
@@ -506,7 +507,7 @@ func TestHandleStatusSystemMissingFallbackCapacity(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), statusRequest())
@@ -525,7 +526,7 @@ func TestHandleStatusSystemZeroCobatFallback(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), statusRequest())
@@ -575,7 +576,7 @@ func TestHandleStatusDynamoDBError(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			h := NewHandler(tc.mock, nil, testSerial, testToken, "11:00", "14:00")
+			h := newTestHandlerFor(tc.mock, nil, testSerial, testToken)
 			h.nowFunc = func() time.Time { return now }
 
 			resp, err := h.Handle(context.Background(), statusRequest())
@@ -597,7 +598,7 @@ func TestHandleStatusOffpeakNotFound(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), statusRequest())
@@ -631,7 +632,7 @@ func TestHandleStatusRollingAvgFewerThan2Readings(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), statusRequest())
@@ -674,7 +675,7 @@ func TestHandleStatusCutoffSuppressedWhenAfterOffpeak(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), statusRequest())
@@ -712,7 +713,7 @@ func TestHandleStatusCutoffShownWhenBeforeOffpeak(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), statusRequest())
@@ -728,11 +729,11 @@ func TestHandleStatusCutoffShownWhenBeforeOffpeak(t *testing.T) {
 		"rolling15min.estimatedCutoffTime should be present when cutoff is before next off-peak")
 }
 
-// TestHandleStatusCutoffShownWithInvalidOffpeakConfig verifies that when the
-// off-peak window is misconfigured (unparseable), the cutoff filter falls
-// through as a no-op — a computed cutoff is still returned as-is rather than
-// silently suppressed.
-func TestHandleStatusCutoffShownWithInvalidOffpeakConfig(t *testing.T) {
+// TestHandleStatusCutoffShownWhenNoPlanPricesTheDay verifies that when no
+// plan prices today (and so there is no free window to charge in), the cutoff
+// filter falls through as a no-op — a computed cutoff is still returned as-is
+// rather than silently suppressed.
+func TestHandleStatusCutoffShownWhenNoPlanPricesTheDay(t *testing.T) {
 	now := time.Date(2026, 4, 15, 7, 0, 0, 0, sydneyTZ)
 	nowUnix := now.Unix()
 
@@ -750,7 +751,7 @@ func TestHandleStatusCutoffShownWithInvalidOffpeakConfig(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, nil, testSerial, testToken, "bad", "also-bad")
+	h := handlerWithPlans(mr) // no plans at all
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), statusRequest())
@@ -760,10 +761,10 @@ func TestHandleStatusCutoffShownWithInvalidOffpeakConfig(t *testing.T) {
 	sr := parseStatusResponse(t, resp)
 	require.NotNil(t, sr.Battery)
 	require.NotNil(t, sr.Battery.EstimatedCutoff,
-		"cutoff should be returned when off-peak config is invalid (no suppression)")
+		"cutoff should be returned when the day is unpriced (no suppression)")
 	require.NotNil(t, sr.Rolling15m)
 	require.NotNil(t, sr.Rolling15m.EstimatedCutoff,
-		"rolling cutoff should be returned when off-peak config is invalid")
+		"rolling cutoff should be returned when the day is unpriced")
 }
 
 // TestHandleStatusCutoffSuppressedDuringOffpeak verifies that when "now" is
@@ -794,7 +795,7 @@ func TestHandleStatusCutoffSuppressedDuringOffpeak(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), statusRequest())
@@ -821,7 +822,7 @@ func TestHandleStatusBundlesNote(t *testing.T) {
 				return &dynamo.NoteItem{Date: date, Text: "Away in Bali", UpdatedAt: "2026-04-15T01:00:00Z"}, nil
 			},
 		}
-		h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+		h := newTestHandlerFor(mr, nil, testSerial, testToken)
 		h.nowFunc = func() time.Time { return now }
 
 		resp, err := h.Handle(context.Background(), statusRequest())
@@ -837,7 +838,7 @@ func TestHandleStatusBundlesNote(t *testing.T) {
 		mr := &mockReader{
 			getNoteFn: func(_ context.Context, _, _ string) (*dynamo.NoteItem, error) { return nil, nil },
 		}
-		h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+		h := newTestHandlerFor(mr, nil, testSerial, testToken)
 		h.nowFunc = func() time.Time { return now }
 
 		resp, err := h.Handle(context.Background(), statusRequest())
@@ -855,7 +856,7 @@ func TestHandleStatusBundlesNote(t *testing.T) {
 				return nil, errors.New("throttled")
 			},
 		}
-		h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+		h := newTestHandlerFor(mr, nil, testSerial, testToken)
 		h.nowFunc = func() time.Time { return now }
 
 		resp, err := h.Handle(context.Background(), statusRequest())
@@ -889,7 +890,7 @@ func TestHandleStatusCantEmptyBeforeOffpeak(t *testing.T) {
 				return &dynamo.SystemItem{SysSn: serial, Cobat: 13.34}, nil
 			},
 		}
-		h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+		h := newTestHandlerFor(mr, nil, testSerial, testToken)
 		h.nowFunc = func() time.Time { return now }
 
 		resp, err := h.Handle(context.Background(), statusRequest())
@@ -925,7 +926,7 @@ func TestHandleStatusCantEmptyBeforeOffpeak(t *testing.T) {
 				return &dynamo.SystemItem{SysSn: serial, Cobat: 13.34}, nil
 			},
 		}
-		h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+		h := newTestHandlerFor(mr, nil, testSerial, testToken)
 		h.nowFunc = func() time.Time { return now }
 
 		resp, err := h.Handle(context.Background(), statusRequest())
@@ -956,7 +957,7 @@ func TestHandleStatusCantEmptyBeforeOffpeak(t *testing.T) {
 				return &dynamo.SystemItem{SysSn: serial, Cobat: 13.34}, nil
 			},
 		}
-		h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+		h := newTestHandlerFor(mr, nil, testSerial, testToken)
 		h.nowFunc = func() time.Time { return now }
 
 		resp, err := h.Handle(context.Background(), statusRequest())
@@ -980,15 +981,15 @@ func TestHandleStatusCantEmptyBeforeOffpeak(t *testing.T) {
 				return &dynamo.SystemItem{SysSn: serial, Cobat: 13.34}, nil
 			},
 		}
-		// Empty off-peak config → ParseOffpeakWindow returns ok=false → no boundary.
-		h := NewHandler(mr, nil, testSerial, testToken, "", "")
+		// No plan prices today or tomorrow → no window boundary at all.
+		h := handlerWithPlans(mr)
 		h.nowFunc = func() time.Time { return now }
 
 		resp, err := h.Handle(context.Background(), statusRequest())
 		require.NoError(t, err)
 		sr := parseStatusResponse(t, resp)
 		require.NotNil(t, sr.Battery)
-		assert.Nil(t, sr.Battery.CantEmptyBeforeOffpeak, "flag must be nil when off-peak config is missing")
+		assert.Nil(t, sr.Battery.CantEmptyBeforeOffpeak, "flag must be nil when no plan supplies a window")
 	})
 
 	t.Run("e) Sydney DST transition day", func(t *testing.T) {
@@ -1012,7 +1013,7 @@ func TestHandleStatusCantEmptyBeforeOffpeak(t *testing.T) {
 				return &dynamo.SystemItem{SysSn: serial, Cobat: 13.34}, nil
 			},
 		}
-		h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+		h := newTestHandlerFor(mr, nil, testSerial, testToken)
 		h.nowFunc = func() time.Time { return now }
 
 		resp, err := h.Handle(context.Background(), statusRequest())
@@ -1025,7 +1026,7 @@ func TestHandleStatusCantEmptyBeforeOffpeak(t *testing.T) {
 
 		// Cross-check the boundary the integration uses: nextOpStart on
 		// the DST day must be 11:00 AEDT (UTC+11), not 11:00 AEST.
-		nextOp, ok := nextOffpeakStart(now.In(sydneyTZ), "11:00", "14:00")
+		nextOp, ok := nextOffpeakStart(now.In(sydneyTZ), []plan.Plan{planRow("p", "2000-01-01", nil, freeBand("11:00", "14:00")).Plan()})
 		require.True(t, ok)
 		_, offsetSec := nextOp.Zone()
 		assert.Equal(t, 11*3600, offsetSec, "off-peak start sits in AEDT after the DST gap")
@@ -1046,7 +1047,7 @@ func TestHandleStatusCantEmptyBeforeOffpeak(t *testing.T) {
 				return nil, nil // not found → fallback capacity used
 			},
 		}
-		h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+		h := newTestHandlerFor(mr, nil, testSerial, testToken)
 		h.nowFunc = func() time.Time { return now }
 
 		resp, err := h.Handle(context.Background(), statusRequest())
@@ -1085,7 +1086,7 @@ func TestHandleStatusProjectedEndSoc(t *testing.T) {
 				return &dynamo.SystemItem{SysSn: serial, Cobat: 13.34}, nil
 			},
 		}
-		h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+		h := newTestHandlerFor(mr, nil, testSerial, testToken)
 		h.nowFunc = func() time.Time { return insideWindow }
 
 		resp, err := h.Handle(context.Background(), statusRequest())
@@ -1107,7 +1108,7 @@ func TestHandleStatusProjectedEndSoc(t *testing.T) {
 				return &dynamo.SystemItem{SysSn: serial, Cobat: 13.34}, nil
 			},
 		}
-		h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+		h := newTestHandlerFor(mr, nil, testSerial, testToken)
 		h.nowFunc = func() time.Time { return outside }
 
 		resp, err := h.Handle(context.Background(), statusRequest())
@@ -1129,7 +1130,7 @@ func TestHandleStatusProjectedEndSoc(t *testing.T) {
 				return &dynamo.SystemItem{SysSn: serial, Cobat: 13.34}, nil
 			},
 		}
-		h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+		h := newTestHandlerFor(mr, nil, testSerial, testToken)
 		h.nowFunc = func() time.Time { return insideWindow }
 
 		resp, err := h.Handle(context.Background(), statusRequest())
@@ -1151,7 +1152,7 @@ func TestHandleStatusProjectedEndSoc(t *testing.T) {
 		}
 
 		// Unsimulated call.
-		hPlain := NewHandler(newReader(), nil, testSerial, testToken, "11:00", "14:00")
+		hPlain := newTestHandlerFor(newReader(), nil, testSerial, testToken)
 		hPlain.nowFunc = func() time.Time { return insideWindow }
 		respPlain, err := hPlain.Handle(context.Background(), simulateStatusRequest(""))
 		require.NoError(t, err)
@@ -1160,7 +1161,7 @@ func TestHandleStatusProjectedEndSoc(t *testing.T) {
 		require.NotNil(t, srPlain.Offpeak.ProjectedEndSoc)
 
 		// Simulated call with added load.
-		hSim := NewHandler(newReader(), nil, testSerial, testToken, "11:00", "14:00")
+		hSim := newTestHandlerFor(newReader(), nil, testSerial, testToken)
 		hSim.nowFunc = func() time.Time { return insideWindow }
 		respSim, err := hSim.Handle(context.Background(), simulateStatusRequest("3000"))
 		require.NoError(t, err)
@@ -1182,7 +1183,7 @@ func TestHandleStatusProjectedEndSoc(t *testing.T) {
 				return &dynamo.SystemItem{SysSn: serial, Cobat: 13.34}, nil
 			},
 		}
-		h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+		h := newTestHandlerFor(mr, nil, testSerial, testToken)
 		h.nowFunc = func() time.Time { return outside }
 
 		resp, err := h.Handle(context.Background(), statusRequest())
@@ -1204,7 +1205,7 @@ func TestHandleStatusSingleNowCapture(t *testing.T) {
 	now := fixedNow()
 
 	mr := &mockReader{}
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time {
 		callCount++
 		return now

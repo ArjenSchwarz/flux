@@ -48,7 +48,7 @@ func TestHandleHistoryDefaultDays(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), historyRequest(nil))
@@ -98,7 +98,7 @@ func TestHandleHistoryDaysValidation(t *testing.T) {
 				},
 			}
 
-			h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+			h := newTestHandlerFor(mr, nil, testSerial, testToken)
 			h.nowFunc = func() time.Time { return now }
 
 			var params map[string]string
@@ -127,7 +127,7 @@ func TestHandleHistoryNoData(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), historyRequest(nil))
@@ -151,7 +151,7 @@ func TestHandleHistoryAscendingOrder(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), historyRequest(nil))
@@ -174,7 +174,7 @@ func TestHandleHistoryEnergyRounding(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), historyRequest(nil))
@@ -216,7 +216,7 @@ func TestHandleHistoryReconcilesTodaysRow(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), historyRequest(nil))
@@ -296,7 +296,7 @@ func TestHandleHistoryOffpeakSplit(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), historyRequest(nil))
@@ -336,7 +336,7 @@ func TestHandleHistoryDynamoDBError(t *testing.T) {
 		},
 	}
 	now := fixedNow()
-	h := NewHandler(mock, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mock, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), historyRequest(nil))
@@ -375,7 +375,7 @@ func TestHandleHistoryBundlesNotes(t *testing.T) {
 				}, nil
 			},
 		}
-		h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+		h := newTestHandlerFor(mr, nil, testSerial, testToken)
 		h.nowFunc = func() time.Time { return now }
 
 		resp, err := h.Handle(context.Background(), historyRequest(nil))
@@ -401,7 +401,7 @@ func TestHandleHistoryBundlesNotes(t *testing.T) {
 				return []dynamo.NoteItem{}, nil
 			},
 		}
-		h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+		h := newTestHandlerFor(mr, nil, testSerial, testToken)
 		h.nowFunc = func() time.Time { return now }
 
 		resp, err := h.Handle(context.Background(), historyRequest(nil))
@@ -427,7 +427,7 @@ func TestHandleHistoryBundlesNotes(t *testing.T) {
 				return nil, errors.New("throttled")
 			},
 		}
-		h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+		h := newTestHandlerFor(mr, nil, testSerial, testToken)
 		h.nowFunc = func() time.Time { return now }
 
 		resp, err := h.Handle(context.Background(), historyRequest(nil))
@@ -542,7 +542,7 @@ func TestHandleHistoryRangeParamMatrix(t *testing.T) {
 				},
 			}
 
-			h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+			h := newTestHandlerFor(mr, nil, testSerial, testToken)
 			h.nowFunc = func() time.Time { return now }
 
 			resp, err := h.Handle(context.Background(), historyRequest(tc.params))
@@ -600,7 +600,7 @@ func TestHandleHistoryRangeSkipsLiveCompute(t *testing.T) {
 		},
 	}}
 
-	h := NewHandler(tr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(tr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), historyRequest(map[string]string{
@@ -649,7 +649,7 @@ func TestHandleHistoryRangePredatesData(t *testing.T) {
 				return []dynamo.DailyEnergyItem{}, nil
 			},
 		}
-		h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+		h := newTestHandlerFor(mr, nil, testSerial, testToken)
 		h.nowFunc = func() time.Time { return now }
 
 		resp, err := h.Handle(context.Background(), historyRequest(map[string]string{
@@ -670,7 +670,7 @@ func TestHandleHistoryRangePredatesData(t *testing.T) {
 				}, nil
 			},
 		}
-		h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+		h := newTestHandlerFor(mr, nil, testSerial, testToken)
 		h.nowFunc = func() time.Time { return now }
 
 		resp, err := h.Handle(context.Background(), historyRequest(map[string]string{
@@ -704,7 +704,7 @@ func TestHandleHistoryOffpeakSoftFailure(t *testing.T) {
 		},
 	}
 
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), historyRequest(nil))

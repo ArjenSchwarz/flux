@@ -7,6 +7,7 @@ import (
 
 	"github.com/ArjenSchwarz/flux/internal/derivedstats"
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
+	"github.com/ArjenSchwarz/flux/internal/plan"
 )
 
 // sydneyTZ is the Australia/Sydney timezone used for all date-based operations.
@@ -18,6 +19,51 @@ var sydneyTZ = func() *time.Location {
 	}
 	return loc
 }()
+
+// offpeakWindow is the free window of the plan pricing one date, expressed as
+// Sydney-local minutes of day.
+//
+// Callers hold it as a *offpeakWindow, where nil means the date has no free
+// window — either its plan carries no free band or no plan prices it at all.
+// Every window-dependent value is then absent rather than defaulted (AC 4.4);
+// the pointer is what makes that state impossible to confuse with a real
+// window.
+type offpeakWindow struct {
+	startMin, endMin int
+}
+
+// startHHMM / endHHMM render the window in the "HH:MM" form the derivedstats
+// helpers still parse.
+func (w offpeakWindow) startHHMM() string { return plan.FormatBandTime(w.startMin) }
+func (w offpeakWindow) endHHMM() string   { return plan.FormatBandTime(w.endMin) }
+
+// resolveOffpeakWindow returns the free window of the plan pricing date
+// (AC 4.1), or nil when there is none.
+func resolveOffpeakWindow(plans []plan.Plan, date string) *offpeakWindow {
+	startMin, endMin, ok := plan.FreeWindow(plans, date)
+	if !ok {
+		return nil
+	}
+	return &offpeakWindow{startMin: startMin, endMin: endMin}
+}
+
+// hhmmBounds renders a window for the derivedstats helpers that take "HH:MM"
+// strings. A nil window yields two empty strings, which those helpers already
+// treat as "no off-peak window" and degrade accordingly.
+func hhmmBounds(w *offpeakWindow) (start, end string) {
+	if w == nil {
+		return "", ""
+	}
+	return w.startHHMM(), w.endHHMM()
+}
+
+// bounds resolves the window to absolute Sydney-local instants on the day
+// containing local.
+func (w offpeakWindow) bounds(local time.Time) (start, end time.Time) {
+	dayStart := startOfDaySydney(local)
+	return dayStart.Add(time.Duration(w.startMin) * time.Minute),
+		dayStart.Add(time.Duration(w.endMin) * time.Minute)
+}
 
 // offpeakDeltas resolves the energy deltas for a complete off-peak record.
 // Pending records return (_, false); callers needing today's in-window value
@@ -47,27 +93,24 @@ type offpeakDeltaValues struct {
 	GridExport       float64
 }
 
-// liveOffpeakDeltas integrates readings over [offpeakStart, min(now, offpeakEnd))
-// for today's date in Sydney local time and returns the five energy deltas.
+// liveOffpeakDeltas integrates readings over [window start, min(now, window
+// end)) for today's date in Sydney local time and returns the five energy
+// deltas.
 //
-// offpeakStart and offpeakEnd are the raw "HH:MM" config values. Returns
-// (_, false) when the window is unparseable, when now is at or before the
-// window start (AC 4.3 — pre-window behaviour), or when the readings slice
+// Returns (_, false) when the day has no free window, when now is at or before
+// the window start (AC 4.3 — pre-window behaviour), or when the readings slice
 // does not contain enough usable samples to integrate (AC 1.6).
 //
 // Pure function: no state and no clock except the explicit now parameter. This
 // is the determinism contract that backs AC 4.4's monotonicity guarantee.
 func liveOffpeakDeltas(readings []dynamo.ReadingItem, now time.Time,
-	offpeakStart, offpeakEnd string,
+	window *offpeakWindow,
 ) (offpeakDeltaValues, bool) {
-	startMin, endMin, parsed := derivedstats.ParseOffpeakWindow(offpeakStart, offpeakEnd)
-	if !parsed {
+	if window == nil {
 		return offpeakDeltaValues{}, false
 	}
 	local := now.In(sydneyTZ)
-	dayStart := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, sydneyTZ)
-	opStart := dayStart.Add(time.Duration(startMin) * time.Minute)
-	opEnd := dayStart.Add(time.Duration(endMin) * time.Minute)
+	opStart, opEnd := window.bounds(local)
 
 	if !local.After(opStart) {
 		return offpeakDeltaValues{}, false
@@ -113,9 +156,8 @@ func liveOffpeakDeltas(readings []dynamo.ReadingItem, now time.Time,
 // It is the "peak so far today" complement of liveOffpeakDeltas, computed
 // directly from readings (independent of reconcileEnergy) so the off-peak
 // sampling artifact is never dumped onto the peak residual (T-1421).
-// offpeakStart and offpeakEnd are the raw "HH:MM" config values.
 //
-// Returns (_, false) when the window is unparseable or the morning window has
+// Returns (_, false) when the day has no free window or the morning window has
 // too few usable samples to integrate — the same <2-point usability gate
 // liveOffpeakDeltas uses. The evening window is additive-when-usable: before
 // now passes opEnd, or when it is too sparse to integrate on its own, it
@@ -126,16 +168,14 @@ func liveOffpeakDeltas(readings []dynamo.ReadingItem, now time.Time,
 //
 // Pure function: no state and no clock except the explicit now parameter.
 func livePeakGridImport(readings []dynamo.ReadingItem, now time.Time,
-	offpeakStart, offpeakEnd string,
+	window *offpeakWindow,
 ) (float64, bool) {
-	startMin, endMin, parsed := derivedstats.ParseOffpeakWindow(offpeakStart, offpeakEnd)
-	if !parsed {
+	if window == nil {
 		return 0, false
 	}
 	local := now.In(sydneyTZ)
-	dayStart := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, sydneyTZ)
-	opStart := dayStart.Add(time.Duration(startMin) * time.Minute)
-	opEnd := dayStart.Add(time.Duration(endMin) * time.Minute)
+	dayStart := startOfDaySydney(local)
+	opStart, opEnd := window.bounds(local)
 	dayEnd := dayStart.AddDate(0, 0, 1)
 
 	// Trim to today's readings so the result is identical regardless of whether
@@ -185,6 +225,60 @@ func livePeakGridImport(readings []dynamo.ReadingItem, now time.Time,
 	return peak, true
 }
 
+// liveBandImports integrates max(pgrid, 0) over each rated segment of the plan
+// pricing today, each clamped to now. It is the live counterpart of the
+// poller's day-close band capture, and the single source both /day and
+// /history use — the two screens cannot disagree about today's split because
+// they compute it exactly once, here (AC 3.4).
+//
+// A segment the clock has not reached yet contributes 0: the day is not over,
+// and that band has genuinely imported nothing so far. A segment that HAS
+// started but cannot be integrated makes the whole split unavailable rather
+// than partially known, because a partially known split is what AC 3.6 defines
+// as unavailable — pricing the unknown bands at zero would understate the day.
+//
+// Boundaries come from plan.SegmentBounds, so band membership follows local
+// wall-clock time across a DST transition (AC 3.8).
+//
+// Returns (_, false) when the plan has no rated segments or any started
+// segment fails the integrator's usability gate.
+func liveBandImports(readings []dynamo.ReadingItem, now time.Time, p plan.Plan) ([]BandImport, bool) {
+	rated := plan.RatedSegments(p)
+	if len(rated) == 0 {
+		return nil, false
+	}
+	local := now.In(sydneyTZ)
+
+	// Trim to today's readings so the result does not depend on whether the
+	// caller's slice carries pre-midnight samples — the same cross-screen
+	// identity argument livePeakGridImport makes. Readings are sorted
+	// ascending (the DynamoDB sort-key guarantee).
+	dayStartUnix := startOfDaySydney(local).Unix()
+	if i := sort.Search(len(readings), func(i int) bool {
+		return readings[i].Timestamp >= dayStartUnix
+	}); i > 0 {
+		readings = readings[i:]
+	}
+
+	nowUnix := local.Unix()
+	out := make([]BandImport, 0, len(rated))
+	for _, seg := range rated {
+		startUnix, endUnix := plan.SegmentBounds(seg, local, sydneyTZ)
+		entry := BandImport{Start: seg.Start, End: seg.End}
+		if nowUnix > startUnix {
+			end := min(endUnix, nowUnix)
+			windowed := sliceWindow(readings, startUnix, end)
+			deltas, ok := derivedstats.IntegrateOffpeakDeltas(toDerivedReadings(windowed), startUnix, end)
+			if !ok {
+				return nil, false
+			}
+			entry.Kwh = derivedstats.RoundEnergy(deltas.GridImportKwh)
+		}
+		out = append(out, entry)
+	}
+	return out, true
+}
+
 // computeCutoffTime estimates when the battery will reach the cutoff percentage
 // using linear extrapolation. Returns nil if the battery is not discharging or
 // SOC is already at/below cutoff.
@@ -223,25 +317,20 @@ const (
 // window end using the idealised two-rate charge curve: offpeakChargeRateKW
 // while SoC < fastChargeMaxSoc, then offpeakTrickleRateKW up to 100%.
 //
-// Returns nil when the window is unparseable, now is outside [start, end), or
+// Returns nil when the day has no free window, now is outside [start, end), or
 // capacity is non-positive. The result is clamped to [soc, 100] and rounded to
 // 1 dp. The projection is a best-case figure independent of the live charge
 // power: it never reads Pbat or the simulated load, so AC 1.9 and AC 2.4 hold
 // by construction (Decision 4, Decision 6).
-func projectOffpeakEndSoc(soc, capacityKwh float64, now time.Time, offpeakStart, offpeakEnd string) *float64 {
-	if capacityKwh <= 0 || !withinOffpeakWindow(now, offpeakStart, offpeakEnd) {
-		return nil
-	}
-	_, endMin, ok := derivedstats.ParseOffpeakWindow(offpeakStart, offpeakEnd)
-	if !ok {
+func projectOffpeakEndSoc(soc, capacityKwh float64, now time.Time, window *offpeakWindow) *float64 {
+	if capacityKwh <= 0 || !withinOffpeakWindow(now, window) {
 		return nil
 	}
 
-	// Window-end instant: today's Sydney-local midnight + endMin, same
-	// construction as nextOffpeakStart. withinOffpeakWindow gates on
-	// minute-of-day so now is always before this instant here; h is a
-	// positive, seconds-precise duration absorbed by the [soc, 100] clamp.
-	windowEnd := startOfDaySydney(now).Add(time.Duration(endMin) * time.Minute)
+	// withinOffpeakWindow gates on minute-of-day, so now is always before the
+	// window end here; h is a positive, seconds-precise duration absorbed by
+	// the [soc, 100] clamp.
+	_, windowEnd := window.bounds(now)
 	h := windowEnd.Sub(now).Hours()
 
 	// r converts a charge power (kW) to a SoC rate (percent per hour).
@@ -303,17 +392,14 @@ func computeCantEmptyBeforeOffpeak(in cantEmptyInput) *bool {
 }
 
 // withinOffpeakWindow reports whether now (in Sydney local time per the
-// handler's invariant) falls inside the off-peak window [start, end).
-// Parsing is delegated to derivedstats.ParseOffpeakWindow so this stays a
-// single source of truth — unparseable inputs return false rather than
-// raising an error (consistent with how cutoff-time suppression degrades).
-func withinOffpeakWindow(now time.Time, offpeakStart, offpeakEnd string) bool {
-	startMin, endMin, ok := derivedstats.ParseOffpeakWindow(offpeakStart, offpeakEnd)
-	if !ok {
+// handler's invariant) falls inside the free window [start, end). A day with
+// no free window is never "within" one.
+func withinOffpeakWindow(now time.Time, window *offpeakWindow) bool {
+	if window == nil {
 		return false
 	}
 	minuteOfDay := now.Hour()*60 + now.Minute()
-	return minuteOfDay >= startMin && minuteOfDay < endMin
+	return minuteOfDay >= window.startMin && minuteOfDay < window.endMin
 }
 
 // computeRollingAverages returns the mean pload and pbat over the given readings.
@@ -481,26 +567,33 @@ func reconcileEnergy(computed *TodayEnergy, stored *TodayEnergy) *TodayEnergy {
 	}
 }
 
-// nextOffpeakStart returns the absolute Sydney-local time of the next
-// off-peak window start, used to suppress cutoff predictions that land at or
-// after the next scheduled charging window. Today's start is returned
-// whenever now is before today's end (including inside the window — during
-// which any future cutoff is also >= start, so it is suppressed); tomorrow's
-// start is returned once now has passed today's end. Returns (_, false) for
-// an unparseable off-peak configuration.
-func nextOffpeakStart(now time.Time, offpeakStart, offpeakEnd string) (time.Time, bool) {
-	startMin, endMin, ok := derivedstats.ParseOffpeakWindow(offpeakStart, offpeakEnd)
-	if !ok {
+// nextOffpeakStart returns the absolute Sydney-local time of the next free
+// window start, used to suppress cutoff predictions that land at or after the
+// next scheduled charging window. Today's start is returned whenever now is
+// before today's end (including inside the window — during which any future
+// cutoff is also >= start, so it is suppressed); tomorrow's start is returned
+// once now has passed today's end.
+//
+// Each candidate window comes from the plan pricing the day that window falls
+// on (Q11/AC 4.2): on the eve of a plan switch the successor's window is the
+// one the battery will actually charge in, so anchoring to today's plan would
+// suppress against a boundary that no longer exists. Returns (_, false) when
+// neither day has a free window.
+func nextOffpeakStart(now time.Time, plans []plan.Plan) (time.Time, bool) {
+	local := now.In(sydneyTZ)
+	if window := resolveOffpeakWindow(plans, local.Format("2006-01-02")); window != nil {
+		todayStart, todayEnd := window.bounds(local)
+		if local.Before(todayEnd) {
+			return todayStart, true
+		}
+	}
+	tomorrow := local.AddDate(0, 0, 1)
+	window := resolveOffpeakWindow(plans, tomorrow.Format("2006-01-02"))
+	if window == nil {
 		return time.Time{}, false
 	}
-	local := now.In(sydneyTZ)
-	dayStart := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, sydneyTZ)
-	todayStart := dayStart.Add(time.Duration(startMin) * time.Minute)
-	todayEnd := dayStart.Add(time.Duration(endMin) * time.Minute)
-	if !local.Before(todayEnd) {
-		return todayStart.AddDate(0, 0, 1), true
-	}
-	return todayStart, true
+	start, _ := window.bounds(tomorrow)
+	return start, true
 }
 
 // startOfDaySydney returns 00:00 on now's Sydney-local date, used as the

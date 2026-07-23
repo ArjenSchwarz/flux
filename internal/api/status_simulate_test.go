@@ -102,7 +102,7 @@ func TestHandleStatusSimulateWaterfall(t *testing.T) {
 					return &dynamo.SystemItem{SysSn: serial, Cobat: 13.34}, nil
 				},
 			}
-			h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+			h := newTestHandlerFor(mr, nil, testSerial, testToken)
 			h.nowFunc = func() time.Time { return now }
 
 			resp, err := h.Handle(context.Background(), simulateStatusRequest(strconv.Itoa(tc.watts)))
@@ -157,7 +157,7 @@ func TestHandleStatusSimulateEmptyByEarlier(t *testing.T) {
 	}
 
 	// Real (no simulation) cutoff.
-	hReal := NewHandler(mkReader(), nil, testSerial, testToken, "11:00", "14:00")
+	hReal := newTestHandlerFor(mkReader(), nil, testSerial, testToken)
 	hReal.nowFunc = func() time.Time { return now }
 	realResp, err := hReal.Handle(context.Background(), simulateStatusRequest(""))
 	require.NoError(t, err)
@@ -166,7 +166,7 @@ func TestHandleStatusSimulateEmptyByEarlier(t *testing.T) {
 	require.NotNil(t, realSR.Rolling15m.EstimatedCutoff, "precondition: real rolling cutoff present")
 
 	// Simulated cutoff with +2000 W.
-	hSim := NewHandler(mkReader(), nil, testSerial, testToken, "11:00", "14:00")
+	hSim := newTestHandlerFor(mkReader(), nil, testSerial, testToken)
 	hSim.nowFunc = func() time.Time { return now }
 	simResp, err := hSim.Handle(context.Background(), simulateStatusRequest("2000"))
 	require.NoError(t, err)
@@ -216,7 +216,7 @@ func TestHandleStatusSimulateNoEmptyByWhenCharging(t *testing.T) {
 			return &dynamo.SystemItem{SysSn: serial, Cobat: 13.34}, nil
 		},
 	}
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), simulateStatusRequest("1700"))
@@ -252,7 +252,7 @@ func TestHandleStatusSimulateOffpeakBoundaryGate(t *testing.T) {
 			return &dynamo.SystemItem{SysSn: serial, Cobat: 13.34}, nil
 		},
 	}
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), simulateStatusRequest("200"))
@@ -281,7 +281,7 @@ func TestHandleStatusSimulateStaleGate(t *testing.T) {
 			}, nil
 		},
 	}
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), simulateStatusRequest("1700"))
@@ -318,7 +318,7 @@ func TestHandleStatusSimulateInvalidParam(t *testing.T) {
 					}, nil
 				},
 			}
-			h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+			h := newTestHandlerFor(mr, nil, testSerial, testToken)
 			h.nowFunc = func() time.Time { return now }
 
 			resp, err := h.Handle(context.Background(), simulateStatusRequest(watts))
@@ -350,7 +350,7 @@ func TestHandleStatusSimulateBoundaryAccepted(t *testing.T) {
 					return &dynamo.SystemItem{SysSn: serial, Cobat: 13.34}, nil
 				},
 			}
-			h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+			h := newTestHandlerFor(mr, nil, testSerial, testToken)
 			h.nowFunc = func() time.Time { return now }
 
 			resp, err := h.Handle(context.Background(), simulateStatusRequest(watts))
@@ -376,7 +376,7 @@ func TestHandleStatusNoParamUnchanged(t *testing.T) {
 			return &dynamo.SystemItem{SysSn: serial, Cobat: 13.34}, nil
 		},
 	}
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), simulateStatusRequest(""))

@@ -1,7 +1,10 @@
 // Package api implements the Lambda API request handling and business logic.
 package api
 
-import "github.com/ArjenSchwarz/flux/internal/derivedstats"
+import (
+	"github.com/ArjenSchwarz/flux/internal/derivedstats"
+	"github.com/ArjenSchwarz/flux/internal/dynamo"
+)
 
 // StatusResponse is the JSON response for GET /status.
 type StatusResponse struct {
@@ -86,6 +89,35 @@ type OffpeakData struct {
 	ProjectedEndSoc     *float64 `json:"projectedEndSoc"`
 }
 
+// BandImport is one rated band's grid import for a day.
+//
+// Start and End are the band's "HH:MM" boundaries in Sydney local time (End
+// may be "24:00"), snapshotted alongside the value so a later plan-window
+// edit shows up to the client as a geometry mismatch instead of silently
+// mispricing the day (Q23).
+//
+// Only rated bands appear: the free band's import lives in
+// offpeakGridImportKwh, which owns that quantity exclusively (Q31).
+type BandImport struct {
+	Start string  `json:"start"`
+	End   string  `json:"end"`
+	Kwh   float64 `json:"kwh"`
+}
+
+// bandImportsFromAttr converts the stored per-band split to the wire shape.
+// Returns nil for an absent split so the field is omitted rather than sent as
+// an empty array, which a client could misread as "zero import in every band".
+func bandImportsFromAttr(stored []dynamo.BandImportAttr) []BandImport {
+	if len(stored) == 0 {
+		return nil
+	}
+	out := make([]BandImport, len(stored))
+	for i, b := range stored {
+		out[i] = BandImport{Start: b.Start, End: b.End, Kwh: b.Kwh}
+	}
+	return out
+}
+
 // TodayEnergy contains cumulative energy totals for the current day.
 type TodayEnergy struct {
 	Epv        float64 `json:"epv"`
@@ -119,6 +151,7 @@ type DayEnergy struct {
 	OffpeakGridImportKwh *float64                  `json:"offpeakGridImportKwh,omitempty"`
 	OffpeakGridExportKwh *float64                  `json:"offpeakGridExportKwh,omitempty"`
 	PeakGridImportKwh    *float64                  `json:"peakGridImportKwh,omitempty"`
+	BandImports          []BandImport              `json:"bandImports,omitempty"`
 	DailyUsage           *derivedstats.DailyUsage  `json:"dailyUsage,omitempty"`
 	SocLow               *float64                  `json:"socLow,omitempty"`
 	SocLowTime           *string                   `json:"socLowTime,omitempty"`
@@ -189,4 +222,8 @@ type DaySummary struct {
 	OffpeakGridImportKwh *float64 `json:"offpeakGridImportKwh,omitempty"`
 	OffpeakGridExportKwh *float64 `json:"offpeakGridExportKwh,omitempty"`
 	PeakGridImportKwh    *float64 `json:"peakGridImportKwh,omitempty"`
+
+	// BandImports is the day's rated-band import split, absent when the day
+	// is unpriced or its split is unavailable (AC 3.6).
+	BandImports []BandImport `json:"bandImports,omitempty"`
 }

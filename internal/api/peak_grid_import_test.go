@@ -40,7 +40,7 @@ func TestHandleDayPeakGridImport(t *testing.T) {
 				}, nil
 			},
 		}
-		h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+		h := newTestHandlerFor(mr, nil, testSerial, testToken)
 		h.nowFunc = fixedNow
 
 		resp, err := h.Handle(context.Background(), dayRequest(map[string]string{"date": date}))
@@ -60,7 +60,7 @@ func TestHandleDayPeakGridImport(t *testing.T) {
 				return &dynamo.DailyEnergyItem{Date: date, EInput: 4.2}, nil
 			},
 		}
-		h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+		h := newTestHandlerFor(mr, nil, testSerial, testToken)
 		h.nowFunc = fixedNow
 
 		resp, err := h.Handle(context.Background(), dayRequest(map[string]string{"date": date}))
@@ -88,7 +88,7 @@ func TestHandleHistoryPeakGridImport(t *testing.T) {
 			}, nil
 		},
 	}
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), historyRequest(map[string]string{"days": "30"}))
@@ -126,7 +126,7 @@ func TestHandleDayTodayLivePeakGridImport(t *testing.T) {
 	readings := uniformTodayReadings(dayStart, now, 3600) // [00:00, 10:00].
 
 	// Expected = the same live integration the handler performs, rounded.
-	rawPeak, ok := livePeakGridImport(readings, now, "11:00", "14:00")
+	rawPeak, ok := livePeakGridImport(readings, now, win("11:00", "14:00"))
 	require.True(t, ok)
 	wantPeak := derivedstats.RoundEnergy(rawPeak)
 	require.Greater(t, wantPeak, 0.0)
@@ -145,7 +145,7 @@ func TestHandleDayTodayLivePeakGridImport(t *testing.T) {
 			return nil, nil
 		},
 	}
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), dayRequest(map[string]string{"date": date}))
@@ -169,7 +169,7 @@ func TestHandleHistoryTodayLivePeakGridImport(t *testing.T) {
 	dayStart := time.Date(2026, 4, 15, 0, 0, 0, 0, sydneyTZ)
 	readings := uniformTodayReadings(dayStart, now, 3600)
 
-	rawPeak, ok := livePeakGridImport(readings, now, "11:00", "14:00")
+	rawPeak, ok := livePeakGridImport(readings, now, win("11:00", "14:00"))
 	require.True(t, ok)
 	wantPeak := derivedstats.RoundEnergy(rawPeak)
 
@@ -185,7 +185,7 @@ func TestHandleHistoryTodayLivePeakGridImport(t *testing.T) {
 			return nil, nil
 		},
 	}
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), historyRequest(map[string]string{"days": "7"}))
@@ -238,7 +238,7 @@ func TestTodayPeakGridImportConsistentAcrossEndpoints(t *testing.T) {
 				return []dynamo.DailyEnergyItem{{Date: today, EInput: 3.0}}, nil
 			},
 		}
-		h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+		h := newTestHandlerFor(mr, nil, testSerial, testToken)
 		h.nowFunc = func() time.Time { return now }
 		return h
 	}
@@ -280,7 +280,7 @@ func TestHandleStatusLivePeakGridImport(t *testing.T) {
 	dayStart := time.Date(2026, 4, 15, 0, 0, 0, 0, sydneyTZ)
 	readings := uniformTodayReadings(dayStart, now, 3600)
 
-	rawPeak, ok := livePeakGridImport(readings, now, "11:00", "14:00")
+	rawPeak, ok := livePeakGridImport(readings, now, win("11:00", "14:00"))
 	require.True(t, ok)
 	wantPeak := derivedstats.RoundEnergy(rawPeak)
 
@@ -298,7 +298,7 @@ func TestHandleStatusLivePeakGridImport(t *testing.T) {
 			return &dynamo.DailyEnergyItem{Date: date, EInput: 3.0}, nil
 		},
 	}
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), statusRequest())

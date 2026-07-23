@@ -8,6 +8,7 @@ import (
 
 	"github.com/ArjenSchwarz/flux/internal/derivedstats"
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
+	"github.com/ArjenSchwarz/flux/internal/plan"
 	"github.com/aws/aws-lambda-go/events"
 	"golang.org/x/sync/errgroup"
 )
@@ -87,9 +88,18 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 	var (
 		items        []dynamo.DailyEnergyItem
 		offpeakItems []dynamo.OffpeakItem
+		plans        []plan.Plan
 	)
 
 	g, gctx := errgroup.WithContext(ctx)
+	// One plan fetch for the whole range; per-day windows are resolved from it
+	// below. Gated, unlike the supplementary off-peak query: a read failure
+	// must fail the request rather than resolve as "no plan" (Q14).
+	g.Go(func() error {
+		rows, err := h.listPlans(gctx)
+		plans = rows
+		return err
+	})
 	g.Go(func() error {
 		result, err := h.reader.QueryDailyEnergy(gctx, h.serial, startDate, endDate)
 		items = result
@@ -202,8 +212,11 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 			ECharge:    energy.ECharge,
 			EDischarge: energy.EDischarge,
 		}
+		// Each day takes the free window of the plan pricing that day, so a
+		// range spanning a switch date attributes each side correctly.
+		window := resolveOffpeakWindow(plans, item.Date)
 		if op, ok := offpeakByDate[item.Date]; ok {
-			imp, exp, hasSplit := offpeakSplit(op, todayReadings, now, isItemToday, h.offpeakStart, h.offpeakEnd)
+			imp, exp, hasSplit := offpeakSplit(op, todayReadings, now, isItemToday, window)
 			if hasSplit {
 				day.OffpeakGridImportKwh = floatPtr(imp)
 				day.OffpeakGridExportKwh = floatPtr(exp)
@@ -215,11 +228,22 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 		// the stored server-computed value; absent on either path falls through
 		// to the iOS residual fallback (e.g. pre-30-day rows, Decision 4b).
 		if isItemToday {
-			if peak, ok := livePeakGridImport(todayReadings, now, h.offpeakStart, h.offpeakEnd); ok {
+			if peak, ok := livePeakGridImport(todayReadings, now, window); ok {
 				day.PeakGridImportKwh = floatPtr(derivedstats.RoundEnergy(peak))
 			}
 		} else if item.PeakGridImportKwh != nil {
 			day.PeakGridImportKwh = floatPtr(*item.PeakGridImportKwh)
+		}
+		// Per-band import split: today via the same helper /day uses (AC 3.4),
+		// past rows from the split captured at day close.
+		if isItemToday {
+			if p, priced := plan.PlanFor(plans, item.Date); priced {
+				if bands, ok := liveBandImports(todayReadings, now, p); ok {
+					day.BandImports = bands
+				}
+			}
+		} else {
+			day.BandImports = bandImportsFromAttr(item.BandImports)
 		}
 		if note, ok := notesByDate[item.Date]; ok {
 			n := note
@@ -242,8 +266,9 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 			if todayDerivedReadings == nil {
 				todayDerivedReadings = toDerivedReadings(todayReadings)
 			}
-			day.DailyUsage = derivedstats.Blocks(todayDerivedReadings, h.offpeakStart, h.offpeakEnd, today, today, now)
-			day.PeakPeriods = derivedstats.PeakPeriods(todayDerivedReadings, h.offpeakStart, h.offpeakEnd)
+			windowStart, windowEnd := hhmmBounds(window)
+			day.DailyUsage = derivedstats.Blocks(todayDerivedReadings, windowStart, windowEnd, today, today, now)
+			day.PeakPeriods = derivedstats.PeakPeriods(todayDerivedReadings, windowStart, windowEnd)
 			if soc, ts, found := derivedstats.MinSOC(todayDerivedReadings); found {
 				slv := soc
 				day.SocLow = &slv
@@ -265,12 +290,12 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 //
 // Complete records pass through the finalised deltas. A pending record on
 // today's date live-integrates from the readings slice over
-// [offpeak-start, min(now, offpeak-end)). Pending records on past dates
+// [window start, min(now, window end)). Pending records on past dates
 // indicate a poller failure and are reported as missing rather than zero.
-// Returns hasSplit=false when the data is not usable (sparse readings or
-// pre-window now).
+// Returns hasSplit=false when the data is not usable (sparse readings,
+// pre-window now, or a day with no free window).
 func offpeakSplit(op dynamo.OffpeakItem, readings []dynamo.ReadingItem, now time.Time,
-	isToday bool, offpeakStart, offpeakEnd string,
+	isToday bool, window *offpeakWindow,
 ) (imp, exp float64, hasSplit bool) {
 	if op.Status == dynamo.OffpeakStatusComplete {
 		deltas, ok := offpeakDeltas(op)
@@ -282,7 +307,7 @@ func offpeakSplit(op dynamo.OffpeakItem, readings []dynamo.ReadingItem, now time
 	if op.Status != dynamo.OffpeakStatusPending || !isToday {
 		return 0, 0, false
 	}
-	deltas, ok := liveOffpeakDeltas(readings, now, offpeakStart, offpeakEnd)
+	deltas, ok := liveOffpeakDeltas(readings, now, window)
 	if !ok {
 		return 0, 0, false
 	}

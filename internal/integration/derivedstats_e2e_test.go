@@ -185,7 +185,8 @@ func TestEndToEnd_DerivedStatsRoundTrip(t *testing.T) {
 	// Verify the Lambda /day handler reads the row and surfaces the
 	// derivedStats sections to clients (read side of the AC 6.7 contract).
 	const apiToken = "test-token"
-	h := api.NewHandler(reader, nil, serial, apiToken, "11:00", "14:00")
+	h := api.NewHandler(reader, nil, serial, apiToken)
+	h.SetPricingStore(fixedPlanStore{})
 	// 12:00 AEST on 2026-04-15 ⇒ /day for 2026-04-14 takes the past-date
 	// branch (reads from storage, not the readings table).
 	h.SetNow(func() time.Time { return time.Date(2026, 4, 15, 12, 0, 0, 0, loc) })
@@ -263,4 +264,41 @@ func TestEndToEnd_DerivedStatsRoundTrip(t *testing.T) {
 		require.NotNil(t, b.SolarKwh, "/history must surface SolarKwh on %s", kind)
 		require.InDelta(t, *storedByKind[kind].SolarKwh, *b.SolarKwh, 1e-9, "/history SolarKwh must match storage for %s", kind)
 	}
+}
+
+// fixedPlanStore is a read-only api.PricingStore serving one open-ended plan
+// with the free window this test's fixtures were computed under. The Lambda
+// derives the off-peak window from plans, so /day and /history need a plan;
+// the pricing table itself is not what this test exercises, so the store is
+// stubbed rather than provisioned in DynamoDB Local.
+type fixedPlanStore struct{}
+
+func (fixedPlanStore) ListPricing(context.Context) ([]dynamo.PricingItem, error) {
+	savings := 0.15
+	return []dynamo.PricingItem{{
+		PricingID:            "e2e-plan",
+		StartDate:            "2000-01-01",
+		DefaultRate:          0.3,
+		Windows:              []dynamo.PricingWindow{{Start: "11:00", End: "14:00", Free: true}},
+		FeedInRate:           0.05,
+		SavingsReferenceRate: &savings,
+	}}, nil
+}
+
+func (fixedPlanStore) GetPricing(context.Context, string) (*dynamo.PricingItem, error) {
+	return nil, nil
+}
+
+func (fixedPlanStore) GetSentinel(context.Context) (*dynamo.PricingSentinel, error) {
+	return nil, nil
+}
+
+func (fixedPlanStore) PutPricing(context.Context, dynamo.PricingItem, *string) error { return nil }
+
+func (fixedPlanStore) UpdatePricing(context.Context, dynamo.PricingItem, *string) error { return nil }
+
+func (fixedPlanStore) DeletePricing(context.Context, string, *string) error { return nil }
+
+func (fixedPlanStore) ReplaceOpenEnded(context.Context, string, string, string, dynamo.PricingItem) error {
+	return nil
 }

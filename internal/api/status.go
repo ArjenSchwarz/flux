@@ -7,6 +7,7 @@ import (
 
 	"github.com/ArjenSchwarz/flux/internal/derivedstats"
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
+	"github.com/ArjenSchwarz/flux/internal/plan"
 	"github.com/aws/aws-lambda-go/events"
 	"golang.org/x/sync/errgroup"
 )
@@ -52,6 +53,7 @@ func (h *Handler) handleStatus(ctx context.Context, req events.LambdaFunctionURL
 		sysItem     *dynamo.SystemItem
 		opItem      *dynamo.OffpeakItem
 		deItem      *dynamo.DailyEnergyItem
+		plans       []plan.Plan
 	)
 
 	g, gctx := errgroup.WithContext(ctx)
@@ -59,6 +61,14 @@ func (h *Handler) handleStatus(ctx context.Context, req events.LambdaFunctionURL
 	g.Go(func() error {
 		items, err := h.reader.QueryReadings(gctx, h.serial, nowUnix-86400, nowUnix)
 		allReadings = items
+		return err
+	})
+	// Plans join the gated queries (Q25): the table holds a handful of rows,
+	// and a read failure must fail the request rather than resolve as "no
+	// plan" (Q14).
+	g.Go(func() error {
+		rows, err := h.listPlans(gctx)
+		plans = rows
 		return err
 	})
 	g.Go(func() error {
@@ -132,11 +142,15 @@ func (h *Handler) handleStatus(ctx context.Context, req events.LambdaFunctionURL
 		CutoffPercent: cutoffPercent,
 	}
 
+	// todayWindow is the free window of the plan pricing today (AC 4.1); nil
+	// when that plan has no free band or no plan prices today.
+	todayWindow := resolveOffpeakWindow(plans, today)
+
 	// nextOpWindowStart is the absolute Sydney-local time of the next off-peak
 	// window start. Cutoff predictions at or after this boundary are
 	// suppressed — the battery will be charged during that window, so any
 	// projected cutoff past the boundary never actually occurs.
-	nextOpWindowStart, hasOffpeakBoundary := nextOffpeakStart(now, h.offpeakStart, h.offpeakEnd)
+	nextOpWindowStart, hasOffpeakBoundary := nextOffpeakStart(now, plans)
 
 	if liveFresh {
 		latest := allReadings[len(allReadings)-1]
@@ -169,7 +183,7 @@ func (h *Handler) handleStatus(ctx context.Context, req events.LambdaFunctionURL
 				Now:                 now,
 				NextOpStart:         nextOpWindowStart,
 				HasBoundary:         hasOffpeakBoundary,
-				WithinOffpeakWindow: withinOffpeakWindow(now, h.offpeakStart, h.offpeakEnd),
+				WithinOffpeakWindow: withinOffpeakWindow(now, todayWindow),
 			})
 		}
 	}
@@ -239,22 +253,23 @@ func (h *Handler) handleStatus(ctx context.Context, req events.LambdaFunctionURL
 	}
 	resp.TodayEnergy = reconcileEnergy(computedEnergy, storedEnergy)
 
-	// Off-peak data — always includes window times, plus deltas when
-	// complete (from the finalised row) or pending today (live-integrated
-	// from the readings already in memory for live compute).
-	resp.Offpeak = buildOffpeak(opItem, allReadings, now, h.offpeakStart, h.offpeakEnd)
+	// Off-peak data — window times plus deltas when complete (from the
+	// finalised row) or pending today (live-integrated from the readings
+	// already in memory for live compute). Null on a day with no free window.
+	resp.Offpeak = buildOffpeak(opItem, allReadings, now, todayWindow)
 
 	// Projected SoC at the off-peak window end (T-1533). Computed only on the
 	// fresh-live branch — same gate as EstimatedCutoff (AC 2.2) — and reusing
 	// the `capacity` variable already resolved above so the two figures never
 	// disagree about capacity (AC 1.4). projectOffpeakEndSoc returns nil
-	// outside the window, on an unparseable window, or for non-positive
+	// outside the window, on a day with no free window, or for non-positive
 	// capacity; it never reads Pbat or the simulated load, so an active
-	// simulation leaves the projection unchanged (AC 1.9, AC 2.4). resp.Offpeak
-	// is always non-nil here (buildOffpeak always returns window times).
+	// simulation leaves the projection unchanged (AC 1.9, AC 2.4). A non-nil
+	// projection implies a resolved window, which implies resp.Offpeak is
+	// non-nil — both derive from the same todayWindow.
 	if liveFresh {
 		latest := allReadings[len(allReadings)-1]
-		if p := projectOffpeakEndSoc(latest.Soc, capacity, now, h.offpeakStart, h.offpeakEnd); p != nil {
+		if p := projectOffpeakEndSoc(latest.Soc, capacity, now, todayWindow); p != nil {
 			resp.Offpeak.ProjectedEndSoc = p
 		}
 	}
@@ -263,7 +278,7 @@ func (h *Handler) handleStatus(ctx context.Context, req events.LambdaFunctionURL
 	// two windows bracketing off-peak, independent of reconcileEnergy so the
 	// off-peak sampling artifact never lands on peak (T-1421). Absent until the
 	// morning window has enough samples; iOS then uses its residual fallback.
-	if peak, ok := livePeakGridImport(allReadings, now, h.offpeakStart, h.offpeakEnd); ok {
+	if peak, ok := livePeakGridImport(allReadings, now, todayWindow); ok {
 		resp.PeakGridImportKwh = floatPtr(derivedstats.RoundEnergy(peak))
 	}
 
@@ -285,21 +300,31 @@ func filterReadings(readings []dynamo.ReadingItem, from, to int64) []dynamo.Read
 
 // buildOffpeak constructs the OffpeakData response.
 //
-// Window times are always included. Deltas come from one of two sources:
+// Returns nil when the day has no free window — either its plan has no free
+// band or no plan prices it (Q35/AC 4.4). The whole object is absent in that
+// case rather than carrying empty window strings, because a client that
+// received a window-less object would have nothing to render and might
+// substitute its own default window constants.
+//
+// When a window exists its times are always included. Deltas come from one of
+// two sources:
 //   - Complete record: the poller has finalised the five integration-sourced
 //     deltas, served directly from the row.
 //   - Pending record on today, with now inside the window: live-integrate
-//     readings over [offpeak-start, min(now, offpeak-end)). Battery delta
+//     readings over [window start, min(now, window end)). Battery delta
 //     percent is unknown mid-window because we lack a fixed end SOC.
 //
 // Returns deltas as nil when neither source is usable (no row, pending row
 // before the window opens, or sparse readings).
 func buildOffpeak(item *dynamo.OffpeakItem, readings []dynamo.ReadingItem, now time.Time,
-	offpeakStart, offpeakEnd string,
+	window *offpeakWindow,
 ) *OffpeakData {
+	if window == nil {
+		return nil
+	}
 	od := &OffpeakData{
-		WindowStart: offpeakStart,
-		WindowEnd:   offpeakEnd,
+		WindowStart: window.startHHMM(),
+		WindowEnd:   window.endHHMM(),
 	}
 	if item == nil {
 		return od
@@ -313,7 +338,7 @@ func buildOffpeak(item *dynamo.OffpeakItem, readings []dynamo.ReadingItem, now t
 	case dynamo.OffpeakStatusComplete:
 		deltas, ok = offpeakDeltas(*item)
 	case dynamo.OffpeakStatusPending:
-		deltas, ok = liveOffpeakDeltas(readings, now, offpeakStart, offpeakEnd)
+		deltas, ok = liveOffpeakDeltas(readings, now, window)
 	}
 	if !ok {
 		return od

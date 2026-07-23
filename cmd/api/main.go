@@ -20,17 +20,15 @@ import (
 
 // config holds all resolved configuration for the Lambda.
 type config struct {
-	reader       dynamo.Reader
-	notes        api.NoteWriter
-	devices      api.DeviceStore
-	rules        api.SocRuleStore
-	fireState    api.FireStateCleaner
-	pricing      api.PricingStore
-	presets      api.SimulationPresetStore
-	apiToken     string
-	serial       string
-	offpeakStart string
-	offpeakEnd   string
+	reader    dynamo.Reader
+	notes     api.NoteWriter
+	devices   api.DeviceStore
+	rules     api.SocRuleStore
+	fireState api.FireStateCleaner
+	pricing   api.PricingStore
+	presets   api.SimulationPresetStore
+	apiToken  string
+	serial    string
 }
 
 // requiredEnvVars lists environment variables that must be set.
@@ -46,8 +44,6 @@ var requiredEnvVars = []string{
 	"TABLE_SOC_FIRESTATE",
 	"TABLE_PRICING",
 	"TABLE_SIMULATION_PRESETS",
-	"OFFPEAK_START",
-	"OFFPEAK_END",
 	"API_TOKEN_PARAM",
 	"SYSTEM_SERIAL_PARAM",
 }
@@ -62,7 +58,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	handler := api.NewHandler(cfg.reader, cfg.notes, cfg.serial, cfg.apiToken, cfg.offpeakStart, cfg.offpeakEnd)
+	handler := api.NewHandler(cfg.reader, cfg.notes, cfg.serial, cfg.apiToken)
 	handler.SetDeviceStore(cfg.devices)
 	handler.SetSocRuleStore(cfg.rules)
 	handler.SetFireStateCleaner(cfg.fireState)
@@ -125,17 +121,15 @@ func loadConfig(ctx context.Context) (*config, error) {
 	presets := dynamo.NewDynamoSimulationPresetStore(ddbClient, os.Getenv("TABLE_SIMULATION_PRESETS"))
 
 	return &config{
-		reader:       reader,
-		notes:        notes,
-		devices:      devices,
-		rules:        socRuleStoreAdapter{reader: ruleReader, writer: ruleWriter},
-		fireState:    fireStateCleanerAdapter{store: fireState},
-		pricing:      pricingStoreAdapter{store: pricing},
-		presets:      presets,
-		apiToken:     apiToken,
-		serial:       serial,
-		offpeakStart: os.Getenv("OFFPEAK_START"),
-		offpeakEnd:   os.Getenv("OFFPEAK_END"),
+		reader:    reader,
+		notes:     notes,
+		devices:   devices,
+		rules:     socRuleStoreAdapter{reader: ruleReader, writer: ruleWriter},
+		fireState: fireStateCleanerAdapter{store: fireState},
+		pricing:   pricingStoreAdapter{store: pricing},
+		presets:   presets,
+		apiToken:  apiToken,
+		serial:    serial,
 	}, nil
 }
 

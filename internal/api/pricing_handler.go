@@ -11,25 +11,44 @@ import (
 	"time"
 
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
+	"github.com/ArjenSchwarz/flux/internal/plan"
 )
 
-// pricingPayload is the wire shape of POST /pricing and PUT
-// /pricing/{id}. JSON numbers decode into float64 unchanged; the
-// validator rejects > 4 decimal places before rounding.
+// pricingPayload is the wire shape of POST /pricing and PUT /pricing/{id}.
+//
+// The plan is transmitted as entered — a default rate plus the exception
+// windows that deviate from it (Decision 4) — and endDate is the exclusive
+// switch date (Decision 5), stored verbatim. Rates are pointers so a missing
+// field is distinguishable from an explicit zero; the validator rejects more
+// than 4 decimal places before anything is rounded.
 type pricingPayload struct {
-	StartDate          string   `json:"startDate"`
-	EndDate            *string  `json:"endDate,omitempty"`
-	PeakRate           *float64 `json:"peakRate"`
-	FeedInRate         *float64 `json:"feedInRate"`
-	OffPeakSavingsRate *float64 `json:"offPeakSavingsRate"`
+	StartDate            string          `json:"startDate"`
+	EndDate              *string         `json:"endDate,omitempty"`
+	DefaultRate          *float64        `json:"defaultRate"`
+	Windows              []windowPayload `json:"windows"`
+	FeedInRate           *float64        `json:"feedInRate"`
+	SavingsReferenceRate *float64        `json:"savingsReferenceRate,omitempty"`
+}
+
+// windowPayload is one exception window. Rate is absent on a free window.
+type windowPayload struct {
+	Start string   `json:"start"`
+	End   string   `json:"end"`
+	Free  bool     `json:"free"`
+	Rate  *float64 `json:"rate,omitempty"`
 }
 
 // replaceOpenEndedPayload is the wire shape of
-// POST /pricing/replace-open-ended.
+// POST /pricing/replace-open-ended. NewPeriod stays raw so the legacy-shape
+// check below can inspect its keys before decoding.
 type replaceOpenEndedPayload struct {
-	ClosingPricingID string         `json:"closingPricingId"`
-	NewPeriod        pricingPayload `json:"newPeriod"`
+	ClosingPricingID string          `json:"closingPricingId"`
+	NewPeriod        json.RawMessage `json:"newPeriod"`
 }
+
+// legacyPayloadMarker is the field whose presence identifies a pre-migration
+// three-rate payload. The band shape has no such field.
+const legacyPayloadMarker = "peakRate"
 
 // SetPricingStore wires the pricing CRUD dependency. Called by
 // cmd/api/main.go and rebuilds the mux so the routes pick up the store.
@@ -38,19 +57,21 @@ func (h *Handler) SetPricingStore(s PricingStore) {
 }
 
 // pricingError is the JSON response shape for every pricing error.
-// `openEndedId` is populated only when the offending row of an overlap
-// is the unique open-ended period — the editor needs the id to surface
-// the one-tap remediation from AC 3.6.
+//
+// `conflictingPricingId` names the plan an overlap collides with (AC 2.5).
+// `openEndedId` is populated only when that offender is the unique
+// open-ended plan — the editor needs the id to surface the one-tap
+// remediation from AC 6.5.
 type pricingError struct {
-	Error       string `json:"error"`
-	Message     string `json:"message"`
-	OpenEndedID string `json:"openEndedId,omitempty"`
+	Error                string `json:"error"`
+	Message              string `json:"message"`
+	OpenEndedID          string `json:"openEndedId,omitempty"`
+	ConflictingPricingID string `json:"conflictingPricingId,omitempty"`
 }
 
 // writePricingError serialises a {"error","message"} response with the
-// given HTTP status. Unlike writeJSONError, this carries the AC 2.3
-// machine-parseable code in the "error" field and the human-readable
-// description in "message".
+// given HTTP status. Unlike writeJSONError, this carries the machine-parseable
+// code in the "error" field and the human-readable description in "message".
 func writePricingError(w http.ResponseWriter, status int, code, message string) {
 	body, err := json.Marshal(pricingError{Error: code, Message: message})
 	if err != nil {
@@ -62,27 +83,29 @@ func writePricingError(w http.ResponseWriter, status int, code, message string) 
 	_, _ = w.Write(body)
 }
 
-// writePricingOverlapError surfaces the offending open-ended row id when
-// the offender is the unique open-ended period; otherwise behaves
-// exactly like writePricingError. The id powers the editor's AC 3.6
-// one-tap remediation flow.
-func writePricingOverlapError(w http.ResponseWriter, openEndedID string) {
-	body, err := json.Marshal(pricingError{
-		Error:       pricingCodeOverlap,
-		Message:     "pricing period overlaps an existing one",
-		OpenEndedID: openEndedID,
-	})
+// writePricingOverlapError names the plan the candidate collides with, and
+// additionally surfaces it as `openEndedId` when that plan is the unique
+// open-ended one — the id that powers the editor's remediation flow.
+func writePricingOverlapError(w http.ResponseWriter, conflictingID string, isOpenEnded bool) {
+	payload := pricingError{
+		Error:                pricingCodeOverlap,
+		Message:              "pricing plan overlaps existing plan " + conflictingID,
+		ConflictingPricingID: conflictingID,
+	}
+	if isOpenEnded {
+		payload.OpenEndedID = conflictingID
+	}
+	body, err := json.Marshal(payload)
 	if err != nil {
 		slog.Error("marshal pricing overlap error", "error", err)
-		body = []byte(`{"error":"overlap","message":"pricing period overlaps an existing one"}`)
+		body = []byte(`{"error":"overlap","message":"pricing plan overlaps an existing one"}`)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusBadRequest)
 	_, _ = w.Write(body)
 }
 
-// handleListPricing returns every pricing period sorted by startDate
-// ascending. AC 2.5.
+// handleListPricing returns every pricing plan sorted by startDate ascending.
 func (h *Handler) handleListPricing(w http.ResponseWriter, r *http.Request) {
 	if h.pricing == nil {
 		writePricingError(w, http.StatusInternalServerError, pricingCodeInternal, "pricing store not configured")
@@ -99,8 +122,8 @@ func (h *Handler) handleListPricing(w http.ResponseWriter, r *http.Request) {
 	}{Pricing: rows})
 }
 
-// handleCreatePricing validates the payload, enforces AC 1.10 ordering,
-// assigns server-side id/timestamps, and writes the row.
+// handleCreatePricing validates the payload, assigns server-side
+// id/timestamps, and writes the row.
 func (h *Handler) handleCreatePricing(w http.ResponseWriter, r *http.Request) {
 	if h.pricing == nil {
 		writePricingError(w, http.StatusInternalServerError, pricingCodeInternal, "pricing store not configured")
@@ -126,10 +149,7 @@ func (h *Handler) handleCreatePricing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := h.nowFunc().UTC().Format(time.RFC3339)
-	item, ok := buildPricingItem(w, payload, h.idFunc(), now, now)
-	if !ok {
-		return
-	}
+	item := payload.toItem(h.idFunc(), now, now)
 
 	if err := h.pricing.PutPricing(r.Context(), item, prevOpenEndedID); err != nil {
 		mapPricingStoreError(w, "put pricing", err)
@@ -139,8 +159,7 @@ func (h *Handler) handleCreatePricing(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleUpdatePricing validates and overwrites an existing pricing row.
-// AC 1.7 / Decision 17: the row being updated is excluded from the
-// overlap check.
+// Decision 17: the row being updated is excluded from the overlap check.
 func (h *Handler) handleUpdatePricing(w http.ResponseWriter, r *http.Request) {
 	if h.pricing == nil {
 		writePricingError(w, http.StatusInternalServerError, pricingCodeInternal, "pricing store not configured")
@@ -170,7 +189,7 @@ func (h *Handler) handleUpdatePricing(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if current == nil {
-		writePricingError(w, http.StatusNotFound, pricingCodeNotFound, "pricing period not found")
+		writePricingError(w, http.StatusNotFound, pricingCodeNotFound, "pricing plan not found")
 		return
 	}
 	if !runPricingValidationChain(w, payload, existing, id) {
@@ -182,10 +201,7 @@ func (h *Handler) handleUpdatePricing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := h.nowFunc().UTC().Format(time.RFC3339)
-	item, ok := buildPricingItem(w, payload, id, current.CreatedAt, now)
-	if !ok {
-		return
-	}
+	item := payload.toItem(id, current.CreatedAt, now)
 
 	if err := h.pricing.UpdatePricing(r.Context(), item, prevOpenEndedID); err != nil {
 		mapPricingStoreError(w, "update pricing", err)
@@ -194,8 +210,8 @@ func (h *Handler) handleUpdatePricing(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, item)
 }
 
-// handleDeletePricing removes a pricing row by id. AC 2.4 / Decision 11:
-// 404 on unknown id, 204 on success.
+// handleDeletePricing removes a pricing row by id. Decision 11: 404 on
+// unknown id, 204 on success.
 func (h *Handler) handleDeletePricing(w http.ResponseWriter, r *http.Request) {
 	if h.pricing == nil {
 		writePricingError(w, http.StatusInternalServerError, pricingCodeInternal, "pricing store not configured")
@@ -213,7 +229,7 @@ func (h *Handler) handleDeletePricing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if existing == nil {
-		writePricingError(w, http.StatusNotFound, pricingCodeNotFound, "pricing period not found")
+		writePricingError(w, http.StatusNotFound, pricingCodeNotFound, "pricing plan not found")
 		return
 	}
 	prevOpenEndedID, ok := loadPrevOpenEndedID(w, r.Context(), h.pricing, "delete")
@@ -228,9 +244,10 @@ func (h *Handler) handleDeletePricing(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleReplaceOpenEnded atomically closes the existing open-ended row
-// at startDate − 1 day and inserts a new pricing row (AC 2.6). The
-// closing-row endDate is derived server-side per AC 3.6.
+// handleReplaceOpenEnded atomically closes the existing open-ended plan on the
+// successor's start date and inserts the successor (AC 2.2/2.6). Both rows
+// carry the same literal date: the predecessor's exclusive end is the
+// successor's inclusive start, so the switch day belongs to the successor.
 func (h *Handler) handleReplaceOpenEnded(w http.ResponseWriter, r *http.Request) {
 	if h.pricing == nil {
 		writePricingError(w, http.StatusInternalServerError, pricingCodeInternal, "pricing store not configured")
@@ -251,6 +268,10 @@ func (h *Handler) handleReplaceOpenEnded(w http.ResponseWriter, r *http.Request)
 		writePricingError(w, http.StatusBadRequest, pricingCodeBadRequest, "closingPricingId required")
 		return
 	}
+	newPeriod, ok := parsePricingPayload(w, payload.NewPeriod)
+	if !ok {
+		return
+	}
 
 	existing, err := h.pricing.ListPricing(r.Context())
 	if err != nil {
@@ -266,25 +287,25 @@ func (h *Handler) handleReplaceOpenEnded(w http.ResponseWriter, r *http.Request)
 		}
 	}
 	if closing == nil {
-		writePricingError(w, http.StatusNotFound, pricingCodeNotFound, "closing pricing period not found")
+		writePricingError(w, http.StatusNotFound, pricingCodeNotFound, "closing pricing plan not found")
 		return
 	}
 	if closing.EndDate != nil {
-		writePricingError(w, http.StatusBadRequest, pricingCodeSecondOpenEnded, "closing period is not open-ended")
+		writePricingError(w, http.StatusBadRequest, pricingCodeSecondOpenEnded, "closing plan is not open-ended")
 		return
 	}
 
-	// Format-validate the new period's startDate up front so a malformed
-	// value surfaces with the same error code the validation chain uses
-	// elsewhere, not as a muddied "newPeriod.startDate invalid". The full
-	// validation chain runs below against the projected post-write state.
-	if !validISODate(payload.NewPeriod.StartDate) {
+	// Format-validate the successor's startDate up front so a malformed value
+	// surfaces with the same error code the validation chain uses elsewhere,
+	// not as a muddied "newPeriod.startDate invalid". The full chain runs
+	// below against the projected post-write state.
+	if !validISODate(newPeriod.StartDate) {
 		writePricingError(w, http.StatusBadRequest, pricingCodeInvertedDates, "newPeriod.startDate must be YYYY-MM-DD")
 		return
 	}
-	// Under exclusive end dates the closing row ends on the successor's
-	// start date — the same literal string, no ±1 arithmetic (Decision 5).
-	closingEndDate := payload.NewPeriod.StartDate
+	// Under exclusive end dates the closing row ends on the successor's start
+	// date — the same literal string, no ±1 arithmetic (Decision 5).
+	closingEndDate := newPeriod.StartDate
 
 	// Simulate the resulting two-row state (closing capped at the switch
 	// date; new row inserted) and run the same validation chain against it.
@@ -299,15 +320,12 @@ func (h *Handler) handleReplaceOpenEnded(w http.ResponseWriter, r *http.Request)
 			projected = append(projected, row)
 		}
 	}
-	if !runPricingValidationChain(w, payload.NewPeriod, projected, "") {
+	if !runPricingValidationChain(w, newPeriod, projected, "") {
 		return
 	}
 
 	now := h.nowFunc().UTC().Format(time.RFC3339)
-	newItem, ok := buildPricingItem(w, payload.NewPeriod, h.idFunc(), now, now)
-	if !ok {
-		return
-	}
+	newItem := newPeriod.toItem(h.idFunc(), now, now)
 	if err := h.pricing.ReplaceOpenEnded(r.Context(), payload.ClosingPricingID, closingEndDate, now, newItem); err != nil {
 		mapPricingStoreError(w, "replace open-ended pricing", err)
 		return
@@ -327,8 +345,8 @@ func (h *Handler) handleReplaceOpenEnded(w http.ResponseWriter, r *http.Request)
 	}{Pricing: []dynamo.PricingItem{closingRow, newItem}})
 }
 
-// decodePricingPayload reads, size-limits, and JSON-decodes the request
-// body. On failure the response is already written; callers return early.
+// decodePricingPayload reads, size-limits, and decodes the request body. On
+// failure the response is already written; callers return early.
 func decodePricingPayload(w http.ResponseWriter, r *http.Request) (pricingPayload, bool) {
 	r.Body = http.MaxBytesReader(w, r.Body, pricingBodyMaxBytes)
 	body, err := io.ReadAll(r.Body)
@@ -336,49 +354,98 @@ func decodePricingPayload(w http.ResponseWriter, r *http.Request) (pricingPayloa
 		writePricingError(w, http.StatusBadRequest, pricingCodeBadRequest, "malformed request body")
 		return pricingPayload{}, false
 	}
+	return parsePricingPayload(w, body)
+}
+
+// parsePricingPayload decodes one plan payload, rejecting the legacy
+// three-rate shape first (AC 7.3).
+//
+// Detection runs on the raw JSON keys because encoding/json silently drops
+// unknown fields: a legacy body would otherwise decode into pricingPayload as
+// a windowless plan with every rate at zero, which is a valid band plan and
+// would be stored as one.
+func parsePricingPayload(w http.ResponseWriter, raw []byte) (pricingPayload, bool) {
+	var keys map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &keys); err != nil {
+		writePricingError(w, http.StatusBadRequest, pricingCodeBadRequest, "malformed request body")
+		return pricingPayload{}, false
+	}
+	if _, legacy := keys[legacyPayloadMarker]; legacy {
+		writePricingError(w, http.StatusBadRequest, pricingCodeLegacyShape,
+			"three-rate pricing plans are no longer accepted; send defaultRate and windows")
+		return pricingPayload{}, false
+	}
 	var payload pricingPayload
-	if err := json.Unmarshal(body, &payload); err != nil {
+	if err := json.Unmarshal(raw, &payload); err != nil {
 		writePricingError(w, http.StatusBadRequest, pricingCodeBadRequest, "malformed request body")
 		return pricingPayload{}, false
 	}
 	return payload, true
 }
 
-// toItem builds a PricingItem from the wire payload + server-assigned
-// fields. Rates are rounded to exactly four decimal places per
-// Decision 10 / Decision 20.
-//
-// TRANSITIONAL: the endpoints still speak the three-rate wire shape with
-// INCLUSIVE end dates while storage has moved to bands with EXCLUSIVE ends,
-// so the payload goes through the same legacy transform the migration tool
-// uses. This whole bridge — here and the candidate-end conversion in
-// validateOverlap — is replaced when the handlers take the band payload.
-//
-// The error is unreachable in practice: validateInvertedDates has already
-// rejected an unparseable endDate by the time this runs.
-func (p pricingPayload) toItem(id, createdAt, updatedAt string) (dynamo.PricingItem, error) {
-	return dynamo.TransformLegacyPricing(dynamo.LegacyPricingItem{
-		PricingID:          id,
-		StartDate:          p.StartDate,
-		EndDate:            p.EndDate,
-		PeakRate:           roundTo4DP(deref(p.PeakRate)),
-		FeedInRate:         roundTo4DP(deref(p.FeedInRate)),
-		OffPeakSavingsRate: roundTo4DP(deref(p.OffPeakSavingsRate)),
-		CreatedAt:          createdAt,
-		UpdatedAt:          updatedAt,
-	})
+// domainPlan converts the wire payload into the domain plan the validation and
+// segmentation helpers operate on. Rates pass through unrounded: the precision
+// rule fires on what the client actually sent, so rounding here would make it
+// unfireable.
+func (p pricingPayload) domainPlan(id string) plan.Plan {
+	windows := make([]plan.Window, len(p.Windows))
+	for i, w := range p.Windows {
+		windows[i] = plan.Window{Start: w.Start, End: w.End, Free: w.Free}
+		if !w.Free {
+			windows[i].Rate = deref(w.Rate)
+		}
+	}
+	end := ""
+	if p.EndDate != nil {
+		end = *p.EndDate
+	}
+	result := plan.Plan{
+		ID:          id,
+		StartDate:   p.StartDate,
+		EndDate:     end,
+		DefaultRate: deref(p.DefaultRate),
+		Windows:     windows,
+		FeedInRate:  deref(p.FeedInRate),
+	}
+	if p.SavingsReferenceRate != nil {
+		savings := *p.SavingsReferenceRate
+		result.SavingsRefRate = &savings
+	}
+	return result
 }
 
-// buildPricingItem wraps toItem with the shared 500 response for the
-// unreachable transform failure.
-func buildPricingItem(w http.ResponseWriter, p pricingPayload, id, createdAt, updatedAt string) (dynamo.PricingItem, bool) {
-	item, err := p.toItem(id, createdAt, updatedAt)
-	if err != nil {
-		slog.Error("build pricing item failed after validation passed", "error", err)
-		writePricingError(w, http.StatusInternalServerError, pricingCodeInternal, "internal error building pricing period")
-		return dynamo.PricingItem{}, false
+// toItem builds the storage row from the wire payload plus the server-assigned
+// id and timestamps. Rates are normalised to exactly four decimal places
+// (Decision 10 / Decision 20) — validation has already rejected anything
+// finer, so this only removes float representation noise.
+func (p pricingPayload) toItem(id, createdAt, updatedAt string) dynamo.PricingItem {
+	dp := p.domainPlan(id)
+	windows := make([]dynamo.PricingWindow, len(dp.Windows))
+	for i, w := range dp.Windows {
+		windows[i] = dynamo.PricingWindow{Start: w.Start, End: w.End, Free: w.Free}
+		if !w.Free {
+			rate := roundTo4DP(w.Rate)
+			windows[i].Rate = &rate
+		}
 	}
-	return item, true
+	item := dynamo.PricingItem{
+		PricingID:   id,
+		StartDate:   dp.StartDate,
+		DefaultRate: roundTo4DP(dp.DefaultRate),
+		Windows:     windows,
+		FeedInRate:  roundTo4DP(dp.FeedInRate),
+		CreatedAt:   createdAt,
+		UpdatedAt:   updatedAt,
+	}
+	if dp.SavingsRefRate != nil {
+		savings := roundTo4DP(*dp.SavingsRefRate)
+		item.SavingsReferenceRate = &savings
+	}
+	if dp.EndDate != "" {
+		end := dp.EndDate
+		item.EndDate = &end
+	}
+	return item
 }
 
 func deref(p *float64) float64 {
@@ -388,71 +455,44 @@ func deref(p *float64) float64 {
 	return *p
 }
 
-// runPricingValidationChain executes AC 1.10 in order:
-// inverted_dates → overlap → rate_precision → rate_out_of_range →
-// second_open_ended. Writes the first failure and returns false; on
-// success returns true with no response written.
+// runPricingValidationChain reports the first violated rule, in the order
+// inverted_dates → overlap → the remaining single-plan band rules →
+// second_open_ended. Writes the failure and returns false; on success returns
+// true with no response written.
+//
+// The single-plan rules come from plan.Validate, which sees one plan at a
+// time; the date-range overlap and single-open-ended rules need the whole plan
+// set and so are checked here. Date validity is pulled ahead of the overlap
+// check because an unparseable date makes the range comparison meaningless.
 //
 // `excludeID` is the id of the row being updated; empty on create.
 func runPricingValidationChain(w http.ResponseWriter, p pricingPayload, existing []dynamo.PricingItem, excludeID string) bool {
-	if !validateInvertedDates(w, p) {
-		return false
+	errs := p.domainPlan(excludeID).Validate()
+	for _, e := range errs {
+		if e.Code == plan.CodeInvertedDates {
+			writePricingError(w, http.StatusBadRequest, e.Code, e.Message)
+			return false
+		}
 	}
 	if !validateOverlap(w, p, existing, excludeID) {
 		return false
 	}
-	if !validateRatePrecision(w, p) {
+	if len(errs) > 0 {
+		writePricingError(w, http.StatusBadRequest, errs[0].Code, errs[0].Message)
 		return false
 	}
-	if !validateRateRange(w, p) {
-		return false
-	}
-	if !validateSecondOpenEnded(w, p, existing, excludeID) {
-		return false
-	}
-	return true
+	return validateSecondOpenEnded(w, p, existing, excludeID)
 }
 
-// validateInvertedDates fires AC 1.6 when endDate is present and
-// strictly before startDate. A YYYY-MM-DD string compare is correct
-// because the format is lexicographically chronological.
-func validateInvertedDates(w http.ResponseWriter, p pricingPayload) bool {
-	if !validISODate(p.StartDate) {
-		writePricingError(w, http.StatusBadRequest, pricingCodeInvertedDates, "startDate must be YYYY-MM-DD")
-		return false
-	}
-	if p.EndDate != nil {
-		if !validISODate(*p.EndDate) {
-			writePricingError(w, http.StatusBadRequest, pricingCodeInvertedDates, "endDate must be YYYY-MM-DD")
-			return false
-		}
-		if *p.EndDate < p.StartDate {
-			writePricingError(w, http.StatusBadRequest, pricingCodeInvertedDates, "endDate must not precede startDate")
-			return false
-		}
-	}
-	return true
-}
-
-// validateOverlap fires AC 1.7 when the candidate's date range
-// intersects any existing row's date range (excluding excludeID).
+// validateOverlap fires when the candidate's date range intersects any
+// existing plan's range (excluding excludeID), naming the offender per AC 2.5.
+// Both sides are half-open [start, end) with exclusive end dates, so a plan
+// ending on the day its successor starts does not overlap it (AC 2.2).
 // Open-ended is modelled as endDate = "9999-12-31".
-//
-// TRANSITIONAL: the payload's endDate is still inclusive while stored rows
-// carry the exclusive switch date, so the candidate is converted to the
-// stored convention before comparing. Both sides become exclusive when the
-// handlers take the band payload, and this conversion goes away with it.
 func validateOverlap(w http.ResponseWriter, p pricingPayload, existing []dynamo.PricingItem, excludeID string) bool {
 	candEnd := pricingMaxEndDate
 	if p.EndDate != nil {
-		next, err := time.Parse("2006-01-02", *p.EndDate)
-		if err != nil {
-			// Unreachable: validateInvertedDates runs first.
-			slog.Error("overlap check on an unparseable endDate", "endDate", *p.EndDate)
-			writePricingError(w, http.StatusBadRequest, pricingCodeInvertedDates, "endDate must be YYYY-MM-DD")
-			return false
-		}
-		candEnd = next.AddDate(0, 0, 1).Format("2006-01-02")
+		candEnd = *p.EndDate
 	}
 	for _, row := range existing {
 		if row.PricingID == excludeID {
@@ -462,50 +502,17 @@ func validateOverlap(w http.ResponseWriter, p pricingPayload, existing []dynamo.
 		if row.EndDate != nil {
 			rowEnd = *row.EndDate
 		}
-		// Half-open [start, end) intervals intersect iff each starts before
-		// the other ends. A period ending on the day its neighbour starts
-		// therefore does not overlap it (AC 2.2).
+		// Half-open intervals intersect iff each starts before the other ends.
 		if p.StartDate < rowEnd && candEnd > row.StartDate {
-			if row.EndDate == nil {
-				writePricingOverlapError(w, row.PricingID)
-				return false
-			}
-			writePricingError(w, http.StatusBadRequest, pricingCodeOverlap, "pricing period overlaps an existing one")
+			writePricingOverlapError(w, row.PricingID, row.EndDate == nil)
 			return false
 		}
 	}
 	return true
 }
 
-// validateRatePrecision fires AC 1.4 when any rate has > 4 decimal
-// places. Float64 round-tripping is precise enough at 4 dp that
-// multiplying by 10000 and comparing against the nearest integer is
-// safe — Decision 20.
-func validateRatePrecision(w http.ResponseWriter, p pricingPayload) bool {
-	for _, rate := range []float64{deref(p.PeakRate), deref(p.FeedInRate), deref(p.OffPeakSavingsRate)} {
-		scaled := rate * 10000
-		if math.Abs(scaled-math.Round(scaled)) > 1e-6 {
-			writePricingError(w, http.StatusBadRequest, pricingCodeRatePrecision, "rates must have at most 4 decimal places")
-			return false
-		}
-	}
-	return true
-}
-
-// validateRateRange fires AC 1.8 when any rate is < 0 or > the cap.
-func validateRateRange(w http.ResponseWriter, p pricingPayload) bool {
-	for _, rate := range []float64{deref(p.PeakRate), deref(p.FeedInRate), deref(p.OffPeakSavingsRate)} {
-		if rate < 0 || rate > pricingRateCap {
-			writePricingError(w, http.StatusBadRequest, pricingCodeRateOutOfRange, "rates must be between 0 and 10.0 AUD per kWh")
-			return false
-		}
-	}
-	return true
-}
-
-// validateSecondOpenEnded fires AC 1.9 when the candidate is
-// open-ended and another existing row (other than excludeID) is also
-// open-ended.
+// validateSecondOpenEnded fires when the candidate is open-ended and another
+// existing row (other than excludeID) is also open-ended.
 func validateSecondOpenEnded(w http.ResponseWriter, p pricingPayload, existing []dynamo.PricingItem, excludeID string) bool {
 	if p.EndDate != nil {
 		return true
@@ -515,7 +522,7 @@ func validateSecondOpenEnded(w http.ResponseWriter, p pricingPayload, existing [
 			continue
 		}
 		if row.EndDate == nil {
-			writePricingError(w, http.StatusBadRequest, pricingCodeSecondOpenEnded, "another pricing period is already open-ended")
+			writePricingError(w, http.StatusBadRequest, pricingCodeSecondOpenEnded, "another pricing plan is already open-ended")
 			return false
 		}
 	}
@@ -549,6 +556,11 @@ func mapPricingStoreError(w http.ResponseWriter, op string, err error) {
 	switch {
 	case errors.Is(err, dynamo.ErrPricingConcurrentWrite):
 		writePricingError(w, http.StatusConflict, pricingCodeConcurrentWrite, "concurrent open-ended write detected")
+	case errors.Is(err, dynamo.ErrPricingLegacyShape):
+		// Q32: succession refuses to patch a not-yet-migrated closing row.
+		slog.Warn("pricing succession blocked by legacy row", "op", op, "error", err)
+		writePricingError(w, http.StatusBadRequest, pricingCodeLegacyShape,
+			"the plan being closed is still the legacy three-rate shape; run the pricing migration first")
 	case errors.Is(err, dynamo.ErrPricingUUIDCollision):
 		slog.Warn("pricing uuid collision", "op", op, "error", err)
 		writePricingError(w, http.StatusInternalServerError, pricingCodeInternal, "uuid collision; retry")
@@ -558,9 +570,8 @@ func mapPricingStoreError(w http.ResponseWriter, op string, err error) {
 	}
 }
 
-// validISODate returns true when s parses as YYYY-MM-DD in
-// Australia/Melbourne. We don't load the location at runtime — the
-// canonical layout match is sufficient for the wire format check.
+// validISODate returns true when s parses as YYYY-MM-DD. Dates are
+// calendar-only here, so no location is involved in the format check.
 func validISODate(s string) bool {
 	if len(s) != 10 {
 		return false

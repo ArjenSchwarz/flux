@@ -104,7 +104,7 @@ func TestHandleDay_PastDate_AllDerivedFieldsPresent(t *testing.T) {
 		},
 	}}
 
-	h := NewHandler(tr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(tr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return fixedNow() }
 
 	resp, err := h.Handle(context.Background(), dayRequest(map[string]string{"date": date}))
@@ -151,7 +151,7 @@ func TestHandleDay_PastDate_OneFieldAbsent(t *testing.T) {
 			return row, nil
 		},
 	}}
-	h := NewHandler(tr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(tr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return fixedNow() }
 
 	resp, err := h.Handle(context.Background(), dayRequest(map[string]string{"date": date}))
@@ -179,7 +179,7 @@ func TestHandleDay_PastDate_AllDerivedFieldsAbsent(t *testing.T) {
 			return row, nil
 		},
 	}}
-	h := NewHandler(tr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(tr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return fixedNow() }
 
 	resp, err := h.Handle(context.Background(), dayRequest(map[string]string{"date": date}))
@@ -214,7 +214,7 @@ func TestHandleDay_PastDate_NoDerivedStats_FallsBackToDailyPower(t *testing.T) {
 			}, nil
 		},
 	}}
-	h := NewHandler(tr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(tr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return fixedNow() }
 
 	resp, err := h.Handle(context.Background(), dayRequest(map[string]string{"date": date}))
@@ -264,7 +264,7 @@ func TestHandleDay_Today_SolarKwh_OnDaylightBlocks(t *testing.T) {
 		},
 	}}
 
-	h := NewHandler(tr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(tr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), dayRequest(map[string]string{"date": date}))
@@ -326,7 +326,7 @@ func TestHandleDay_Today_LiveCompute_Unchanged(t *testing.T) {
 		},
 	}}
 
-	h := NewHandler(tr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(tr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), dayRequest(map[string]string{"date": date}))

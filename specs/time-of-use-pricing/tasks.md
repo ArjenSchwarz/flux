@@ -85,7 +85,7 @@ references:
 
 ## Lambda API
 
-- [ ] 12. Write failing handler tests for band-based /pricing endpoints <!-- id:chkfing -->
+- [x] 12. Write failing handler tests for band-based /pricing endpoints <!-- id:chkfing -->
   - internal/api/pricing_handler.go tests; wire shape from design.md
   - Validation codes incl. noRatedBand and legacyShape via raw JSON key check
   - Overlap is half-open interval intersection naming the conflicting plan (AC 2.5)
@@ -95,12 +95,12 @@ references:
   - Stream: 1
   - Requirements: [1.7](requirements.md#1.7), [2.1](requirements.md#2.1), [2.3](requirements.md#2.3), [2.4](requirements.md#2.4), [2.5](requirements.md#2.5), [7.1](requirements.md#7.1), [7.2](requirements.md#7.2), [7.3](requirements.md#7.3)
 
-- [ ] 13. Implement pricing handlers for the band shape <!-- id:chkfinh -->
+- [x] 13. Implement pricing handlers for the band shape <!-- id:chkfinh -->
   - Blocked-by: chkfing (Write failing handler tests for band-based /pricing endpoints)
   - Stream: 1
   - Requirements: [1.7](requirements.md#1.7), [2.1](requirements.md#2.1), [2.3](requirements.md#2.3), [2.4](requirements.md#2.4), [2.5](requirements.md#2.5), [7.1](requirements.md#7.1), [7.2](requirements.md#7.2), [7.3](requirements.md#7.3)
 
-- [ ] 14. Write failing tests for plan-derived windows in status/day/history and nullable offpeak <!-- id:chkfini -->
+- [x] 14. Write failing tests for plan-derived windows in status/day/history and nullable offpeak <!-- id:chkfini -->
   - status.go/day.go/history.go/compute.go tests; plans fetched in existing errgroups
   - /status.offpeak serialises null on no-free-band or no-plan day (never default window)
   - nextOffpeakStart uses the free band of the plan pricing the day the window falls on — switch eve must pick the successor window (AC 4.2/Q11)
@@ -109,14 +109,14 @@ references:
   - Stream: 1
   - Requirements: [4.1](requirements.md#4.1), [4.2](requirements.md#4.2), [4.4](requirements.md#4.4), [2.7](requirements.md#2.7)
 
-- [ ] 15. Implement plan-derived window resolution in the API and drop env window config <!-- id:chkfinj -->
+- [x] 15. Implement plan-derived window resolution in the API and drop env window config <!-- id:chkfinj -->
   - Also remove OFFPEAK_START/END from cmd/api/main.go env validation and the handler offpeakStart/offpeakEnd fields
   - Lambda pricing read failure -> 500, never fabricated no-plan (Q14)
   - Blocked-by: chkfini (Write failing tests for plan-derived windows in status/day/history and nullable offpeak)
   - Stream: 1
   - Requirements: [4.1](requirements.md#4.1), [4.2](requirements.md#4.2), [4.4](requirements.md#4.4), [2.7](requirements.md#2.7)
 
-- [ ] 16. Write failing tests for bandImports in /day and /history and the shared live-split helper <!-- id:chkfink -->
+- [x] 16. Write failing tests for bandImports in /day and /history and the shared live-split helper <!-- id:chkfink -->
   - DayEnergy + DaySummary gain nullable bandImports (rated only)
   - Today's split integrated live from readings via ONE shared helper used by both /day and /history (computeTodayEnergy pattern, AC 3.4)
   - /status does NOT carry bandImports (Q29)
@@ -124,7 +124,7 @@ references:
   - Stream: 1
   - Requirements: [3.4](requirements.md#3.4), [3.6](requirements.md#3.6), [3.7](requirements.md#3.7)
 
-- [ ] 17. Implement bandImports serving and today's live split <!-- id:chkfinl -->
+- [x] 17. Implement bandImports serving and today's live split <!-- id:chkfinl -->
   - Blocked-by: chkfink (Write failing tests for bandImports in /day and /history and the shared live-split helper)
   - Stream: 1
   - Requirements: [3.4](requirements.md#3.4), [3.6](requirements.md#3.6), [3.7](requirements.md#3.7)

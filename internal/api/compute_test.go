@@ -122,7 +122,7 @@ func TestLiveOffpeakDeltas(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got, ok := liveOffpeakDeltas(readings, tc.now, windowStart, windowEnd)
+			got, ok := liveOffpeakDeltas(readings, tc.now, win(windowStart, windowEnd))
 			assert.Equal(t, tc.wantOK, ok)
 			if !ok {
 				return
@@ -156,8 +156,8 @@ func TestLiveOffpeakDeltasDeterminism(t *testing.T) {
 
 	now := opStart.Add(time.Hour)
 
-	first, ok1 := liveOffpeakDeltas(readings, now, windowStart, windowEnd)
-	second, ok2 := liveOffpeakDeltas(readings, now, windowStart, windowEnd)
+	first, ok1 := liveOffpeakDeltas(readings, now, win(windowStart, windowEnd))
+	second, ok2 := liveOffpeakDeltas(readings, now, win(windowStart, windowEnd))
 
 	require.True(t, ok1)
 	require.True(t, ok2)
@@ -217,7 +217,7 @@ func TestLivePeakGridImport(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got, ok := livePeakGridImport(readings, tc.now, windowStart, windowEnd)
+			got, ok := livePeakGridImport(readings, tc.now, win(windowStart, windowEnd))
 			assert.Equal(t, tc.wantOK, ok)
 			if !ok {
 				return
@@ -228,18 +228,18 @@ func TestLivePeakGridImport(t *testing.T) {
 	}
 }
 
-// TestLivePeakGridImportGates covers the not-usable paths: an unparseable
+// TestLivePeakGridImportGates covers the not-usable paths: a day with no free
 // window and a morning window with too few samples to integrate.
 func TestLivePeakGridImportGates(t *testing.T) {
 	loc := sydneyTZ
 	dayStart := time.Date(2026, 4, 15, 0, 0, 0, 0, loc)
 
-	t.Run("unparseable window returns false", func(t *testing.T) {
+	t.Run("no free window returns false", func(t *testing.T) {
 		readings := []dynamo.ReadingItem{
 			{Timestamp: dayStart.Add(time.Hour).Unix(), Pgrid: 1000},
 			{Timestamp: dayStart.Add(time.Hour + 10*time.Second).Unix(), Pgrid: 1000},
 		}
-		_, ok := livePeakGridImport(readings, dayStart.Add(2*time.Hour), "nope", "14:00")
+		_, ok := livePeakGridImport(readings, dayStart.Add(2*time.Hour), nil)
 		assert.False(t, ok)
 	})
 
@@ -247,7 +247,7 @@ func TestLivePeakGridImportGates(t *testing.T) {
 		readings := []dynamo.ReadingItem{
 			{Timestamp: dayStart.Add(time.Hour).Unix(), Pgrid: 1000},
 		}
-		_, ok := livePeakGridImport(readings, dayStart.Add(2*time.Hour), "11:00", "14:00")
+		_, ok := livePeakGridImport(readings, dayStart.Add(2*time.Hour), win("11:00", "14:00"))
 		assert.False(t, ok)
 	})
 }
@@ -283,7 +283,7 @@ func TestBuildOffpeakDispatch(t *testing.T) {
 			StartECharge:    999.0,
 			StartEDischarge: 999.0,
 		}
-		got := buildOffpeak(op, readings, now, "11:00", "14:00")
+		got := buildOffpeak(op, readings, now, win("11:00", "14:00"))
 		require.NotNil(t, got)
 		assert.Equal(t, "11:00", got.WindowStart)
 		assert.Equal(t, "14:00", got.WindowEnd)
@@ -305,7 +305,7 @@ func TestBuildOffpeakDispatch(t *testing.T) {
 		}
 		// Readings would integrate to 1.8 if used — assert we see 2.5 instead,
 		// proving the complete branch reads from the row.
-		got := buildOffpeak(op, readings, now, "11:00", "14:00")
+		got := buildOffpeak(op, readings, now, win("11:00", "14:00"))
 		require.NotNil(t, got)
 		require.NotNil(t, got.GridUsageKwh)
 		assert.Equal(t, 2.5, *got.GridUsageKwh)
@@ -314,7 +314,7 @@ func TestBuildOffpeakDispatch(t *testing.T) {
 	})
 
 	t.Run("nil item returns window only", func(t *testing.T) {
-		got := buildOffpeak(nil, readings, now, "11:00", "14:00")
+		got := buildOffpeak(nil, readings, now, win("11:00", "14:00"))
 		require.NotNil(t, got)
 		assert.Equal(t, "11:00", got.WindowStart)
 		assert.Equal(t, "14:00", got.WindowEnd)
@@ -324,7 +324,7 @@ func TestBuildOffpeakDispatch(t *testing.T) {
 	t.Run("pending row before window returns no deltas (AC 4.3)", func(t *testing.T) {
 		beforeWindow := time.Date(2026, 4, 15, 10, 0, 0, 0, loc)
 		op := &dynamo.OffpeakItem{Status: dynamo.OffpeakStatusPending}
-		got := buildOffpeak(op, readings, beforeWindow, "11:00", "14:00")
+		got := buildOffpeak(op, readings, beforeWindow, win("11:00", "14:00"))
 		require.NotNil(t, got)
 		assert.Equal(t, "11:00", got.WindowStart)
 		assert.Empty(t, got.Status, "no status before window opens")
@@ -353,7 +353,7 @@ func TestOffpeakSplitDispatch(t *testing.T) {
 			Status:      dynamo.OffpeakStatusPending,
 			StartEInput: 999.0, // must not be read
 		}
-		imp, exp, hasSplit := offpeakSplit(op, readings, now, true, "11:00", "14:00")
+		imp, exp, hasSplit := offpeakSplit(op, readings, now, true, win("11:00", "14:00"))
 		require.True(t, hasSplit)
 		assert.InDelta(t, 1.8, imp, 0.01)
 		assert.InDelta(t, 0, exp, 0.01)
@@ -366,7 +366,7 @@ func TestOffpeakSplitDispatch(t *testing.T) {
 			GridExportKwh: 0.3,
 		}
 		// Past day (isToday=false) — still a pass-through.
-		imp, exp, hasSplit := offpeakSplit(op, nil, now, false, "11:00", "14:00")
+		imp, exp, hasSplit := offpeakSplit(op, nil, now, false, win("11:00", "14:00"))
 		require.True(t, hasSplit)
 		assert.Equal(t, 2.5, imp)
 		assert.Equal(t, 0.3, exp)
@@ -374,14 +374,14 @@ func TestOffpeakSplitDispatch(t *testing.T) {
 
 	t.Run("pending past-date row has no split", func(t *testing.T) {
 		op := dynamo.OffpeakItem{Status: dynamo.OffpeakStatusPending}
-		_, _, hasSplit := offpeakSplit(op, readings, now, false, "11:00", "14:00")
+		_, _, hasSplit := offpeakSplit(op, readings, now, false, win("11:00", "14:00"))
 		assert.False(t, hasSplit, "pending past-date row indicates poller failure, no split")
 	})
 
 	t.Run("pending today row before offpeak-start returns no split (AC 4.3)", func(t *testing.T) {
 		beforeWindow := time.Date(2026, 4, 15, 10, 0, 0, 0, loc)
 		op := dynamo.OffpeakItem{Status: dynamo.OffpeakStatusPending}
-		_, _, hasSplit := offpeakSplit(op, readings, beforeWindow, true, "11:00", "14:00")
+		_, _, hasSplit := offpeakSplit(op, readings, beforeWindow, true, win("11:00", "14:00"))
 		assert.False(t, hasSplit)
 	})
 }
@@ -442,71 +442,6 @@ func TestComputeCutoffTime(t *testing.T) {
 			} else {
 				assert.NotNil(t, got)
 				assert.WithinDuration(t, *tc.want, *got, time.Millisecond)
-			}
-		})
-	}
-}
-
-func TestNextOffpeakStart(t *testing.T) {
-	const opStart = "11:00"
-	const opEnd = "14:00"
-
-	syd := func(h, m int) time.Time {
-		return time.Date(2026, 4, 15, h, m, 0, 0, sydneyTZ)
-	}
-
-	tests := map[string]struct {
-		now          time.Time
-		offpeakStart string
-		offpeakEnd   string
-		wantValid    bool
-		wantStart    time.Time
-	}{
-		"morning before window": {
-			now:          syd(9, 0),
-			offpeakStart: opStart, offpeakEnd: opEnd,
-			wantValid: true,
-			wantStart: syd(11, 0),
-		},
-		"exactly at window start": {
-			now:          syd(11, 0),
-			offpeakStart: opStart, offpeakEnd: opEnd,
-			wantValid: true,
-			wantStart: syd(11, 0),
-		},
-		"inside window": {
-			now:          syd(12, 30),
-			offpeakStart: opStart, offpeakEnd: opEnd,
-			wantValid: true,
-			wantStart: syd(11, 0),
-		},
-		"exactly at window end rolls to tomorrow": {
-			now:          syd(14, 0),
-			offpeakStart: opStart, offpeakEnd: opEnd,
-			wantValid: true,
-			wantStart: syd(11, 0).AddDate(0, 0, 1),
-		},
-		"after window same day": {
-			now:          syd(18, 0),
-			offpeakStart: opStart, offpeakEnd: opEnd,
-			wantValid: true,
-			wantStart: syd(11, 0).AddDate(0, 0, 1),
-		},
-		"invalid window returns false": {
-			now:          syd(9, 0),
-			offpeakStart: "bad", offpeakEnd: "also-bad",
-			wantValid: false,
-		},
-	}
-
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			got, ok := nextOffpeakStart(tc.now, tc.offpeakStart, tc.offpeakEnd)
-			assert.Equal(t, tc.wantValid, ok)
-			if tc.wantValid {
-				assert.True(t, got.Equal(tc.wantStart),
-					"nextOffpeakStart(%s, %s, %s) = %s, want %s",
-					tc.now, tc.offpeakStart, tc.offpeakEnd, got, tc.wantStart)
 			}
 		})
 	}
@@ -947,40 +882,21 @@ func TestWithinOffpeakWindow(t *testing.T) {
 	}
 
 	tests := map[string]struct {
-		now          time.Time
-		offpeakStart string
-		offpeakEnd   string
-		want         bool
+		now    time.Time
+		window *offpeakWindow
+		want   bool
 	}{
-		"before window": {
-			now: syd(10, 59), offpeakStart: "11:00", offpeakEnd: "14:00",
-			want: false,
-		},
-		"at start": {
-			now: syd(11, 0), offpeakStart: "11:00", offpeakEnd: "14:00",
-			want: true,
-		},
-		"mid-window": {
-			now: syd(12, 30), offpeakStart: "11:00", offpeakEnd: "14:00",
-			want: true,
-		},
-		"at end (exclusive)": {
-			now: syd(14, 0), offpeakStart: "11:00", offpeakEnd: "14:00",
-			want: false,
-		},
-		"after window": {
-			now: syd(14, 30), offpeakStart: "11:00", offpeakEnd: "14:00",
-			want: false,
-		},
-		"unparseable strings": {
-			now: syd(12, 0), offpeakStart: "x", offpeakEnd: "y",
-			want: false,
-		},
+		"before window":      {now: syd(10, 59), window: win("11:00", "14:00"), want: false},
+		"at start":           {now: syd(11, 0), window: win("11:00", "14:00"), want: true},
+		"mid-window":         {now: syd(12, 30), window: win("11:00", "14:00"), want: true},
+		"at end (exclusive)": {now: syd(14, 0), window: win("11:00", "14:00"), want: false},
+		"after window":       {now: syd(14, 30), window: win("11:00", "14:00"), want: false},
+		"no free window":     {now: syd(12, 0), window: nil, want: false},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := withinOffpeakWindow(tc.now, tc.offpeakStart, tc.offpeakEnd)
+			got := withinOffpeakWindow(tc.now, tc.window)
 			assert.Equal(t, tc.want, got)
 		})
 	}
@@ -1207,7 +1123,7 @@ func TestProjectOffpeakEndSoc(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := projectOffpeakEndSoc(tc.soc, tc.cap, tc.now, start, end)
+			got := projectOffpeakEndSoc(tc.soc, tc.cap, tc.now, win(start, end))
 			if tc.want == nil {
 				assert.Nil(t, got)
 				return
@@ -1252,7 +1168,7 @@ func TestPropertyProjectOffpeakEndSoc(t *testing.T) {
 		f := func(socRaw, capRaw, fRaw float64) bool {
 			soc := normSoc(socRaw)
 			capKwh := normCap(capRaw)
-			got := projectOffpeakEndSoc(soc, capKwh, nowFor(fRaw), start, end)
+			got := projectOffpeakEndSoc(soc, capKwh, nowFor(fRaw), win(start, end))
 			if got == nil {
 				return false // always in-window with positive capacity
 			}
@@ -1269,8 +1185,8 @@ func TestPropertyProjectOffpeakEndSoc(t *testing.T) {
 			// Earlier now (more hours remaining) vs the same instant moved
 			// later (fewer hours). More hours must not yield a lower SoC.
 			fLate := f0 + (1-f0)/2 // strictly later than f0, still < 1
-			early := projectOffpeakEndSoc(soc, capKwh, nowFor(f0), start, end)
-			late := projectOffpeakEndSoc(soc, capKwh, nowFor(fLate), start, end)
+			early := projectOffpeakEndSoc(soc, capKwh, nowFor(f0), win(start, end))
+			late := projectOffpeakEndSoc(soc, capKwh, nowFor(fLate), win(start, end))
 			if early == nil || late == nil {
 				return false
 			}
@@ -1287,8 +1203,8 @@ func TestPropertyProjectOffpeakEndSoc(t *testing.T) {
 			// Same now and capacity; a higher starting SoC must not project a
 			// lower end SoC.
 			highSoc := lowSoc + (100-lowSoc)/2 // strictly greater, <= 100
-			low := projectOffpeakEndSoc(lowSoc, capKwh, now, start, end)
-			high := projectOffpeakEndSoc(highSoc, capKwh, now, start, end)
+			low := projectOffpeakEndSoc(lowSoc, capKwh, now, win(start, end))
+			high := projectOffpeakEndSoc(highSoc, capKwh, now, win(start, end))
 			if low == nil || high == nil {
 				return false
 			}

@@ -3,12 +3,15 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"time"
 
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
+	"github.com/ArjenSchwarz/flux/internal/plan"
 	"github.com/aws/aws-lambda-go/events"
 )
 
@@ -21,17 +24,15 @@ type NoteWriter interface {
 
 // Handler processes Lambda Function URL requests with auth and routing.
 type Handler struct {
-	reader       dynamo.Reader
-	notes        NoteWriter
-	devices      DeviceStore
-	rules        SocRuleStore
-	fireState    FireStateCleaner
-	pricing      PricingStore
-	presets      SimulationPresetStore
-	serial       string
-	apiToken     string
-	offpeakStart string
-	offpeakEnd   string
+	reader    dynamo.Reader
+	notes     NoteWriter
+	devices   DeviceStore
+	rules     SocRuleStore
+	fireState FireStateCleaner
+	pricing   PricingStore
+	presets   SimulationPresetStore
+	serial    string
+	apiToken  string
 	// nowFunc returns the current time. Defaults to time.Now.
 	// Exposed for testing to ensure consistent time capture per request.
 	nowFunc func() time.Time
@@ -45,19 +46,39 @@ type Handler struct {
 
 // NewHandler creates a Handler with all dependencies injected. Pass a nil
 // notes writer in tests that don't exercise the write endpoint.
-func NewHandler(reader dynamo.Reader, notes NoteWriter, serial, apiToken, offpeakStart, offpeakEnd string) *Handler {
+//
+// The pricing store is wired separately via SetPricingStore, but it is not
+// optional: /status, /day, and /history all derive the off-peak window from
+// the plans it holds.
+func NewHandler(reader dynamo.Reader, notes NoteWriter, serial, apiToken string) *Handler {
 	h := &Handler{
-		reader:       reader,
-		notes:        notes,
-		serial:       serial,
-		apiToken:     apiToken,
-		offpeakStart: offpeakStart,
-		offpeakEnd:   offpeakEnd,
-		nowFunc:      time.Now,
-		idFunc:       defaultIDFunc,
+		reader:   reader,
+		notes:    notes,
+		serial:   serial,
+		apiToken: apiToken,
+		nowFunc:  time.Now,
+		idFunc:   defaultIDFunc,
 	}
 	h.mux = h.buildMux()
 	return h
+}
+
+// listPlans fetches every pricing plan as the domain type the window helpers
+// take.
+//
+// A read failure is returned rather than swallowed: resolving it as "no plan"
+// would strip a priced day's window, off-peak split, and cost data with no
+// signal that anything went wrong (Q14). The read endpoints turn the error
+// into a 500, same as any other store failure.
+func (h *Handler) listPlans(ctx context.Context) ([]plan.Plan, error) {
+	if h.pricing == nil {
+		return nil, errors.New("pricing store not configured")
+	}
+	rows, err := h.pricing.ListPricing(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list pricing: %w", err)
+	}
+	return dynamo.PlansFromItems(rows), nil
 }
 
 // SetNow overrides the clock used by request handlers. Intended for the
