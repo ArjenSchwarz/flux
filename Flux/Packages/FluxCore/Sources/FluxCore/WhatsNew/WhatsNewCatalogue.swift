@@ -7,6 +7,32 @@ public enum WhatsNewCatalogue {
     // swiftlint:disable line_length
     public static let releases: [WhatsNewRelease] = [
         WhatsNewRelease(
+            version: "1.8",
+            date: dateOf(year: 2026, month: 7),
+            highlights: [
+                Highlight(
+                    category: .new,
+                    title: "Prices that change during the day",
+                    detail: "A plan is now a default rate plus the time windows that differ from it — a free window, a cheaper overnight rate, or both. Set them up in Settings → Pricing."
+                ),
+                Highlight(
+                    category: .new,
+                    title: "Plans switch over on their own",
+                    detail: "Enter your next plan ahead of time with the date it starts, and it takes over on that day without you having to do anything."
+                ),
+                Highlight(
+                    category: .improved,
+                    title: "The free window follows your plan",
+                    detail: "Chart shading, the off-peak card and the charge projection all pick up the free window from whichever plan covers that day, so they move with it when a plan changes."
+                ),
+                Highlight(
+                    category: .improved,
+                    title: "Costs come from your bands",
+                    detail: "Each day's cost is worked out band by band. Past days are unaffected — every historical figure was checked against the old calculation before anything changed."
+                )
+            ]
+        ),
+        WhatsNewRelease(
             version: "1.7",
             date: dateOf(year: 2026, month: 6),
             highlights: [
