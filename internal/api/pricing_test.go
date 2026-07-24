@@ -785,3 +785,33 @@ func TestPricing_StoreFailureMapsTo500(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 }
+
+// TestPricing_LegacyRowInStoreReportsWhatToDo pins that a legacy row surfacing
+// from a read is reported as legacy_shape with the remedy, not as a generic
+// 500. Since task 39 removed the transitional read conversion, a read is now a
+// way this error reaches an operator — and "internal error" would tell them
+// nothing about a problem one command fixes.
+func TestPricing_LegacyRowInStoreReportsWhatToDo(t *testing.T) {
+	for _, tc := range []struct {
+		name, method, path string
+	}{
+		{"list", http.MethodGet, "/pricing"},
+		{"delete", http.MethodDelete, "/pricing/p1"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			store := newFakePricingStore()
+			store.listErr = dynamo.ErrPricingLegacyShape
+			store.getErr = dynamo.ErrPricingLegacyShape
+			h := newPricingTestHandler(store)
+
+			resp, err := h.Handle(context.Background(), makeRequest(tc.method, tc.path, "Bearer "+testToken))
+			require.NoError(t, err)
+			assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+			var body pricingError
+			require.NoError(t, json.Unmarshal([]byte(resp.Body), &body))
+			assert.Equal(t, pricingCodeLegacyShape, body.Error)
+			assert.Contains(t, body.Message, "cmd/migrate-pricing")
+		})
+	}
+}

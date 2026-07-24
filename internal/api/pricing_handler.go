@@ -113,8 +113,7 @@ func (h *Handler) handleListPricing(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := h.pricing.ListPricing(r.Context())
 	if err != nil {
-		slog.Error("list pricing failed", "error", err)
-		writePricingError(w, http.StatusInternalServerError, pricingCodeInternal, "list pricing failed")
+		mapPricingStoreError(w, "list pricing", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, struct {
@@ -136,8 +135,7 @@ func (h *Handler) handleCreatePricing(w http.ResponseWriter, r *http.Request) {
 
 	existing, err := h.pricing.ListPricing(r.Context())
 	if err != nil {
-		slog.Error("list pricing failed during create", "error", err)
-		writePricingError(w, http.StatusInternalServerError, pricingCodeInternal, "list pricing failed")
+		mapPricingStoreError(w, "list pricing during create", err)
 		return
 	}
 	if !runPricingValidationChain(w, payload, existing, "") {
@@ -177,8 +175,7 @@ func (h *Handler) handleUpdatePricing(w http.ResponseWriter, r *http.Request) {
 
 	existing, err := h.pricing.ListPricing(r.Context())
 	if err != nil {
-		slog.Error("list pricing failed during update", "error", err)
-		writePricingError(w, http.StatusInternalServerError, pricingCodeInternal, "list pricing failed")
+		mapPricingStoreError(w, "list pricing during update", err)
 		return
 	}
 	var current *dynamo.PricingItem
@@ -224,8 +221,7 @@ func (h *Handler) handleDeletePricing(w http.ResponseWriter, r *http.Request) {
 	}
 	existing, err := h.pricing.GetPricing(r.Context(), id)
 	if err != nil {
-		slog.Error("get pricing failed during delete", "id", id, "error", err)
-		writePricingError(w, http.StatusInternalServerError, pricingCodeInternal, "get pricing failed")
+		mapPricingStoreError(w, "get pricing during delete", err)
 		return
 	}
 	if existing == nil {
@@ -275,8 +271,7 @@ func (h *Handler) handleReplaceOpenEnded(w http.ResponseWriter, r *http.Request)
 
 	existing, err := h.pricing.ListPricing(r.Context())
 	if err != nil {
-		slog.Error("list pricing failed during replace-open-ended", "error", err)
-		writePricingError(w, http.StatusInternalServerError, pricingCodeInternal, "list pricing failed")
+		mapPricingStoreError(w, "list pricing during replace-open-ended", err)
 		return
 	}
 	var closing *dynamo.PricingItem
@@ -569,10 +564,14 @@ func mapPricingStoreError(w http.ResponseWriter, op string, err error) {
 	case errors.Is(err, dynamo.ErrPricingConcurrentWrite):
 		writePricingError(w, http.StatusConflict, pricingCodeConcurrentWrite, "concurrent open-ended write detected")
 	case errors.Is(err, dynamo.ErrPricingLegacyShape):
-		// Q32: succession refuses to patch a not-yet-migrated closing row.
-		slog.Warn("pricing succession blocked by legacy row", "op", op, "error", err)
+		// Raised by succession refusing to patch a not-yet-migrated closing row
+		// (Q32), and — since the transitional read conversion was removed
+		// (task 39) — by any read that encounters a legacy row. Both mean the
+		// same thing to an operator, and both are fixed the same way, so the
+		// response says what to do rather than reporting a generic failure.
+		slog.Warn("pricing blocked by legacy row", "op", op, "error", err)
 		writePricingError(w, http.StatusBadRequest, pricingCodeLegacyShape,
-			"the plan being closed is still the legacy three-rate shape; run the pricing migration first")
+			"the pricing table still holds a legacy three-rate row; run cmd/migrate-pricing first")
 	case errors.Is(err, dynamo.ErrPricingUUIDCollision):
 		slog.Warn("pricing uuid collision", "op", op, "error", err)
 		writePricingError(w, http.StatusInternalServerError, pricingCodeInternal, "uuid collision; retry")

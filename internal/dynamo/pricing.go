@@ -262,9 +262,10 @@ type PricingScanAPI interface {
 }
 
 // ListPricingRows is the shared implementation behind ListPricing: it pages
-// the table, skips the sentinel, and converts legacy rows on the way. Exported
-// so the backfill and migration CLIs get identical decoding without building a
-// read/write store.
+// the table, skips the sentinel, and decodes each row into the band shape,
+// erroring on any row still carrying the pre-migration three-rate shape.
+// Exported so the backfill and migration CLIs get identical decoding without
+// building a read/write store.
 func ListPricingRows(ctx context.Context, client PricingScanAPI, table string) ([]PricingItem, error) {
 	items := make([]PricingItem, 0)
 	limit := int32(pricingListPageLimit)
