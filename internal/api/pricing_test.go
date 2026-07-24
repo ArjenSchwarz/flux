@@ -425,9 +425,10 @@ func TestPricing_CreateValidationErrorsByCode(t *testing.T) {
 }
 
 func TestPricing_CreateRejectsLegacyThreeRateShape(t *testing.T) {
-	// AC 7.3 / Q28: encoding/json drops unknown fields, so a legacy body
-	// would otherwise decode as a band plan with every rate at zero. The
-	// marker has to be detected on the raw JSON keys.
+	// AC 7.3: encoding/json drops unknown fields, so a legacy body would
+	// otherwise decode as a band plan with every rate at zero. The marker has
+	// to be detected on the raw JSON keys. This rejection is permanent — it
+	// outlives the migration, unlike the read-side conversion.
 	store := newFakePricingStore()
 	h := newPricingTestHandler(store)
 
@@ -679,8 +680,8 @@ func TestPricing_ReplaceOpenEndedRejectsLegacyNewPeriod(t *testing.T) {
 func TestPricing_ReplaceOpenEndedMapsLegacyClosingRowTo400(t *testing.T) {
 	// Q32: the store refuses to patch a closing row that is still the legacy
 	// three-rate shape — a partial UpdateItem would leave a legacy-detected
-	// row carrying an exclusive end date, double-shifted by the read transform
-	// and the migration.
+	// row carrying an exclusive end date, which the migration would then shift
+	// by a day it had already gained.
 	store := newFakePricingStore()
 	store.rows["open-id"] = bandPlanRow("open-id", "2026-01-01", nil, 0.25)
 	openID := "open-id"
@@ -784,4 +785,34 @@ func TestPricing_StoreFailureMapsTo500(t *testing.T) {
 	resp, err := h.Handle(context.Background(), makeRequest(http.MethodGet, "/pricing", "Bearer "+testToken))
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+}
+
+// TestPricing_LegacyRowInStoreReportsWhatToDo pins that a legacy row surfacing
+// from a read is reported as legacy_shape with the remedy, not as a generic
+// 500. Since task 39 removed the transitional read conversion, a read is now a
+// way this error reaches an operator — and "internal error" would tell them
+// nothing about a problem one command fixes.
+func TestPricing_LegacyRowInStoreReportsWhatToDo(t *testing.T) {
+	for _, tc := range []struct {
+		name, method, path string
+	}{
+		{"list", http.MethodGet, "/pricing"},
+		{"delete", http.MethodDelete, "/pricing/p1"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			store := newFakePricingStore()
+			store.listErr = dynamo.ErrPricingLegacyShape
+			store.getErr = dynamo.ErrPricingLegacyShape
+			h := newPricingTestHandler(store)
+
+			resp, err := h.Handle(context.Background(), makeRequest(tc.method, tc.path, "Bearer "+testToken))
+			require.NoError(t, err)
+			assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+			var body pricingError
+			require.NoError(t, json.Unmarshal([]byte(resp.Body), &body))
+			assert.Equal(t, pricingCodeLegacyShape, body.Error)
+			assert.Contains(t, body.Message, "cmd/migrate-pricing")
+		})
+	}
 }

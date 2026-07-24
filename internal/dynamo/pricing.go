@@ -123,9 +123,9 @@ func IsLegacyPricingRow(av map[string]types.AttributeValue) bool {
 }
 
 // TransformLegacyPricing converts a legacy three-rate period into the band
-// model (AC 5.1). Defined once and shared by the transitional read path and
-// cmd/migrate-pricing so the two can never disagree about what a migrated row
-// looks like.
+// model (AC 5.1). It is now used only by cmd/migrate-pricing — the transitional
+// read path that shared it is gone. Kept because the tool is idempotent and
+// re-runnable, so it stays useful for a restored backup.
 //
 // The end date shifts from inclusive to exclusive by one day, so the period
 // prices exactly the same calendar days before and after migration (AC 5.2).
@@ -156,17 +156,20 @@ func TransformLegacyPricing(old LegacyPricingItem) (PricingItem, error) {
 // parsing in UTC is sufficient — no wall-clock arithmetic happens here.
 const pricingDateLayout = "2006-01-02"
 
-// decodePricingRow unmarshals one raw row into the band shape, converting a
-// legacy row on the way (Q28). This keeps a band-aware poller or Lambda
-// deployed ahead of the migration working correctly; the conversion is
-// removed once the migration has run.
+// decodePricingRow unmarshals one raw row into the band shape.
+//
+// The transitional conversion that used to happen here (Q28) is gone: the
+// production migration has run, so every stored row is band-shaped and the
+// write path rejects anything else permanently.
+//
+// A legacy row reaching this point is therefore an error, not something to
+// repair silently. It is still detected on the raw attribute map because
+// attributevalue drops attributes with no matching struct field — unmarshal
+// alone would yield a zero-rate plan with no windows, which prices every day
+// at $0.00 rather than failing.
 func decodePricingRow(av map[string]types.AttributeValue, desc string) (PricingItem, error) {
 	if IsLegacyPricingRow(av) {
-		var legacy LegacyPricingItem
-		if err := attributevalue.UnmarshalMap(av, &legacy); err != nil {
-			return PricingItem{}, fmt.Errorf("unmarshal legacy %s: %w", desc, err)
-		}
-		return TransformLegacyPricing(legacy)
+		return PricingItem{}, fmt.Errorf("%w: %s carries the pre-migration three-rate shape", ErrPricingLegacyShape, desc)
 	}
 	var item PricingItem
 	if err := attributevalue.UnmarshalMap(av, &item); err != nil {
@@ -259,9 +262,10 @@ type PricingScanAPI interface {
 }
 
 // ListPricingRows is the shared implementation behind ListPricing: it pages
-// the table, skips the sentinel, and converts legacy rows on the way. Exported
-// so the backfill and migration CLIs get identical decoding without building a
-// read/write store.
+// the table, skips the sentinel, and decodes each row into the band shape,
+// erroring on any row still carrying the pre-migration three-rate shape.
+// Exported so the backfill and migration CLIs get identical decoding without
+// building a read/write store.
 func ListPricingRows(ctx context.Context, client PricingScanAPI, table string) ([]PricingItem, error) {
 	items := make([]PricingItem, 0)
 	limit := int32(pricingListPageLimit)

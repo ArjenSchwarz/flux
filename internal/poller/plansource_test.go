@@ -196,8 +196,9 @@ func TestPlanSource_ColdStartRespectsContextCancellation(t *testing.T) {
 	assert.Equal(t, 1, lister.calls)
 }
 
-// The legacy read transform lives in the dynamo layer, so a pre-migration
-// table still yields usable band plans here (Q28).
+// PlanSource serves the domain type, not storage rows: the dynamo layer owns
+// the PricingItem → plan.Plan conversion, so the scheduler and summarisation
+// pass only ever see plans.
 func TestPlanSource_ServesPlansConvertedFromStoredRows(t *testing.T) {
 	lister := &mockPlanLister{responses: []planListerResponse{
 		{items: []dynamo.PricingItem{testPricingItem("a", "2026-01-01", "2026-08-01", 0.35)}},

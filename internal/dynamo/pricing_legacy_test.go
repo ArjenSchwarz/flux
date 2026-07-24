@@ -167,52 +167,65 @@ func TestTransformedLegacyPlanPreservesTheHistoricalWindow(t *testing.T) {
 	assert.Equal(t, 14*60, end)
 }
 
-// TestListPricingTransformsLegacyRows covers Q28: until the migration runs,
-// the read path converts legacy rows so a band-aware poller or Lambda
-// deployed first still resolves windows and serves plans correctly.
-func TestListPricingTransformsLegacyRows(t *testing.T) {
+// TestListPricingRejectsLegacyRows pins the post-migration contract (task 39).
+// The transitional read-path conversion of Q28 is gone, so a legacy row is now
+// an error rather than something repaired on the fly.
+//
+// Failing loudly is the point: attributevalue drops attributes with no matching
+// struct field, so a plain unmarshal would produce a zero-rate plan with no
+// windows and price every day at $0.00 without anything looking wrong.
+func TestListPricingRejectsLegacyRows(t *testing.T) {
 	t.Parallel()
 	api := newInMemoryPricingAPI()
 	store := NewDynamoPricingStore(api, pricingTestTable())
 
 	legacyEnd := "2026-07-31"
 	api.items["p-legacy"] = legacyRow("p-legacy", "2026-01-01", &legacyEnd)
+
+	_, err := store.ListPricing(context.Background())
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrPricingLegacyShape)
+}
+
+// TestListPricingServesBandRows is the companion happy path: with only
+// band-shape rows the read path is a plain unmarshal.
+func TestListPricingServesBandRows(t *testing.T) {
+	t.Parallel()
+	api := newInMemoryPricingAPI()
+	store := NewDynamoPricingStore(api, pricingTestTable())
+
 	newItem := bandPricingItem("p-band", "2026-08-01", nil)
 	require.NoError(t, store.PutPricing(context.Background(), newItem, nil))
 
 	got, err := store.ListPricing(context.Background())
 	require.NoError(t, err)
-	require.Len(t, got, 2)
-
-	assert.Equal(t, "p-legacy", got[0].PricingID)
-	assert.Equal(t, 0.2873, got[0].DefaultRate)
-	assert.Equal(t, []PricingWindow{{Start: "11:00", End: "14:00", Free: true}}, got[0].Windows)
-	require.NotNil(t, got[0].SavingsReferenceRate)
-	assert.Equal(t, 0.15, *got[0].SavingsReferenceRate)
-	require.NotNil(t, got[0].EndDate)
-	assert.Equal(t, "2026-08-01", *got[0].EndDate)
-
-	assert.Equal(t, newItem, got[1], "band-shape rows pass through unchanged")
+	require.Len(t, got, 1)
+	assert.Equal(t, newItem, got[0], "band-shape rows pass through unchanged")
 }
 
 // TestListPricingLeavesTheSentinelAlone pins that the sentinel row is never
-// mistaken for a pricing row by either the legacy detector or the transform.
+// mistaken for a pricing row — it is keyed, not shaped, so it must be filtered
+// by id before any shape check runs.
 func TestListPricingLeavesTheSentinelAlone(t *testing.T) {
 	t.Parallel()
 	api := newInMemoryPricingAPI()
 	store := NewDynamoPricingStore(api, pricingTestTable())
 
-	openID := "p-legacy"
+	openID := "p-band"
 	sentinel := PricingSentinel{PricingID: PricingSentinelID, OpenEndedID: &openID, UpdatedAt: "2026-05-23T10:00:00Z"}
 	av, err := attributevalue.MarshalMap(sentinel)
 	require.NoError(t, err)
 	api.items[PricingSentinelID] = av
-	api.items["p-legacy"] = legacyRow("p-legacy", "2026-01-01", nil)
+	// Inserted raw rather than via PutPricing: writing an open-ended row
+	// rewrites the sentinel, which is the very thing under test here.
+	bandAV, err := attributevalue.MarshalMap(bandPricingItem("p-band", "2026-01-01", nil))
+	require.NoError(t, err)
+	api.items["p-band"] = bandAV
 
 	got, err := store.ListPricing(context.Background())
 	require.NoError(t, err)
 	require.Len(t, got, 1)
-	assert.Equal(t, "p-legacy", got[0].PricingID)
+	assert.Equal(t, "p-band", got[0].PricingID)
 
 	gotSentinel, err := store.GetSentinel(context.Background())
 	require.NoError(t, err)
@@ -220,20 +233,17 @@ func TestListPricingLeavesTheSentinelAlone(t *testing.T) {
 	assert.Equal(t, sentinel, *gotSentinel)
 }
 
-// TestGetPricingTransformsLegacyRow covers the single-row read path, which
-// needs the same conversion as the list path.
-func TestGetPricingTransformsLegacyRow(t *testing.T) {
+// TestGetPricingRejectsLegacyRow covers the single-row read path, which rejects
+// the legacy shape for the same reason the list path does (task 39).
+func TestGetPricingRejectsLegacyRow(t *testing.T) {
 	t.Parallel()
 	api := newInMemoryPricingAPI()
 	store := NewDynamoPricingStore(api, pricingTestTable())
 	api.items["p-legacy"] = legacyRow("p-legacy", "2026-01-01", nil)
 
-	got, err := store.GetPricing(context.Background(), "p-legacy")
-	require.NoError(t, err)
-	require.NotNil(t, got)
-	assert.Equal(t, 0.2873, got.DefaultRate)
-	assert.Equal(t, []PricingWindow{{Start: "11:00", End: "14:00", Free: true}}, got.Windows)
-	assert.Nil(t, got.EndDate)
+	_, err := store.GetPricing(context.Background(), "p-legacy")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrPricingLegacyShape)
 }
 
 // TestPlansFromItems pins the conversion the poller and Lambda consume:

@@ -45,9 +45,10 @@ func TestReplaceOpenEnded_SameDaySuccession(t *testing.T) {
 
 // TestReplaceOpenEnded_RejectsLegacyClosingRow covers Q32. The closing write
 // is a partial UpdateItem, so patching a not-yet-migrated row would leave it
-// still legacy-detected but carrying an exclusive end date — which the read
-// transform and then the migration would each shift by a day. Rejecting is
-// the guard; the cutover order already runs the migration first.
+// still legacy-detected but carrying an exclusive end date, which the
+// migration would then shift by a day it had already gained. Rejecting is the
+// guard, and it stays permanently: the migration has run, but a restored
+// backup could reintroduce a legacy row.
 func TestReplaceOpenEnded_RejectsLegacyClosingRow(t *testing.T) {
 	t.Parallel()
 	api := newInMemoryPricingAPI()
