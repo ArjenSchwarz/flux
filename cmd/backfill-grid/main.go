@@ -316,15 +316,12 @@ func freeWindowOn(p plan.Plan, day time.Time, loc *time.Location) (offpeakWindow
 	if !ok {
 		return offpeakWindow{}, false
 	}
-	midnight := time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, loc)
-	at := func(minutes int) time.Time {
-		// time.Date normalises out-of-range fields in the location, so a
-		// "24:00" boundary lands on the next local midnight DST-correctly.
-		return time.Date(midnight.Year(), midnight.Month(), midnight.Day(), minutes/60, minutes%60, 0, 0, loc)
-	}
+	// plan.WallClockAt is the shared boundary resolution — the same one the
+	// segmentation and the poller use, so a backfill cannot disagree with the
+	// capture it is repairing about where a window edge falls.
 	return offpeakWindow{
-		Start:     at(startMin),
-		End:       at(endMin),
+		Start:     plan.WallClockAt(day, loc, startMin),
+		End:       plan.WallClockAt(day, loc, endMin),
 		StartHHMM: plan.FormatBandTime(startMin),
 		EndHHMM:   plan.FormatBandTime(endMin),
 	}, true

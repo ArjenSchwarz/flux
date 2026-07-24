@@ -155,16 +155,30 @@ func FreeWindow(plans []Plan, date string) (startMin, endMin int, ok bool) {
 // whichever occurrence time.Date picks. That is deterministic, which is all
 // the sum invariant needs, and no real plan has a boundary in 02:00–03:00.
 func SegmentBounds(seg Segment, day time.Time, loc *time.Location) (startUnix, endUnix int64) {
-	local := day.In(loc)
 	at := func(hhmm string) int64 {
 		minutes, ok := ParseBandTime(hhmm)
 		if !ok {
 			minutes = 0
 		}
-		// time.Date normalises out-of-range fields, so 24:00 becomes the next
-		// day's midnight — DST-correctly, because the normalisation happens
-		// in the location.
-		return time.Date(local.Year(), local.Month(), local.Day(), minutes/60, minutes%60, 0, 0, loc).Unix()
+		return WallClockAt(day, loc, minutes).Unix()
 	}
 	return at(seg.Start), at(seg.End)
+}
+
+// WallClockAt resolves a minute-of-day to the absolute instant carrying that
+// wall-clock time on day's local calendar date.
+//
+// This is the one implementation of that conversion. It matters because the
+// obvious alternative — adding elapsed minutes to local midnight — is an hour
+// off on the two DST-transition days a year, and this repository has already
+// shipped that bug once. Every consumer of a band or window boundary (the
+// segmentation here, the poller's scheduler, the backfill CLIs, the Lambda's
+// live window) resolves it through this function, so how a boundary lands is
+// decided in one place rather than three that happen to agree.
+//
+// minutes may be 1440 ("24:00"): time.Date normalises out-of-range fields
+// within the location, so it lands on the next local midnight DST-correctly.
+func WallClockAt(day time.Time, loc *time.Location, minutes int) time.Time {
+	local := day.In(loc)
+	return time.Date(local.Year(), local.Month(), local.Day(), minutes/60, minutes%60, 0, 0, loc)
 }

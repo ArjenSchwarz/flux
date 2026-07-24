@@ -664,11 +664,12 @@ func positionFor(now time.Time, win offpeakWindow) windowPosition {
 	}
 }
 
-// wallClockTime returns the wall-clock time for a given date and duration from
-// midnight. Uses time.Date for DST safety.
+// wallClockTime returns the wall-clock time for a given date and offset from
+// midnight, expressed as a duration for the scheduler's convenience.
+//
+// The conversion itself lives in plan.WallClockAt so the scheduler, the
+// segmentation, the backfill CLIs and the Lambda all resolve a boundary the
+// same way — this is only the duration-to-minutes adapter.
 func wallClockTime(day time.Time, loc *time.Location, d time.Duration) time.Time {
-	local := day.In(loc)
-	h := int(d.Hours())
-	m := int(d.Minutes()) % 60
-	return time.Date(local.Year(), local.Month(), local.Day(), h, m, 0, 0, loc)
+	return plan.WallClockAt(day, loc, int(d.Minutes()))
 }
