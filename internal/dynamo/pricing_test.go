@@ -295,13 +295,13 @@ func TestPricingStore_ListPricingExcludesSentinelRow(t *testing.T) {
 	// Seed both a real pricing row and the singleton sentinel directly.
 	openID := "pricing-1"
 	sentinel := PricingSentinel{
-		PricingID:   pricingSentinelID,
+		PricingID:   PricingSentinelID,
 		OpenEndedID: &openID,
 		UpdatedAt:   "2026-05-23T10:00:00Z",
 	}
 	av, err := attributevalue.MarshalMap(sentinel)
 	require.NoError(t, err)
-	api.items[pricingSentinelID] = av
+	api.items[PricingSentinelID] = av
 
 	item := bandPricingItem(openID, "2026-01-01", nil)
 	require.NoError(t, store.PutPricing(context.Background(), item, nil))
@@ -327,13 +327,13 @@ func TestPricingStore_GetSentinelRoundTrip(t *testing.T) {
 
 	openID := "pricing-open"
 	want := PricingSentinel{
-		PricingID:   pricingSentinelID,
+		PricingID:   PricingSentinelID,
 		OpenEndedID: &openID,
 		UpdatedAt:   "2026-05-23T10:00:00Z",
 	}
 	av, err := attributevalue.MarshalMap(want)
 	require.NoError(t, err)
-	api.items[pricingSentinelID] = av
+	api.items[PricingSentinelID] = av
 
 	got, err := store.GetSentinel(context.Background())
 	require.NoError(t, err)

@@ -230,18 +230,14 @@ func (h *Handler) handleDay(ctx context.Context, req events.LambdaFunctionURLReq
 		} else if deItem != nil && deItem.PeakGridImportKwh != nil {
 			summary.PeakGridImportKwh = floatPtr(*deItem.PeakGridImportKwh)
 		}
-		// Per-band import split: today is integrated live from readings via
-		// the helper /history also uses (AC 3.4); past days are served from
-		// the split captured at day close, which outlives the readings TTL.
-		if isToday {
-			if p, priced := plan.PlanFor(plans, date); priced {
-				if bands, ok := liveBandImports(readings, now, p); ok {
-					summary.BandImports = bands
-				}
-			}
-		} else if deItem != nil {
-			summary.BandImports = bandImportsFromAttr(deItem.BandImports)
+		// Per-band import split, resolved by the same helper /history uses so
+		// the two endpoints cannot report a different split for the same day
+		// (AC 3.4). An absent daily-energy row simply carries no stored split.
+		var storedBands []dynamo.BandImportAttr
+		if deItem != nil {
+			storedBands = deItem.BandImports
 		}
+		summary.BandImports = bandImportsFor(plans, date, isToday, readings, now, storedBands)
 		resp.Summary = summary
 	}
 

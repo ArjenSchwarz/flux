@@ -87,6 +87,18 @@ func (p *Poller) runSummarisationPass(ctx context.Context, date string) string {
 		offpeakEnd = plan.FormatBandTime(endMin)
 	}
 
+	// Nothing left to compute for this date. Only reachable with no plan: the
+	// band and peak groups both need one, and their sentinels are deliberately
+	// left unset so a later backfill can still capture the split — which means
+	// without this gate the pass would re-query a full day of readings every
+	// hour, forever, to compute nothing and write nothing. Returning here keeps
+	// the day repairable while making an unpriced date visible in the metric
+	// rather than indistinguishable from useful work.
+	if !needDerived && (!hasPlan || (!needPeak && !needBands)) {
+		slog.Info("summary skipped: no plan prices this date", "date", date)
+		return PassResultSkippedNoPlan
+	}
+
 	// 3. Fetch the day's readings.
 	dayStart, _ := time.ParseInLocation(dateLayout, date, p.cfg.Location)
 	dayEnd := dayStart.AddDate(0, 0, 1)

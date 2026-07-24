@@ -164,7 +164,7 @@ public struct PricingPlanDraft: Codable, Sendable, Equatable {
         // wire already enforces this; this keeps the pre-flight validator in
         // agreement with the authoritative server check.
         var calendar = Calendar(identifier: .iso8601)
-        calendar.timeZone = TimeZone(identifier: "Australia/Melbourne") ?? .gmt
+        calendar.timeZone = DateFormatting.sydneyTimeZone
         let components = DateComponents(year: year, month: month, day: day)
         return calendar.date(from: components).map {
             let resolved = calendar.dateComponents([.year, .month, .day], from: $0)

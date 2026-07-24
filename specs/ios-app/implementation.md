@@ -105,7 +105,7 @@ The `ParsedReading` indirection between view model and chart views creates a cle
 
 ### Potential Issues
 
-- **Off-peak window defaults** — when `offpeak` is nil in the status response, the app falls back to `OffpeakData.defaultWindowStart` / `.defaultWindowEnd` ("11:00"/"14:00"). If the backend changes these defaults, the app's fallback values would diverge. A future version could make the backend always return the window times.
+- ~~**Off-peak window defaults**~~ — *resolved by `specs/time-of-use-pricing` (Q35).* The `OffpeakData.defaultWindowStart` / `.defaultWindowEnd` constants are gone. `offpeak` is now nullable end to end and a nil window renders as "no window" everywhere, including the widgets — no client ever substitutes a default, because a day whose plan has no free band genuinely has no window to show.
 - **Fallback data heuristic** — detecting SOC-only data by checking if all power fields are zero is safe in practice (a running household never has zero load across all readings) but theoretically fragile. A backend `dataSource` flag would be more robust.
 - **`ISO8601DateFormatter` fallback** — `DateFormatting.parseTimestamp` tries fractional seconds first, then falls back to no-fractional-seconds format. If the backend changes timestamp format, both formatters would fail silently (returning nil), causing readings to be dropped from charts.
 - **No automatic cache pruning** — `CachedDayEnergy` rows accumulate indefinitely. For a personal app this is negligible (365 rows/year at ~100 bytes each), but a cache size limit or age-based pruning would be needed at scale.

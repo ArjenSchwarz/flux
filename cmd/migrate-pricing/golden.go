@@ -32,14 +32,8 @@ func (d dayEnergy) toDayEnergy() plan.DayEnergy {
 		PeakGridImportKwh: d.PeakGridImportKwh,
 	}
 	if d.Offpeak != nil {
-		start, end := d.Offpeak.Geometry()
-		out.Offpeak = &plan.OffpeakRow{
-			GridImportKwh: d.Offpeak.GridUsageKwh,
-			WindowStart:   start,
-			WindowEnd:     end,
-			IntegratedAt:  d.Offpeak.IntegratedAt,
-			SampleCount:   d.Offpeak.IntegrationSampleCount,
-		}
+		row := d.Offpeak.PlanRow()
+		out.Offpeak = &row
 	}
 	for _, b := range d.BandImports {
 		out.BandImports = append(out.BandImports, plan.BandImport{Start: b.Start, End: b.End, Kwh: b.Kwh})

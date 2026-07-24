@@ -266,8 +266,10 @@ func (h *Handler) handleStatus(ctx context.Context, req events.LambdaFunctionURL
 	// capacity; it never reads Pbat or the simulated load, so an active
 	// simulation leaves the projection unchanged (AC 1.9, AC 2.4). A non-nil
 	// projection implies a resolved window, which implies resp.Offpeak is
-	// non-nil — both derive from the same todayWindow.
-	if liveFresh {
+	// non-nil — both derive from the same todayWindow. The nil check keeps that
+	// an invariant rather than a nil dereference in the 10s-polled hot path if
+	// either function's window handling later diverges.
+	if liveFresh && resp.Offpeak != nil {
 		latest := allReadings[len(allReadings)-1]
 		if p := projectOffpeakEndSoc(latest.Soc, capacity, now, todayWindow); p != nil {
 			resp.Offpeak.ProjectedEndSoc = p

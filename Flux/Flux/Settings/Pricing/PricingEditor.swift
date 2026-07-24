@@ -324,7 +324,7 @@ extension PricingEditor {
 
     private static let bandCalendar: Calendar = {
         var calendar = Calendar(identifier: .iso8601)
-        calendar.timeZone = TimeZone(identifier: "Australia/Melbourne") ?? .current
+        calendar.timeZone = DateFormatting.sydneyTimeZone
         return calendar
     }()
 
@@ -332,7 +332,7 @@ extension PricingEditor {
         let formatter = DateFormatter()
         formatter.calendar = Calendar(identifier: .iso8601)
         formatter.dateFormat = "yyyy-MM-dd"
-        formatter.timeZone = TimeZone(identifier: "Australia/Melbourne") ?? .current
+        formatter.timeZone = DateFormatting.sydneyTimeZone
         return formatter
     }()
 }

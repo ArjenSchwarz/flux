@@ -59,10 +59,16 @@ func hhmmBounds(w *offpeakWindow) (start, end string) {
 
 // bounds resolves the window to absolute Sydney-local instants on the day
 // containing local.
+//
+// Boundaries come from plan.SegmentBounds, the same wall-clock resolution the
+// poller's capture and liveBandImports use. Adding elapsed minutes to midnight
+// instead would put the window an hour off on the two DST-transition days a
+// year, so the free-window edge and the band edges beside it would disagree
+// (Data Consistency).
 func (w offpeakWindow) bounds(local time.Time) (start, end time.Time) {
-	dayStart := startOfDaySydney(local)
-	return dayStart.Add(time.Duration(w.startMin) * time.Minute),
-		dayStart.Add(time.Duration(w.endMin) * time.Minute)
+	seg := plan.Segment{Start: w.startHHMM(), End: w.endHHMM()}
+	startUnix, endUnix := plan.SegmentBounds(seg, local, sydneyTZ)
+	return time.Unix(startUnix, 0).In(sydneyTZ), time.Unix(endUnix, 0).In(sydneyTZ)
 }
 
 // offpeakDeltas resolves the energy deltas for a complete off-peak record.

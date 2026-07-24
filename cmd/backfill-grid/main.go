@@ -400,6 +400,20 @@ func backfillOffpeak(ctx context.Context, store *dynamo.DynamoStore, client dyna
 func backfillBands(ctx context.Context, store *dynamo.DynamoStore, client dynamoAPI,
 	opts backfillOpts, date string, datePlan plan.Plan, dayStart time.Time, res *backfillResult,
 ) error {
+	// GET the daily-energy row first: the backfill must never create a phantom
+	// row (Decision 7). An absent row is skipped and keeps the fallback — and
+	// skipping before the readings query means a date with no row costs nothing
+	// to reject.
+	existing, err := store.GetDailyEnergy(ctx, opts.serial, date)
+	if err != nil {
+		return fmt.Errorf("get daily energy for bands (date=%s): %w", date, err)
+	}
+	if existing == nil {
+		res.PeakSkippedAbsent++
+		slog.Info("skip bands: flux-daily-energy row absent (no phantom-row creation)", "date", date)
+		return nil
+	}
+
 	// Separate full-day readings query, kept independent of backfillOffpeak's
 	// free-window query on purpose: the rated segments span the rest of the
 	// day, so this needs all of it. The off-peak recompute keeps its own query
@@ -417,18 +431,6 @@ func backfillBands(ctx context.Context, store *dynamo.DynamoStore, client dynamo
 		res.PeakSkippedSparse++
 		slog.Info("skip bands: a rated segment failed the usability gate",
 			"date", date, "readings", len(readings))
-		return nil
-	}
-
-	// GET the daily-energy row first: the backfill must never create a phantom
-	// row (Decision 7). An absent row is skipped and keeps the fallback.
-	existing, err := store.GetDailyEnergy(ctx, opts.serial, date)
-	if err != nil {
-		return fmt.Errorf("get daily energy for bands (date=%s): %w", date, err)
-	}
-	if existing == nil {
-		res.PeakSkippedAbsent++
-		slog.Info("skip bands: flux-daily-energy row absent (no phantom-row creation)", "date", date)
 		return nil
 	}
 

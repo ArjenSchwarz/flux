@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ArjenSchwarz/flux/internal/alphaess"
+	"github.com/ArjenSchwarz/flux/internal/plan"
 )
 
 const ttl30Days = 30 * 24 * time.Hour
@@ -218,32 +219,35 @@ type OffpeakItem struct {
 	WindowEnd   string `dynamodbav:"windowEnd,omitempty"`
 }
 
-// offpeakLegacyWindowStart / offpeakLegacyWindowEnd is the window every row
-// written before the geometry snapshot existed was computed under. It was the
-// only configured window for that whole period, so substituting it for a
-// missing snapshot is exact, not a guess.
-const (
-	offpeakLegacyWindowStart = "11:00"
-	offpeakLegacyWindowEnd   = "14:00"
-)
+// PlanRow converts the row to the cost domain's view of it. plan.OffpeakRow
+// mirrors this type field for field (Decision 7), so the conversion is the
+// single place the two shapes meet — the migration tool and the API both go
+// through it rather than assembling the domain value by hand.
+func (o OffpeakItem) PlanRow() plan.OffpeakRow {
+	return plan.OffpeakRow{
+		GridImportKwh: o.GridUsageKwh,
+		WindowStart:   o.WindowStart,
+		WindowEnd:     o.WindowEnd,
+		IntegratedAt:  o.IntegratedAt,
+		SampleCount:   o.IntegrationSampleCount,
+	}
+}
 
 // Geometry returns the free window the row's deltas were computed over,
 // substituting the pre-feature window when the row carries no snapshot.
-func (o OffpeakItem) Geometry() (start, end string) {
-	if o.WindowStart == "" || o.WindowEnd == "" {
-		return offpeakLegacyWindowStart, offpeakLegacyWindowEnd
-	}
-	return o.WindowStart, o.WindowEnd
-}
+//
+// Both this and Usable delegate to plan.OffpeakRow: tier-1 costing turns on
+// exactly these two rules, and the shared cost vectors pin them, so a second
+// copy here would be a second answer to whether a day can be priced from its
+// stored split.
+func (o OffpeakItem) Geometry() (start, end string) { return o.PlanRow().Geometry() }
 
 // Usable reports whether the row's deltas are a real measurement. A row
 // integrated from readings but with no samples in the window is a zero-delta
 // artifact, not a measured zero, so it cannot price a free band. Rows
 // predating the integration path (no IntegratedAt) are snapshot deltas and
 // remain usable.
-func (o OffpeakItem) Usable() bool {
-	return o.IntegratedAt == "" || o.IntegrationSampleCount > 0
-}
+func (o OffpeakItem) Usable() bool { return o.PlanRow().Usable() }
 
 // NewReadingItem transforms AlphaESS power data into a DynamoDB reading item.
 func NewReadingItem(serial string, data *alphaess.PowerData, now time.Time) ReadingItem {

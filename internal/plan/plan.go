@@ -199,13 +199,13 @@ func (p Plan) validateDates() []ValidationError {
 	invalid := func(format string, args ...any) []ValidationError {
 		return []ValidationError{{Code: CodeInvertedDates, Message: fmt.Sprintf(format, args...)}}
 	}
-	if !validDate(p.StartDate) {
+	if !ValidDate(p.StartDate) {
 		return invalid("startDate %q must be YYYY-MM-DD", p.StartDate)
 	}
 	if p.EndDate == "" {
 		return nil
 	}
-	if !validDate(p.EndDate) {
+	if !ValidDate(p.EndDate) {
 		return invalid("endDate %q must be YYYY-MM-DD", p.EndDate)
 	}
 	if p.EndDate <= p.StartDate {
@@ -263,10 +263,14 @@ func (p Plan) validateRates() []ValidationError {
 	return errs
 }
 
-// validDate reports whether s is a real calendar date in YYYY-MM-DD form.
+// ValidDate reports whether s is a real calendar date in YYYY-MM-DD form.
 // The structural check runs first so common malformed inputs fail without
 // reaching the parser, and time.Parse rejects impossible dates like 02-30.
-func validDate(s string) bool {
+//
+// Exported so the API handler validates plan dates with the same predicate
+// Validate applies, rather than a parallel copy that could accept a date the
+// domain then rejects.
+func ValidDate(s string) bool {
 	if len(s) != 10 || s[4] != '-' || s[7] != '-' {
 		return false
 	}

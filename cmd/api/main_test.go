@@ -9,18 +9,13 @@ import (
 )
 
 func TestLoadConfigMissingEnv(t *testing.T) {
-	// Set all env vars except TABLE_READINGS to verify validation catches it.
+	// Set every required env var except TABLE_READINGS to verify validation
+	// catches it. Driven off requiredEnvVars so the list cannot drift out of
+	// step with what loadConfig actually demands.
+	for _, key := range requiredEnvVars {
+		t.Setenv(key, "placeholder")
+	}
 	t.Setenv("TABLE_READINGS", "")
-	t.Setenv("TABLE_DAILY_ENERGY", "flux-daily-energy")
-	t.Setenv("TABLE_DAILY_POWER", "flux-daily-power")
-	t.Setenv("TABLE_SYSTEM", "flux-system")
-	t.Setenv("TABLE_OFFPEAK", "flux-offpeak")
-	t.Setenv("TABLE_NOTES", "flux-notes")
-	t.Setenv("TABLE_PRICING", "flux-pricing")
-	t.Setenv("OFFPEAK_START", "11:00")
-	t.Setenv("OFFPEAK_END", "14:00")
-	t.Setenv("API_TOKEN_PARAM", "/flux/api-token")
-	t.Setenv("SYSTEM_SERIAL_PARAM", "/flux/system-serial")
 
 	_, err := loadConfig(context.Background())
 	require.Error(t, err)

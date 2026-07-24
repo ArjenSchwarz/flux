@@ -79,15 +79,29 @@ public enum DateFormatting {
         dayFormatter.string(from: date)
     }
 
+    /// Parses an `"HH:MM"` band boundary onto `date`'s Sydney calendar day.
+    ///
+    /// `"24:00"` resolves to the start of the following day, matching the
+    /// end-of-day sentinel `plan.ParseBandTime` and `PlanWindow.parseBandTime`
+    /// use. A plan's free band may legitimately run to midnight, and without
+    /// this the window would fail to parse and every consumer would treat the
+    /// day as having no free window at all.
     public static func parseWindowTime(_ timeString: String, on date: Date = .now) -> Date? {
         let parts = timeString.split(separator: ":", omittingEmptySubsequences: false)
         guard parts.count == 2,
               let hour = Int(parts[0]),
               let minute = Int(parts[1]),
-              (0 ... 23).contains(hour),
-              (0 ... 59).contains(minute)
+              (0 ... 24).contains(hour),
+              (0 ... 59).contains(minute),
+              hour < 24 || minute == 0
         else {
             return nil
+        }
+        if hour == 24 {
+            // Calendar arithmetic, not +86400: the day after a DST transition
+            // is 23 or 25 hours long.
+            let dayStart = sydneyCalendar.startOfDay(for: date)
+            return sydneyCalendar.date(byAdding: .day, value: 1, to: dayStart)
         }
         return sydneyCalendar.date(bySettingHour: hour, minute: minute, second: 0, of: date)
     }

@@ -235,17 +235,10 @@ func (h *Handler) handleHistory(ctx context.Context, req events.LambdaFunctionUR
 		} else if item.PeakGridImportKwh != nil {
 			day.PeakGridImportKwh = floatPtr(*item.PeakGridImportKwh)
 		}
-		// Per-band import split: today via the same helper /day uses (AC 3.4),
-		// past rows from the split captured at day close.
-		if isItemToday {
-			if p, priced := plan.PlanFor(plans, item.Date); priced {
-				if bands, ok := liveBandImports(todayReadings, now, p); ok {
-					day.BandImports = bands
-				}
-			}
-		} else {
-			day.BandImports = bandImportsFromAttr(item.BandImports)
-		}
+		// Per-band import split, resolved by the same helper /day uses so the
+		// two endpoints cannot report a different split for the same day
+		// (AC 3.4).
+		day.BandImports = bandImportsFor(plans, item.Date, isItemToday, todayReadings, now, item.BandImports)
 		if note, ok := notesByDate[item.Date]; ok {
 			n := note
 			day.Note = &n

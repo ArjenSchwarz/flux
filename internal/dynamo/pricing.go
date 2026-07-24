@@ -12,12 +12,17 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
 
-// pricingSentinelID is the partition key of the singleton sentinel row
+// PricingSentinelID is the partition key of the singleton sentinel row
 // that pins which pricing period (if any) is currently open-ended. The
 // row never appears in ListPricing output and is maintained inside every
 // TransactWriteItems request that introduces, retires, or replaces an
 // open-ended period (Decision 21).
-const pricingSentinelID = "__open_ended"
+//
+// Exported because operator tools that scan the raw table (cmd/migrate-pricing)
+// must filter the sentinel out by id before any shape detection runs — it is
+// keyed, not shaped. A hand-copied literal there would be one edit away from
+// the migration treating the sentinel as a pricing row.
+const PricingSentinelID = "__open_ended"
 
 // PricingWindow is one stored exception to a plan's default rate. Rate is
 // absent on a free window — the domain ignores it there by contract.
@@ -269,7 +274,7 @@ func ListPricingRows(ctx context.Context, client PricingScanAPI, table string) (
 		for _, av := range out.Items {
 			// Skip the sentinel — identified by partition key, not by
 			// shape — before attempting to decode into PricingItem.
-			if idAV, ok := av["pricingId"].(*types.AttributeValueMemberS); ok && idAV.Value == pricingSentinelID {
+			if idAV, ok := av["pricingId"].(*types.AttributeValueMemberS); ok && idAV.Value == PricingSentinelID {
 				continue
 			}
 			item, err := decodePricingRow(av, fmt.Sprintf("pricing (table=%s)", table))
@@ -315,7 +320,7 @@ func (s *DynamoPricingStore) GetPricing(ctx context.Context, id string) (*Pricin
 // provisioned. The first transactional write lazily creates it via a
 // ConditionExpression that tolerates the absent state.
 func (s *DynamoPricingStore) GetSentinel(ctx context.Context) (*PricingSentinel, error) {
-	return getItem[PricingSentinel](ctx, s.client, s.table, pricingKey(pricingSentinelID),
+	return getItem[PricingSentinel](ctx, s.client, s.table, pricingKey(PricingSentinelID),
 		fmt.Sprintf("pricing sentinel (table=%s)", s.table),
 	)
 }

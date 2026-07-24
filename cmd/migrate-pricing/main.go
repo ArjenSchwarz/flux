@@ -171,7 +171,10 @@ func runMigration(ctx context.Context, client dynamoAPI, opts migrateOpts) (*mig
 	if err != nil {
 		return res, err
 	}
-	legacy, band := partitionRows(rows)
+	legacy, band, err := partitionRows(rows)
+	if err != nil {
+		return res, err
+	}
 	res.LegacyRows = len(legacy)
 	res.AlreadyBandRows = len(band)
 
@@ -328,7 +331,7 @@ func transformLine(old dynamo.LegacyPricingItem, next dynamo.PricingItem) string
 	}
 	return fmt.Sprintf("row %s  %s..%s (inclusive) → %s..%s (exclusive)  rate=%.4f feedIn=%.4f savings=%.4f  free 11:00-14:00",
 		old.PricingID, old.StartDate, end(old.EndDate), next.StartDate, end(next.EndDate),
-		next.DefaultRate, next.FeedInRate, derefRate(next.SavingsReferenceRate))
+		next.DefaultRate, next.FeedInRate, deref(next.SavingsReferenceRate))
 }
 
 func mismatchLine(m dayMismatch) string {
@@ -338,13 +341,6 @@ func mismatchLine(m dayMismatch) string {
 		m.Before.FeedInIncome, m.After.FeedInIncome,
 		m.Before.Net, m.After.Net,
 		m.Before.Savings, m.After.Savings)
-}
-
-func derefRate(v *float64) float64 {
-	if v == nil {
-		return 0
-	}
-	return *v
 }
 
 // putPricingRow writes the migrated row as a full item, preserving its
@@ -374,7 +370,7 @@ func scanPricingRaw(ctx context.Context, client dynamoAPI, table string) ([]map[
 			return nil, fmt.Errorf("scan pricing (table=%s): %w", table, err)
 		}
 		for _, av := range page.Items {
-			if id, ok := av["pricingId"].(*types.AttributeValueMemberS); ok && id.Value == pricingSentinelID {
+			if id, ok := av["pricingId"].(*types.AttributeValueMemberS); ok && id.Value == dynamo.PricingSentinelID {
 				continue
 			}
 			out = append(out, av)
@@ -387,34 +383,34 @@ func scanPricingRaw(ctx context.Context, client dynamoAPI, table string) ([]map[
 	return out, nil
 }
 
-// pricingSentinelID mirrors the unexported constant in internal/dynamo. The
-// sentinel is keyed, not shaped, so it must be filtered by id before any
-// shape detection runs.
-const pricingSentinelID = "__open_ended"
-
 // partitionRows splits the raw rows into the ones still carrying peakRate and
 // the ones already in the band shape.
-func partitionRows(rows []map[string]types.AttributeValue) ([]dynamo.LegacyPricingItem, []dynamo.PricingItem) {
+//
+// An undecodable row aborts the run rather than being skipped. Skipping one
+// would leave it untransformed AND drop every day it prices out of the golden
+// check (those days fall through to "unpriced"), so --apply would migrate the
+// remaining rows, report success, and leave a half-migrated table behind — the
+// exact silent repricing this tool exists to prevent. dynamo.ListPricingRows
+// errors on the same failure.
+func partitionRows(rows []map[string]types.AttributeValue) ([]dynamo.LegacyPricingItem, []dynamo.PricingItem, error) {
 	var legacy []dynamo.LegacyPricingItem
 	var band []dynamo.PricingItem
 	for _, av := range rows {
 		if dynamo.IsLegacyPricingRow(av) {
 			var item dynamo.LegacyPricingItem
 			if err := attributevalue.UnmarshalMap(av, &item); err != nil {
-				slog.Warn("skip: undecodable legacy row", "error", err)
-				continue
+				return nil, nil, fmt.Errorf("undecodable legacy pricing row: %w", err)
 			}
 			legacy = append(legacy, item)
 			continue
 		}
 		var item dynamo.PricingItem
 		if err := attributevalue.UnmarshalMap(av, &item); err != nil {
-			slog.Warn("skip: undecodable pricing row", "error", err)
-			continue
+			return nil, nil, fmt.Errorf("undecodable pricing row: %w", err)
 		}
 		band = append(band, item)
 	}
 	sort.SliceStable(legacy, func(i, j int) bool { return legacy[i].StartDate < legacy[j].StartDate })
 	sort.SliceStable(band, func(i, j int) bool { return band[i].StartDate < band[j].StartDate })
-	return legacy, band
+	return legacy, band, nil
 }

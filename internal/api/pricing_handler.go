@@ -299,13 +299,25 @@ func (h *Handler) handleReplaceOpenEnded(w http.ResponseWriter, r *http.Request)
 	// surfaces with the same error code the validation chain uses elsewhere,
 	// not as a muddied "newPeriod.startDate invalid". The full chain runs
 	// below against the projected post-write state.
-	if !validISODate(newPeriod.StartDate) {
+	if !plan.ValidDate(newPeriod.StartDate) {
 		writePricingError(w, http.StatusBadRequest, pricingCodeInvertedDates, "newPeriod.startDate must be YYYY-MM-DD")
 		return
 	}
 	// Under exclusive end dates the closing row ends on the successor's start
 	// date — the same literal string, no ±1 arithmetic (Decision 5).
 	closingEndDate := newPeriod.StartDate
+
+	// The validation chain below only ever sees the successor payload, so the
+	// projected closing row's own dates have to be checked here. A successor
+	// starting at or before the closing plan's start date would cap it at
+	// endDate <= startDate — the zero-day/inverted plan plan.Validate rejects on
+	// every other write path. The overlap check cannot catch it: a zero-day
+	// half-open range intersects nothing.
+	if closingEndDate <= closing.StartDate {
+		writePricingError(w, http.StatusBadRequest, pricingCodeInvertedDates,
+			"newPeriod.startDate must be after the closing plan's startDate")
+		return
+	}
 
 	// Simulate the resulting two-row state (closing capped at the switch
 	// date; new row inserted) and run the same validation chain against it.
@@ -568,21 +580,6 @@ func mapPricingStoreError(w http.ResponseWriter, op string, err error) {
 		slog.Error("pricing store error", "op", op, "error", err)
 		writePricingError(w, http.StatusInternalServerError, pricingCodeInternal, "internal error")
 	}
-}
-
-// validISODate returns true when s parses as YYYY-MM-DD. Dates are
-// calendar-only here, so no location is involved in the format check.
-func validISODate(s string) bool {
-	if len(s) != 10 {
-		return false
-	}
-	// Cheap structural check before time.Parse so common malformed
-	// inputs fail fast.
-	if s[4] != '-' || s[7] != '-' {
-		return false
-	}
-	_, err := time.Parse("2006-01-02", s)
-	return err == nil
 }
 
 // roundTo4DP rounds v to exactly four decimal places. Used to normalise

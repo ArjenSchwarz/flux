@@ -2,8 +2,11 @@
 package api
 
 import (
+	"time"
+
 	"github.com/ArjenSchwarz/flux/internal/derivedstats"
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
+	"github.com/ArjenSchwarz/flux/internal/plan"
 )
 
 // StatusResponse is the JSON response for GET /status.
@@ -154,6 +157,32 @@ func bandImportsFromAttr(stored []dynamo.BandImportAttr) []BandImport {
 		out[i] = BandImport{Start: b.Start, End: b.End, Kwh: b.Kwh}
 	}
 	return out
+}
+
+// bandImportsFor resolves one day's rated-band split for a read endpoint.
+//
+// Today's is integrated live from readings; a past day's is served from the
+// split captured at day close, which outlives the 30-day readings TTL. AC 3.4
+// requires /day and /history to report the identical split for the same day,
+// so both call this rather than each deciding today-vs-stored for itself.
+//
+// A nil result means "no split available", which the cost helper treats as
+// unavailable rather than as zero import in every band.
+func bandImportsFor(plans []plan.Plan, date string, isToday bool,
+	readings []dynamo.ReadingItem, now time.Time, stored []dynamo.BandImportAttr,
+) []BandImport {
+	if !isToday {
+		return bandImportsFromAttr(stored)
+	}
+	p, priced := plan.PlanFor(plans, date)
+	if !priced {
+		return nil
+	}
+	bands, ok := liveBandImports(readings, now, p)
+	if !ok {
+		return nil
+	}
+	return bands
 }
 
 // TodayEnergy contains cumulative energy totals for the current day.

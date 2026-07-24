@@ -2,6 +2,7 @@ package poller
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -190,6 +191,30 @@ func TestSummarisation_NoPlan_RunsWindowIndependentStatsOnly(t *testing.T) {
 	assert.Empty(t, ms.lastDerived.PeakComputedAt, "peak is undefined without a plan")
 	assert.Empty(t, ms.lastDerived.BandsComputedAt, "the band sentinel stays unset for backfill")
 	assert.Nil(t, ms.lastDerived.BandImports)
+}
+
+// Once the window-independent stats are written, a date no plan prices has
+// nothing left the pass can compute — the peak and band groups both need a
+// plan, and their sentinels stay unset on purpose so a backfill can still
+// repair the day. Without the gate the pass would re-query a full day of
+// readings every hour to compute nothing, so the outcome must be a skip, and a
+// distinct one: an operator watching the metric needs to see dates going
+// unpriced.
+func TestSummarisation_NoPlan_SkipsOnceWindowIndependentStatsExist(t *testing.T) {
+	ms := &mockStore{
+		getDailyEnergyResult: &dynamo.DailyEnergyItem{
+			SysSn: "TEST123", Date: "2026-04-14",
+			DerivedStatsComputedAt: "2026-04-15T01:00:00Z",
+		},
+		// A readings query on this date is the failure being guarded against, so
+		// make one impossible to miss: reaching it would return
+		// PassResultError instead of the skip.
+		queryReadingsErr: errors.New("readings must not be queried for an unpriceable date"),
+	}
+	p := summarisationPollerWith(t, ms, &mockPlanLister{responses: []planListerResponse{{items: nil}}})
+
+	assert.Equal(t, PassResultSkippedNoPlan, p.runSummarisationPass(context.Background(), "2026-04-14"))
+	assert.Nil(t, ms.lastDerived, "nothing to write")
 }
 
 // --- Sentinel gating across the three groups ---

@@ -21,18 +21,16 @@ type PricingStore interface {
 }
 
 // Pricing error codes returned in the response envelope's "error" field.
-// The single-plan band codes live in internal/plan, which owns the rules
-// they report, and are re-exported here so every code the endpoint can
-// emit is visible in one place.
+//
+// The single-plan band codes are not listed here: the handler emits whatever
+// plan.Validate reports, so aliasing them would be a second copy that could
+// silently fall out of step with the rules they name. The full set it can
+// forward is plan.CodeBandWindowInvalid, CodeBandOverlap, CodeMultipleFreeBands,
+// CodeSavingsRateMissing, CodeNoRatedBand, CodeRatePrecision, and
+// CodeRateOutOfRange. CodeInvertedDates is aliased below because the handler
+// raises it directly, not only by forwarding.
 const (
-	pricingCodeInvertedDates      = plan.CodeInvertedDates
-	pricingCodeBandWindowInvalid  = plan.CodeBandWindowInvalid
-	pricingCodeBandOverlap        = plan.CodeBandOverlap
-	pricingCodeMultipleFreeBands  = plan.CodeMultipleFreeBands
-	pricingCodeSavingsRateMissing = plan.CodeSavingsRateMissing
-	pricingCodeNoRatedBand        = plan.CodeNoRatedBand
-	pricingCodeRatePrecision      = plan.CodeRatePrecision
-	pricingCodeRateOutOfRange     = plan.CodeRateOutOfRange
+	pricingCodeInvertedDates = plan.CodeInvertedDates
 
 	pricingCodeOverlap         = "overlap"
 	pricingCodeSecondOpenEnded = "second_open_ended"

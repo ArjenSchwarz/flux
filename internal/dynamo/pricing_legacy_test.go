@@ -203,10 +203,10 @@ func TestListPricingLeavesTheSentinelAlone(t *testing.T) {
 	store := NewDynamoPricingStore(api, pricingTestTable())
 
 	openID := "p-legacy"
-	sentinel := PricingSentinel{PricingID: pricingSentinelID, OpenEndedID: &openID, UpdatedAt: "2026-05-23T10:00:00Z"}
+	sentinel := PricingSentinel{PricingID: PricingSentinelID, OpenEndedID: &openID, UpdatedAt: "2026-05-23T10:00:00Z"}
 	av, err := attributevalue.MarshalMap(sentinel)
 	require.NoError(t, err)
-	api.items[pricingSentinelID] = av
+	api.items[PricingSentinelID] = av
 	api.items["p-legacy"] = legacyRow("p-legacy", "2026-01-01", nil)
 
 	got, err := store.ListPricing(context.Background())

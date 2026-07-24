@@ -219,6 +219,36 @@ public extension DayCosts {
     }
 }
 
+public extension OffpeakImport {
+    /// Reconstructs the off-peak row from the flat fields the read payloads
+    /// carry. `/day` and `/history` describe the same day and the Data
+    /// Consistency rule requires it to price identically on both, so the two
+    /// rules that matter live here once: a day with no off-peak import has no
+    /// row at all rather than a zero row — the distinction the single-rate
+    /// formula turns on — and an absent sample count reads as zero samples.
+    ///
+    /// The surrounding `DayCostInputs` is still built per payload type:
+    /// `DayEnergy.eInput` is non-optional where `DaySummary.eInput` is
+    /// optional, so a shared protocol cannot cover the energy fields.
+    static func from(
+        gridImportKwh: Double?,
+        windowStart: String?,
+        windowEnd: String?,
+        integratedAt: String?,
+        sampleCount: Int?
+    ) -> OffpeakImport? {
+        gridImportKwh.map {
+            OffpeakImport(
+                gridImportKwh: $0,
+                windowStart: windowStart,
+                windowEnd: windowEnd,
+                integratedAt: integratedAt,
+                sampleCount: sampleCount ?? 0
+            )
+        }
+    }
+}
+
 public extension DaySummary {
     /// Returns the cost breakdown for `date` if a plan covers it, or `nil` when
     /// none does (AC 2.7).
@@ -230,24 +260,19 @@ public extension DaySummary {
         return DayCosts.resolve(plan: plan, day: costInputs)
     }
 
-    /// The day's energy as cost resolution sees it. The off-peak row is
-    /// reconstructed from the flat wire fields; a day with no off-peak import
-    /// has no row at all, which is the distinction the single-rate formula
-    /// turns on.
+    /// The day's energy as cost resolution sees it.
     var costInputs: DayCostInputs {
         DayCostInputs(
             eInput: eInput,
             eOutput: eOutput,
             peakGridImportKwh: peakGridImportKwh,
-            offpeak: offpeakGridImportKwh.map {
-                OffpeakImport(
-                    gridImportKwh: $0,
-                    windowStart: offpeakWindowStart,
-                    windowEnd: offpeakWindowEnd,
-                    integratedAt: offpeakIntegratedAt,
-                    sampleCount: offpeakSampleCount ?? 0
-                )
-            },
+            offpeak: .from(
+                gridImportKwh: offpeakGridImportKwh,
+                windowStart: offpeakWindowStart,
+                windowEnd: offpeakWindowEnd,
+                integratedAt: offpeakIntegratedAt,
+                sampleCount: offpeakSampleCount
+            ),
             bandImports: bandImports
         )
     }
@@ -266,15 +291,13 @@ public extension DayEnergy {
             eInput: eInput,
             eOutput: eOutput,
             peakGridImportKwh: peakGridImportKwh,
-            offpeak: offpeakGridImportKwh.map {
-                OffpeakImport(
-                    gridImportKwh: $0,
-                    windowStart: offpeakWindowStart,
-                    windowEnd: offpeakWindowEnd,
-                    integratedAt: offpeakIntegratedAt,
-                    sampleCount: offpeakSampleCount ?? 0
-                )
-            },
+            offpeak: .from(
+                gridImportKwh: offpeakGridImportKwh,
+                windowStart: offpeakWindowStart,
+                windowEnd: offpeakWindowEnd,
+                integratedAt: offpeakIntegratedAt,
+                sampleCount: offpeakSampleCount
+            ),
             bandImports: bandImports
         )
     }

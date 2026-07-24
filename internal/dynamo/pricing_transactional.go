@@ -66,7 +66,7 @@ func (s *DynamoPricingStore) sentinelUpdate(newOpenEndedID, prevOpenEndedID *str
 	return types.TransactWriteItem{
 		Update: &types.Update{
 			TableName:                 &s.table,
-			Key:                       pricingKey(pricingSentinelID),
+			Key:                       pricingKey(PricingSentinelID),
 			UpdateExpression:          &expr,
 			ConditionExpression:       &cond,
 			ExpressionAttributeValues: values,
