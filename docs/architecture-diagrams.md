@@ -149,7 +149,9 @@ the Internet Gateway. The VPC template also defines an S3 gateway endpoint, but
 the poller has no runtime S3 path — it is not drawn here to avoid implying one.
 
 IAM is least-privilege per role: the poller's `TaskRole` reads SoC rules/devices
-and writes readings, summaries, off-peak, and fire-state; the
+and pricing (read-only — `Scan`/`GetItem`/`Query`, so it can resolve each day's
+free window without gaining a write path) and writes readings, summaries,
+off-peak, and fire-state; the
 `LambdaExecutionRole` is read-only on the energy tables and write-scoped to the
 user-authored tables (notes, devices, rules, pricing, presets) only.
 
@@ -169,7 +171,7 @@ flowchart LR
         g2["pollDailyPower<br/>every 1h · today + yesterday"]
         g3["pollDailyEnergy<br/>every 1h · today + yesterday"]
         g4["pollSystemInfo<br/>every 24h"]
-        g5["offpeak scheduler<br/>at window start + end"]
+        g5["offpeak scheduler<br/>wakes at local midnight<br/>resolves the day's free window"]
         g6["pollDailySummary<br/>every 1h · derives, no API call"]
         g7["midnightFinalizer<br/>~00:15 local"]
     end
@@ -211,13 +213,21 @@ Notes that matter for correctness:
 - **Today and yesterday both polled hourly** — yesterday is re-fetched so the
   final pre-midnight snapshots land before the day rolls over.
 - **Off-peak energy is integrated from live readings** (post-T-1341) —
-  `handleEnd` runs a strongly-consistent query of `flux-readings` over the
-  configured window (e.g. 11:00–14:00) and sums the per-reading power deltas via
+  `handleEnd` runs a strongly-consistent query of `flux-readings` over the free
+  window and sums the per-reading power deltas via
   `derivedstats.IntegrateOffpeakDeltas`, then writes the result to `flux-offpeak`.
   The `getOneDateEnergy` snapshots captured at window start/end are retained for
   diagnostics and drift logging only — they are not the basis of the computed
   value. This is why `g5` reads from `flux-readings` rather than following the
   `e3 → flux-daily-energy` path the other goroutines use.
+- **The free window comes from the pricing plan, not configuration**
+  (`specs/time-of-use-pricing`, Decision 2) — `g5` wakes at local midnight,
+  refreshes its plan cache, and resolves that day's free band before sleeping to
+  its start, so a plan switch moves the window with no stack update. A day whose
+  plan has no free band sleeps through to the next midnight. Plan reads that
+  fail are served from the last-good cache and never resolved as "no plan"
+  (Q14). `g6` additionally captures the day's rated-band import split
+  (`bandImports`) so banded costs outlive the 30-day readings TTL.
 - **`pollLiveData` also feeds SoC alerts** — the same 10s tick evaluates rules and
   writes `flux-soc-fire-state`, so the poller touches more than the five tables
   shown here. See diagram 8 for the full fire path.
@@ -238,12 +248,12 @@ historical date.
 | `flux-daily-power` | `sysSn` / `uploadTime` | retained | Poller (hourly) | Lambda (Day Detail fallback) |
 | `flux-daily-energy` | `sysSn` / `date` | retained | Poller (hourly + summary + finalizer) | Lambda |
 | `flux-system` | `sysSn` | retained | Poller (24h) | Lambda |
-| `flux-offpeak` | `sysSn` / `date` | retained | Poller (window diff) | Lambda |
+| `flux-offpeak` | `sysSn` / `date` | retained | Poller (window integration, snapshots the window geometry) | Lambda |
 | `flux-notes` | `sysSn` / `date` | PITR | Lambda (`PUT /note`) | Lambda |
 | `flux-devices` | `deviceId` | PITR | Lambda + Poller (GC) | Poller (eval) |
 | `flux-soc-rules` | `deviceId` / `ruleId` | PITR | Lambda | Poller (eval) |
 | `flux-soc-fire-state` | `deviceRule` / `windowStartDate` | TTL 7d | Poller (idempotent) | Poller |
-| `flux-pricing` | `pricingId` | PITR | Lambda | Lambda |
+| `flux-pricing` | `pricingId` | PITR | Lambda | Lambda + Poller (read-only, for each day's free window) |
 | `flux-simulation-presets` | `presetId` | PITR | Lambda | Lambda |
 
 Write ownership is deliberately split — the poller and the Lambda never share a
@@ -270,6 +280,7 @@ flowchart LR
 
     devices --> poller
     rules --> poller
+    pricing -->|free window per day| poller
     poller -.->|GC delete| devices
     poller -.->|GC delete| rules
 

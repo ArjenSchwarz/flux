@@ -18,13 +18,24 @@ const (
 // SummarisationPassResult dimension values emitted by the daily-derived-stats
 // summarisation pass. These map 1:1 to the AC 1.11 dimensions; a CloudWatch
 // alarm on absence of `PassResultSuccess` for >24h flags a stuck pass.
+// The former "skipped-ssm-unresolved" dimension is gone: the window comes
+// from the plan now, and the outcomes that used to collapse into it are
+// distinguished instead — a plan read failure reports `error` so it is
+// retried, while a day with no free band or no plan runs its
+// window-independent blocks and reports `success` (Q33).
+//
+// `skipped-no-plan` is the steady state for a date no plan prices once its
+// window-independent stats have been written: the peak and band sentinels stay
+// unset so a backfill can still capture the split, and the pass stops re-reading
+// the day's readings every hour to compute nothing. A rising count means dates
+// are going unpriced.
 const (
-	PassResultSuccess              = "success"
-	PassResultError                = "error"
-	PassResultSkippedNoRow         = "skipped-no-row"
-	PassResultSkippedAlreadyDone   = "skipped-already-populated"
-	PassResultSkippedSSMUnresolved = "skipped-ssm-unresolved"
-	PassResultSkippedNoReadings    = "skipped-no-readings"
+	PassResultSuccess            = "success"
+	PassResultError              = "error"
+	PassResultSkippedNoRow       = "skipped-no-row"
+	PassResultSkippedAlreadyDone = "skipped-already-populated"
+	PassResultSkippedNoReadings  = "skipped-no-readings"
+	PassResultSkippedNoPlan      = "skipped-no-plan"
 )
 
 // MetricsRecorder is the small surface the poller uses for emitting custom

@@ -22,7 +22,8 @@ iOS App --> Lambda Function URL (Go, ARM64) -------------+
 - **Poller** polls AlphaESS on multiple schedules (10s for live data, hourly/6h/24h for summaries) and writes to DynamoDB
 - **Lambda API** reads from DynamoDB and computes derived stats (rolling averages, cutoff estimates, off-peak deltas, peak usage periods)
 - **DynamoDB tables** (11, all PAY_PER_REQUEST): `flux-readings` (TTL 30d), `flux-daily-power`, `flux-daily-energy`, `flux-system`, `flux-offpeak`, `flux-notes` (PITR), `flux-devices` (PITR), `flux-soc-rules` (PITR), `flux-soc-fire-state` (TTL 7d), `flux-pricing` (PITR), `flux-simulation-presets` (PITR)
-- Off-peak energy is computed by integrating `flux-readings` over the SSM-configured window (11:00-14:00) in the poller's `handleEnd`; the `getOneDateEnergy` snapshots captured at window start/end are retained for diagnostics only (post-T-1341, `specs/offpeak-from-readings`)
+- Off-peak energy is computed by integrating `flux-readings` over the free window in the poller's `handleEnd`; the `getOneDateEnergy` snapshots captured at window start/end are retained for diagnostics only (post-T-1341, `specs/offpeak-from-readings`)
+- The free (off-peak) window is a property of the pricing plan covering each day, not configuration: every consumer resolves it from the free band of the plan pricing the day in question, so it changes with the plan rather than with a stack update (`specs/time-of-use-pricing`, Decision 2). The `OffPeakWindowStart`/`OffPeakWindowEnd` SSM parameters are gone
 
 Visual reference for the full flow (AWS infrastructure, polling engine, data model, API surface, dashboard and push sequences): `docs/architecture-diagrams.md`.
 

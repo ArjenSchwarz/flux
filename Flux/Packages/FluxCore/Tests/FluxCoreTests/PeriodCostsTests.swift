@@ -8,14 +8,14 @@ struct PeriodCostsTests {
 
     @Test
     func emptyDaysReturnsNil() throws {
-        let pricing = [period(start: "2026-04-01", end: nil, peak: 0.30, feedIn: 0.05, offPeak: 0.10)]
+        let pricing = [plan(start: "2026-04-01", end: nil, rate: 0.30, feedIn: 0.05, savings: 0.10)]
         #expect(PeriodCosts.compute(days: [], pricing: pricing) == nil)
     }
 
     @Test
     func zeroPricedDaysReturnsNil() throws {
-        // Days exist but none is covered by any pricing period (AC 5.4).
-        let pricing = [period(start: "2030-01-01", end: nil, peak: 0.30, feedIn: 0.05, offPeak: 0.10)]
+        // Days exist but none is covered by any plan (AC 2.7).
+        let pricing = [plan(start: "2030-01-01", end: nil, rate: 0.30, feedIn: 0.05, savings: 0.10)]
         let days = [
             day(date: "2026-04-15", eInput: 10, eOutput: 4, offpeakKwh: 3),
             day(date: "2026-04-16", eInput: 12, eOutput: 5, offpeakKwh: 2)
@@ -25,7 +25,7 @@ struct PeriodCostsTests {
 
     @Test
     func fullCoverageNoCaption() throws {
-        let pricing = [period(start: "2026-04-01", end: nil, peak: 0.30, feedIn: 0.05, offPeak: 0.10)]
+        let pricing = [plan(start: "2026-04-01", end: nil, rate: 0.30, feedIn: 0.05, savings: 0.10)]
         let days = [
             day(date: "2026-04-15", eInput: 10, eOutput: 4, offpeakKwh: 3),
             day(date: "2026-04-16", eInput: 12, eOutput: 5, offpeakKwh: 2)
@@ -38,7 +38,7 @@ struct PeriodCostsTests {
 
     @Test
     func partialCoverageReportsCount() throws {
-        let pricing = [period(start: "2026-04-01", end: "2026-04-30", peak: 0.30, feedIn: 0.05, offPeak: 0.10)]
+        let pricing = [plan(start: "2026-04-01", end: "2026-05-01", rate: 0.30, feedIn: 0.05, savings: 0.10)]
         let days = [
             day(date: "2026-04-15", eInput: 10, eOutput: 4, offpeakKwh: 3),
             day(date: "2026-05-01", eInput: 12, eOutput: 5, offpeakKwh: 2),
@@ -52,7 +52,7 @@ struct PeriodCostsTests {
 
     @Test
     func totalsExcludeUnpricedDays() throws {
-        let pricing = [period(start: "2026-04-01", end: "2026-04-30", peak: 0.30, feedIn: 0.05, offPeak: 0.10)]
+        let pricing = [plan(start: "2026-04-01", end: "2026-05-01", rate: 0.30, feedIn: 0.05, savings: 0.10)]
         let days = [
             day(date: "2026-04-15", eInput: 10, eOutput: 4, offpeakKwh: 3),
             day(date: "2026-05-01", eInput: 999, eOutput: 999, offpeakKwh: 999)
@@ -65,11 +65,26 @@ struct PeriodCostsTests {
         #expect(totals.net == 7 * 0.30 - 4 * 0.05)
     }
 
+    @Test
+    func daysSpanningASwitchDateArePricedByTheirOwnPlan() throws {
+        let pricing = [
+            plan(id: "old", start: "2026-01-01", end: "2026-08-01", rate: 0.20, feedIn: 0.05, savings: 0.10),
+            plan(id: "new", start: "2026-08-01", end: nil, rate: 0.40, feedIn: 0.05, savings: 0.10)
+        ]
+        let days = [
+            day(date: "2026-07-31", eInput: 10, eOutput: 0, offpeakKwh: 0),
+            day(date: "2026-08-01", eInput: 10, eOutput: 0, offpeakKwh: 0)
+        ]
+        let totals = try #require(PeriodCosts.compute(days: days, pricing: pricing))
+        #expect(totals.pricedDayCount == 2)
+        #expect(approximately(totals.peakImportsCost, 10 * 0.20 + 10 * 0.40))
+    }
+
     // MARK: - Net invariant
 
     @Test
     func netEqualsSumOfPerDayNets() throws {
-        let pricing = [period(start: "2026-04-01", end: nil, peak: 0.30, feedIn: 0.05, offPeak: 0.10)]
+        let pricing = [plan(start: "2026-04-01", end: nil, rate: 0.30, feedIn: 0.05, savings: 0.10)]
         let days = [
             day(date: "2026-04-15", eInput: 10, eOutput: 4, offpeakKwh: 3),
             day(date: "2026-04-16", eInput: 12, eOutput: 5, offpeakKwh: 2),
@@ -78,8 +93,7 @@ struct PeriodCostsTests {
         let totals = try #require(PeriodCosts.compute(days: days, pricing: pricing))
 
         let perDayNets = days.compactMap { $0.costs(in: pricing)?.net }
-        let summed = perDayNets.reduce(0, +)
-        #expect(approximately(totals.net, summed))
+        #expect(approximately(totals.net, perDayNets.reduce(0, +)))
     }
 
     // MARK: - Linearity (property-based)
@@ -93,13 +107,8 @@ struct PeriodCostsTests {
         (1.0, 1.0)
     ])
     func costLinearityPerLine(rate: Double, kwh: Double) throws {
-        let pricing = [period(start: "2026-04-01", end: nil, peak: rate, feedIn: rate, offPeak: rate)]
-        let summary = DaySummary(
-            epv: nil, eInput: kwh, eOutput: kwh,
-            eCharge: nil, eDischarge: nil,
-            socLow: nil, socLowTime: nil,
-            offpeakGridImportKwh: 0, offpeakGridExportKwh: nil
-        )
+        let pricing = [plan(start: "2026-04-01", end: nil, rate: rate, feedIn: rate, savings: rate)]
+        let summary = summary(eInput: kwh, eOutput: kwh, offpeakKwh: 0)
         let costs = try #require(summary.costs(forDate: "2026-04-15", in: pricing))
         #expect(approximately(costs.peakImportsCost, rate * kwh))
         #expect(approximately(costs.solarFeedInIncome, rate * kwh))
@@ -107,14 +116,9 @@ struct PeriodCostsTests {
 
     @Test(arguments: [0.0, 1.0, 10.0, 100.0, 1000.0])
     func zeroRateProducesZeroCost(kwh: Double) throws {
-        let pricing = [period(start: "2026-04-01", end: nil, peak: 0, feedIn: 0, offPeak: 0)]
-        let summary = DaySummary(
-            epv: nil, eInput: kwh, eOutput: kwh,
-            eCharge: nil, eDischarge: nil,
-            socLow: nil, socLowTime: nil,
-            offpeakGridImportKwh: 0, offpeakGridExportKwh: nil
-        )
-        let costs = try #require(summary.costs(forDate: "2026-04-15", in: pricing))
+        let pricing = [plan(start: "2026-04-01", end: nil, rate: 0, feedIn: 0, savings: 0)]
+        let costs = try #require(summary(eInput: kwh, eOutput: kwh, offpeakKwh: 0)
+            .costs(forDate: "2026-04-15", in: pricing))
         #expect(costs.peakImportsCost == 0)
         #expect(costs.solarFeedInIncome == 0)
         #expect(costs.offPeakSavings == 0)
@@ -123,14 +127,9 @@ struct PeriodCostsTests {
 
     @Test(arguments: [0.0, 0.05, 0.30, 1.0, 9.99])
     func zeroKwhProducesZeroCost(rate: Double) throws {
-        let pricing = [period(start: "2026-04-01", end: nil, peak: rate, feedIn: rate, offPeak: rate)]
-        let summary = DaySummary(
-            epv: nil, eInput: 0, eOutput: 0,
-            eCharge: nil, eDischarge: nil,
-            socLow: nil, socLowTime: nil,
-            offpeakGridImportKwh: 0, offpeakGridExportKwh: nil
-        )
-        let costs = try #require(summary.costs(forDate: "2026-04-15", in: pricing))
+        let pricing = [plan(start: "2026-04-01", end: nil, rate: rate, feedIn: rate, savings: rate)]
+        let costs = try #require(summary(eInput: 0, eOutput: 0, offpeakKwh: 0)
+            .costs(forDate: "2026-04-15", in: pricing))
         #expect(costs.peakImportsCost == 0)
         #expect(costs.solarFeedInIncome == 0)
         #expect(costs.offPeakSavings == 0)
@@ -142,63 +141,67 @@ struct PeriodCostsTests {
         (0.0001, 1000.0, 0.5)
     ])
     func scalingRateScalesCostProportionally(rate: Double, kwh: Double, scale: Double) throws {
-        let pricing = [period(start: "2026-04-01", end: nil, peak: rate, feedIn: 0, offPeak: 0)]
-        let scaledPricing = [period(start: "2026-04-01", end: nil, peak: rate * scale, feedIn: 0, offPeak: 0)]
-        let summary = DaySummary(
-            epv: nil, eInput: kwh, eOutput: 0,
-            eCharge: nil, eDischarge: nil,
-            socLow: nil, socLowTime: nil,
-            offpeakGridImportKwh: 0, offpeakGridExportKwh: nil
-        )
-        let base = try #require(summary.costs(forDate: "2026-04-15", in: pricing))
+        let base = [plan(start: "2026-04-01", end: nil, rate: rate, feedIn: 0, savings: 0)]
+        let scaledPricing = [plan(start: "2026-04-01", end: nil, rate: rate * scale, feedIn: 0, savings: 0)]
+        let summary = summary(eInput: kwh, eOutput: 0, offpeakKwh: 0)
+        let baseCosts = try #require(summary.costs(forDate: "2026-04-15", in: base))
         let scaled = try #require(summary.costs(forDate: "2026-04-15", in: scaledPricing))
-        #expect(approximately(scaled.peakImportsCost, base.peakImportsCost * scale))
+        #expect(approximately(scaled.peakImportsCost, baseCosts.peakImportsCost * scale))
     }
 
-    // MARK: - Overlap symmetry (property-based)
+    // MARK: - Overlap symmetry (half-open, Decision 5)
 
     @Test(arguments: [
-        ("2026-01-01", "2026-06-30", "2026-04-01", "2026-12-31"),
-        ("2026-01-01", "2026-06-30", "2026-07-01", "2026-12-31"),
-        ("2026-01-01", "2026-12-31", "2026-04-01", "2026-04-30"),
-        ("2026-01-01", "2026-06-30", "2026-06-30", "2026-12-31") // single-day overlap
+        ("2026-01-01", "2026-07-01", "2026-04-01", "2027-01-01"),
+        ("2026-01-01", "2026-07-01", "2026-07-01", "2027-01-01"),
+        ("2026-01-01", "2027-01-01", "2026-04-01", "2026-05-01"),
+        ("2026-01-01", "2026-07-01", "2026-06-30", "2027-01-01")
     ])
     func overlapsIsSymmetric(aStart: String, aEnd: String, bStart: String, bEnd: String) throws {
-        let alpha = period(id: "a", start: aStart, end: aEnd, peak: 0, feedIn: 0, offPeak: 0)
-        let beta = period(id: "b", start: bStart, end: bEnd, peak: 0, feedIn: 0, offPeak: 0)
+        let alpha = plan(id: "a", start: aStart, end: aEnd, rate: 0, feedIn: 0, savings: 0)
+        let beta = plan(id: "b", start: bStart, end: bEnd, rate: 0, feedIn: 0, savings: 0)
         #expect(rangesOverlap(alpha, beta) == rangesOverlap(beta, alpha))
+    }
+
+    @Test
+    func abuttingRangesDoNotOverlapUnderExclusiveEnds() throws {
+        // The whole point of Decision 5: "old ends 2026-08-01, new starts
+        // 2026-08-01" is a clean succession, not an overlap.
+        let alpha = plan(id: "a", start: "2026-01-01", end: "2026-08-01", rate: 0, feedIn: 0, savings: 0)
+        let beta = plan(id: "b", start: "2026-08-01", end: nil, rate: 0, feedIn: 0, savings: 0)
+        #expect(!rangesOverlap(alpha, beta))
+        #expect(!rangesOverlap(beta, alpha))
     }
 
     @Test(arguments: [
-        ("2026-01-01", "2026-06-30", "2026-04-01"),
+        ("2026-01-01", "2026-07-01", "2026-04-01"),
         ("2026-01-01", nil, "2026-04-01"),
-        ("2026-01-01", "2026-06-30", "2026-06-30")
+        ("2026-01-01", "2026-07-01", "2026-07-01")
     ])
     func overlapsWithOpenEnded(aStart: String, aEnd: String?, bStart: String) throws {
-        // The right-hand range is open-ended; if its start is on or before
-        // the left's end, the two overlap (and the relation is symmetric).
-        let alpha = period(id: "a", start: aStart, end: aEnd, peak: 0, feedIn: 0, offPeak: 0)
-        let beta = period(id: "b", start: bStart, end: nil, peak: 0, feedIn: 0, offPeak: 0)
+        let alpha = plan(id: "a", start: aStart, end: aEnd, rate: 0, feedIn: 0, savings: 0)
+        let beta = plan(id: "b", start: bStart, end: nil, rate: 0, feedIn: 0, savings: 0)
         #expect(rangesOverlap(alpha, beta) == rangesOverlap(beta, alpha))
     }
 
-    // MARK: - helpers
+    // MARK: - Helpers
 
-    private func period(
+    private func plan(
         id: String = "p",
         start: String,
         end: String?,
-        peak: Double,
+        rate: Double,
         feedIn: Double,
-        offPeak: Double
-    ) -> PricingPeriod {
-        PricingPeriod(
+        savings: Double
+    ) -> PricingPlan {
+        PricingPlan(
             id: id,
             startDate: start,
             endDate: end,
-            peakRate: peak,
+            defaultRate: rate,
+            windows: [PlanWindow(start: "11:00", end: "14:00", free: true, rate: nil)],
             feedInRate: feedIn,
-            offPeakSavingsRate: offPeak,
+            savingsReferenceRate: savings,
             createdAt: Date(timeIntervalSince1970: 1),
             updatedAt: Date(timeIntervalSince1970: 1)
         )
@@ -215,14 +218,24 @@ struct PeriodCostsTests {
         )
     }
 
+    private func summary(eInput: Double, eOutput: Double, offpeakKwh: Double?) -> DaySummary {
+        DaySummary(
+            epv: nil, eInput: eInput, eOutput: eOutput,
+            eCharge: nil, eDischarge: nil,
+            socLow: nil, socLowTime: nil,
+            offpeakGridImportKwh: offpeakKwh, offpeakGridExportKwh: nil
+        )
+    }
+
     private func approximately(_ lhs: Double, _ rhs: Double, tolerance: Double = 1e-6) -> Bool {
         abs(lhs - rhs) < tolerance
     }
 
-    /// Free function so we can test the relation directly.
-    private func rangesOverlap(_ left: PricingPeriod, _ right: PricingPeriod) -> Bool {
+    /// Half-open interval intersection — the relation the server's overlap
+    /// check now uses (Decision 5).
+    private func rangesOverlap(_ left: PricingPlan, _ right: PricingPlan) -> Bool {
         let leftEnd = left.endDate ?? "9999-12-31"
         let rightEnd = right.endDate ?? "9999-12-31"
-        return left.startDate <= rightEnd && right.startDate <= leftEnd
+        return left.startDate < rightEnd && right.startDate < leftEnd
     }
 }

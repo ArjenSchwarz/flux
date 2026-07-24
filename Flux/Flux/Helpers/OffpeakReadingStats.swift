@@ -23,12 +23,16 @@ struct OffpeakReadingStats: Equatable {
     /// window-specific stats. The API's `OffpeakData.gridUsageKwh` is the
     /// source of truth when available; the integrated value here is a
     /// fallback for the Day Detail summary split.
-    static func compute(date: String, readings: [ParsedReading]) -> OffpeakReadingStats {
+    static func compute(
+        date: String,
+        readings: [ParsedReading],
+        offpeakWindow: PlanSegment?
+    ) -> OffpeakReadingStats {
         guard !readings.isEmpty else { return .empty }
 
         let lowest = readings.min { $0.point.soc < $1.point.soc }
 
-        guard let range = DayChartDomain.offpeakRange(for: date) else {
+        guard let range = DayChartDomain.offpeakRange(for: date, window: offpeakWindow) else {
             return OffpeakReadingStats(
                 lowestSOC: lowest?.point.soc,
                 lowestSOCTimestamp: lowest?.date,

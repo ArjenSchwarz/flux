@@ -6,6 +6,8 @@ struct SOCChartView: View {
     let date: String
     let readings: [ParsedReading]
     let summary: DaySummary?
+    /// The day's free window, from the plan pricing it; nil means no shading.
+    let offpeakWindow: PlanSegment?
 
     @State private var selectedDate: Date?
 
@@ -18,7 +20,7 @@ struct SOCChartView: View {
             }
 
             Chart {
-                if let offpeak = DayChartDomain.offpeakRange(for: date) {
+                if let offpeak = DayChartDomain.offpeakRange(for: date, window: offpeakWindow) {
                     RectangleMark(
                         xStart: .value("Start", offpeak.start),
                         xEnd: .value("End", offpeak.end)
@@ -98,7 +100,12 @@ struct SOCChartView: View {
         guard let date = DateFormatting.parseTimestamp(reading.timestamp) else { return nil }
         return ParsedReading(id: reading.id, date: date, point: reading)
     }
-    SOCChartView(date: day.date, readings: parsed, summary: day.summary)
+    SOCChartView(
+        date: day.date,
+        readings: parsed,
+        summary: day.summary,
+        offpeakWindow: PlanSegment(start: "11:00", end: "14:00", free: true, rate: 0)
+    )
         .padding()
 }
 #endif

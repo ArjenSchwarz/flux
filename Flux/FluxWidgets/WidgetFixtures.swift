@@ -36,8 +36,8 @@ enum WidgetFixtures {
                     estimatedCutoffTime: "2026-04-20T17:12:00Z"
                 ),
                 offpeak: OffpeakData(
-                    windowStart: OffpeakData.defaultWindowStart,
-                    windowEnd: OffpeakData.defaultWindowEnd,
+                    windowStart: "11:00",
+                    windowEnd: "14:00",
                     gridUsageKwh: 1.2,
                     solarKwh: nil,
                     batteryChargeKwh: nil,

@@ -7,17 +7,17 @@ struct PricingServiceTests {
     @Test
     func refreshLoadsListAndSortsAscending() async throws {
         let api = MockPricingAPIClient()
-        let later = makePeriod(id: "later", start: "2026-07-01", end: nil)
-        let earlier = makePeriod(id: "earlier", start: "2026-01-01", end: "2026-06-30")
-        api.periodsToReturn = [later, earlier]
+        let later = makePlan(id: "later", start: "2026-07-01", end: nil)
+        let earlier = makePlan(id: "earlier", start: "2026-01-01", end: "2026-07-01")
+        api.plansToReturn = [later, earlier]
         let svc = PricingService()
         svc.bind(apiClient: api)
 
         try await svc.refresh()
 
-        #expect(svc.periods.count == 2)
-        #expect(svc.periods.first?.id == "earlier")
-        #expect(svc.periods.last?.id == "later")
+        #expect(svc.plans.count == 2)
+        #expect(svc.plans.first?.id == "earlier")
+        #expect(svc.plans.last?.id == "later")
         #expect(svc.lastError == nil)
     }
 
@@ -43,16 +43,17 @@ struct PricingServiceTests {
         let svc = PricingService()
         svc.bind(apiClient: api)
 
-        let draft = PricingPeriodDraft(
+        let draft = PricingPlanDraft(
             startDate: "2026-08-01",
             endDate: nil,
-            peakRate: 0.30,
+            defaultRate: 0.30,
+            windows: [PlanWindow(start: "11:00", end: "14:00", free: true, rate: nil)],
             feedInRate: 0.06,
-            offPeakSavingsRate: 0.12
+            savingsReferenceRate: 0.12
         )
         let created = try await svc.create(draft)
 
-        #expect(svc.periods.contains(where: { $0.id == created.id }))
+        #expect(svc.plans.contains(where: { $0.id == created.id }))
 
         // Wait for fire-and-forget refetch to complete.
         try await waitForRefetch(api: api, expected: 1)
@@ -62,55 +63,55 @@ struct PricingServiceTests {
     @Test
     func updateFoldsUpdatedRowIntoLocalList() async throws {
         let api = MockPricingAPIClient()
-        let existing = makePeriod(id: "pp-1", start: "2026-01-01", end: "2026-06-30", peakRate: 0.28)
-        api.periodsToReturn = [existing]
+        let existing = makePlan(id: "pp-1", start: "2026-01-01", end: "2026-07-01", defaultRate: 0.28)
+        api.plansToReturn = [existing]
         let svc = PricingService()
         svc.bind(apiClient: api)
         try await svc.refresh()
 
-        let draft = PricingPeriodDraft(period: existing).with(peakRate: 0.32)
+        let draft = PricingPlanDraft(plan: existing).with(defaultRate: 0.32)
         let updated = try await svc.update(id: existing.id, draft)
-        #expect(updated.peakRate == 0.32)
-        #expect(svc.periods.first?.peakRate == 0.32)
+        #expect(updated.defaultRate == 0.32)
+        #expect(svc.plans.first?.defaultRate == 0.32)
     }
 
     @Test
     func deleteRemovesRowFromLocalList() async throws {
         let api = MockPricingAPIClient()
-        let existing = makePeriod(id: "pp-1", start: "2026-01-01", end: "2026-06-30")
-        api.periodsToReturn = [existing]
+        let existing = makePlan(id: "pp-1", start: "2026-01-01", end: "2026-07-01")
+        api.plansToReturn = [existing]
         let svc = PricingService()
         svc.bind(apiClient: api)
         try await svc.refresh()
 
         try await svc.delete(id: existing.id)
-        #expect(svc.periods.isEmpty)
+        #expect(svc.plans.isEmpty)
     }
 
     @Test
     func replaceOpenEndedFoldsBothChanges() async throws {
         let api = MockPricingAPIClient()
-        let open = makePeriod(id: "pp-open", start: "2026-01-01", end: nil)
-        api.periodsToReturn = [open]
+        let open = makePlan(id: "pp-open", start: "2026-01-01", end: nil)
+        api.plansToReturn = [open]
         let svc = PricingService()
         svc.bind(apiClient: api)
         try await svc.refresh()
         // The server returns the new row only — the service must trigger alpha
         // refetch so the local list reflects the closing-row's new endDate.
-        let newOpen = makePeriod(id: "pp-new", start: "2026-08-01", end: nil)
-        let closed = makePeriod(id: "pp-open", start: "2026-01-01", end: "2026-07-31")
-        api.replaceOpenEndedResult = ReplaceOpenEndedResult(closing: closed, newPeriod: newOpen)
+        let newOpen = makePlan(id: "pp-new", start: "2026-08-01", end: nil)
+        let closed = makePlan(id: "pp-open", start: "2026-01-01", end: "2026-08-01")
+        api.replaceOpenEndedResult = ReplaceOpenEndedResult(closing: closed, newPlan: newOpen)
         // After the refetch the API returns the final state.
-        api.periodsToReturn = [closed, newOpen]
+        api.plansToReturn = [closed, newOpen]
 
-        let draft = PricingPeriodDraft(period: newOpen)
+        let draft = PricingPlanDraft(plan: newOpen)
         let result = try await svc.replaceOpenEnded(closingId: "pp-open", with: draft)
         #expect(result.id == "pp-new")
         try await waitForRefetch(api: api, expected: 2)
-        let finalPeriods = svc.periods
-        #expect(finalPeriods.count == 2)
-        #expect(finalPeriods.first?.id == "pp-open")
-        #expect(finalPeriods.first?.endDate == "2026-07-31")
+        let finalPlans = svc.plans
+        #expect(finalPlans.count == 2)
+        #expect(finalPlans.first?.id == "pp-open")
+        #expect(finalPlans.first?.endDate == "2026-08-01")
     }
 
     @Test
@@ -148,24 +149,25 @@ struct PricingServiceTests {
         Issue.record("refetch did not complete in time (got \(api.fetchCallCount), expected \(expected))")
     }
 
-    private func makePeriod(id: String, start: String, end: String?, peakRate: Double = 0.30) -> PricingPeriod {
-        PricingPeriod(
+    private func makePlan(id: String, start: String, end: String?, defaultRate: Double = 0.30) -> PricingPlan {
+        PricingPlan(
             id: id,
             startDate: start,
             endDate: end,
-            peakRate: peakRate,
+            defaultRate: defaultRate,
+            windows: [PlanWindow(start: "11:00", end: "14:00", free: true, rate: nil)],
             feedInRate: 0.05,
-            offPeakSavingsRate: 0.12,
+            savingsReferenceRate: 0.12,
             createdAt: Date(timeIntervalSince1970: 1),
             updatedAt: Date(timeIntervalSince1970: 1)
         )
     }
 }
 
-private extension PricingPeriodDraft {
-    func with(peakRate: Double) -> PricingPeriodDraft {
+private extension PricingPlanDraft {
+    func with(defaultRate: Double) -> PricingPlanDraft {
         var copy = self
-        copy.peakRate = peakRate
+        copy.defaultRate = defaultRate
         return copy
     }
 }
@@ -173,7 +175,7 @@ private extension PricingPeriodDraft {
 // MARK: - Test doubles
 
 final class MockPricingAPIClient: FluxAPIClient, @unchecked Sendable {
-    var periodsToReturn: [PricingPeriod] = []
+    var plansToReturn: [PricingPlan] = []
     var fetchError: FluxAPIError?
     var fetchCallCount = 0
     var replaceOpenEndedResult: ReplaceOpenEndedResult?
@@ -189,54 +191,56 @@ final class MockPricingAPIClient: FluxAPIClient, @unchecked Sendable {
         NoteResponse(date: date, text: "", updatedAt: nil)
     }
 
-    func fetchPricing() async throws -> [PricingPeriod] {
+    func fetchPricing() async throws -> [PricingPlan] {
         fetchCallCount += 1
         if let fetchError { throw fetchError }
-        return periodsToReturn
+        return plansToReturn
     }
 
-    func createPricing(_ draft: PricingPeriodDraft) async throws -> PricingPeriod {
+    func createPricing(_ draft: PricingPlanDraft) async throws -> PricingPlan {
         let now = Date()
-        let period = PricingPeriod(
+        let plan = PricingPlan(
             id: "mock-\(UUID().uuidString)",
             startDate: draft.startDate,
             endDate: draft.endDate,
-            peakRate: draft.peakRate,
+            defaultRate: draft.defaultRate,
+            windows: draft.windows,
             feedInRate: draft.feedInRate,
-            offPeakSavingsRate: draft.offPeakSavingsRate,
+            savingsReferenceRate: draft.savingsReferenceRate,
             createdAt: now,
             updatedAt: now
         )
-        periodsToReturn.append(period)
-        return period
+        plansToReturn.append(plan)
+        return plan
     }
 
-    func updatePricing(id: String, _ draft: PricingPeriodDraft) async throws -> PricingPeriod {
-        guard let idx = periodsToReturn.firstIndex(where: { $0.id == id }) else {
+    func updatePricing(id: String, _ draft: PricingPlanDraft) async throws -> PricingPlan {
+        guard let idx = plansToReturn.firstIndex(where: { $0.id == id }) else {
             throw FluxAPIError.notFound
         }
         let now = Date()
-        let period = PricingPeriod(
+        let plan = PricingPlan(
             id: id,
             startDate: draft.startDate,
             endDate: draft.endDate,
-            peakRate: draft.peakRate,
+            defaultRate: draft.defaultRate,
+            windows: draft.windows,
             feedInRate: draft.feedInRate,
-            offPeakSavingsRate: draft.offPeakSavingsRate,
-            createdAt: periodsToReturn[idx].createdAt,
+            savingsReferenceRate: draft.savingsReferenceRate,
+            createdAt: plansToReturn[idx].createdAt,
             updatedAt: now
         )
-        periodsToReturn[idx] = period
-        return period
+        plansToReturn[idx] = plan
+        return plan
     }
 
     func deletePricing(id: String) async throws {
-        periodsToReturn.removeAll { $0.id == id }
+        plansToReturn.removeAll { $0.id == id }
     }
 
     func replaceOpenEndedPricing(
         closingId _: String,
-        with _: PricingPeriodDraft
+        with _: PricingPlanDraft
     ) async throws -> ReplaceOpenEndedResult {
         if let result = replaceOpenEndedResult { return result }
         throw FluxAPIError.serverError

@@ -44,7 +44,7 @@ func (m *mockNoteWriter) DeleteNote(ctx context.Context, serial, date string) er
 // newNoteTestHandler returns a handler wired to the supplied notes writer and
 // a nowFunc pinned to 2026-04-15 10:00 Sydney so "today" is 2026-04-15.
 func newNoteTestHandler(notes NoteWriter) *Handler {
-	h := NewHandler(&mockReader{}, notes, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(&mockReader{}, notes, testSerial, testToken)
 	h.nowFunc = func() time.Time { return time.Date(2026, 4, 15, 10, 0, 0, 0, sydneyTZ) }
 	return h
 }
@@ -354,7 +354,7 @@ func TestHandleNote_DynamoErrorReturns500(t *testing.T) {
 func TestHandleNote_NilWriterReturns500NotPanic(t *testing.T) {
 	// A misconfigured Lambda (e.g. TABLE_NOTES env var missing) wires a nil
 	// writer. The handler must return 500 cleanly rather than nil-panic.
-	h := NewHandler(&mockReader{}, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(&mockReader{}, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return time.Date(2026, 4, 15, 10, 0, 0, 0, sydneyTZ) }
 
 	req := noteRequest("PUT", map[string]string{"content-type": "application/json"}, `{"date":"2026-04-15","text":"hi"}`, false)

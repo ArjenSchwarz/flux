@@ -23,7 +23,8 @@
 
 ## Handler
 
-- `Handler` struct holds: `reader` (dynamo.Reader), `notes` (api.NoteWriter), `serial`, `apiToken`, `offpeakStart`, `offpeakEnd`, `nowFunc`.
+- `Handler` struct holds: `reader` (dynamo.Reader), `notes` (api.NoteWriter), `serial`, `apiToken`, `nowFunc`, plus a pricing store injected via `SetPricingStore`.
+- There are no `offpeakStart`/`offpeakEnd` fields and no `OFFPEAK_START`/`OFFPEAK_END` env vars: the free window is resolved per day from the plan pricing that day (`specs/time-of-use-pricing`, Decision 2). `/status`, `/day`, and `/history` each fetch plans once, inside their existing errgroup. A pricing read failure is a 500 — never a fabricated "no plan" (Q14).
 - `api.NoteWriter` is a small interface defined in the api package mirroring the dynamo-side `PutNote`/`DeleteNote` methods so handler tests can mock without importing dynamo internals (the parameter type is still `dynamo.NoteItem`).
 - `nowFunc` defaults to `time.Now`, overridable in tests for deterministic time.
 - `Handle` is the Lambda entry point — logs method, path, status, duration via slog. Never logs the token.
@@ -39,7 +40,7 @@
 - Phase 2: in-memory computation — extract latest reading, filter to 60s/15min subsets, compute pgridSustained, rolling averages, cutoff estimates, MinSOC for `low24h` (filtered to readings since 00:00 Sydney local on `now`'s date via `startOfDaySydney`; field name preserved for wire compatibility — see `specs/low-since-offpeak/decision_log.md` Decision 4). No off-peak dependency on this path.
 - `liveFresh` gate (T-1274): `resp.Live`, `battery.EstimatedCutoff`, and `rolling15min.EstimatedCutoff` are populated only when the most recent reading is within `liveDataStalenessThreshold` (90 s). Past that, the dashboard's existing "Awaiting live data" UI surfaces instead of presenting an aged reading as current. `low24h` and the rolling averages themselves still derive from their own time-windowed subsets, which already produce correct results when the latest reading is stale.
 - `filterReadings(readings, from, to)` — returns subset by timestamp range.
-- `buildOffpeak(item, today, windowStart, windowEnd)` — always includes window times. Deltas come from a complete record's final values, or are projected from today's running `DailyEnergyItem` against the pending record's start snapshot. Pending without a daily-energy item leaves deltas null. The response carries a `status` field (`"pending"` or `"complete"`) so clients can mark in-progress data; `batteryDeltaPercent` is unavailable mid-window because no current SOC is computed in this slice.
+- `buildOffpeak(item, readings, now, window)` — returns `nil` when the day has no free window (its plan has no free band, or no plan prices it), which serialises `/status.offpeak` as `null`; clients render that as "no window" and never substitute a default (Q35). Otherwise it includes the window times. Deltas come from a complete record's final values, or are live-integrated from readings while pending. Pending without usable readings leaves deltas null. The response carries a `status` field (`"pending"` or `"complete"`) so clients can mark in-progress data; `batteryDeltaPercent` is unavailable mid-window because no current SOC is computed in this slice.
 - `floatPtr(v)` — helper for nullable float64 fields.
 - Battery capacity: fallback 13.34 when system missing or cobat == 0.
 - Rolling 15min: requires >= 2 readings in window, otherwise null.
@@ -70,7 +71,8 @@
 
 - Package-level `sydneyTZ` var loaded once via init function — avoids repeated `time.LoadLocation` calls and silently discarded errors. Panics on load failure (fail-fast).
 - `computeCutoffTime(soc, pbat, capacityKwh, cutoffPercent, now)` — Linear extrapolation. Returns nil for charging/idle/SOC≤cutoff.
-- `nextOffpeakStart(now, offpeakStart, offpeakEnd)` — Absolute Sydney-local time of the next off-peak window start (today's start if `now < todayEnd`, tomorrow's start otherwise). Returns `(_, false)` for invalid off-peak config. Used by `/status` to suppress cutoff predictions that land at or after the next scheduled charging window (see T-827).
+- `nextOffpeakStart(now, plans)` — Absolute Sydney-local time of the next off-peak window start (today's start if `now < todayEnd`, tomorrow's start otherwise). The window comes from the plan pricing **the day the window falls on**, so on the eve of a plan switch it follows the successor's window rather than the outgoing one (AC 4.2/Q11). Returns `(_, false)` when that day has no free window. Used by `/status` to suppress cutoff predictions that land at or after the next scheduled charging window (see T-827).
+- `offpeakWindow.bounds(local)` — resolves a window to absolute instants via `plan.SegmentBounds`, i.e. wall-clock `time.Date`, **not** midnight-plus-elapsed-minutes. The additive form is an hour off on Sydney's two DST-transition days and would put the free-window edge an hour away from the band edges served in the same payload. Pinned by `dst_window_test.go`.
 - `computeRollingAverages(readings)` — Mean of pload and pbat. Returns (0,0) for empty.
 - `computePgridSustained(readings)` — Iterates backwards from end, counts consecutive pgrid>500 within 30s gaps. Needs 3+ consecutive. Expects ascending order input.
 - `downsample(readings, date)` — 288 five-minute buckets, averages per bucket, omits empty. Uses `sydneyTZ`. Output is already in chronological order (buckets iterated 0..287).

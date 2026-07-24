@@ -73,7 +73,7 @@ func (s *fakeSimulationPresetStore) DeletePreset(_ context.Context, id string) e
 // newPresetsTestHandler wires a fake preset store with a fixed clock and a
 // deterministic id generator so create/list/PUT/DELETE assertions are exact.
 func newPresetsTestHandler(store *fakeSimulationPresetStore) *Handler {
-	h := NewHandler(&mockReader{}, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(&mockReader{}, nil, testSerial, testToken)
 	h.SetSimulationPresetStore(store)
 	fixed := time.Date(2026, 5, 19, 10, 0, 0, 0, time.UTC)
 	h.nowFunc = func() time.Time { return fixed }
@@ -244,7 +244,7 @@ func TestHandlePresetValidationBoundaryAccepted(t *testing.T) {
 
 func TestHandleCreatePreset_CapReturns409(t *testing.T) {
 	store := newFakeSimulationPresetStore()
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		store.presets = append(store.presets, dynamo.SimulationPresetItem{
 			PresetID:  fmt.Sprintf("p%d", i),
 			Label:     fmt.Sprintf("Preset %d", i),

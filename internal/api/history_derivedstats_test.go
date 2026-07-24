@@ -96,7 +96,7 @@ func TestHandleHistory_AllPastRowsHaveDerivedStats(t *testing.T) {
 			return rows, nil
 		},
 	}
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), historyRequest(map[string]string{"days": "7"}))
@@ -129,7 +129,7 @@ func TestHandleHistory_OldestDayLacksDerivedFields(t *testing.T) {
 			return []dynamo.DailyEnergyItem{rowOld, rowMid, rowRecent}, nil
 		},
 	}
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), historyRequest(map[string]string{"days": "7"}))
@@ -180,7 +180,7 @@ func TestHandleHistory_TodayLiveCompute(t *testing.T) {
 			return todayReadings, nil
 		},
 	}
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), historyRequest(map[string]string{"days": "7"}))
@@ -223,7 +223,7 @@ func TestHandleHistory_TodayReadingsQueryFailure_AC4_9(t *testing.T) {
 			return nil, errors.New("throttled")
 		},
 	}
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), historyRequest(map[string]string{"days": "7"}))
@@ -293,7 +293,7 @@ func TestHandleHistory_TodayLiveCompute_TrimsPreMidnight(t *testing.T) {
 			return allReadings, nil
 		},
 	}
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	resp, err := h.Handle(context.Background(), historyRequest(map[string]string{"days": "7"}))

@@ -5,12 +5,18 @@ enum DayDetailPanels {
     static func power(
         date: String,
         readings: [ParsedReading],
+        offpeakWindow: PlanSegment?,
         selectedDate: Binding<Date?>
     ) -> some View {
         FluxPanel {
             VStack(alignment: .leading, spacing: 0) {
                 FluxPanelHeader(label: "Power", right: "kW")
-                PowerChartView(date: date, readings: readings, selectedDate: selectedDate)
+                PowerChartView(
+                    date: date,
+                    readings: readings,
+                    offpeakWindow: offpeakWindow,
+                    selectedDate: selectedDate
+                )
                 HStack(spacing: 14) {
                     legendChip(color: FluxTheme.Palette.amber, text: "Solar")
                     legendChip(color: FluxTheme.Palette.load, text: "House")
@@ -27,12 +33,19 @@ enum DayDetailPanels {
         date: String,
         readings: [ParsedReading],
         summary: DaySummary?,
+        offpeakWindow: PlanSegment?,
         selectedDate: Binding<Date?>
     ) -> some View {
         FluxPanel {
             VStack(alignment: .leading, spacing: 0) {
                 FluxPanelHeader(label: "Battery", right: "% · ± kW")
-                BatteryCombinedChartView(date: date, readings: readings, summary: summary, selectedDate: selectedDate)
+                BatteryCombinedChartView(
+                    date: date,
+                    readings: readings,
+                    summary: summary,
+                    offpeakWindow: offpeakWindow,
+                    selectedDate: selectedDate
+                )
             }
         }
     }

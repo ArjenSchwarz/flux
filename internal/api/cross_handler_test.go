@@ -34,7 +34,7 @@ func TestCrossHandlerEquivalence_PastDateDerivedStats(t *testing.T) {
 	}
 
 	now := fixedNow()
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	dayResp, err := h.Handle(context.Background(), dayRequest(map[string]string{"date": date}))
@@ -133,7 +133,7 @@ func TestCrossHandlerEquivalence_OldDateSummaryFields(t *testing.T) {
 	}
 
 	now := fixedNow()
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	dayResp, err := h.Handle(context.Background(), dayRequest(map[string]string{"date": date}))

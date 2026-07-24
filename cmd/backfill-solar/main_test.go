@@ -21,6 +21,7 @@ const (
 	testSerial       = "TEST123"
 	testEnergyTable  = "flux-daily-energy-test"
 	testReadingTable = "flux-readings-test"
+	testPricingTable = "flux-pricing-test"
 )
 
 // fakeDynamo is a lightweight in-memory stand-in for the DynamoDB client.
@@ -29,11 +30,50 @@ const (
 type fakeDynamo struct {
 	dailyEnergyRows  map[string][]dynamo.DailyEnergyItem // keyed by date or "*" for all
 	readingsByDate   map[string][]dynamo.ReadingItem     // keyed by date "YYYY-MM-DD" Sydney
+	pricingRows      []dynamo.PricingItem                // nil ⇒ the default 11:00–14:00 open-ended plan
 	location         *time.Location
 	queries          []*dynamodb.QueryInput
 	updates          []*dynamodb.UpdateItemInput
 	queryErrForTable map[string]error
 	updateErr        error
+	scanErr          error
+}
+
+// Scan serves the pricing read. A fixture that sets no pricingRows gets the
+// pre-feature plan — free 11:00–14:00, one flat rate — which is the window
+// every date in these tests was originally computed under.
+func (f *fakeDynamo) Scan(_ context.Context, _ *dynamodb.ScanInput, _ ...func(*dynamodb.Options)) (*dynamodb.ScanOutput, error) {
+	if f.scanErr != nil {
+		return nil, f.scanErr
+	}
+	rows := f.pricingRows
+	if rows == nil {
+		rows = []dynamo.PricingItem{testPricingRow("legacy-equivalent", "2000-01-01", "", "11:00", "14:00")}
+	}
+	avs := make([]map[string]types.AttributeValue, 0, len(rows))
+	for i := range rows {
+		av, err := attributevalue.MarshalMap(rows[i])
+		if err != nil {
+			return nil, err
+		}
+		avs = append(avs, av)
+	}
+	return &dynamodb.ScanOutput{Items: avs}, nil
+}
+
+// testPricingRow builds a band-shape plan whose free window is the given
+// range and whose remainder carries a single flat rate.
+func testPricingRow(id, startDate, endDate, freeStart, freeEnd string) dynamo.PricingItem {
+	savings := 0.35
+	item := dynamo.PricingItem{
+		PricingID: id, StartDate: startDate, DefaultRate: 0.35, FeedInRate: 0.05,
+		Windows:              []dynamo.PricingWindow{{Start: freeStart, End: freeEnd, Free: true}},
+		SavingsReferenceRate: &savings,
+	}
+	if endDate != "" {
+		item.EndDate = &endDate
+	}
+	return item
 }
 
 func (f *fakeDynamo) Query(_ context.Context, params *dynamodb.QueryInput, _ ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
@@ -190,10 +230,9 @@ func backfillOptsForTest(loc *time.Location) backfillOpts {
 		serial:           testSerial,
 		tableDailyEnergy: testEnergyTable,
 		tableReadings:    testReadingTable,
+		tablePricing:     testPricingTable,
 		from:             "2026-04-14",
 		to:               "2026-04-14",
-		offpeakStart:     "11:00",
-		offpeakEnd:       "14:00",
 		location:         loc,
 		now:              func() time.Time { return now },
 	}

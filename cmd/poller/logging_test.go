@@ -31,12 +31,10 @@ func TestLogPollerStartupDoesNotLogAppSecret(t *testing.T) {
 	var output bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&output, nil))
 	cfg := &config.Config{
-		Serial:       "SYS-001",
-		AppSecret:    "super-secret-value",
-		OffpeakStart: 11 * time.Hour,
-		OffpeakEnd:   14 * time.Hour,
-		Location:     time.UTC,
-		DryRun:       true,
+		Serial:    "SYS-001",
+		AppSecret: "super-secret-value",
+		Location:  time.UTC,
+		DryRun:    true,
 	}
 
 	logPollerStartup(cfg, logger)

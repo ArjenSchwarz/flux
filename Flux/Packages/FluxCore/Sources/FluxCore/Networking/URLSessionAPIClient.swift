@@ -4,7 +4,7 @@ public final class URLSessionAPIClient: FluxAPIClient, Sendable {
     private let session: URLSession
     private let baseURL: URL
     private let tokenProvider: @Sendable () -> String?
-    private let decoder: JSONDecoder
+    let decoder: JSONDecoder  // internal: used by the pricing extension's own file
     let encoder: JSONEncoder  // internal: used by the simulation extension's own file
 
     private static let noCacheSession: URLSession = {
@@ -304,97 +304,4 @@ public final class URLSessionAPIClient: FluxAPIClient, Sendable {
         return response.error
     }
 
-}
-
-// MARK: - Pricing (daily-costs spec)
-
-extension URLSessionAPIClient {
-    public func fetchPricing() async throws -> [PricingPeriod] {
-        let response: PricingListResponse = try await performRequest(path: "pricing", queryItems: [])
-        return response.pricing
-    }
-
-    public func createPricing(_ draft: PricingPeriodDraft) async throws -> PricingPeriod {
-        let body = try encoder.encode(draft)
-        return try await performRequest(path: "pricing", queryItems: [], method: "POST", body: body)
-    }
-
-    public func updatePricing(id: String, _ draft: PricingPeriodDraft) async throws -> PricingPeriod {
-        let body = try encoder.encode(draft)
-        return try await performRequest(path: "pricing/\(id)", queryItems: [], method: "PUT", body: body)
-    }
-
-    public func deletePricing(id: String) async throws {
-        let _: EmptyPricingResponse = try await performRequest(
-            path: "pricing/\(id)",
-            queryItems: [],
-            method: "DELETE"
-        )
-    }
-
-    public func replaceOpenEndedPricing(
-        closingId: String,
-        with draft: PricingPeriodDraft
-    ) async throws -> ReplaceOpenEndedResult {
-        let payload = ReplaceOpenEndedPayload(closingPricingId: closingId, newPeriod: draft)
-        let body = try encoder.encode(payload)
-        let response: PricingListResponse = try await performRequest(
-            path: "pricing/replace-open-ended",
-            queryItems: [],
-            method: "POST",
-            body: body
-        )
-        guard response.pricing.count == 2 else {
-            throw FluxAPIError.decodingError("replace-open-ended expected 2 rows, got \(response.pricing.count)")
-        }
-        // Match by id rather than position so a server-side reorder
-        // (e.g. start-date sort) can't swap closing and new on the wire.
-        guard let closing = response.pricing.first(where: { $0.id == closingId }) else {
-            throw FluxAPIError.decodingError("replace-open-ended response missing row with id \(closingId)")
-        }
-        guard let newPeriod = response.pricing.first(where: { $0.id != closingId }) else {
-            throw FluxAPIError.decodingError("replace-open-ended response: both rows share id \(closingId)")
-        }
-        return ReplaceOpenEndedResult(closing: closing, newPeriod: newPeriod)
-    }
-
-    fileprivate func parsePricingValidationReason(from data: Data) -> PricingValidationReason? {
-        guard let payload = try? decoder.decode(PricingErrorResponse.self, from: data) else {
-            return nil
-        }
-        switch payload.error {
-        case "inverted_dates":
-            return .invertedDates
-        case "overlap":
-            return .overlap(openEndedId: payload.openEndedId)
-        case "rate_precision":
-            return .ratePrecision
-        case "rate_out_of_range":
-            return .rateOutOfRange
-        case "second_open_ended":
-            return .secondOpenEnded
-        case "concurrent_open_ended_write":
-            return .concurrentWrite
-        default:
-            return nil
-        }
-    }
-
-    fileprivate struct PricingErrorResponse: Decodable {
-        let error: String
-        let openEndedId: String?
-    }
-
-    fileprivate struct PricingListResponse: Decodable {
-        let pricing: [PricingPeriod]
-    }
-
-    fileprivate struct ReplaceOpenEndedPayload: Encodable {
-        let closingPricingId: String
-        let newPeriod: PricingPeriodDraft
-    }
-
-    fileprivate struct EmptyPricingResponse: Decodable {
-        init(from _: Decoder) throws {}
-    }
 }

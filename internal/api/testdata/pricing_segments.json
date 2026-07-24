@@ -1,0 +1,130 @@
+[
+  {
+    "name": "flat-plan-no-windows",
+    "description": "A plan with no exception windows is one default-rate segment covering the whole day.",
+    "plan": {
+      "defaultRate": 0.35,
+      "windows": [],
+      "feedInRate": 0.05
+    },
+    "segments": [
+      { "start": "00:00", "end": "24:00", "free": false, "rate": 0.35 }
+    ]
+  },
+  {
+    "name": "current-plan",
+    "description": "The plan in production before the switch: free 11:00-14:00, one flat rate otherwise.",
+    "plan": {
+      "defaultRate": 0.35,
+      "windows": [{ "start": "11:00", "end": "14:00", "free": true }],
+      "feedInRate": 0.05,
+      "savingsReferenceRate": 0.35
+    },
+    "segments": [
+      { "start": "00:00", "end": "11:00", "free": false, "rate": 0.35 },
+      { "start": "11:00", "end": "14:00", "free": true, "rate": 0 },
+      { "start": "14:00", "end": "24:00", "free": false, "rate": 0.35 }
+    ]
+  },
+  {
+    "name": "new-plan",
+    "description": "The incoming time-of-use plan: free 10:00-15:00, cheaper 01:00-06:00, standard otherwise.",
+    "plan": {
+      "defaultRate": 0.35,
+      "windows": [
+        { "start": "10:00", "end": "15:00", "free": true },
+        { "start": "01:00", "end": "06:00", "free": false, "rate": 0.28 }
+      ],
+      "feedInRate": 0.05,
+      "savingsReferenceRate": 0.35
+    },
+    "segments": [
+      { "start": "00:00", "end": "01:00", "free": false, "rate": 0.35 },
+      { "start": "01:00", "end": "06:00", "free": false, "rate": 0.28 },
+      { "start": "06:00", "end": "10:00", "free": false, "rate": 0.35 },
+      { "start": "10:00", "end": "15:00", "free": true, "rate": 0 },
+      { "start": "15:00", "end": "24:00", "free": false, "rate": 0.35 }
+    ]
+  },
+  {
+    "name": "window-at-day-start",
+    "description": "A window starting at 00:00 leaves no leading default segment.",
+    "plan": {
+      "defaultRate": 0.35,
+      "windows": [{ "start": "00:00", "end": "06:00", "free": false, "rate": 0.28 }],
+      "feedInRate": 0.05
+    },
+    "segments": [
+      { "start": "00:00", "end": "06:00", "free": false, "rate": 0.28 },
+      { "start": "06:00", "end": "24:00", "free": false, "rate": 0.35 }
+    ]
+  },
+  {
+    "name": "window-at-day-end",
+    "description": "A window ending at 24:00 leaves no trailing default segment.",
+    "plan": {
+      "defaultRate": 0.35,
+      "windows": [{ "start": "18:00", "end": "24:00", "free": false, "rate": 0.28 }],
+      "feedInRate": 0.05
+    },
+    "segments": [
+      { "start": "00:00", "end": "18:00", "free": false, "rate": 0.35 },
+      { "start": "18:00", "end": "24:00", "free": false, "rate": 0.28 }
+    ]
+  },
+  {
+    "name": "windows-tile-the-day",
+    "description": "Windows covering the whole day leave zero-width default remainders, which are not emitted.",
+    "plan": {
+      "defaultRate": 0.35,
+      "windows": [
+        { "start": "00:00", "end": "10:00", "free": false, "rate": 0.28 },
+        { "start": "10:00", "end": "15:00", "free": true },
+        { "start": "15:00", "end": "24:00", "free": false, "rate": 0.3 }
+      ],
+      "feedInRate": 0.05,
+      "savingsReferenceRate": 0.35
+    },
+    "segments": [
+      { "start": "00:00", "end": "10:00", "free": false, "rate": 0.28 },
+      { "start": "10:00", "end": "15:00", "free": true, "rate": 0 },
+      { "start": "15:00", "end": "24:00", "free": false, "rate": 0.3 }
+    ]
+  },
+  {
+    "name": "abutting-same-rate-windows-not-merged",
+    "description": "Q26: abutting segments carrying the same rate stay separate so the stored split's geometry is stable.",
+    "plan": {
+      "defaultRate": 0.35,
+      "windows": [
+        { "start": "00:00", "end": "06:00", "free": false, "rate": 0.35 },
+        { "start": "06:00", "end": "12:00", "free": false, "rate": 0.35 }
+      ],
+      "feedInRate": 0.05
+    },
+    "segments": [
+      { "start": "00:00", "end": "06:00", "free": false, "rate": 0.35 },
+      { "start": "06:00", "end": "12:00", "free": false, "rate": 0.35 },
+      { "start": "12:00", "end": "24:00", "free": false, "rate": 0.35 }
+    ]
+  },
+  {
+    "name": "unsorted-windows",
+    "description": "Windows are segmented in chronological order regardless of the order they were entered in.",
+    "plan": {
+      "defaultRate": 0.35,
+      "windows": [
+        { "start": "18:00", "end": "20:00", "free": false, "rate": 0.4 },
+        { "start": "01:00", "end": "06:00", "free": false, "rate": 0.28 }
+      ],
+      "feedInRate": 0.05
+    },
+    "segments": [
+      { "start": "00:00", "end": "01:00", "free": false, "rate": 0.35 },
+      { "start": "01:00", "end": "06:00", "free": false, "rate": 0.28 },
+      { "start": "06:00", "end": "18:00", "free": false, "rate": 0.35 },
+      { "start": "18:00", "end": "20:00", "free": false, "rate": 0.4 },
+      { "start": "20:00", "end": "24:00", "free": false, "rate": 0.35 }
+    ]
+  }
+]

@@ -23,7 +23,7 @@ struct DayChartExpansionTests {
             Issue.record("Failed to parse fixture date string")
             return
         }
-        let view = PowerChartView(date: dateString, readings: [], selectedDate: .constant(nil))
+        let view = PowerChartView(date: dateString, readings: [], offpeakWindow: nil, selectedDate: .constant(nil))
         #expect(view.expansionScope == .daySpecific(date: expected))
     }
 
@@ -38,6 +38,7 @@ struct DayChartExpansionTests {
             date: dateString,
             readings: [],
             summary: nil,
+            offpeakWindow: nil,
             selectedDate: .constant(nil)
         )
         #expect(view.expansionScope == .daySpecific(date: expected))
@@ -45,8 +46,8 @@ struct DayChartExpansionTests {
 
     @Test("Different date strings produce distinct expansion scopes")
     func differentDatesProduceDistinctScopes() {
-        let first = PowerChartView(date: "2026-05-01", readings: [], selectedDate: .constant(nil))
-        let second = PowerChartView(date: "2026-05-02", readings: [], selectedDate: .constant(nil))
+        let first = PowerChartView(date: "2026-05-01", readings: [], offpeakWindow: nil, selectedDate: .constant(nil))
+        let second = PowerChartView(date: "2026-05-02", readings: [], offpeakWindow: nil, selectedDate: .constant(nil))
         #expect(first.expansionScope != second.expansionScope)
     }
 }

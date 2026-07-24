@@ -99,6 +99,13 @@ The server rejects requests where the timestamp drifts more than 300 seconds fro
 
 ### Off-Peak Calculation
 
+> **Superseded twice.** The snapshot-diff basis was replaced by integration over
+> `flux-readings` in T-1341 (`specs/offpeak-from-readings`); the snapshots are
+> now retained for diagnostics only. The SSM-configured window was replaced by
+> the free band of the pricing plan covering each day in T-1890/T-1891
+> (`specs/time-of-use-pricing`, Decision 2). The description below is the
+> original V1 plan, kept for context.
+
 The container is configured with the off-peak window (11:00 AM – 2:00 PM) via SSM Parameter Store. It calls `getOneDateEnergyBySn` at the start and end of the off-peak window and stores both snapshots. The diff between the two gives exact off-peak values for every energy metric:
 
 - Off-peak grid usage = `eInput(end) - eInput(start)`
@@ -389,6 +396,12 @@ All time axes show 00:00 through 00:00 with intermediate labels.
 The system serial number and off-peak window are configured server-side in SSM Parameter Store, not in the app.
 
 ### Off-Peak Window
+
+> **Superseded by `specs/time-of-use-pricing` (Decision 2).** The window is now
+> the free band of the pricing plan covering each day, so it changes with the
+> plan rather than with a stack update, and the SSM parameters are gone.
+> `/status.offpeak` is nullable — a day with no free band serialises `null`, and
+> clients must render that as "no window" rather than substituting a default.
 
 Configured server-side in SSM Parameter Store (currently 11:00 AM – 2:00 PM). The container uses this to schedule energy snapshot calls and compute off-peak deltas. The app reads the window times from the `/status` response for display purposes only.
 

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
+	"github.com/ArjenSchwarz/flux/internal/plan"
 )
 
 // PricingStore is the api-package-local view of the pricing read+write
@@ -19,31 +20,34 @@ type PricingStore interface {
 	ReplaceOpenEnded(ctx context.Context, closingID, closingEndDate, updatedAt string, newItem dynamo.PricingItem) error
 }
 
-// Pricing error codes documented in AC 2.3 and the design's
-// TransactionCanceledException → HTTP mapping table.
+// Pricing error codes returned in the response envelope's "error" field.
+//
+// The single-plan band codes are not listed here: the handler emits whatever
+// plan.Validate reports, so aliasing them would be a second copy that could
+// silently fall out of step with the rules they name. The full set it can
+// forward is plan.CodeBandWindowInvalid, CodeBandOverlap, CodeMultipleFreeBands,
+// CodeSavingsRateMissing, CodeNoRatedBand, CodeRatePrecision, and
+// CodeRateOutOfRange. CodeInvertedDates is aliased below because the handler
+// raises it directly, not only by forwarding.
 const (
-	pricingCodeInvertedDates   = "inverted_dates"
+	pricingCodeInvertedDates = plan.CodeInvertedDates
+
 	pricingCodeOverlap         = "overlap"
-	pricingCodeRatePrecision   = "rate_precision"
-	pricingCodeRateOutOfRange  = "rate_out_of_range"
 	pricingCodeSecondOpenEnded = "second_open_ended"
 	pricingCodeConcurrentWrite = "concurrent_open_ended_write"
+	pricingCodeLegacyShape     = "legacy_shape"
 	pricingCodeNotFound        = "not_found"
 	pricingCodeBadRequest      = "bad_request"
 	pricingCodeInternal        = "internal_error"
 )
-
-// pricingRateCap is the per-rate upper bound from Decision 12 — 10×
-// the highest plausible AU retail tariff, catching order-of-magnitude
-// typos without constraining legitimate use.
-const pricingRateCap = 10.0
 
 // pricingMaxEndDate is the "open-ended" sentinel value used by the
 // in-memory overlap check. Lexicographic compare on a YYYY-MM-DD string
 // keeps the check trivial.
 const pricingMaxEndDate = "9999-12-31"
 
-// pricingBodyMaxBytes caps inbound JSON on every pricing mutation. A
-// maxed-out payload fits comfortably under 512 bytes; the cap leaves
-// generous room for whitespace.
+// pricingBodyMaxBytes caps inbound JSON on every pricing mutation. The
+// incoming time-of-use plan (three rates, two windows) fits in well under
+// 512 bytes; the cap leaves generous room for a plan with many bands
+// while still bounding a pathological payload.
 const pricingBodyMaxBytes = 4096

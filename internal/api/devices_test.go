@@ -54,7 +54,7 @@ func (s *fakeDeviceStore) PutDeviceConditional(_ context.Context, item dynamo.De
 }
 
 func newDeviceTestHandler(store *fakeDeviceStore) *Handler {
-	h := NewHandler(&mockReader{}, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(&mockReader{}, nil, testSerial, testToken)
 	h.devices = store
 	return h
 }

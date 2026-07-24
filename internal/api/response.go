@@ -1,7 +1,13 @@
 // Package api implements the Lambda API request handling and business logic.
 package api
 
-import "github.com/ArjenSchwarz/flux/internal/derivedstats"
+import (
+	"time"
+
+	"github.com/ArjenSchwarz/flux/internal/derivedstats"
+	"github.com/ArjenSchwarz/flux/internal/dynamo"
+	"github.com/ArjenSchwarz/flux/internal/plan"
+)
 
 // StatusResponse is the JSON response for GET /status.
 type StatusResponse struct {
@@ -86,6 +92,99 @@ type OffpeakData struct {
 	ProjectedEndSoc     *float64 `json:"projectedEndSoc"`
 }
 
+// BandImport is one rated band's grid import for a day.
+//
+// Start and End are the band's "HH:MM" boundaries in Sydney local time (End
+// may be "24:00"), snapshotted alongside the value so a later plan-window
+// edit shows up to the client as a geometry mismatch instead of silently
+// mispricing the day (Q23).
+//
+// Only rated bands appear: the free band's import lives in
+// offpeakGridImportKwh, which owns that quantity exclusively (Q31).
+type BandImport struct {
+	Start string  `json:"start"`
+	End   string  `json:"end"`
+	Kwh   float64 `json:"kwh"`
+}
+
+// OffpeakSource describes the flux-offpeak row that OffpeakGridImportKwh came
+// from. Clients need it to decide whether that value can price a plan's free
+// band: the geometry so a plan-window edit shows up as a mismatch rather than
+// silently mispricing the day (Q23/Q16), and the integration provenance so a
+// sparse-complete row (integrated, no samples) is recognised as a zero-delta
+// artifact rather than a measured zero.
+//
+// The fields are flattened into DaySummary and DayEnergy, alongside the
+// off-peak values they describe. All are absent when the day has no off-peak
+// split; the window is additionally absent on pre-feature rows, which can only
+// have been integrated under 11:00–14:00.
+type OffpeakSource struct {
+	OffpeakWindowStart  string `json:"offpeakWindowStart,omitempty"`
+	OffpeakWindowEnd    string `json:"offpeakWindowEnd,omitempty"`
+	OffpeakIntegratedAt string `json:"offpeakIntegratedAt,omitempty"`
+	OffpeakSampleCount  *int   `json:"offpeakSampleCount,omitempty"`
+}
+
+// offpeakSourceFrom describes the row a day's off-peak split came from.
+//
+// Today's split is live-integrated from readings over the resolved window
+// rather than read off the row, so it carries that window's geometry and no
+// row provenance — it is a measurement by construction.
+func offpeakSourceFrom(op dynamo.OffpeakItem, isToday bool, window *offpeakWindow) OffpeakSource {
+	if isToday && op.Status != dynamo.OffpeakStatusComplete {
+		start, end := hhmmBounds(window)
+		return OffpeakSource{OffpeakWindowStart: start, OffpeakWindowEnd: end}
+	}
+	start, end := op.Geometry()
+	count := op.IntegrationSampleCount
+	return OffpeakSource{
+		OffpeakWindowStart:  start,
+		OffpeakWindowEnd:    end,
+		OffpeakIntegratedAt: op.IntegratedAt,
+		OffpeakSampleCount:  &count,
+	}
+}
+
+// bandImportsFromAttr converts the stored per-band split to the wire shape.
+// Returns nil for an absent split so the field is omitted rather than sent as
+// an empty array, which a client could misread as "zero import in every band".
+func bandImportsFromAttr(stored []dynamo.BandImportAttr) []BandImport {
+	if len(stored) == 0 {
+		return nil
+	}
+	out := make([]BandImport, len(stored))
+	for i, b := range stored {
+		out[i] = BandImport{Start: b.Start, End: b.End, Kwh: b.Kwh}
+	}
+	return out
+}
+
+// bandImportsFor resolves one day's rated-band split for a read endpoint.
+//
+// Today's is integrated live from readings; a past day's is served from the
+// split captured at day close, which outlives the 30-day readings TTL. AC 3.4
+// requires /day and /history to report the identical split for the same day,
+// so both call this rather than each deciding today-vs-stored for itself.
+//
+// A nil result means "no split available", which the cost helper treats as
+// unavailable rather than as zero import in every band.
+func bandImportsFor(plans []plan.Plan, date string, isToday bool,
+	readings []dynamo.ReadingItem, now time.Time, stored []dynamo.BandImportAttr,
+) []BandImport {
+	if !isToday {
+		return bandImportsFromAttr(stored)
+	}
+	p, priced := plan.PlanFor(plans, date)
+	if !priced {
+		return nil
+	}
+	bands, ok := liveBandImports(readings, now, p)
+	if !ok {
+		return nil
+	}
+	return bands
+}
+
 // TodayEnergy contains cumulative energy totals for the current day.
 type TodayEnergy struct {
 	Epv        float64 `json:"epv"`
@@ -119,6 +218,8 @@ type DayEnergy struct {
 	OffpeakGridImportKwh *float64                  `json:"offpeakGridImportKwh,omitempty"`
 	OffpeakGridExportKwh *float64                  `json:"offpeakGridExportKwh,omitempty"`
 	PeakGridImportKwh    *float64                  `json:"peakGridImportKwh,omitempty"`
+	BandImports          []BandImport              `json:"bandImports,omitempty"`
+	OffpeakSource                                  // flattened: offpeakWindowStart/End, offpeakIntegratedAt, offpeakSampleCount
 	DailyUsage           *derivedstats.DailyUsage  `json:"dailyUsage,omitempty"`
 	SocLow               *float64                  `json:"socLow,omitempty"`
 	SocLowTime           *string                   `json:"socLowTime,omitempty"`
@@ -189,4 +290,12 @@ type DaySummary struct {
 	OffpeakGridImportKwh *float64 `json:"offpeakGridImportKwh,omitempty"`
 	OffpeakGridExportKwh *float64 `json:"offpeakGridExportKwh,omitempty"`
 	PeakGridImportKwh    *float64 `json:"peakGridImportKwh,omitempty"`
+
+	// BandImports is the day's rated-band import split, absent when the day
+	// is unpriced or its split is unavailable (AC 3.6).
+	BandImports []BandImport `json:"bandImports,omitempty"`
+
+	// OffpeakSource describes the row OffpeakGridImportKwh came from, so the
+	// client can tell whether it can price this plan's free band.
+	OffpeakSource
 }

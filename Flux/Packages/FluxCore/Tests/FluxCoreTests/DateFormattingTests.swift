@@ -62,8 +62,37 @@ import Testing
     @Test
     func parseWindowTimeRejectsInvalidFormats() {
         #expect(DateFormatting.parseWindowTime("invalid") == nil)
-        #expect(DateFormatting.parseWindowTime("24:00") == nil)
         #expect(DateFormatting.parseWindowTime("09:60") == nil)
+        // 24:00 is the only valid hour-24 value: it is the end-of-day sentinel,
+        // not a time of day.
+        #expect(DateFormatting.parseWindowTime("24:01") == nil)
+        #expect(DateFormatting.parseWindowTime("25:00") == nil)
+    }
+
+    @Test
+    func parseWindowTimeResolvesEndOfDaySentinel() throws {
+        // A plan's free band may run to midnight, and the band model expresses
+        // that as an end of "24:00" (plan.ParseBandTime / PlanWindow accept it).
+        // Rejecting it here would make every consumer treat such a day as
+        // having no free window at all.
+        let now = makeSydneyDate(year: 2026, month: 4, day: 15, hour: 9, minute: 5)
+        let midnight = try #require(DateFormatting.parseWindowTime("24:00", on: now))
+        let components = sydneyCalendar.dateComponents([.year, .month, .day, .hour, .minute], from: midnight)
+
+        #expect(components.year == 2026)
+        #expect(components.month == 4)
+        #expect(components.day == 16, "end-of-day is the start of the following day")
+        #expect(components.hour == 0)
+        #expect(components.minute == 0)
+    }
+
+    @Test
+    func isInOffpeakWindowHandlesAFreeBandRunningToMidnight() {
+        let insideWindow = makeSydneyDate(year: 2026, month: 4, day: 15, hour: 23, minute: 30)
+        let beforeWindow = makeSydneyDate(year: 2026, month: 4, day: 15, hour: 19, minute: 59)
+
+        #expect(DateFormatting.isInOffpeakWindow(start: "20:00", end: "24:00", now: insideWindow))
+        #expect(DateFormatting.isInOffpeakWindow(start: "20:00", end: "24:00", now: beforeWindow) == false)
     }
 
     @Test

@@ -13,51 +13,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// testOffpeakWindowStart / testOffpeakWindowEnd is the 01:00–06:00 free
+// window the fixtures in this file are built around. It comes from the day's
+// plan in production; the tests pin it here so they don't have to build a
+// plan just to exercise snapshot capture and integration.
+const (
+	testOffpeakWindowStart = 1 * time.Hour
+	testOffpeakWindowEnd   = 6 * time.Hour
+)
+
 func testOffpeakCfg() *config.Config {
 	return &config.Config{
-		Serial:       "TEST123",
-		Location:     time.FixedZone("AEST", 10*60*60),
-		OffpeakStart: 1 * time.Hour, // 01:00
-		OffpeakEnd:   6 * time.Hour, // 06:00
-	}
-}
-
-// --- Tests for time position detection ---
-
-func TestTimePosition(t *testing.T) {
-	cfg := testOffpeakCfg()
-
-	tests := map[string]struct {
-		now  time.Time
-		want windowPosition
-	}{
-		"before window": {
-			now:  time.Date(2026, 4, 13, 0, 30, 0, 0, cfg.Location),
-			want: positionBefore,
-		},
-		"exactly at start": {
-			now:  time.Date(2026, 4, 13, 1, 0, 0, 0, cfg.Location),
-			want: positionDuring,
-		},
-		"during window": {
-			now:  time.Date(2026, 4, 13, 3, 0, 0, 0, cfg.Location),
-			want: positionDuring,
-		},
-		"exactly at end": {
-			now:  time.Date(2026, 4, 13, 6, 0, 0, 0, cfg.Location),
-			want: positionAfter,
-		},
-		"after window": {
-			now:  time.Date(2026, 4, 13, 12, 0, 0, 0, cfg.Location),
-			want: positionAfter,
-		},
-	}
-
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			got := timePosition(tc.now, cfg.OffpeakStart, cfg.OffpeakEnd)
-			assert.Equal(t, tc.want, got)
-		})
+		Serial:   "TEST123",
+		Location: time.FixedZone("AEST", 10*60*60),
 	}
 }
 
@@ -131,6 +99,7 @@ func TestOffpeak_StartSucceeds_EndFails_DeletesPending(t *testing.T) {
 		lastPowerData: &alphaess.PowerData{Soc: 50.0},
 	}
 	cfg := testOffpeakCfg()
+	day := time.Date(2026, 4, 13, 0, 0, 0, 0, cfg.Location)
 	o := &OffpeakScheduler{client: mc, store: ms, cfg: cfg, retryDelay: 1 * time.Millisecond, now: time.Now}
 
 	// Simulate start capture.
@@ -139,7 +108,7 @@ func TestOffpeak_StartSucceeds_EndFails_DeletesPending(t *testing.T) {
 
 	// Now make API fail for end capture.
 	mc.oneDateEnergyErr = errors.New("end snapshot fail")
-	err = o.handleEnd(context.Background(), "2026-04-13", nil)
+	err = o.handleEnd(context.Background(), "2026-04-13", nil, testWindow(day))
 	require.Error(t, err)
 
 	assert.True(t, logContains(buf, "end snapshot fail") || logContains(buf, "3 attempts"))
@@ -221,8 +190,8 @@ func TestOffpeak_MidWindowRecovery_StoreError(t *testing.T) {
 func TestPositionAfterRecovery_PendingRow_RunsHandleEndImmediately(t *testing.T) {
 	cfg := testOffpeakCfg()
 	day := time.Date(2026, 4, 13, 0, 0, 0, 0, cfg.Location)
-	windowStart := day.Add(cfg.OffpeakStart)
-	windowEnd := day.Add(cfg.OffpeakEnd)
+	windowStart := day.Add(testOffpeakWindowStart)
+	windowEnd := day.Add(testOffpeakWindowEnd)
 	readings := fixtureReadings(windowStart, windowEnd, 0, 2000, -1500)
 
 	pending := &dynamo.OffpeakItem{
@@ -250,46 +219,20 @@ func TestPositionAfterRecovery_PendingRow_RunsHandleEndImmediately(t *testing.T)
 		client: mc, store: ms, cfg: cfg, retryDelay: 1 * time.Millisecond,
 		// Clock past offpeak-end so the recovery path's "skip wait" branch
 		// actually skips the wait — the boundary is in the past.
-		now: func() time.Time { return day.Add(cfg.OffpeakEnd + 30*time.Minute) },
+		now: func() time.Time { return day.Add(testOffpeakWindowEnd + 30*time.Minute) },
 	}
 
-	o.recoverAfterWindow(context.Background(), "2026-04-13")
+	o.recoverAfterWindow(context.Background(), "2026-04-13", testWindow(day))
 	assert.Equal(t, 1, writes, "handleEnd-style integration must finalise the row")
 	assert.Equal(t, dynamo.OffpeakStatusComplete, captured.Status)
 	assert.InDelta(t, 10.0, captured.GridUsageKwh, 0.05)
 	assert.Greater(t, captured.IntegrationSampleCount, 0)
 }
 
-func TestPositionAfterRecovery_NoRow_LogsAndSkips(t *testing.T) {
-	buf, restore := captureLog()
-	defer restore()
-
-	cfg := testOffpeakCfg()
-	ms := &mockStore{getOffpeakResult: nil}
-	o := &OffpeakScheduler{store: ms, cfg: cfg, now: time.Now}
-
-	o.recoverAfterWindow(context.Background(), "2026-04-13")
-	assert.True(t, logContains(buf, "past window") || logContains(buf, "no pending"),
-		"absent row → log and skip")
-}
-
-func TestPositionAfterRecovery_CompleteRow_LogsAndSkips(t *testing.T) {
-	cfg := testOffpeakCfg()
-	completeWrites := 0
-	ms := &mockStore{
-		getOffpeakResult: &dynamo.OffpeakItem{
-			SysSn: "TEST123", Date: "2026-04-13", Status: dynamo.OffpeakStatusComplete,
-		},
-		writeOffpeakIfPendingOrAbsentFunc: func(_ context.Context, _ dynamo.OffpeakItem) error {
-			completeWrites++
-			return nil
-		},
-	}
-	o := &OffpeakScheduler{store: ms, cfg: cfg, now: time.Now}
-
-	o.recoverAfterWindow(context.Background(), "2026-04-13")
-	assert.Equal(t, 0, completeWrites, "already-complete row must not be re-written")
-}
+// The absent-row and complete-row recovery paths moved to
+// offpeak_plan_test.go: under Q36 an absent row is repaired from readings
+// rather than skipped, so the assertions changed shape along with the
+// behaviour.
 
 // --- Tests for DST-safe wall-clock scheduling ---
 
@@ -297,22 +240,21 @@ func TestWallClockTime_DST(t *testing.T) {
 	sydney, err := time.LoadLocation("Australia/Sydney")
 	require.NoError(t, err)
 
-	cfg := &config.Config{
-		Serial:       "TEST123",
-		Location:     sydney,
-		OffpeakStart: 1 * time.Hour,
-		OffpeakEnd:   6 * time.Hour,
+	windowOn := func(day time.Time) offpeakWindow {
+		return offpeakWindow{
+			Start:     wallClockTime(day, sydney, testOffpeakWindowStart),
+			End:       wallClockTime(day, sydney, testOffpeakWindowEnd),
+			StartHHMM: "01:00", EndHHMM: "06:00",
+		}
 	}
 
 	// During AEDT (UTC+11), 01:00 local = 14:00 UTC previous day.
 	aedt := time.Date(2026, 1, 15, 1, 0, 0, 0, sydney)
-	pos := timePosition(aedt, cfg.OffpeakStart, cfg.OffpeakEnd)
-	assert.Equal(t, positionDuring, pos)
+	assert.Equal(t, positionDuring, positionFor(aedt, windowOn(aedt)))
 
 	// During AEST (UTC+10), 01:00 local = 15:00 UTC previous day.
 	aest := time.Date(2026, 7, 15, 1, 0, 0, 0, sydney)
-	pos = timePosition(aest, cfg.OffpeakStart, cfg.OffpeakEnd)
-	assert.Equal(t, positionDuring, pos)
+	assert.Equal(t, positionDuring, positionFor(aest, windowOn(aest)))
 }
 
 // --- retryMockClient wraps mockClient with custom energy function ---
@@ -416,8 +358,8 @@ func TestHandleEnd_CallsLogOffpeakDrift(t *testing.T) {
 
 	cfg := testOffpeakCfg()
 	day := time.Date(2026, 4, 13, 0, 0, 0, 0, cfg.Location)
-	windowStart := day.Add(cfg.OffpeakStart)
-	windowEnd := day.Add(cfg.OffpeakEnd)
+	windowStart := day.Add(testOffpeakWindowStart)
+	windowEnd := day.Add(testOffpeakWindowEnd)
 	readings := fixtureReadings(windowStart, windowEnd, 0, 1000, 0)
 	readings = append(readings, dynamo.ReadingItem{Timestamp: windowEnd.Unix() + 3})
 
@@ -444,7 +386,7 @@ func TestHandleEnd_CallsLogOffpeakDrift(t *testing.T) {
 	o.startSnapshot = &alphaess.EnergyData{EInput: 1.0}
 	o.socStart = 20.0
 
-	require.NoError(t, o.handleEnd(context.Background(), "2026-04-13", nil))
+	require.NoError(t, o.handleEnd(context.Background(), "2026-04-13", nil, testWindow(day)))
 	assert.Equal(t, 1, writes)
 	assert.True(t, logContains(buf, "offpeak drift"), "handleEnd must emit a drift line")
 	assert.True(t, driftSeenBeforeWrite, "drift log must be emitted before the conditional write fires")
@@ -470,8 +412,8 @@ func TestHandleEnd_HappyPath_IntegratesAndWrites(t *testing.T) {
 	cfg := testOffpeakCfg()
 	// Window: 01:00 → 06:00 on 2026-04-13, AEST.
 	day := time.Date(2026, 4, 13, 0, 0, 0, 0, cfg.Location)
-	windowStart := day.Add(cfg.OffpeakStart)
-	windowEnd := day.Add(cfg.OffpeakEnd)
+	windowStart := day.Add(testOffpeakWindowStart)
+	windowEnd := day.Add(testOffpeakWindowEnd)
 	// Charge at 2000 W on the grid (heavy off-peak charging), 1500 W to the
 	// battery, no solar (off-peak window is overnight).
 	readings := fixtureReadings(windowStart, windowEnd, 0, 2000, -1500)
@@ -515,7 +457,7 @@ func TestHandleEnd_HappyPath_IntegratesAndWrites(t *testing.T) {
 	}
 	o.socStart = 20.0
 
-	err := o.handleEnd(context.Background(), "2026-04-13", nil)
+	err := o.handleEnd(context.Background(), "2026-04-13", nil, testWindow(day))
 	require.NoError(t, err)
 	assert.Equal(t, 1, writeCalled, "WriteOffpeakIfPendingOrAbsent must be called once")
 	assert.Equal(t, dynamo.OffpeakStatusComplete, captured.Status)
@@ -539,8 +481,8 @@ func TestHandleEnd_HappyPath_IntegratesAndWrites(t *testing.T) {
 func TestHandleEnd_BoundaryWaitTimeout_StillWritesRow(t *testing.T) {
 	cfg := testOffpeakCfg()
 	day := time.Date(2026, 4, 13, 0, 0, 0, 0, cfg.Location)
-	windowStart := day.Add(cfg.OffpeakStart)
-	windowEnd := day.Add(cfg.OffpeakEnd)
+	windowStart := day.Add(testOffpeakWindowStart)
+	windowEnd := day.Add(testOffpeakWindowEnd)
 	// Build readings strictly before windowEnd — wait-for-boundary will time out.
 	readings := fixtureReadings(windowStart, windowEnd.Add(-10*time.Second), 0, 1000, -1000)
 
@@ -577,7 +519,7 @@ func TestHandleEnd_BoundaryWaitTimeout_StillWritesRow(t *testing.T) {
 	o.endWaitBudget = 30 * time.Millisecond
 	o.endWaitPollInterval = 10 * time.Millisecond
 
-	err := o.handleEnd(context.Background(), "2026-04-13", nil)
+	err := o.handleEnd(context.Background(), "2026-04-13", nil, testWindow(day))
 	require.NoError(t, err)
 	assert.Equal(t, 1, writeCalled, "row must be written even when the boundary wait times out")
 	assert.Equal(t, dynamo.OffpeakStatusComplete, captured.Status)
@@ -591,8 +533,8 @@ func TestHandleEnd_ConditionalWriteFails_LogsWarn_NoError(t *testing.T) {
 
 	cfg := testOffpeakCfg()
 	day := time.Date(2026, 4, 13, 0, 0, 0, 0, cfg.Location)
-	windowStart := day.Add(cfg.OffpeakStart)
-	windowEnd := day.Add(cfg.OffpeakEnd)
+	windowStart := day.Add(testOffpeakWindowStart)
+	windowEnd := day.Add(testOffpeakWindowEnd)
 	readings := fixtureReadings(windowStart, windowEnd, 0, 1000, 0)
 	readings = append(readings, dynamo.ReadingItem{Timestamp: windowEnd.Unix() + 3})
 
@@ -614,7 +556,7 @@ func TestHandleEnd_ConditionalWriteFails_LogsWarn_NoError(t *testing.T) {
 	}
 	o.startSnapshot = &alphaess.EnergyData{}
 
-	err := o.handleEnd(context.Background(), "2026-04-13", nil)
+	err := o.handleEnd(context.Background(), "2026-04-13", nil, testWindow(day))
 	require.NoError(t, err, "conditional-failure must be logged, not returned as error")
 	assert.True(t, logContains(buf, "conditional"), "warn log should mention the conditional failure")
 }
@@ -622,7 +564,7 @@ func TestHandleEnd_ConditionalWriteFails_LogsWarn_NoError(t *testing.T) {
 func TestHandleEnd_EmptyReadings_WritesRowWithZeroDeltas(t *testing.T) {
 	cfg := testOffpeakCfg()
 	day := time.Date(2026, 4, 13, 0, 0, 0, 0, cfg.Location)
-	windowEnd := day.Add(cfg.OffpeakEnd)
+	windowEnd := day.Add(testOffpeakWindowEnd)
 
 	var captured dynamo.OffpeakItem
 	writeCalled := 0
@@ -648,7 +590,7 @@ func TestHandleEnd_EmptyReadings_WritesRowWithZeroDeltas(t *testing.T) {
 	}
 	o.startSnapshot = &alphaess.EnergyData{}
 
-	err := o.handleEnd(context.Background(), "2026-04-13", nil)
+	err := o.handleEnd(context.Background(), "2026-04-13", nil, testWindow(day))
 	require.NoError(t, err)
 	assert.Equal(t, 1, writeCalled, "row must still be written when readings are empty")
 	assert.Equal(t, 0.0, captured.GridUsageKwh)

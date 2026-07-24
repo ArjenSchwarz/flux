@@ -139,8 +139,6 @@ docker-dry-run:
 		-e ALPHA_APP_ID=$${ALPHA_APP_ID} \
 		-e ALPHA_APP_SECRET=$${ALPHA_APP_SECRET} \
 		-e SYSTEM_SERIAL=$${SYSTEM_SERIAL} \
-		-e OFFPEAK_START=11:00 \
-		-e OFFPEAK_END=14:00 \
 		-e TZ=Australia/Sydney \
 		flux-poller
 

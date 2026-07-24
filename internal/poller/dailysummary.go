@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ArjenSchwarz/flux/internal/config"
 	"github.com/ArjenSchwarz/flux/internal/derivedstats"
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
+	"github.com/ArjenSchwarz/flux/internal/plan"
 )
 
 // pollDailySummary runs the daily-derived-stats summarisation pass for
@@ -52,26 +52,51 @@ func (p *Poller) runSummarisationPass(ctx context.Context, date string) string {
 		return PassResultSkippedNoRow
 	}
 
-	// Two orthogonal sentinels gate two independent compute blocks
-	// (peak-from-readings Decision 3). Skip the whole pass only when BOTH are
+	// Three orthogonal sentinels gate three independent compute blocks
+	// (peak-from-readings Decision 3). Skip the whole pass only when ALL are
 	// set; otherwise compute whichever group is still missing. A row with
 	// derived stats but no peak (e.g. pre-feature row picked up after deploy)
 	// gets only peak written.
 	needDerived := item.DerivedStatsComputedAt == ""
 	needPeak := item.PeakComputedAt == ""
-	if !needDerived && !needPeak {
-		// AC 1.10 / daily-derived-stats Decision 8 — both sentinels present
+	needBands := item.BandsComputedAt == ""
+	if !needDerived && !needPeak && !needBands {
+		// AC 1.10 / daily-derived-stats Decision 8 — every sentinel present
 		// means a prior pass computed everything.
 		return PassResultSkippedAlreadyDone
 	}
 
-	// 2. Off-peak window resolution (AC 1.6 / 1.14). Needed by both blocks.
-	offpeakStart := config.FormatHHMM(p.cfg.OffpeakStart)
-	offpeakEnd := config.FormatHHMM(p.cfg.OffpeakEnd)
-	startMin, endMin, ok := derivedstats.ParseOffpeakWindow(offpeakStart, offpeakEnd)
-	if !ok {
-		slog.Warn("summary skipped: off-peak window unresolved", "date", date)
-		return PassResultSkippedSSMUnresolved
+	// 2. Plan resolution (AC 4.1). The plan pricing the date is the source of
+	// truth for the free window; the three outcomes below are gated
+	// separately because they mean different things (Q33).
+	plans, err := p.plans.Plans(ctx)
+	if err != nil {
+		// AC 4.6: an unreadable pricing table is transient, never "no plan".
+		// Setting sentinels here would make the day terminal on the strength
+		// of an infra blip, so nothing is written and the next tick retries.
+		slog.Error("summary plan read failed", "date", date, "error", err)
+		return PassResultError
+	}
+	datePlan, hasPlan := plan.PlanFor(plans, date)
+	// hhmm bounds for the derivedstats helpers. Empty strings are how those
+	// helpers already express "no off-peak window", and they degrade to their
+	// window-free layouts rather than defaulting to a window that isn't there.
+	var offpeakStart, offpeakEnd string
+	if startMin, endMin, ok := datePlan.FreeWindowMinutes(); hasPlan && ok {
+		offpeakStart = plan.FormatBandTime(startMin)
+		offpeakEnd = plan.FormatBandTime(endMin)
+	}
+
+	// Nothing left to compute for this date. Only reachable with no plan: the
+	// band and peak groups both need one, and their sentinels are deliberately
+	// left unset so a later backfill can still capture the split — which means
+	// without this gate the pass would re-query a full day of readings every
+	// hour, forever, to compute nothing and write nothing. Returning here keeps
+	// the day repairable while making an unpriced date visible in the metric
+	// rather than indistinguishable from useful work.
+	if !needDerived && (!hasPlan || (!needPeak && !needBands)) {
+		slog.Info("summary skipped: no plan prices this date", "date", date)
+		return PassResultSkippedNoPlan
 	}
 
 	// 3. Fetch the day's readings.
@@ -94,35 +119,55 @@ func (p *Poller) runSummarisationPass(ctx context.Context, date string) string {
 	// 4a. derivedStats block — gated on its own sentinel. Pass `today=date` so
 	// the today-gate cannot fire on a completed date (AC 1.2 + the "today"
 	// parameter contract on derivedstats.Blocks).
+	//
+	// With no plan at all only socLow runs: the block layout and the peak
+	// periods both partition the day around the free window, and guessing one
+	// would bake a wrong layout into a sentinel-gated field. socLow needs no
+	// window, and the design's rule is that a semantic absence never returns
+	// before window-independent work has run.
 	if needDerived {
 		socLow, socLowTS, socFound := derivedstats.MinSOC(readings)
-		derived.DailyUsage = dynamo.DailyUsageToAttr(derivedstats.Blocks(readings, offpeakStart, offpeakEnd, date, date, now))
-		derived.PeakPeriods = dynamo.PeakPeriodsToAttr(derivedstats.PeakPeriods(readings, offpeakStart, offpeakEnd))
-		derived.DerivedStatsComputedAt = now.UTC().Format(time.RFC3339)
 		if socFound {
 			derived.SocLow = &dynamo.SocLowAttr{
 				Soc:       socLow,
 				Timestamp: time.Unix(socLowTS, 0).UTC().Format(time.RFC3339),
 			}
 		}
+		if hasPlan {
+			derived.DailyUsage = dynamo.DailyUsageToAttr(derivedstats.Blocks(readings, offpeakStart, offpeakEnd, date, date, now))
+			derived.PeakPeriods = dynamo.PeakPeriodsToAttr(derivedstats.PeakPeriods(readings, offpeakStart, offpeakEnd))
+		}
+		derived.DerivedStatsComputedAt = now.UTC().Format(time.RFC3339)
 	}
 
-	// 4b. Peak grid import block — gated on its own sentinel. The off-peak
-	// window bounds the two peak sub-windows. Boundaries are derived from the
-	// DST-correct dayStart so 23h/25h Sydney days integrate correctly. When
-	// the usability gate fails for either sub-window the field is left absent
-	// (PeakGridImportKwh stays nil), but the sentinel is still set so the row
-	// is not re-attempted every hour.
-	if needPeak {
-		offpeakStartUnix := dayStart.Add(time.Duration(startMin) * time.Minute).Unix()
-		offpeakEndUnix := dayStart.Add(time.Duration(endMin) * time.Minute).Unix()
-		kwh, _, _, peakOK := derivedstats.IntegratePeakGridImportKwh(
-			readings, dayStart.Unix(), offpeakStartUnix, offpeakEndUnix, dayEnd.Unix())
-		if peakOK {
-			rounded := derivedstats.RoundEnergy(kwh)
-			derived.PeakGridImportKwh = &rounded
+	// 4b. Rated-band block, shared by the peak and band groups. Both describe
+	// the same physical quantity — grid import outside the free window — so
+	// they come from one integration and cannot disagree (Data Consistency).
+	// A plan without a free band leaves the whole day rated, which is exactly
+	// what "whole-day-rated mode" means for both values.
+	//
+	// Without a plan neither is defined: "peak" means "outside the free
+	// window", and no plan means no answer to what that window is. Both
+	// sentinels stay unset so a backfill can still capture the split once a
+	// plan exists — terminal only once the readings TTL prunes the day.
+	if hasPlan && (needPeak || needBands) {
+		bands, totalKwh, bandsOK := dynamo.IntegrateRatedBands(readings, datePlan, dayStart, p.cfg.Location)
+		if needPeak {
+			// The usability gate is shared too: a split missing any segment
+			// cannot produce a trustworthy total either. The field stays
+			// absent, but the sentinel is set so the row is not re-attempted
+			// every hour.
+			if bandsOK {
+				derived.PeakGridImportKwh = &totalKwh
+			}
+			derived.PeakComputedAt = now.UTC().Format(time.RFC3339)
 		}
-		derived.PeakComputedAt = now.UTC().Format(time.RFC3339)
+		if needBands {
+			if bandsOK {
+				derived.BandImports = bands
+			}
+			derived.BandsComputedAt = now.UTC().Format(time.RFC3339)
+		}
 	}
 
 	// 5. Write — UpdateDailyEnergyDerived writes each group only when its
@@ -131,8 +176,29 @@ func (p *Poller) runSummarisationPass(ctx context.Context, date string) string {
 		slog.Error("summary write failed", "date", date, "error", err)
 		return PassResultError
 	}
-	slog.Info("summary written", "date", date, "wroteDerived", needDerived, "wrotePeak", needPeak)
+	slog.Info("summary written", "date", date,
+		"plan", planLabel(datePlan, hasPlan), "window", windowLabel(offpeakStart, offpeakEnd),
+		"wroteDerived", derived.DerivedStatsComputedAt != "",
+		"wrotePeak", derived.PeakComputedAt != "",
+		"wroteBands", derived.BandsComputedAt != "")
 	return PassResultSuccess
+}
+
+// planLabel renders the plan pricing the date for the pass's log line.
+func planLabel(p plan.Plan, hasPlan bool) string {
+	if !hasPlan {
+		return "none"
+	}
+	return p.ID
+}
+
+// windowLabel renders the resolved free window, or "none" when the day's plan
+// has no free band.
+func windowLabel(start, end string) string {
+	if start == "" || end == "" {
+		return "none"
+	}
+	return start + "-" + end
 }
 
 // summaryToDerivedReadings converts the storage-level []dynamo.ReadingItem

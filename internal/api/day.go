@@ -9,6 +9,7 @@ import (
 	"github.com/ArjenSchwarz/flux/internal/alphaess"
 	"github.com/ArjenSchwarz/flux/internal/derivedstats"
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
+	"github.com/ArjenSchwarz/flux/internal/plan"
 	"github.com/aws/aws-lambda-go/events"
 	"golang.org/x/sync/errgroup"
 )
@@ -45,9 +46,18 @@ func (h *Handler) handleDay(ctx context.Context, req events.LambdaFunctionURLReq
 		readings []dynamo.ReadingItem
 		deItem   *dynamo.DailyEnergyItem
 		opItem   *dynamo.OffpeakItem
+		plans    []plan.Plan
 	)
 
 	g, gctx := errgroup.WithContext(ctx)
+
+	// Plans are gated, unlike the supplementary off-peak query: a read failure
+	// must fail the request rather than resolve as "no plan" (Q14).
+	g.Go(func() error {
+		rows, err := h.listPlans(gctx)
+		plans = rows
+		return err
+	})
 
 	if isToday {
 		g.Go(func() error {
@@ -85,6 +95,11 @@ func (h *Handler) handleDay(ctx context.Context, req events.LambdaFunctionURLReq
 	}
 	noteText := waitNote()
 
+	// window is the free band of the plan pricing the requested date (AC 4.1),
+	// nil when that plan has no free band or the date is unpriced.
+	window := resolveOffpeakWindow(plans, date)
+	windowStart, windowEnd := hhmmBounds(window)
+
 	var points []TimeSeriesPoint
 	var socLow float64
 	var socLowTime int64
@@ -98,8 +113,8 @@ func (h *Handler) handleDay(ctx context.Context, req events.LambdaFunctionURLReq
 			drs := toDerivedReadings(readings)
 			socLow, socLowTime, hasSocLow = derivedstats.MinSOC(drs)
 			points = downsample(readings, date)
-			peakPeriods = derivedstats.PeakPeriods(drs, h.offpeakStart, h.offpeakEnd)
-			dailyUsage = derivedstats.Blocks(drs, h.offpeakStart, h.offpeakEnd, date, today, now)
+			peakPeriods = derivedstats.PeakPeriods(drs, windowStart, windowEnd)
+			dailyUsage = derivedstats.Blocks(drs, windowStart, windowEnd, date, today, now)
 		} else {
 			// Today with no readings: fall back to flux-daily-power for the
 			// chart and socLow.
@@ -197,9 +212,10 @@ func (h *Handler) handleDay(ctx context.Context, req events.LambdaFunctionURLReq
 			summary.EDischarge = floatPtr(energy.EDischarge)
 		}
 		if opItem != nil {
-			if imp, exp, hasSplit := offpeakSplit(*opItem, readings, now, isToday, h.offpeakStart, h.offpeakEnd); hasSplit {
+			if imp, exp, hasSplit := offpeakSplit(*opItem, readings, now, isToday, window); hasSplit {
 				summary.OffpeakGridImportKwh = floatPtr(imp)
 				summary.OffpeakGridExportKwh = floatPtr(exp)
+				summary.OffpeakSource = offpeakSourceFrom(*opItem, isToday, window)
 			}
 		}
 		// Peak grid import: today is integrated live from readings (T-1420,
@@ -208,12 +224,20 @@ func (h *Handler) handleDay(ctx context.Context, req events.LambdaFunctionURLReq
 		// the stored server-computed value. Absent on either path falls through
 		// to the iOS residual fallback (e.g. pre-30-day rows, Decision 4b).
 		if isToday {
-			if peak, ok := livePeakGridImport(readings, now, h.offpeakStart, h.offpeakEnd); ok {
+			if peak, ok := livePeakGridImport(readings, now, window); ok {
 				summary.PeakGridImportKwh = floatPtr(derivedstats.RoundEnergy(peak))
 			}
 		} else if deItem != nil && deItem.PeakGridImportKwh != nil {
 			summary.PeakGridImportKwh = floatPtr(*deItem.PeakGridImportKwh)
 		}
+		// Per-band import split, resolved by the same helper /history uses so
+		// the two endpoints cannot report a different split for the same day
+		// (AC 3.4). An absent daily-energy row simply carries no stored split.
+		var storedBands []dynamo.BandImportAttr
+		if deItem != nil {
+			storedBands = deItem.BandImports
+		}
+		summary.BandImports = bandImportsFor(plans, date, isToday, readings, now, storedBands)
 		resp.Summary = summary
 	}
 

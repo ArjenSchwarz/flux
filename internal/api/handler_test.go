@@ -92,7 +92,19 @@ const testSerial = "AB1234"
 
 // newTestHandler creates a Handler with a mock reader and test credentials.
 func newTestHandler() *Handler {
-	return NewHandler(&mockReader{}, nil, testSerial, testToken, "11:00", "14:00")
+	return newTestHandlerFor(&mockReader{}, nil, testSerial, testToken)
+}
+
+// newTestHandlerFor builds a Handler over the given reader and note writer,
+// wired to a pricing store holding the migrated shape of the plan these tests
+// were written against: free 11:00–14:00, open-ended, one flat rate. The
+// window now comes from the plan, so tests that assert on window-dependent
+// values need one; tests about the window itself supply their own plans via
+// handlerWithPlans.
+func newTestHandlerFor(reader dynamo.Reader, notes NoteWriter, serial, apiToken string) *Handler {
+	h := NewHandler(reader, notes, serial, apiToken)
+	h.SetPricingStore(storeWithPlans(planRow("legacy-plan", "2000-01-01", nil, freeBand("11:00", "14:00"))))
+	return h
 }
 
 // makeRequest builds a LambdaFunctionURLRequest with the given method, path, and optional auth header.

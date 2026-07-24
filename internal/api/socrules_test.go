@@ -94,7 +94,7 @@ func (f *fakeFireStateCleaner) DeleteFireStateByDeviceRule(_ context.Context, de
 }
 
 func newRulesTestHandler(rules *fakeSocRuleStore, cleaner *fakeFireStateCleaner) *Handler {
-	h := NewHandler(&mockReader{}, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(&mockReader{}, nil, testSerial, testToken)
 	h.rules = rules
 	h.fireState = cleaner
 	// Fix the clock and the UUID generator so tests are deterministic.
@@ -181,7 +181,7 @@ func TestHandleCreateRule_ValidationParityWithAC1_3(t *testing.T) {
 
 func TestHandleCreateRule_Returns409OnEleventhRule(t *testing.T) {
 	rules := newFakeSocRuleStore()
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		rules.rules["dev-1"] = append(rules.rules["dev-1"], dynamo.SoCRuleItem{
 			DeviceID:  "dev-1",
 			RuleID:    fmt.Sprintf("rule-%d", i),

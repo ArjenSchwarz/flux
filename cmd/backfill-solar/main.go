@@ -7,14 +7,19 @@
 // (totalKwh, start, end, boundarySource, percentOfDay, status,
 // averageKwhPerHour) is preserved byte-for-byte (Decision 7).
 //
+// Each day's block layout is partitioned around the free window of the plan
+// pricing that day, read from the pricing table rather than passed as flags: a
+// range spanning a plan switch needs a different window on either side of it,
+// and a static flag pair would recompute one side under the wrong layout (Q24).
+//
 // Usage (with operator AWS credentials):
 //
 //	go run ./cmd/backfill-solar \
 //	    --serial=AB1234 \
 //	    --from=2026-04-09 --to=2026-05-08 \
-//	    --offpeak-start=11:00 --offpeak-end=14:00 \
 //	    --table-daily-energy=flux-daily-energy \
 //	    --table-readings=flux-readings \
+//	    --table-pricing=flux-pricing \
 //	    [--dry-run]
 //
 // Defaults: from = today - 30d, to = yesterday (the practical readings TTL
@@ -39,22 +44,25 @@ import (
 
 	"github.com/ArjenSchwarz/flux/internal/derivedstats"
 	"github.com/ArjenSchwarz/flux/internal/dynamo"
+	"github.com/ArjenSchwarz/flux/internal/plan"
 )
 
 // dynamoAPI is the subset of the DynamoDB client this CLI uses.
 type dynamoAPI interface {
 	Query(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error)
 	UpdateItem(ctx context.Context, params *dynamodb.UpdateItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error)
+	// Scan serves the pricing read (ListPricingRows). The CLI never writes
+	// pricing rows — the Lambda keeps sole write access to that table.
+	Scan(ctx context.Context, params *dynamodb.ScanInput, optFns ...func(*dynamodb.Options)) (*dynamodb.ScanOutput, error)
 }
 
 type backfillOpts struct {
 	serial           string
 	tableDailyEnergy string
 	tableReadings    string
+	tablePricing     string
 	from             string
 	to               string
-	offpeakStart     string
-	offpeakEnd       string
 	location         *time.Location
 	dryRun           bool
 	now              func() time.Time
@@ -65,6 +73,7 @@ type backfillResult struct {
 	RowsSkipped int
 	RowsWritten int
 	RowsDryRun  int
+	RowsNoPlan  int // no plan prices the date — block layout unknowable
 	IntentLog   []string
 }
 
@@ -84,10 +93,9 @@ func main() {
 	flag.StringVar(&opts.serial, "serial", os.Getenv("SYSTEM_SERIAL"), "AlphaESS system serial number (or env SYSTEM_SERIAL)")
 	flag.StringVar(&opts.tableDailyEnergy, "table-daily-energy", os.Getenv("TABLE_DAILY_ENERGY"), "flux-daily-energy table name (or env TABLE_DAILY_ENERGY)")
 	flag.StringVar(&opts.tableReadings, "table-readings", os.Getenv("TABLE_READINGS"), "flux-readings table name (or env TABLE_READINGS)")
+	flag.StringVar(&opts.tablePricing, "table-pricing", os.Getenv("TABLE_PRICING"), "flux-pricing table name (or env TABLE_PRICING)")
 	flag.StringVar(&opts.from, "from", defaultFrom, "start date inclusive (YYYY-MM-DD, Sydney TZ)")
 	flag.StringVar(&opts.to, "to", defaultTo, "end date inclusive (YYYY-MM-DD, Sydney TZ)")
-	flag.StringVar(&opts.offpeakStart, "offpeak-start", os.Getenv("OFFPEAK_START"), "off-peak window start HH:MM (or env OFFPEAK_START)")
-	flag.StringVar(&opts.offpeakEnd, "offpeak-end", os.Getenv("OFFPEAK_END"), "off-peak window end HH:MM (or env OFFPEAK_END)")
 	flag.BoolVar(&opts.dryRun, "dry-run", false, "log intended writes without invoking UpdateItem")
 	flag.Parse()
 
@@ -112,6 +120,7 @@ func main() {
 	slog.Info("backfill complete",
 		"scanned", res.RowsScanned,
 		"skipped", res.RowsSkipped,
+		"noPlan", res.RowsNoPlan,
 		"written", res.RowsWritten,
 		"dryRun", res.RowsDryRun,
 	)
@@ -127,8 +136,8 @@ func validateOpts(o backfillOpts) error {
 	if o.tableReadings == "" {
 		return fmt.Errorf("--table-readings is required")
 	}
-	if o.offpeakStart == "" || o.offpeakEnd == "" {
-		return fmt.Errorf("--offpeak-start and --offpeak-end are required")
+	if o.tablePricing == "" {
+		return fmt.Errorf("--table-pricing is required")
 	}
 	from, err := time.ParseInLocation("2006-01-02", o.from, o.location)
 	if err != nil {
@@ -151,6 +160,12 @@ func validateOpts(o backfillOpts) error {
 // calling UpdateItem.
 func runBackfill(ctx context.Context, client dynamoAPI, opts backfillOpts) (*backfillResult, error) {
 	res := &backfillResult{}
+	pricingRows, err := dynamo.ListPricingRows(ctx, client, opts.tablePricing)
+	if err != nil {
+		return nil, fmt.Errorf("list pricing (%s): %w", opts.tablePricing, err)
+	}
+	plans := dynamo.PlansFromItems(pricingRows)
+
 	rows, err := queryDailyEnergyRange(ctx, client, opts.tableDailyEnergy, opts.serial, opts.from, opts.to)
 	if err != nil {
 		return nil, fmt.Errorf("query daily energy (%s): %w", opts.tableDailyEnergy, err)
@@ -168,6 +183,20 @@ func runBackfill(ctx context.Context, client dynamoAPI, opts backfillOpts) (*bac
 			slog.Info("skip: all daylight blocks already populated", "date", row.Date)
 			continue
 		}
+
+		// The block layout is partitioned around the day's free window, so
+		// recomputing without knowing it would produce a different set of
+		// blocks than the stored row has and the per-kind patch would land on
+		// the wrong ones. A plan with no free band yields empty bounds, which
+		// derivedstats.Blocks already reads as "no off-peak window" and which
+		// is the layout that row was stored under anyway.
+		datePlan, hasPlan := plan.PlanFor(plans, row.Date)
+		if !hasPlan {
+			res.RowsNoPlan++
+			slog.Warn("skip: no plan prices this date", "date", row.Date)
+			continue
+		}
+		offpeakStart, offpeakEnd := freeWindowHHMM(datePlan)
 
 		dayStart, err := time.ParseInLocation("2006-01-02", row.Date, opts.location)
 		if err != nil {
@@ -191,8 +220,8 @@ func runBackfill(ctx context.Context, client dynamoAPI, opts backfillOpts) (*bac
 
 		recomputed := derivedstats.Blocks(
 			toDerivedReadings(readings),
-			opts.offpeakStart,
-			opts.offpeakEnd,
+			offpeakStart,
+			offpeakEnd,
 			row.Date,
 			row.Date,
 			opts.now().In(opts.location),
@@ -236,6 +265,18 @@ func runBackfill(ctx context.Context, client dynamoAPI, opts backfillOpts) (*bac
 	}
 
 	return res, nil
+}
+
+// freeWindowHHMM renders the plan's free band for the derivedstats helpers.
+// A plan with no free band yields two empty strings, which those helpers
+// already treat as "no off-peak window" and degrade accordingly — never a
+// substituted default, which would invent a block boundary (AC 4.4).
+func freeWindowHHMM(p plan.Plan) (start, end string) {
+	startMin, endMin, ok := p.FreeWindowMinutes()
+	if !ok {
+		return "", ""
+	}
+	return plan.FormatBandTime(startMin), plan.FormatBandTime(endMin)
 }
 
 // countDaylightPopulated reports how many daylight blocks (morning peak,

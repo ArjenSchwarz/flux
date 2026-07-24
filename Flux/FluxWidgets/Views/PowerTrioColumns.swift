@@ -7,12 +7,14 @@ struct PowerTrioColumns: View {
     var spacing: CGFloat = 4
     var tight: Bool = false
 
-    private var offpeakStart: String {
-        entry.offpeak?.windowStart ?? OffpeakData.defaultWindowStart
+    /// A day with no free window has none — never substitute a default, which
+    /// would falsely render the legacy 11:00–14:00 band (Q35).
+    private var offpeakStart: String? {
+        entry.offpeak?.windowStart
     }
 
-    private var offpeakEnd: String {
-        entry.offpeak?.windowEnd ?? OffpeakData.defaultWindowEnd
+    private var offpeakEnd: String? {
+        entry.offpeak?.windowEnd
     }
 
     var body: some View {

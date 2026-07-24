@@ -14,13 +14,13 @@ extension StatusEntry {
 
     var gridTintColor: Color {
         if staleness == .offline { return .secondary }
-        let windowStart = offpeak?.windowStart ?? OffpeakData.defaultWindowStart
-        let windowEnd = offpeak?.windowEnd ?? OffpeakData.defaultWindowEnd
+        // A day with no free window has none — never substitute a default,
+        // which would falsely paint the legacy 11:00–14:00 band (Q35).
         return GridColor.forGrid(
             pgrid: pgrid,
             pgridSustained: live?.pgridSustained ?? false,
-            offpeakWindowStart: windowStart,
-            offpeakWindowEnd: windowEnd,
+            offpeakWindowStart: offpeak?.windowStart,
+            offpeakWindowEnd: offpeak?.windowEnd,
             now: date
         ).color
     }
@@ -51,8 +51,7 @@ extension StatusEntry {
         // Only escalate when the cutoff is actually close — distant predictions
         // would otherwise paint the ring orange all afternoon on a normal day.
         if cutoff.timeIntervalSince(date) > 6 * 60 * 60 { return nil }
-        let windowStart = offpeak?.windowStart ?? OffpeakData.defaultWindowStart
-        let tier = CutoffTimeColor.forCutoff(cutoff, offpeakWindowStart: windowStart, now: date)
+        let tier = CutoffTimeColor.forCutoff(cutoff, offpeakWindowStart: offpeak?.windowStart, now: date)
         switch tier {
         case .red, .orange, .amber:
             return tier.color

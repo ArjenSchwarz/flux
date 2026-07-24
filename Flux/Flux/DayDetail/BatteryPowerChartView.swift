@@ -5,6 +5,8 @@ import SwiftUI
 struct BatteryPowerChartView: View {
     let date: String
     let readings: [ParsedReading]
+    /// The day's free window, from the plan pricing it; nil means no shading.
+    let offpeakWindow: PlanSegment?
 
     @State private var selectedDate: Date?
 
@@ -25,7 +27,7 @@ struct BatteryPowerChartView: View {
             }
 
             Chart {
-                if let offpeak = DayChartDomain.offpeakRange(for: date) {
+                if let offpeak = DayChartDomain.offpeakRange(for: date, window: offpeakWindow) {
                     RectangleMark(
                         xStart: .value("Start", offpeak.start),
                         xEnd: .value("End", offpeak.end)
@@ -97,7 +99,11 @@ struct BatteryPowerChartView: View {
         guard let date = DateFormatting.parseTimestamp(reading.timestamp) else { return nil }
         return ParsedReading(id: reading.id, date: date, point: reading)
     }
-    BatteryPowerChartView(date: day.date, readings: parsed)
-        .padding()
+    BatteryPowerChartView(
+        date: day.date,
+        readings: parsed,
+        offpeakWindow: PlanSegment(start: "11:00", end: "14:00", free: true, rate: 0)
+    )
+    .padding()
 }
 #endif

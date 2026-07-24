@@ -1,7 +1,7 @@
 import Foundation
 
 /// Owns the pricing cache and the mutating CRUD path. View models read
-/// `periods` directly; AC 2.7 requires a fetch on every UI entry point and
+/// `plans` directly; AC 2.7 requires a fetch on every UI entry point and
 /// immediately after any mutation. The post-mutation refetch is
 /// fire-and-forget so the editor sees instant local feedback while the
 /// authoritative list lands on the next tick.
@@ -10,7 +10,7 @@ import Foundation
 public final class PricingService {
     public static let shared = PricingService()
 
-    public private(set) var periods: [PricingPeriod] = []
+    public private(set) var plans: [PricingPlan] = []
     public private(set) var lastError: Error?
 
     private var apiClient: (any FluxAPIClient)?
@@ -36,7 +36,7 @@ public final class PricingService {
             // Bail if the task was cancelled mid-flight — a fresher
             // refresh has already overtaken us.
             try Task.checkCancellation()
-            periods = remote.sorted { $0.startDate < $1.startDate }
+            plans = remote.sorted { $0.startDate < $1.startDate }
             lastError = nil
         } catch is CancellationError {
             // Cancelled refreshes are not failures; leave state alone.
@@ -48,7 +48,7 @@ public final class PricingService {
     }
 
     @discardableResult
-    public func create(_ draft: PricingPeriodDraft) async throws -> PricingPeriod {
+    public func create(_ draft: PricingPlanDraft) async throws -> PricingPlan {
         guard let apiClient else {
             lastError = FluxAPIError.notConfigured
             throw FluxAPIError.notConfigured
@@ -66,7 +66,7 @@ public final class PricingService {
     }
 
     @discardableResult
-    public func update(id: String, _ draft: PricingPeriodDraft) async throws -> PricingPeriod {
+    public func update(id: String, _ draft: PricingPlanDraft) async throws -> PricingPlan {
         guard let apiClient else {
             lastError = FluxAPIError.notConfigured
             throw FluxAPIError.notConfigured
@@ -90,7 +90,7 @@ public final class PricingService {
         }
         do {
             try await apiClient.deletePricing(id: id)
-            periods.removeAll { $0.id == id }
+            plans.removeAll { $0.id == id }
             lastError = nil
             scheduleRefetch()
         } catch {
@@ -102,8 +102,8 @@ public final class PricingService {
     @discardableResult
     public func replaceOpenEnded(
         closingId: String,
-        with draft: PricingPeriodDraft
-    ) async throws -> PricingPeriod {
+        with draft: PricingPlanDraft
+    ) async throws -> PricingPlan {
         guard let apiClient else {
             lastError = FluxAPIError.notConfigured
             throw FluxAPIError.notConfigured
@@ -112,34 +112,34 @@ public final class PricingService {
             let result = try await apiClient.replaceOpenEndedPricing(closingId: closingId, with: draft)
             // Sort once after both folds rather than re-sorting per insert.
             foldInsert(result.closing, sort: false)
-            foldInsert(result.newPeriod, sort: false)
-            periods.sort { $0.startDate < $1.startDate }
+            foldInsert(result.newPlan, sort: false)
+            plans.sort { $0.startDate < $1.startDate }
             lastError = nil
             scheduleRefetch()
-            return result.newPeriod
+            return result.newPlan
         } catch {
             lastError = error
             throw error
         }
     }
 
-    private func foldInsert(_ period: PricingPeriod, sort: Bool = true) {
-        if let idx = periods.firstIndex(where: { $0.id == period.id }) {
-            periods[idx] = period
+    private func foldInsert(_ plan: PricingPlan, sort: Bool = true) {
+        if let idx = plans.firstIndex(where: { $0.id == plan.id }) {
+            plans[idx] = plan
         } else {
-            periods.append(period)
+            plans.append(plan)
         }
         if sort {
-            periods.sort { $0.startDate < $1.startDate }
+            plans.sort { $0.startDate < $1.startDate }
         }
     }
 
-    private func foldReplace(_ period: PricingPeriod) {
-        if let idx = periods.firstIndex(where: { $0.id == period.id }) {
-            periods[idx] = period
-            periods.sort { $0.startDate < $1.startDate }
+    private func foldReplace(_ plan: PricingPlan) {
+        if let idx = plans.firstIndex(where: { $0.id == plan.id }) {
+            plans[idx] = plan
+            plans.sort { $0.startDate < $1.startDate }
         } else {
-            foldInsert(period)
+            foldInsert(plan)
         }
     }
 

@@ -47,7 +47,7 @@ func BenchmarkHandleHistory_30Days(b *testing.B) {
 			return rows, nil
 		},
 	}
-	h := NewHandler(mr, nil, "TEST", "tok", "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, "TEST", "tok")
 	h.nowFunc = func() time.Time { return now }
 	req := historyRequest(map[string]string{"days": "30"})
 	req.Headers["authorization"] = "Bearer tok"

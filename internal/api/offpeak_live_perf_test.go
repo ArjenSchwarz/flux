@@ -2,7 +2,7 @@ package api
 
 import (
 	"context"
-	"sort"
+	"slices"
 	"testing"
 	"time"
 
@@ -62,7 +62,7 @@ func TestHandleStatus_LiveOffpeak_P95Under500ms(t *testing.T) {
 			return &dynamo.OffpeakItem{Status: dynamo.OffpeakStatusPending}, nil
 		},
 	}
-	h := NewHandler(mr, nil, testSerial, testToken, "11:00", "14:00")
+	h := newTestHandlerFor(mr, nil, testSerial, testToken)
 	h.nowFunc = func() time.Time { return now }
 
 	// Warm-up — first call pays one-off costs (sync.Once init, allocator
@@ -99,7 +99,7 @@ func TestHandleStatus_LiveOffpeak_P95Under500ms(t *testing.T) {
 			"live path must populate gridUsageKwh from the readings integration")
 	}
 
-	sort.Slice(timings, func(i, j int) bool { return timings[i] < timings[j] })
+	slices.Sort(timings)
 	p50 := timings[samples/2]
 	p95 := timings[(samples*95)/100]
 	p99 := timings[(samples*99)/100]
