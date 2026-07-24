@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Removed
+
+- **Transitional legacy pricing read conversion** (T-1890, final cleanup task). The production migration has run — 1 legacy row transformed, 101 priced days verified identical under the pre- and post-migration formulas — so the read path no longer converts pre-migration rows on the fly. A three-rate row reaching the read path is now an error rather than something repaired silently; it is still detected on the raw attribute map, because a plain unmarshal would drop the unmatched attributes and yield a zero-rate plan that prices every day at $0.00 without looking wrong. The write-path rejection stays permanently, and `TransformLegacyPricing` stays with `cmd/migrate-pricing`, which is idempotent and re-runnable against a restored backup.
+
 ### Changed
 
 - **Time-of-use pricing — app** (T-1890, T-1891). Fourth implementation phase of the band-based pricing spec, and the first with user-visible change. Settings ▸ Pricing now edits band-based plans, and costs are computed from them.

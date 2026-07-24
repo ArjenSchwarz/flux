@@ -280,7 +280,7 @@ references:
 
 ## Cleanup
 
-- [ ] 39. Remove transitional legacy read transform after the migration has run <!-- id:chkfio7 -->
+- [x] 39. Remove transitional legacy read transform after the migration has run <!-- id:chkfio7 -->
   - Delete the dynamo read-side legacy conversion only; keep the write-path legacyShape rejection permanently
   - Gated by prerequisites.md: the production migration run must have completed and been verified first
   - Blocked-by: chkfinv (Implement cmd/migrate-pricing)
