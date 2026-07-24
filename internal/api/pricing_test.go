@@ -425,9 +425,10 @@ func TestPricing_CreateValidationErrorsByCode(t *testing.T) {
 }
 
 func TestPricing_CreateRejectsLegacyThreeRateShape(t *testing.T) {
-	// AC 7.3 / Q28: encoding/json drops unknown fields, so a legacy body
-	// would otherwise decode as a band plan with every rate at zero. The
-	// marker has to be detected on the raw JSON keys.
+	// AC 7.3: encoding/json drops unknown fields, so a legacy body would
+	// otherwise decode as a band plan with every rate at zero. The marker has
+	// to be detected on the raw JSON keys. This rejection is permanent — it
+	// outlives the migration, unlike the read-side conversion.
 	store := newFakePricingStore()
 	h := newPricingTestHandler(store)
 
@@ -679,8 +680,8 @@ func TestPricing_ReplaceOpenEndedRejectsLegacyNewPeriod(t *testing.T) {
 func TestPricing_ReplaceOpenEndedMapsLegacyClosingRowTo400(t *testing.T) {
 	// Q32: the store refuses to patch a closing row that is still the legacy
 	// three-rate shape — a partial UpdateItem would leave a legacy-detected
-	// row carrying an exclusive end date, double-shifted by the read transform
-	// and the migration.
+	// row carrying an exclusive end date, which the migration would then shift
+	// by a day it had already gained.
 	store := newFakePricingStore()
 	store.rows["open-id"] = bandPlanRow("open-id", "2026-01-01", nil, 0.25)
 	openID := "open-id"
