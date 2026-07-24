@@ -211,8 +211,9 @@ day it priced out of the golden check, and exited 0 with a half-migrated table.
 
 - **Cutover is ordered and manual** (`prerequisites.md`): deploy → migrate →
   enter the new plan → switch date. The migration must complete before the new
-  plan is entered. Task 39 (deleting the transitional read transform) is gated
-  on it and is intentionally still open.
+  plan is entered. Done as of 2026-07-24 except for entering the new plan; task
+  39 (deleting the transitional read transform) was unblocked by that run and
+  is now complete.
 - **Window edits degrade multi-rate days to the fallback tier.** Energy is
   frozen at capture; rates apply at display. A rate edit reprices history
   cleanly, but a *window* edit invalidates the geometry join for affected
@@ -243,12 +244,16 @@ day it priced out of the golden check, and exited 0 with a half-migrated table.
 - Cross-language vectors are consumed by both Go (`pricing_vectors_test.go`)
   and Swift (`PlanSegmentsVectorTests`, `DayCostsVectorTests`).
 
-### Partially implemented — by design
+### Fully implemented, completed after the cutover
 
-- **Requirement 5** (migration). The tool, its golden check, and its tests are
-  complete; the *production run* is a prerequisite, not a code task. Task 39
-  (removing the transitional legacy read transform) is correctly blocked on it.
-  The write-path `legacyShape` rejection is permanent in two places and stays.
+- **Requirement 5** (migration). The tool, its golden check, and its tests
+  landed with the feature; the *production run* was a prerequisite, not a code
+  task. It ran on 2026-07-24 — 1 legacy row transformed, 101 priced days
+  verified identical under both formulas, 0 mismatches — which unblocked task
+  39. The transitional read conversion is now gone: a legacy row reaching the
+  read path is an error rather than something repaired silently. The
+  write-path `legacyShape` rejection is permanent in two places and stays,
+  because a restored backup could reintroduce a legacy row.
 
 ### Gaps worth noting
 
