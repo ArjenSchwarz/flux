@@ -233,12 +233,7 @@ final actor MockFluxAPIClient: FluxAPIClient {
         ])
     }
 
-    private static let isoUTCFormatter: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
-        return formatter
-    }()
+    // Removed the static property isoUTCFormatter as requested
 
     // Returns a closure that converts a Sydney-local (hour, minute) on the
     // given date to its UTC ISO8601 timestamp, so preview block boundaries
@@ -247,7 +242,10 @@ final actor MockFluxAPIClient: FluxAPIClient {
         let baseDay = DateFormatting.parseDayDate(date) ?? Date()
         return { hour, minute in
             let target = calendar.date(byAdding: .minute, value: hour * 60 + minute, to: baseDay) ?? baseDay
-            return isoUTCFormatter.string(from: target)
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime]
+            formatter.timeZone = TimeZone(secondsFromGMT: 0)
+            return formatter.string(from: target)
         }
     }
 
@@ -281,16 +279,23 @@ final actor MockFluxAPIClient: FluxAPIClient {
 
     func saveNote(date: String, text: String) async throws -> NoteResponse {
         lastSaveNoteCall = (date, text)
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        let updatedAt = text.isEmpty ? nil : formatter.string(from: Date())
         return NoteResponse(
             date: date,
             text: text,
-            updatedAt: text.isEmpty ? nil : Self.isoUTCFormatter.string(from: Date())
+            updatedAt: updatedAt
         )
     }
 
     // MARK: - SoC Alerts
 
     func registerDevice(_ registration: DeviceRegistration) async throws -> DeviceItemResponse {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
         let response = DeviceItemResponse(
             deviceId: registration.deviceId,
             platform: registration.platform,
@@ -298,7 +303,7 @@ final actor MockFluxAPIClient: FluxAPIClient {
             tzIdentifier: registration.tzIdentifier,
             tzUpdatedAt: registration.tzUpdatedAt,
             tokenStatus: "active",
-            lastRegisteredAt: Self.isoUTCFormatter.string(from: Date())
+            lastRegisteredAt: formatter.string(from: Date())
         )
         registeredDevices[registration.deviceId] = response
         return response
@@ -346,3 +351,4 @@ final actor MockFluxAPIClient: FluxAPIClient {
     }
 }
 #endif
+
