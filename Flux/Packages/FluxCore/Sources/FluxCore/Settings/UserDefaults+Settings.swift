@@ -1,7 +1,7 @@
 import Foundation
 
 extension UserDefaults {
-    public static let fluxAppGroupSuiteName = "group.me.nore.ig.flux"
+    public static let fluxAppGroupSuiteName = "group.me.nore.ig.apps.flux"
 
     public static let fluxAppGroup: UserDefaults = UserDefaults(suiteName: fluxAppGroupSuiteName) ?? .standard
 

@@ -64,7 +64,7 @@ struct KeychainAccessibilityMigratorTests {
 
     private func makeKeychain(
         accessibility: KeychainAccessibility = .afterFirstUnlockThisDeviceOnly,
-        service: String = "me.nore.ig.flux.tests.\(UUID().uuidString)",
+        service: String = "me.nore.ig.apps.flux.tests.\(UUID().uuidString)",
         account: String = "api-token.\(UUID().uuidString)"
     ) -> KeychainService {
         KeychainService(
@@ -81,7 +81,7 @@ struct KeychainAccessibilityMigratorTests {
     }
 
     private func makeContext(initialAccessibility: KeychainAccessibility) -> Context {
-        let service = "me.nore.ig.flux.tests.\(UUID().uuidString)"
+        let service = "me.nore.ig.apps.flux.tests.\(UUID().uuidString)"
         let account = "api-token.\(UUID().uuidString)"
         let seed = KeychainService(
             service: service,

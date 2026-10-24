@@ -248,7 +248,7 @@ struct URLSessionAPIClientTests {
     @Test
     func missingTokenThrowsNotConfigured() async throws {
         let keychain = KeychainService(
-            service: "me.nore.ig.flux.tests.\(UUID().uuidString)",
+            service: "me.nore.ig.apps.flux.tests.\(UUID().uuidString)",
             account: "api-token",
             accessGroup: nil,
             synchronizable: false
@@ -400,7 +400,7 @@ struct URLSessionAPIClientTests {
     func validationInitializerUsesExplicitToken() async throws {
         let session = makeSession()
         let keychain = KeychainService(
-            service: "me.nore.ig.flux.tests.\(UUID().uuidString)",
+            service: "me.nore.ig.apps.flux.tests.\(UUID().uuidString)",
             account: "api-token",
             accessGroup: nil,
             synchronizable: false

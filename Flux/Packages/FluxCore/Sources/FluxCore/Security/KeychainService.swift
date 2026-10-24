@@ -44,9 +44,9 @@ public final class KeychainService: Sendable {
     private let synchronizable: Bool
 
     public init(
-        service: String = "me.nore.ig.flux",
+        service: String = "me.nore.ig.apps.flux",
         account: String = "api-token",
-        accessGroup: String? = "group.me.nore.ig.flux",
+        accessGroup: String? = "group.me.nore.ig.apps.flux",
         accessibility: KeychainAccessibility = .afterFirstUnlock,
         synchronizable: Bool = true
     ) {

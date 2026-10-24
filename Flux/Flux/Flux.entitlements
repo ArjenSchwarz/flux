@@ -10,13 +10,13 @@
 	<string>$(TeamIdentifierPrefix)$(CFBundleIdentifier)</string>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.me.nore.ig.flux</string>
+		<string>group.me.nore.ig.apps.flux</string>
 	</array>
 	<key>com.apple.security.network.client</key>
 	<true/>
 	<key>keychain-access-groups</key>
 	<array>
-		<string>$(AppIdentifierPrefix)group.me.nore.ig.flux</string>
+		<string>$(AppIdentifierPrefix)group.me.nore.ig.apps.flux</string>
 	</array>
 </dict>
 </plist>

@@ -228,7 +228,7 @@ struct SettingsViewModelTests {
 
     private func makeKeychainService() -> KeychainService {
         KeychainService(
-            service: "me.nore.ig.flux.tests.\(UUID().uuidString)",
+            service: "me.nore.ig.apps.flux.tests.\(UUID().uuidString)",
             account: "api-token",
             accessGroup: nil
         )
