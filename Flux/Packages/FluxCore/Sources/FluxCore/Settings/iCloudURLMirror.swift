@@ -2,7 +2,7 @@ import Foundation
 import os
 
 public extension Notification.Name {
-    static let fluxCredentialsChanged = Notification.Name("me.nore.ig.flux.credentialsChanged")
+    static let fluxCredentialsChanged = Notification.Name("me.nore.ig.apps.flux.credentialsChanged")
 }
 
 public protocol KeyValueStore: AnyObject {

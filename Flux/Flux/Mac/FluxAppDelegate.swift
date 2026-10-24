@@ -4,7 +4,7 @@ import FluxCore
 import os
 
 final class FluxAppDelegate: NSObject, NSApplicationDelegate {
-    private let log = Logger(subsystem: "me.nore.ig.flux", category: "apns")
+    private let log = Logger(subsystem: "me.nore.ig.apps.flux", category: "apns")
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true

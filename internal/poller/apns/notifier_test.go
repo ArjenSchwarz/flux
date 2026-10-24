@@ -39,7 +39,7 @@ func (f *fakePusher) Push(_ context.Context, _ *apns2.Notification) (*apns2.Resp
 }
 
 func newNotifierWithPusher(p PushClient) *Notifier {
-	n := NewNotifier(p, "me.nore.ig.flux")
+	n := NewNotifier(p, "me.nore.ig.apps.Flux")
 	// Zero out the backoff base so retry tests don't sleep.
 	n.backoffBase = 0
 	return n
@@ -188,7 +188,7 @@ func TestEnvironmentFromSSM(t *testing.T) {
 func TestNotifier_RoutesByEnvironment(t *testing.T) {
 	dev := &fakePusher{responses: []*apns2.Response{{StatusCode: http.StatusOK}}}
 	prod := &fakePusher{responses: []*apns2.Response{{StatusCode: http.StatusOK}}}
-	n := NewMultiEnvNotifier(dev, prod, "me.nore.ig.flux")
+	n := NewMultiEnvNotifier(dev, prod, "me.nore.ig.apps.Flux")
 	n.backoffBase = 0
 
 	require.NoError(t, n.Push(context.Background(), "development", "tok-dev", "c-1", Payload{Title: "T", Body: "B"}))
@@ -201,7 +201,7 @@ func TestNotifier_RoutesByEnvironment(t *testing.T) {
 func TestNotifier_RejectsUnknownEnvironment(t *testing.T) {
 	dev := &fakePusher{}
 	prod := &fakePusher{}
-	n := NewMultiEnvNotifier(dev, prod, "me.nore.ig.flux")
+	n := NewMultiEnvNotifier(dev, prod, "me.nore.ig.apps.Flux")
 	err := n.Push(context.Background(), "staging", "tok", "c", Payload{Title: "T", Body: "B"})
 	require.Error(t, err)
 	assert.Equal(t, int32(0), dev.calls.Load(), "unknown env must not reach any client")
@@ -214,7 +214,7 @@ func TestNotifier_EmptyEnvironmentDefaultsToDev(t *testing.T) {
 	// poller doesn't drop pushes for legacy registrations.
 	dev := &fakePusher{responses: []*apns2.Response{{StatusCode: http.StatusOK}}}
 	prod := &fakePusher{}
-	n := NewMultiEnvNotifier(dev, prod, "me.nore.ig.flux")
+	n := NewMultiEnvNotifier(dev, prod, "me.nore.ig.apps.Flux")
 	n.backoffBase = 0
 	require.NoError(t, n.Push(context.Background(), "", "tok", "c", Payload{Title: "T", Body: "B"}))
 	assert.Equal(t, int32(1), dev.calls.Load())

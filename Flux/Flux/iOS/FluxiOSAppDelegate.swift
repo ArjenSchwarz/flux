@@ -5,7 +5,7 @@ import os
 
 @MainActor
 final class FluxiOSAppDelegate: NSObject, UIApplicationDelegate {
-    private let log = Logger(subsystem: "me.nore.ig.flux", category: "apns")
+    private let log = Logger(subsystem: "me.nore.ig.apps.flux", category: "apns")
 
     func application(
         _ application: UIApplication,

@@ -22,7 +22,7 @@ xcodebuild test -scheme Flux -destination 'platform=iOS Simulator,name=iPhone 17
 
 - **FluxAPIClient.swift** — Protocol with `Sendable` conformance. Three async throws methods: `fetchStatus()`, `fetchHistory(days:)`, `fetchDay(date:)`.
 - **URLSessionAPIClient.swift** — Concrete client using `URLComponents` with separate `queryItems` array (prevents query encoding bugs). Has `decodeResponse` and `parseErrorMessage` helpers. Accepts either `KeychainService` or hardcoded token.
-- **KeychainService.swift** — Uses `[CFString: Any]` dictionary keys (idiomatic Security framework). Service: `"me.nore.ig.flux"`, account: `"api-token"`, App Group: `"group.me.nore.ig.flux"`.
+- **KeychainService.swift** — Uses `[CFString: Any]` dictionary keys (idiomatic Security framework). Service: `"me.nore.ig.apps.flux"`, account: `"api-token"`, App Group: `"group.me.nore.ig.apps.flux"`.
 - **MockFluxAPIClient.swift** — `#if DEBUG` guarded actor with static preview data. Used for SwiftUI previews. Test files create their own focused mocks instead.
 
 ## FluxCore Helpers (Flux/Packages/FluxCore/Sources/FluxCore/Helpers/)

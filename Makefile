@@ -4,7 +4,7 @@ SHELL = /bin/bash
 # iOS project settings
 IOS_SCHEME = Flux
 IOS_PROJECT = Flux/Flux.xcodeproj
-IOS_BUNDLE_ID = me.nore.ig.Flux
+IOS_BUNDLE_ID = me.nore.ig.apps.Flux
 IOS_CONFIG ?= Debug
 IOS_DERIVED_DATA = ./DerivedData
 

@@ -239,7 +239,7 @@ struct KeychainServiceTests {
 
     private func makeUniqueIds() -> (service: String, account: String) {
         (
-            "me.nore.ig.flux.tests.\(UUID().uuidString)",
+            "me.nore.ig.apps.flux.tests.\(UUID().uuidString)",
             "api-token.\(UUID().uuidString)"
         )
     }
