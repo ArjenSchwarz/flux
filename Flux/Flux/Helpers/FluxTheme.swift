@@ -173,7 +173,9 @@ extension View {
     }
 }
 
-private func adaptiveColor(light: Color, dark: Color) -> Color {
+// SwiftUI can resolve dynamic colours on its background renderer. Keep the
+// provider from inheriting the app target's default MainActor isolation.
+nonisolated private func adaptiveColor(light: Color, dark: Color) -> Color {
     #if canImport(UIKit)
     return Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .light ? UIColor(light) : UIColor(dark)
