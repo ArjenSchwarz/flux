@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Prevent an iPhone crash when opening Details or History in Swift 6 builds by allowing adaptive colours to resolve on SwiftUI's background renderer.
+
 ### Changed
 
 - Move the iOS/macOS app and widget to team `4PJS97G236` and the `me.nore.ig.apps` identifiers, including App Group, Keychain and iCloud key-value namespaces. This creates a separate app identity; local settings, credentials and alert registrations are not copied from the former app. See [the account migration notes](docs/account-migration.md) for setup and verification limits.
