@@ -34,6 +34,8 @@ help:
 	@echo "  Go Backend:"
 	@echo "    build           - Build poller binary"
 	@echo "    build-api       - Build Lambda API binary (ARM64 Linux)"
+	@echo "    build-cli       - Build the read-only Flux CLI for this machine"
+	@echo "    build-cli-linux - Package Linux amd64 and arm64 CLI binaries"
 	@echo "    test            - Run Go tests"
 	@echo "    integration     - Run integration tests (starts DynamoDB Local)"
 	@echo "    fmt             - Format Go code"
@@ -88,6 +90,16 @@ build:
 
 build-api:
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o lambda/bootstrap ./cmd/api
+
+.PHONY: build-cli build-cli-linux
+build-cli:
+	CGO_ENABLED=0 go build -trimpath -o bin/flux ./cmd/flux
+
+build-cli-linux:
+	@for arch in amd64 arm64; do \
+		CGO_ENABLED=0 GOOS=linux GOARCH=$$arch go build -trimpath -o bin/flux-linux-$$arch/flux ./cmd/flux; \
+		tar -czf bin/flux-linux-$$arch.tar.gz -C bin/flux-linux-$$arch flux; \
+	done
 
 test:
 	go test ./...

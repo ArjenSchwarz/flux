@@ -5,6 +5,9 @@ on:
     branches: [main]
     paths:
       - cmd/poller/**
+      - cmd/flux/**
+      - .github/workflows/poller.yml
+      - Makefile
       - internal/**
       - go.mod
       - go.sum
@@ -12,6 +15,9 @@ on:
   pull_request:
     paths:
       - cmd/poller/**
+      - cmd/flux/**
+      - .github/workflows/poller.yml
+      - Makefile
       - internal/**
       - go.mod
       - go.sum
@@ -38,6 +44,17 @@ jobs:
 
       - name: Run go test
         run: go test ./...
+
+      - name: Build Linux CLI archives
+        run: make build-cli-linux
+
+      - name: Upload Linux CLI archives
+        uses: actions/upload-artifact@v7
+        with:
+          name: flux-linux-${{ github.sha }}
+          path: bin/flux-linux-*.tar.gz
+          if-no-files-found: error
+          retention-days: 90
 
       - name: Extract short SHA and lowercase owner
         id: meta
