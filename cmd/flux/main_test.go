@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ArjenSchwarz/flux/internal/client"
 )
 
 func TestReadCommandsPreserveJSON(t *testing.T) {
@@ -135,7 +137,7 @@ func TestResponseFailuresDoNotPrintBodies(t *testing.T) {
 		"server error": {500, "do-not-print"},
 		"invalid JSON": {200, "do-not-print"},
 		"empty body":   {204, ""},
-		"too large":    {200, `"` + strings.Repeat("x", maxResponseBytes) + `"`},
+		"too large":    {200, `"` + strings.Repeat("x", client.MaxResponseBytes) + `"`},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

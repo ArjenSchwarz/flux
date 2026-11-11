@@ -3,7 +3,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -15,6 +14,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/ArjenSchwarz/flux/internal/client"
 )
 
 const usage = `Usage:
@@ -33,11 +34,10 @@ Output is the original API JSON, with a final newline if needed. Errors go to
 stderr; exit codes: 0 success/help, 1 request/output failure, 2 invalid usage/config.
 `
 
-const maxResponseBytes = 8 << 20
-
 type options struct {
-	endpoint *url.URL
-	token    string
+	path   string
+	query  url.Values
+	config client.Config
 }
 
 func main() {
@@ -47,7 +47,7 @@ func main() {
 	os.Exit(code)
 }
 
-func run(ctx context.Context, args []string, getenv func(string) string, client *http.Client, stdout, stderr io.Writer) int {
+func run(ctx context.Context, args []string, getenv func(string) string, httpClient *http.Client, stdout, stderr io.Writer) int {
 	opts, err := parseOptions(args, getenv)
 	if errors.Is(err, flag.ErrHelp) {
 		if _, err := io.WriteString(stdout, usage); err != nil {
@@ -58,7 +58,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, client 
 	if err != nil {
 		return fail(stderr, 2, err)
 	}
-	data, err := fetch(ctx, opts, client)
+	data, err := client.New(opts.config, httpClient).Get(ctx, opts.path, opts.query)
 	if err != nil {
 		return fail(stderr, 1, err)
 	}
@@ -88,7 +88,7 @@ func parseOptions(args []string, getenv func(string) string) (options, error) {
 	// Flag errors can quote arbitrary argument values. Keep diagnostics bounded
 	// and never echo potential credentials from malformed invocations.
 	flags.SetOutput(io.Discard)
-	base := flags.String("url", getenv("FLUX_API_URL"), "API base URL")
+	base := flags.String("url", getenv(client.EnvURL), "API base URL")
 	tokenFile := flags.String("token-file", "", "token file")
 	var days int
 	var from, to string
@@ -138,68 +138,14 @@ func parseOptions(args []string, getenv func(string) string) (options, error) {
 			return options{}, errors.New("status does not accept positional arguments")
 		}
 	}
-	endpoint, err := url.Parse(*base)
-	if err != nil || endpoint.Scheme != "https" || endpoint.Hostname() == "" ||
-		endpoint.User != nil || endpoint.RawQuery != "" || endpoint.ForceQuery || endpoint.Fragment != "" {
-		return options{}, errors.New("set --url or FLUX_API_URL to an HTTPS base URL without credentials, query or fragment")
+	config, err := client.LoadConfig(*base, getenv(client.EnvToken), *tokenFile)
+	if err != nil {
+		return options{}, err
 	}
-	endpoint = endpoint.JoinPath(command)
-	endpoint.RawQuery = query.Encode()
-	token := getenv("FLUX_API_TOKEN")
-	if *tokenFile != "" {
-		data, err := os.ReadFile(*tokenFile)
-		if err != nil {
-			return options{}, errors.New("could not read token file")
-		}
-		token = string(data)
-	}
-	token = strings.TrimSpace(token)
-	if token == "" || strings.ContainsAny(token, "\r\n") {
-		return options{}, errors.New("supply a nonempty single-line token via --token-file or FLUX_API_TOKEN")
-	}
-	return options{endpoint: endpoint, token: token}, nil
+	return options{path: command, query: query, config: config}, nil
 }
 
 func validDate(value string) bool {
 	parsed, err := time.Parse(time.DateOnly, value)
 	return err == nil && parsed.Format(time.DateOnly) == value
-}
-
-func fetch(ctx context.Context, opts options, client *http.Client) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, opts.endpoint.String(), nil)
-	if err != nil {
-		return nil, errors.New("could not create request")
-	}
-	req.Header.Set("Authorization", "Bearer "+opts.token)
-	req.Header.Set("Accept", "application/json")
-	// Do not follow redirects, even to related hosts: the token belongs only
-	// to the explicitly configured API endpoint.
-	requestClient := *client
-	requestClient.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	resp, err := requestClient.Do(req)
-	if err != nil {
-		if errors.Is(err, context.Canceled) {
-			return nil, errors.New("request canceled")
-		}
-		if errors.Is(err, context.DeadlineExceeded) {
-			return nil, errors.New("request timed out")
-		}
-		// Transport errors can include the URL; never print raw errors or headers.
-		return nil, errors.New("request failed (network or TLS error)")
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("API returned HTTP %d %s", resp.StatusCode, http.StatusText(resp.StatusCode))
-	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
-	if err != nil {
-		return nil, errors.New("could not read API response")
-	}
-	if len(data) > maxResponseBytes {
-		return nil, errors.New("API response exceeds 8 MiB limit")
-	}
-	if !json.Valid(data) {
-		return nil, errors.New("API returned invalid JSON")
-	}
-	return data, nil
 }
