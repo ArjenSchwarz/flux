@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Read-only Go CLI for Flux status, history and day-detail JSON, with Linux amd64 and arm64 build artifacts in GitHub Actions.
+
 ### Fixed
 
 - Prevent an iPhone crash when opening Details or History in Swift 6 builds by allowing adaptive colours to resolve on SwiftUI's background renderer.
